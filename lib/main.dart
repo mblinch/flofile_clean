@@ -68,6 +68,7 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF2E3A59), // Cool Gray
           brightness: Brightness.light,
         ),
+        scaffoldBackgroundColor: Colors.white, // Pure white background
         useMaterial3: true,
         fontFamily: 'RobotoCondensed',
         textTheme: ThemeData.light().textTheme.copyWith(
@@ -95,12 +96,12 @@ class MyApp extends StatelessWidget {
             foregroundColor: const Color(0xFF00A8E8), // Sky Blue Accent
           ),
         ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-          hintStyle: TextStyle(fontSize: kInputTextSize),
-          labelStyle: TextStyle(fontSize: kInputTextSize),
-          contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        ),
+        // inputDecorationTheme: const InputDecorationTheme(
+        //   border: OutlineInputBorder(),
+        //   hintStyle: TextStyle(fontSize: kInputTextSize),
+        //   labelStyle: TextStyle(fontSize: kInputTextSize),
+        //   contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        // ),
       ),
       home: const CaptionBuilder(),
       builder: (context, child) {
@@ -193,12 +194,11 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
     if (widget.selected && !oldWidget.selected && widget.onSelected != null) {
       // Just got selected
       final chipTheme = ChipTheme.of(context);
-      const flashColor =
-          Color(0xFFEEEEEE); // A very light grey for flash (grey.shade200)
+      const flashColor = Color(0x0D000000); // 5% opacity black for flash
       const selectedColor =
-          Color(0xFFE0E0E0); // A light grey for selected state (grey.shade300)
-      final unselectedColor = chipTheme.backgroundColor ??
-          Theme.of(context).colorScheme.surfaceContainerHighest;
+          Color(0x0D000000); // 5% opacity black for selected state
+      final unselectedColor =
+          chipTheme.backgroundColor ?? const Color(0x0D000000);
 
       _animation = TweenSequence<Color?>([
         TweenSequenceItem(
@@ -226,7 +226,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
   Widget build(BuildContext context) {
     final chipTheme = ChipTheme.of(context);
     const selectedColor =
-        Color(0xFFE0E0E0); // A light grey for selected state (grey.shade300)
+        Color(0x0D000000); // 5% opacity black for selected state
     final backgroundColor = chipTheme.backgroundColor;
 
     return AnimatedBuilder(
@@ -292,6 +292,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _displayedCaption = '';
   String _targetCaption = '';
   String _previousCaption = '';
+
+  // Personality field typewriter effect
+  late AnimationController _personalityTypewriterController;
+  late Animation<double> _personalityTypewriterAnimation;
+  String _displayedPersonality = '';
+  String _targetPersonality = '';
+  String _previousPersonality = '';
 
   // Wireframe mode for layout visualization
   bool _showWireframe = false;
@@ -430,8 +437,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Widget _buildStyledButton(String text, VoidCallback? onPressed,
       {bool isBlue = false}) {
-    final backgroundColor =
-        isBlue ? const Color(0xFF0052CC) : Colors.grey.shade100;
+    final backgroundColor = isBlue ? const Color(0xFF0052CC) : Colors.white;
     final textColor = isBlue ? Colors.white : Colors.black;
     final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
 
@@ -1634,7 +1640,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // ── Info section ─────────────────────────────
   DateTime selectedDate = DateTime.now();
-  final photographerController = TextEditingController(text: 'Mark Blinch');
+
   final stadiumController = TextEditingController(text: 'Rogers Centre');
   final cityController = TextEditingController(text: 'Toronto');
   final TextEditingController provinceController =
@@ -1784,12 +1790,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   final sourceController =
       TextEditingController(text: 'Getty Images North America');
 
+  // IPTC metadata controllers
+  final urgencyController = TextEditingController(text: '3');
+  final countryController = TextEditingController(text: 'Canada');
+  final countryCodeController = TextEditingController(text: 'CAN');
+
   // Location and categorization controllers
   final titleObjectNameController = TextEditingController();
   final categoryController = TextEditingController(text: 'S');
   final suppCat1Controller = TextEditingController(text: 'SPO');
   final suppCat2Controller = TextEditingController(text: 'BBN');
   final suppCat3Controller = TextEditingController(text: 'BBA');
+  final specialInstructionsController = TextEditingController();
 
   void loadPersonalityFromMetadata(XmlDocument xmlDoc) {
     final personalityTag = xmlDoc.findAllElements('Personality').firstOrNull;
@@ -1837,6 +1849,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           const Duration(milliseconds: 2000), // 2 seconds for full caption
       vsync: this,
     );
+    _personalityTypewriterController = AnimationController(
+      duration:
+          const Duration(milliseconds: 2000), // 2 seconds for full personality
+      vsync: this,
+    );
 
     // Initialize animations
     _captionGlowAnimation = Tween<double>(
@@ -1868,6 +1885,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _typewriterController,
+      curve: Curves.easeInOut,
+    ));
+
+    _personalityTypewriterAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _personalityTypewriterController,
       curve: Curves.easeInOut,
     ));
 
@@ -2009,6 +2034,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _targetCaption = newCaption;
     _displayedCaption = _previousCaption; // Start with the current caption
 
+    // If captions are identical, don't animate
+    if (_previousCaption.trim() == _targetCaption.trim()) {
+      captionController.text = _targetCaption;
+      return;
+    }
+
     // Calculate animation duration based on new words only
     int newWordsCount = 0;
     if (_previousCaption.isNotEmpty) {
@@ -2052,7 +2083,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   @override
   void dispose() {
-    photographerController.dispose();
     stadiumController.dispose();
     cityController.dispose();
     captionController.dispose();
@@ -2069,11 +2099,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     creditController.dispose();
     copyrightController.dispose();
     sourceController.dispose();
+    urgencyController.dispose();
+    countryController.dispose();
+    countryCodeController.dispose();
     titleObjectNameController.dispose();
     categoryController.dispose();
     suppCat1Controller.dispose();
     suppCat2Controller.dispose();
     suppCat3Controller.dispose();
+    specialInstructionsController.dispose();
     personalityController.dispose();
 
     // Dispose animation controllers
@@ -2216,6 +2250,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         codeReplacements.addAll(newReplacements);
         _isConnectedToApi = true;
       });
+
+      // Update caption to reflect the new stadium information
+      _updateCaption();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
@@ -2255,6 +2293,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         '-ObjectName',
         '-Category',
         '-SupplementalCategories',
+        '-XMP-photoshop:Instructions',
+        '-Sub-location',
+        '-City',
+        '-Province-State',
+        '-Urgency',
+        '-Country',
+        '-CountryCode',
         '-model',
         '-make',
         '-ImageWidth',
@@ -2320,6 +2365,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final extractedSource = meta['Source']?.toString() ?? '';
       if (extractedSource.isNotEmpty) sourceController.text = extractedSource;
 
+      // Load IPTC metadata fields
+      final extractedUrgency = meta['Urgency']?.toString() ?? '';
+      if (extractedUrgency.isNotEmpty)
+        urgencyController.text = extractedUrgency;
+
+      final extractedCountry = meta['Country']?.toString() ?? '';
+      if (extractedCountry.isNotEmpty)
+        countryController.text = extractedCountry;
+
+      final extractedCountryCode = meta['CountryCode']?.toString() ?? '';
+      if (extractedCountryCode.isNotEmpty)
+        countryCodeController.text = extractedCountryCode;
+
       // Load categorization metadata
       titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
       final extractedCategory = meta['Category']?.toString() ?? '';
@@ -2339,6 +2397,43 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         } else {
           // Single string, put in first field
           suppCat1Controller.text = suppCats.toString();
+        }
+      }
+
+      // Load special instructions - try IPTC field first, then XMP field
+      final specialInstructions = meta['SpecialInstructions']?.toString() ??
+          meta['Instructions']?.toString() ??
+          meta['XMP-photoshop:Instructions']?.toString() ??
+          '';
+      if (specialInstructions.isNotEmpty) {
+        specialInstructionsController.text = specialInstructions;
+      }
+
+      // Load location fields from JPEG metadata
+      final extractedStadium = meta['Sub-location']?.toString() ?? '';
+      if (extractedStadium.isNotEmpty) {
+        stadiumController.text = extractedStadium;
+      }
+
+      final extractedCity = meta['City']?.toString() ?? '';
+      if (extractedCity.isNotEmpty) {
+        cityController.text = extractedCity;
+      }
+
+      final extractedProvince = meta['Province-State']?.toString() ?? '';
+      if (extractedProvince.isNotEmpty) {
+        provinceController.text = extractedProvince;
+      }
+
+      // Load date from image metadata
+      final imageDateString = meta['DateTimeOriginal']?.toString();
+      if (imageDateString != null) {
+        try {
+          final dt = DateTime.parse(
+              imageDateString.replaceFirst(':', '-').replaceFirst(':', '-'));
+          selectedDate = dt;
+        } catch (e) {
+          // Keep current date if parsing fails
         }
       }
 
@@ -2403,6 +2498,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final suppCat1 = suppCat1Controller.text;
     final suppCat2 = suppCat2Controller.text;
     final suppCat3 = suppCat3Controller.text;
+    final specialInstructions = specialInstructionsController.text;
+    final urgency = urgencyController.text;
+    final country = countryController.text;
+    final countryCode = countryCodeController.text;
 
     await Process.run(
       'exiftool',
@@ -2430,6 +2529,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             suppCat2,
             suppCat3
           ].where((s) => s.isNotEmpty).join(';')}',
+        if (specialInstructions.isNotEmpty)
+          '-XMP-photoshop:Instructions=$specialInstructions',
+        if (urgency.isNotEmpty) '-Urgency=$urgency',
+        if (country.isNotEmpty) '-Country=$country',
+        if (countryCode.isNotEmpty) '-CountryCode=$countryCode',
         path,
       ],
     );
@@ -2849,38 +2953,37 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     // Handle any Prior to Game action caption
     if (_selectedVerb == 'Prior to Game' && _selectedPriorAction != null) {
-      final cityUpper = city.toUpperCase();
-      final provUpper = prov.toUpperCase();
       final monthUpper = monLC.toUpperCase();
-      final day = selectedDate.day;
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
       final playerName =
           _combinePlayersWithSingleTeam(selectedPlayers.toList());
       final awayTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
       final stadium = stadiumController.text;
-      final photoBy = photographerController.text;
+      final photoBy = creatorController.text;
       final action = _selectedPriorAction!.toLowerCase();
-      captionController.text = '$cityUpper, $provUpper - $monthUpper $day: '
+      captionController.text = '$dateline '
           '$playerName $action prior to playing against the $awayTeam '
-          'in their MLB game at $stadium on $monthUpper $day, $year in '
-          '$city, $prov, Canada. (Photo by $photoBy/Getty Images)';
+          'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
       return;
     }
 
     // Handle "Prior to Game" caption
     if (_selectedVerb == 'Prior to Game' && _isLooksOn == true) {
-      final cityUpper = city.toUpperCase();
-      final provUpper = prov.toUpperCase();
       final monthUpper = monLC.toUpperCase();
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
       final playerName =
           _combinePlayersWithSingleTeam(selectedPlayers.toList());
       final homeTeam = selectedHomeTeam!;
       final awayTeam = selectedAwayTeam!;
       final stadium = stadiumController.text;
-      final photoBy = photographerController.text;
-      captionController.text = '$cityUpper, $provUpper - $monthUpper $day: '
+      final photoBy = creatorController.text;
+      captionController.text = '$dateline '
           '$playerName looks on prior to playing against the $awayTeam '
-          'in their MLB game at $stadium on $monthUpper $day, $year in '
-          '$city, $prov, Canada. (Photo by $photoBy/Getty Images)';
+          'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
       return;
     }
 
@@ -3106,8 +3209,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     // Write final caption
     final formattedDate = '$monLC $day, $year';
+    final dateline = _formatDateline(city, prov, monLC.toUpperCase(), day);
+    final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
     final caption =
-        "TORONTO, ON - ${monLC.toUpperCase()} $day: $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate in ${_capitalize(city)}, ${_capitalize(prov)}, Canada. (Photo by ${photographerController.text}/Getty Images)";
+        "$dateline $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate $locationSuffix. (Photo by ${creatorController.text}/Getty Images)";
 
     // Store previous caption to detect changes
     final previousCaption = captionController.text;
@@ -3151,6 +3256,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _capitalize(String s) {
     if (s.isEmpty) return s;
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
+  }
+
+  // Helper to determine if the game is in the United States
+  bool _isGameInUnitedStates() {
+    final homeTeamState = teamStates[selectedHomeTeam];
+    // If the state is not 'Ontario' (Canada), then it's in the US
+    return homeTeamState != null && homeTeamState != 'Ontario';
+  }
+
+  // Helper to format the dateline for captions
+  String _formatDateline(
+      String city, String stateOrProvince, String monthUpper, int day) {
+    if (_isGameInUnitedStates()) {
+      // US format: CITY, STATE - DATE
+      return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
+    } else {
+      // Canadian format: CITY, PROVINCE_ABBREVIATION - DATE
+      final provAbbr = _abbr(stateOrProvince);
+      return '${city.toUpperCase()}, $provAbbr - $monthUpper $day:';
+    }
+  }
+
+  // Helper to format the location suffix for captions
+  String _formatLocationSuffix(
+      String city, String stateOrProvince, String formattedDate) {
+    if (_isGameInUnitedStates()) {
+      // US format: in City, State (no country needed)
+      // Special case for Washington DC - keep DC capitalized
+      final formattedState =
+          stateOrProvince == 'DC' ? 'DC' : _capitalize(stateOrProvince);
+      return 'in ${_capitalize(city)}, $formattedState';
+    } else {
+      // Canadian format: in City, Province, Canada
+      return 'in ${_capitalize(city)}, ${_capitalize(stateOrProvince)}, Canada';
+    }
   }
 
   @override
@@ -3252,8 +3392,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            backgroundColor:
-                _showWireframe ? Colors.yellow.withOpacity(0.1) : null,
+            backgroundColor: _showWireframe
+                ? Colors.yellow.withOpacity(0.1)
+                : const Color(0xFFF5F5F5),
             appBar: AdaptiveAppBar(
               title: Row(
                 children: [
@@ -3342,42 +3483,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _loadTeam(v, isHomeTeam: false);
                             },
                           ),
-                          const SizedBox(
-                              width: 8), // Add spacing before the date button
-                          SizedBox(
-                            child: ElevatedButton(
-                              onPressed: _pickDate,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.surface,
-                                foregroundColor: Colors.black,
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                  side: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.0),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 12),
-                                textStyle: const TextStyle(fontSize: 12),
-                              ),
-                              child: Text(
-                                  '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _buildField(
-                                  'Photographer', photographerController)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _buildField('Stadium', stadiumController)),
-                          const SizedBox(width: 8),
-                          Expanded(child: _buildField('City', cityController)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _buildField(
-                                  'State/Province', provinceController)),
+
                           const SizedBox(width: 8),
                           // API Selection Dropdown
                           Row(
@@ -3451,7 +3557,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               const Spacer(),
                                               Material(
                                                 elevation: 1.0,
-                                                color: Colors.grey.shade100,
+                                                color: Colors.white,
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
                                                       BorderRadius.circular(4),
@@ -3498,27 +3604,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               children: [
                                                 Expanded(
                                                     child: _buildField(
-                                                        'Description Writers',
-                                                        descriptionWritersController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField('Job ID',
-                                                        jobIdController)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            _buildField(
-                                                'Headline', headlineController),
-                                            const SizedBox(height: 4),
-                                            _buildField(
-                                                'Keywords', keywordsController),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildField(
                                                         'Creator',
                                                         creatorController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField('MEID',
+                                                        jobIdController)),
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                     child: _buildField(
@@ -3526,8 +3617,102 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         creatorJobTitleController)),
                                                 const SizedBox(width: 8),
                                                 Expanded(
-                                                    child: _buildField('Credit',
-                                                        creditController)),
+                                                    child: _buildField(
+                                                        'Description Writers',
+                                                        descriptionWritersController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Copyright',
+                                                        copyrightController)),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Material(
+                                                    elevation: 2.0,
+                                                    color: Colors.transparent,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    child: InkWell(
+                                                      onTap: _pickDate,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      child: InputDecorator(
+                                                        decoration:
+                                                            InputDecoration(
+                                                          labelText: 'Date',
+                                                          floatingLabelBehavior:
+                                                              FloatingLabelBehavior
+                                                                  .always,
+                                                          isDense: true,
+                                                          contentPadding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 12),
+                                                          filled: true,
+                                                          fillColor:
+                                                              Colors.white,
+                                                          labelStyle:
+                                                              const TextStyle(
+                                                                  fontSize: 10),
+                                                          enabledBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            borderSide: BorderSide(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400,
+                                                                width: 1.0),
+                                                          ),
+                                                          focusedBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            borderSide: BorderSide(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400,
+                                                                width: 1.0),
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontSize: 11),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Stadium',
+                                                        stadiumController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField('City',
+                                                        cityController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'State/Province',
+                                                        provinceController)),
                                               ],
                                             ),
                                             const SizedBox(height: 4),
@@ -3535,8 +3720,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               children: [
                                                 Expanded(
                                                     child: _buildField(
-                                                        'Copyright',
-                                                        copyrightController)),
+                                                        'Headline',
+                                                        headlineController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Keywords',
+                                                        keywordsController)),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                    child: _buildField('Credit',
+                                                        creditController)),
                                                 const SizedBox(width: 8),
                                                 Expanded(
                                                     child: _buildField('Source',
@@ -3544,15 +3742,32 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ],
                                             ),
                                             const SizedBox(height: 4),
-
-                                            // Title/Object Name
-                                            _buildField('Title/Object Name',
-                                                titleObjectNameController),
-                                            const SizedBox(height: 4),
-
-                                            // Category and Supplemental Categories
                                             Row(
                                               children: [
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Urgency',
+                                                        urgencyController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Country',
+                                                        countryController)),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Country Code',
+                                                        countryCodeController)),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                    child: _buildField(
+                                                        'Title/Object Name',
+                                                        titleObjectNameController)),
+                                                const SizedBox(width: 8),
                                                 Expanded(
                                                     child: _buildField(
                                                         'Category',
@@ -3562,11 +3777,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     child: _buildField(
                                                         'Supp Cat 1',
                                                         suppCat1Controller)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Row(
-                                              children: [
+                                                const SizedBox(width: 8),
                                                 Expanded(
                                                     child: _buildField(
                                                         'Supp Cat 2',
@@ -3579,119 +3790,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ],
                                             ),
                                             const SizedBox(height: 4),
+                                            _buildField('Special Instructions',
+                                                specialInstructionsController),
+                                            const SizedBox(height: 4),
                                           ],
 
-                                          // Personality Field
-                                          Container(
-                                            width: double.infinity,
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                  color: Colors.grey.shade400),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: TextField(
-                                              controller: personalityController,
-                                              maxLines:
-                                                  1, // Reduced from 2 to 1
-                                              style:
-                                                  const TextStyle(fontSize: 14),
-                                              decoration: const InputDecoration(
-                                                hintText: 'Personality...',
-                                                contentPadding:
-                                                    EdgeInsets.all(12),
-                                                border: InputBorder.none,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-
-                                          // Caption TextField (MIDDLE) - Typewriter only
-                                          AnimatedBuilder(
-                                            animation: _typewriterAnimation,
-                                            builder: (context, child) {
-                                              return SizedBox(
-                                                width: double.infinity,
-                                                height: 60, // Fixed height to prevent resizing
-                                                child: Container(
-                                                  width: double.infinity,
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                      color: Colors.grey.shade400,
-                                                    ),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: TextField(
-                                                    controller: TextEditingController(
-                                                      text: _typewriterController.isAnimating 
-                                                        ? _displayedCaption 
-                                                        : captionController.text,
-                                                    ),
-                                                    maxLines: 2,
-                                                    minLines: 2,
-                                                    style: const TextStyle(fontSize: 14),
-                                                    decoration: const InputDecoration(
-                                                      hintText: 'Caption will appear here...',
-                                                      contentPadding: EdgeInsets.all(12),
-                                                      border: InputBorder.none,
-                                                    ),
-                                                    readOnly: _typewriterController.isAnimating,
-                                                    onChanged: (value) {
-                                                      if (!_typewriterController.isAnimating) {
-                                                        captionController.text = value;
-                                                        // No shake animation
-                                                      }
-                                                    },
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                                                                    ),
-                                                          text: _typewriterController
-                                                                  .isAnimating
-                                                              ? _displayedCaption
-                                                              : captionController
-                                                                  .text,
-                                                        ),
-                                                        maxLines:
-                                                            2, // Reduced from 3 to 2
-                                                        minLines:
-                                                            2, // Force consistent height
-                                                        style: const TextStyle(
-                                                            fontSize: 14),
-                                                        decoration:
-                                                            InputDecoration(
-                                                          hintText:
-                                                              'Caption will appear here...',
-                                                          contentPadding:
-                                                              const EdgeInsets
-                                                                  .all(12),
-                                                          border:
-                                                              InputBorder.none,
-                                                        ),
-                                                        readOnly:
-                                                            _typewriterController
-                                                                .isAnimating,
-                                                        onChanged: (value) {
-                                                          if (!_typewriterController
-                                                              .isAnimating) {
-                                                            captionController
-                                                                .text = value;
-                                                            // Trigger a subtle shake when user types
-                                                            if (value
-                                                                .isNotEmpty) {
-                                                              _triggerCaptionShake();
-                                                            }
-                                                          }
-                                                        },
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                          const SizedBox(height: 8),
+                                          const Spacer(),
 
                                           // Navigation and Action Buttons
                                           Row(
@@ -3747,6 +3851,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Container(
                                               width: double.infinity,
                                               decoration: BoxDecoration(
+                                                color: const Color(
+                                                    0x09000000), // 3.5% opacity black background
                                                 border: Border.all(
                                                     color:
                                                         Colors.grey.shade400),
@@ -3767,8 +3873,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       ),
                                                     )
                                                   : Container(
-                                                      color:
-                                                          Colors.grey.shade100,
+                                                      color: const Color(
+                                                          0x0D000000),
                                                       child: const Center(
                                                         child: Column(
                                                           mainAxisAlignment:
@@ -3777,14 +3883,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           children: [
                                                             Icon(Icons.image,
                                                                 size: 48,
-                                                                color: Colors
-                                                                    .grey),
+                                                                color: const Color(
+                                                                    0xFF808080)),
                                                             SizedBox(height: 8),
                                                             Text(
                                                                 'No image selected',
                                                                 style: TextStyle(
-                                                                    color: Colors
-                                                                        .grey)),
+                                                                    color: const Color(
+                                                                        0xFF808080))),
                                                           ],
                                                         ),
                                                       ),
@@ -3792,6 +3898,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ),
                                           ),
                                           const SizedBox(height: 8),
+
                                           // EXIF Data Display
                                           if (imagePaths.isNotEmpty) ...[
                                             Text(
@@ -3815,7 +3922,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ].join(' •  '),
                                               style: const TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.grey,
+                                                color: const Color(0xFF808080),
                                               ),
                                             ),
                                           ],
@@ -3829,87 +3936,270 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
-                                    child: Card(
-                                      elevation: 2.0,
-                                      margin: const EdgeInsets.symmetric(
-                                          vertical: 8.0, horizontal: 0.0),
-                                      shape: RoundedRectangleBorder(
+                                    child: Container(
+                                      margin: const EdgeInsets.all(8),
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                            0x09000000), // 3.5% opacity black
                                         borderRadius: BorderRadius.circular(8),
-                                        side: BorderSide(
-                                            color: Colors.grey.shade400,
-                                            width: 1.0),
                                       ),
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.all(16.0),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            SizedBox(
-                                              width:
-                                                  320, // Increased from 240 to make wider so team name fits on one line
-                                              child: Column(
-                                                children: [
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          SizedBox(
+                                            width:
+                                                290, // Reduced to 290px for more space
+                                            child: Column(
+                                              children: [
+                                                _buildPlayerContainer(
+                                                  title: (_showHomeFirst
+                                                          ? selectedHomeTeam
+                                                          : selectedAwayTeam) ??
+                                                      'Players',
+                                                  codes: _showHomeFirst
+                                                      ? homePlayers
+                                                      : awayPlayers,
+                                                  isHomeList: _showHomeFirst,
+                                                  toggle: true,
+                                                ),
+                                                if (_selectedVerb != null &&
+                                                    !soloVerbs.contains(
+                                                        _selectedVerb!))
                                                   _buildPlayerContainer(
                                                     title: (_showHomeFirst
-                                                            ? selectedHomeTeam
-                                                            : selectedAwayTeam) ??
+                                                            ? selectedAwayTeam
+                                                            : selectedHomeTeam) ??
                                                         'Players',
                                                     codes: _showHomeFirst
-                                                        ? homePlayers
-                                                        : awayPlayers,
-                                                    isHomeList: _showHomeFirst,
-                                                    toggle: true,
+                                                        ? awayPlayers
+                                                        : homePlayers,
+                                                    isHomeList: !_showHomeFirst,
+                                                    toggle: false,
                                                   ),
-                                                  if (_selectedVerb != null &&
-                                                      !soloVerbs.contains(
-                                                          _selectedVerb!))
-                                                    _buildPlayerContainer(
-                                                      title: (_showHomeFirst
-                                                              ? selectedAwayTeam
-                                                              : selectedHomeTeam) ??
-                                                          'Players',
-                                                      codes: _showHomeFirst
-                                                          ? awayPlayers
-                                                          : homePlayers,
-                                                      isHomeList:
-                                                          !_showHomeFirst,
-                                                      toggle: false,
-                                                    ),
-                                                ],
-                                              ),
+                                              ],
                                             ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: Opacity(
-                                                opacity: (_showHomeFirst
-                                                        ? selectedPlayers
-                                                            .isNotEmpty
-                                                        : selectedOpponentPlayers
-                                                            .isNotEmpty)
-                                                    ? 1.0
-                                                    : 0.3,
-                                                child: Padding(
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                const SizedBox(
+                                                    height:
+                                                        43), // Add spacing to align with search bar top
+                                                // Caption TextField - Typewriter only
+                                                AnimatedBuilder(
+                                                  animation:
+                                                      _typewriterAnimation,
+                                                  builder: (context, child) {
+                                                    return Padding(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              8.0),
+                                                      child: Material(
+                                                        elevation: 2.0,
+                                                        color: Colors.white,
+                                                        shadowColor:
+                                                            Colors.grey,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        child: TextField(
+                                                          controller:
+                                                              TextEditingController(
+                                                            text: _typewriterController
+                                                                    .isAnimating
+                                                                ? _displayedCaption
+                                                                : captionController
+                                                                    .text,
+                                                          ),
+                                                          maxLines: 2,
+                                                          minLines: 2,
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontSize: 15),
+                                                          decoration:
+                                                              InputDecoration(
+                                                            labelText:
+                                                                'Caption',
+                                                            floatingLabelBehavior:
+                                                                FloatingLabelBehavior
+                                                                    .always,
+                                                            isDense: true,
+                                                            contentPadding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical:
+                                                                        12),
+                                                            labelStyle:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        14,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                            enabledBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                            focusedBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                          ),
+                                                          readOnly:
+                                                              _typewriterController
+                                                                  .isAnimating,
+                                                          onChanged: (value) {
+                                                            if (!_typewriterController
+                                                                .isAnimating) {
+                                                              captionController
+                                                                  .text = value;
+                                                              // No shake animation
+                                                            }
+                                                          },
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                                const SizedBox(height: 16),
+                                                // Personality Field
+                                                Padding(
                                                   padding: const EdgeInsets
                                                       .symmetric(
-                                                      horizontal: 0.0,
-                                                      vertical: 0.0),
-                                                  child: SingleChildScrollView(
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        ..._buildAllVerbsList(),
+                                                      horizontal: 4.0,
+                                                      vertical: 2.0),
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.grey
+                                                              .withOpacity(
+                                                                  0.25),
+                                                          blurRadius: 8,
+                                                          offset: Offset(0,
+                                                              8), // Move shadow further down
+                                                        ),
                                                       ],
+                                                    ),
+                                                    child: SizedBox(
+                                                      width: double.infinity,
+                                                      height:
+                                                          60, // Match caption box height
+                                                      child: TextField(
+                                                        controller:
+                                                            personalityController,
+                                                        maxLines: 1,
+                                                        style: const TextStyle(
+                                                            fontSize: 15),
+                                                        decoration:
+                                                            InputDecoration(
+                                                          labelText:
+                                                              'Personality',
+                                                          floatingLabelBehavior:
+                                                              FloatingLabelBehavior
+                                                                  .always,
+                                                          isDense: true,
+                                                          contentPadding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 12),
+                                                          labelStyle:
+                                                              const TextStyle(
+                                                                  fontSize: 14,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold),
+                                                          filled: true,
+                                                          fillColor: Colors
+                                                              .white, // Ensure white background
+                                                          enabledBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            borderSide: BorderSide(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400,
+                                                                width: 1.0),
+                                                          ),
+                                                          focusedBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            borderSide: BorderSide(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400,
+                                                                width: 1.0),
+                                                          ),
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
+                                                const SizedBox(height: 16),
+                                                Opacity(
+                                                  opacity: (_showHomeFirst
+                                                          ? selectedPlayers
+                                                              .isNotEmpty
+                                                          : selectedOpponentPlayers
+                                                              .isNotEmpty)
+                                                      ? 1.0
+                                                      : 0.3,
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 0.0,
+                                                        vertical: 0.0),
+                                                    child:
+                                                        SingleChildScrollView(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          ..._buildAllVerbsList(),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
@@ -3959,7 +4249,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       padding: const EdgeInsets.only(top: 8.0),
       child: Container(
         height: filmstripHeight,
-        color: Theme.of(context).colorScheme.surfaceContainer,
+        color: const Color(0x0D000000),
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: imagePaths.isEmpty
             ? Center(
@@ -3982,7 +4272,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       margin:
                           const EdgeInsets.symmetric(horizontal: imagePadding),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
+                        color: Colors.white,
                         border: Border.all(
                           color: isSelected
                               ? Theme.of(context).colorScheme.primary
@@ -4018,9 +4308,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           floatingLabelBehavior: FloatingLabelBehavior.always,
           isDense: true,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           filled: true,
-          fillColor: Theme.of(context).colorScheme.surface,
+          fillColor: Colors.white,
           labelStyle: const TextStyle(fontSize: 10),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
@@ -4061,7 +4351,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             filled: true,
-            fillColor: Theme.of(context).colorScheme.surface,
+            fillColor: Colors.white,
             labelStyle: const TextStyle(fontSize: kInputTextSize),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
@@ -4396,202 +4686,246 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     return Container(
       height: 500,
+      padding:
+          const EdgeInsets.all(8.0), // Add some padding inside the container
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height:
-                48.0, // Set a fixed height for the title row to ensure alignment
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: RichText(
-                    text: TextSpan(
-                      // Default style for the team name
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize:
-                              12, // Reduced from 14 to 12 to make team name smaller
-                          color: Colors.black,
-                          fontFamily: 'RobotoCondensed'),
-                      children: <TextSpan>[
-                        TextSpan(text: '$title '),
-                        TextSpan(
-                            text: '(${isHomeList ? 'Home' : 'Away'})',
-                            style: TextStyle(
-                                fontSize:
-                                    10, // Reduced from 12 to 10 to keep proportion
-                                color:
-                                    Colors.grey.shade600, // Lighter grey color
-                                fontWeight: FontWeight.normal)),
-                      ],
-                    ),
-                  ),
-                ),
-                if (toggle)
-                  TextButton.icon(
-                    icon: const Icon(Icons.refresh,
-                        size:
-                            14), // Reduced from 18 to 14 to make switch team icon smaller
-                    label: const Text('Switch Team',
-                        style: TextStyle(fontSize: 12)),
-                    // Disable the button if players are selected from the current list.
-                    onPressed: (isHomeList && selectedPlayers.isNotEmpty) ||
-                            (!isHomeList && selectedOpponentPlayers.isNotEmpty)
-                        ? null
-                        : () {
-                            _homeSearchController.clear();
-                            _awaySearchController.clear();
-                            setState(() {
-                              _showHomeFirst = !_showHomeFirst;
-                              // When switching, clear all selections to avoid confusion.
-                              selectedPlayers.clear();
-                              selectedOpponentPlayers.clear();
-                              _selectedVerb = null;
-                              selectedInning = null;
-                              celebrateWith.clear();
-                              captionController.clear();
-                              personalityController.clear();
-                            });
-                          },
-                    style: TextButton.styleFrom(
-                      foregroundColor:
-                          Colors.black, // Match other non-primary buttons
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
+          // Team name
+          RichText(
+            text: TextSpan(
+              // Default style for the team name
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize:
+                      12, // Reduced from 14 to 12 to make team name smaller
+                  color: Colors.black,
+                  fontFamily: 'RobotoCondensed'),
+              children: <TextSpan>[
+                TextSpan(text: '$title '),
+                TextSpan(
+                    text: '(${isHomeList ? 'Home' : 'Away'})',
+                    style: TextStyle(
+                        fontSize:
+                            10, // Reduced from 12 to 10 to keep proportion
+                        color: Colors.grey.shade600, // Lighter grey color
+                        fontWeight: FontWeight.normal)),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal:
-                    24.0), // Increased from 16.0 to 24.0 to make search bar even narrower
-            child: SizedBox(
-              // Search bar height
-              height: 24, // Reduced from 30 to 24 to make search bar smaller
-              child: TextField(
-                controller: searchController,
-                onChanged: (value) {
-                  setState(() {}); // Rebuild to filter list
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search...',
-                  hintStyle: const TextStyle(
-                      fontSize: 11), // Slightly smaller hint text
-                  prefixIcon:
-                      const Icon(Icons.search, size: 16), // Smaller search icon
-                  suffixIcon: searchText.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear,
-                              size: 16), // Smaller clear icon
-                          onPressed: () {
-                            searchController.clear();
-                            setState(() {}); // Rebuild
-                          },
-                        )
-                      : null,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      vertical: 8.0, horizontal: 6.0), // Reduced padding
-                  border: const OutlineInputBorder(),
+          // Switch Team button directly below the team name
+          if (toggle)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset:
+                    const Offset(-8, 0), // Move left to align with team name
+                child: TextButton.icon(
+                  icon: const Icon(Icons.refresh, size: 10), // Smaller icon
+                  label: const Text('Switch Team',
+                      style: TextStyle(
+                        fontSize: 10, // Smaller text
+                        fontWeight: FontWeight.normal, // Remove bold
+                      )),
+                  // Disable the button if players are selected from the current list.
+                  onPressed: (isHomeList && selectedPlayers.isNotEmpty) ||
+                          (!isHomeList && selectedOpponentPlayers.isNotEmpty)
+                      ? null
+                      : () {
+                          _homeSearchController.clear();
+                          _awaySearchController.clear();
+                          setState(() {
+                            _showHomeFirst = !_showHomeFirst;
+                            // When switching, clear all selections to avoid confusion.
+                            selectedPlayers.clear();
+                            selectedOpponentPlayers.clear();
+                            _selectedVerb = null;
+                            selectedInning = null;
+                            celebrateWith.clear();
+                            captionController.clear();
+                            personalityController.clear();
+                          });
+                        },
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        Colors.black, // Match other non-primary buttons
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2), // Smaller padding
+                    minimumSize:
+                        const Size(0, 0), // Remove minimum size constraints
+                    tapTargetSize:
+                        MaterialTapTargetSize.shrinkWrap, // Shrink tap target
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4), // Slight rounding
+                    ),
+                  ),
                 ),
-                style: const TextStyle(fontSize: 11), // Smaller text size
-                cursorHeight: 10.0, // Smaller cursor
               ),
+            ),
+          const SizedBox(height: 8),
+          Container(
+            width: 200,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0),
+                  child: Icon(Icons.search, size: 16, color: Colors.grey),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: searchController,
+                    onChanged: (value) {
+                      setState(() {}); // Rebuild to filter list
+                    },
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black,
+                      height: 1.0,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Search...',
+                      hintStyle: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8.0,
+                        vertical: 0.0,
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (searchText.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      searchController.clear();
+                      setState(() {}); // Rebuild
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8.0),
+                      child: Icon(Icons.clear, size: 16, color: Colors.grey),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
           Flexible(
-            child: ListView(
-              children: [
-                ...filteredCodes.map((code) {
-                  final replacement = codeReplacements[code];
-                  if (replacement == null) {
-                    return const SizedBox.shrink();
-                  }
-                  final jerseyNumber = replacement.jerseyNumber;
-                  // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
-                  String nameOnly = replacement.short;
-                  if (jerseyNumber != null &&
-                      nameOnly.startsWith('$jerseyNumber ')) {
-                    nameOnly = nameOnly.substring(jerseyNumber.length + 1);
-                  }
-
-                  final isSelected = isHomeList
-                      ? selectedPlayers.contains(code)
-                      : selectedOpponentPlayers.contains(code);
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        if (isHomeList) {
-                          if (isSelected) {
-                            // If already selected, deselect
-                            selectedPlayers.remove(code);
-                          } else {
-                            selectedPlayers.add(code);
-                            isHome = true;
-                          }
-                        } else {
-                          if (isSelected) {
-                            selectedOpponentPlayers.remove(code);
-                          } else {
-                            selectedOpponentPlayers.add(code);
-                            isHome = false;
-                          }
-                        }
-
-                        // When a player is selected or deselected, update the
-                        // personality box to reflect the current selections.
-                        final allSelectedCodes = [
-                          ...selectedPlayers,
-                          ...selectedOpponentPlayers
-                        ];
-                        final personalityText = allSelectedCodes
-                            .map((c) {
-                              final replacement = codeReplacements[c];
-                              if (replacement == null) return null;
-                              // Get full name (FirstName LastName) from short name by removing number
-                              return replacement.short.split(' #').first;
-                            })
-                            .whereNotNull()
-                            .join(';');
-                        personalityController.text = personalityText;
-
-                        _updateCaption();
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 1.0, horizontal: 8.0),
-                      color:
-                          isSelected ? Colors.blue.shade50 : Colors.transparent,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 20, // Fixed width for the number column
-                            child: Text(
-                              jerseyNumber ?? '',
-                              textAlign: TextAlign
-                                  .right, // Right-align for number padding effect
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          const SizedBox(
-                              width: 8), // Space between number and name
-                          Expanded(
-                            child: Text(nameOnly,
-                                style: const TextStyle(fontSize: 12)),
-                          ),
-                        ],
+            child: filteredCodes.isEmpty && searchText.isNotEmpty
+                ? const Align(
+                    alignment: Alignment.topLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 20.0, left: 15.0),
+                      child: Text(
+                        'No results',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ],
-            ),
+                  )
+                : ListView(
+                    children: [
+                      ...filteredCodes.map((code) {
+                        final replacement = codeReplacements[code];
+                        if (replacement == null) {
+                          return const SizedBox.shrink();
+                        }
+                        final jerseyNumber = replacement.jerseyNumber;
+                        // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
+                        String nameOnly = replacement.short;
+                        if (jerseyNumber != null &&
+                            nameOnly.startsWith('$jerseyNumber ')) {
+                          nameOnly =
+                              nameOnly.substring(jerseyNumber.length + 1);
+                        }
+
+                        final isSelected = isHomeList
+                            ? selectedPlayers.contains(code)
+                            : selectedOpponentPlayers.contains(code);
+                        return InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (isHomeList) {
+                                if (isSelected) {
+                                  // If already selected, deselect
+                                  selectedPlayers.remove(code);
+                                } else {
+                                  selectedPlayers.add(code);
+                                  isHome = true;
+                                }
+                              } else {
+                                if (isSelected) {
+                                  selectedOpponentPlayers.remove(code);
+                                } else {
+                                  selectedOpponentPlayers.add(code);
+                                  isHome = false;
+                                }
+                              }
+
+                              // When a player is selected or deselected, update the
+                              // personality box to reflect the current selections.
+                              final allSelectedCodes = [
+                                ...selectedPlayers,
+                                ...selectedOpponentPlayers
+                              ];
+                              final personalityText = allSelectedCodes
+                                  .map((c) {
+                                    final replacement = codeReplacements[c];
+                                    if (replacement == null) return null;
+                                    // Get full name (FirstName LastName) from short name by removing number
+                                    return replacement.short.split(' #').first;
+                                  })
+                                  .whereNotNull()
+                                  .join(';');
+                              personalityController.text = personalityText;
+
+                              _updateCaption();
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 1.0,
+                                horizontal: 0.0), // Remove horizontal padding
+                            color: isSelected
+                                ? Colors.blue.shade50
+                                : Colors.transparent,
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width:
+                                      20, // Fixed width for the number column
+                                  child: Text(
+                                    jerseyNumber ?? '',
+                                    textAlign: TextAlign
+                                        .right, // Right-align for number padding effect
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                const SizedBox(
+                                    width: 8), // Space between number and name
+                                Expanded(
+                                  child: Text(nameOnly,
+                                      style: const TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -4611,7 +4945,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       width: 350,
       height: 500,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
+        border: Border.all(color: const Color.fromARGB(255, 216, 216, 216)),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
