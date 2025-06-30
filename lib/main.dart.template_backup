@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_navigation/adaptive_navigation.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:http/http.dart' as http;
 import 'dart:convert'; // for jsonDecode
@@ -273,8 +272,9 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
           pressElevation: 2,
           shadowColor: Colors.grey.shade400,
           shape: RoundedRectangleBorder(
+            // Add thin dark grey border
             borderRadius: BorderRadius.circular(4),
-            side: BorderSide.none,
+            side: BorderSide(color: Colors.grey.shade400, width: 1.0),
           ),
         );
       },
@@ -285,7 +285,6 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
 class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
-  String selectedState = '';
   final double _fixedChipWidth = 110.0;
   final double _dropdownWidth = 120.0;
 
@@ -513,7 +512,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _showHitTypes = false;
   bool _isSoloCelebration = false;
   bool _walkOff = false;
-  String _pastedRosterText = '';
 
   // Hit selection state
   String? _selectedHitType; // 'single', 'double', 'triple', 'home run'
@@ -565,117 +563,98 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisSize: MainAxisSize.min, // Prevent overflow
           children: [
-            const SizedBox(width: 2),
-            _buildArrow(),
-            const SizedBox(width: 2),
             Padding(
               padding: const EdgeInsets.only(left: 5.0),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // No IN option
-                    GestureDetector(
-                      onTap: () => onInningSelected(null),
+              child: MenuAnchor(
+                builder: (BuildContext context, MenuController controller,
+                    Widget? child) {
+                  return GestureDetector(
+                    onTap: () {
+                      if (controller.isOpen) {
+                        controller.close();
+                      } else {
+                        controller.open();
+                      }
+                    },
+                    child: SizedBox(
+                      width: _dropdownWidth,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 8.0),
                         decoration: BoxDecoration(
-                          color: selectedInning == null
-                              ? Colors.grey.shade600
-                              : Colors.grey.shade200,
+                          border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: Colors.black,
-                          ),
                         ),
-                        child: Text(
-                          'No IN',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: selectedInning == null
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: selectedInning == null
-                                ? Colors.white
-                                : Colors.black,
-                          ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisSize: MainAxisSize.min, // Prevent overflow
+                          children: [
+                            Expanded(
+                              child: Text(
+                                selectedInning != null
+                                    ? '$selectedInning IN'
+                                    : 'No IN',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.color,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down, size: 20),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    // Innings 1-9
-                    ...List.generate(9, (i) => i + 1).map((inning) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 4.0),
-                        child: GestureDetector(
-                          onTap: () => onInningSelected(inning),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4.0, vertical: 8.0),
-                            decoration: BoxDecoration(
-                              color: selectedInning == inning
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: Colors.black,
-                              ),
-                            ),
-                            child: Text(
-                              '$inning',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: selectedInning == inning
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: selectedInning == inning
-                                    ? Colors.white
-                                    : Colors.black,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    // Extras option
-                    GestureDetector(
-                      onTap: () {
-                        // Show dialog for extra innings selection
-                        _showExtraInningsDialog(onInningSelected);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 8.0),
-                        decoration: BoxDecoration(
-                          color:
-                              (selectedInning != null && selectedInning >= 10)
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: Colors.black,
-                          ),
-                        ),
-                        child: Text(
-                          'Extras',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight:
-                                (selectedInning != null && selectedInning >= 10)
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                            color:
-                                (selectedInning != null && selectedInning >= 10)
-                                    ? Colors.white
-                                    : Colors.black,
-                          ),
-                        ),
-                      ),
+                  );
+                },
+                menuChildren: [
+                  // First option: No IN
+                  MenuItemButton(
+                    onPressed: () => onInningSelected(null),
+                    style: MenuItemButton.styleFrom(
+                      minimumSize: const Size(0, 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     ),
-                  ],
-                ),
+                    child: const Text('No IN', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Divider(height: 1),
+                  ...List.generate(9, (i) => i + 1).map((inning) {
+                    return MenuItemButton(
+                      onPressed: () => onInningSelected(inning),
+                      style: MenuItemButton.styleFrom(
+                          minimumSize: const Size(0, 24),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 16.0)),
+                      child: Text('$inning IN',
+                          style: const TextStyle(fontSize: 12)),
+                    );
+                  }),
+                  SubmenuButton(
+                    style: MenuItemButton.styleFrom(
+                        minimumSize: const Size(0, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0)),
+                    menuChildren: [
+                      ...List.generate(21, (i) => i + 10).map((inning) {
+                        return MenuItemButton(
+                          onPressed: () => onInningSelected(inning),
+                          style: MenuItemButton.styleFrom(
+                              minimumSize: const Size(0, 24),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16.0)),
+                          child: Text('$inning IN',
+                              style: const TextStyle(fontSize: 12)),
+                        );
+                      }),
+                    ],
+                    child: const Text('Extra Innings...',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
             ),
           ],
@@ -704,73 +683,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
       ],
-    );
-  }
-
-  // Helper method to show extra innings dialog
-  void _showExtraInningsDialog(ValueChanged<int?> onInningSelected) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Select Extra Inning'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: GridView.builder(
-              shrinkWrap: true,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 2.5,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: 21, // 10th through 30th inning
-              itemBuilder: (context, index) {
-                final inning = index + 10;
-                return GestureDetector(
-                  onTap: () {
-                    onInningSelected(inning);
-                    Navigator.of(context).pop();
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _selectedRbiInning == inning
-                          ? Colors.blue.shade100
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: _selectedRbiInning == inning
-                            ? Colors.blue.shade300
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$inning',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: _selectedRbiInning == inning
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                          color: _selectedRbiInning == inning
-                              ? Colors.blue.shade700
-                              : Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -863,8 +775,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ),
                         if (_selectedVerb == 'hit') ...[
                           const SizedBox(width: 8.0),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 8.0),
                           ...(_selectedHitType == null
                                   ? ['single', 'double', 'triple', 'home run']
                                   : [_selectedHitType!])
@@ -909,181 +819,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       key: UniqueKey(),
                                     ),
                                   )),
-                          // Add RBI and inning selectors after hit type selection
-                          if (_selectedHitType != null) ...[
-                            // Add RBI selector for all hit types (including home runs)
-                            const SizedBox(width: 8.0),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildArrow(),
-                                const SizedBox(width: 2),
-                                if (_selectedHitType == 'home run') ...[
-                                  // Home run type selector
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 5.0),
-                                    child: MenuAnchor(
-                                      builder: (BuildContext context,
-                                          MenuController controller,
-                                          Widget? child) {
-                                        return GestureDetector(
-                                          onTap: () {
-                                            if (controller.isOpen) {
-                                              controller.close();
-                                            } else {
-                                              controller.open();
-                                            }
-                                          },
-                                          child: SizedBox(
-                                            width: _dropdownWidth,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                    color:
-                                                        Colors.grey.shade400),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8.0,
-                                                      vertical: 4.0),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment
-                                                        .spaceBetween,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      _selectedHomeRunType ==
-                                                              null
-                                                          ? 'HR Type'
-                                                          : _selectedHomeRunType ==
-                                                                  'solo'
-                                                              ? 'Solo HR'
-                                                              : _selectedHomeRunType ==
-                                                                      'two-run'
-                                                                  ? '2 Run HR'
-                                                                  : _selectedHomeRunType ==
-                                                                          'three-run'
-                                                                      ? '3 Run HR'
-                                                                      : 'Grand Slam',
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Theme.of(context)
-                                                            .textTheme
-                                                            .bodyMedium
-                                                            ?.color,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  const Icon(
-                                                      Icons.arrow_drop_down,
-                                                      size: 20),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      menuChildren: [
-                                        if (_selectedHomeRunType != null) ...[
-                                          MenuItemButton(
-                                            onPressed: () {
-                                              setState(() {
-                                                _selectedHomeRunType = null;
-                                                _updateCaption();
-                                              });
-                                            },
-                                            style: MenuItemButton.styleFrom(
-                                              minimumSize: const Size(0, 24),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 16.0),
-                                            ),
-                                            child: const Text('Clear Selection',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontStyle: FontStyle.italic,
-                                                    color: Colors.redAccent)),
-                                          ),
-                                          const Divider(height: 1),
-                                        ],
-                                        MenuItemButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _selectedHomeRunType = 'solo';
-                                              _updateCaption();
-                                            });
-                                          },
-                                          style: MenuItemButton.styleFrom(
-                                            minimumSize: const Size(0, 24),
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16.0),
-                                          ),
-                                          child: const Text('Solo HR',
-                                              style: TextStyle(fontSize: 12)),
-                                        ),
-                                        MenuItemButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _selectedHomeRunType = 'two-run';
-                                              _updateCaption();
-                                            });
-                                          },
-                                          style: MenuItemButton.styleFrom(
-                                            minimumSize: const Size(0, 24),
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16.0),
-                                          ),
-                                          child: const Text('2 Run HR',
-                                              style: TextStyle(fontSize: 12)),
-                                        ),
-                                        MenuItemButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _selectedHomeRunType =
-                                                  'three-run';
-                                              _updateCaption();
-                                            });
-                                          },
-                                          style: MenuItemButton.styleFrom(
-                                            minimumSize: const Size(0, 24),
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16.0),
-                                          ),
-                                          child: const Text('3 Run HR',
-                                              style: TextStyle(fontSize: 12)),
-                                        ),
-                                        MenuItemButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _selectedHomeRunType =
-                                                  'grand slam';
-                                              _updateCaption();
-                                            });
-                                          },
-                                          style: MenuItemButton.styleFrom(
-                                            minimumSize: const Size(0, 24),
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16.0),
-                                          ),
-                                          child: const Text('Grand Slam',
-                                              style: TextStyle(fontSize: 12)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ] else ...[
-                                  // Old RBI selector removed - using horizontal RBI selector below
-                                ],
-                              ],
-                            ),
-                          ],
                           if (_selectedHitType != null &&
                               !(_isSoloCelebration ||
                                   celebrateWith.isNotEmpty ||
@@ -1097,17 +832,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ],
                     ),
                   ),
-                  // Add inning and RBI selectors after hit type selection
-                  if (_selectedVerb == 'hit') ...[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0, left: 166.0),
-                      child: _buildHorizontalRbiSelector(),
-                    ),
-                  ],
                   // --- REPLACEMENT BLOCK FOR OPTIONAL ADAPTERS ---
                   if (_selectedHitType != null)
                     Padding(
-                      padding: EdgeInsets.only(left: 320.0, top: 4.0),
+                      padding: EdgeInsets.only(
+                          left: _hitIndent.clamp(0.0, double.infinity),
+                          top: 4.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1134,81 +864,30 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                                 selected: _isSoloCelebration ||
                                     celebrateWith.isNotEmpty,
-                                onSelected: (isSelected) async {
-                                  if (isSelected) {
-                                    // Set default to solo celebration
-                                    setState(() {
-                                      _isSoloCelebration = true;
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _isSoloCelebration =
+                                          true; // Select this option
                                       celebrateWith.clear();
-                                      _isBatterRunning = false;
-                                    });
-                                    _updateCaption();
-                                  } else {
-                                    setState(() {
+                                      _isBatterRunning =
+                                          false; // Deselect other sub-option
+                                    } else {
                                       _isSoloCelebration = false;
                                       celebrateWith.clear();
-                                    });
+                                    }
                                     _updateCaption();
-                                  }
+                                  });
                                 },
                                 visualDensity: VisualDensity.compact,
                                 padding: EdgeInsets.zero,
                               ),
                               if (_isSoloCelebration ||
                                   celebrateWith.isNotEmpty) ...[
-                                const SizedBox(width: 8.0),
-                                // Alone chip
-                                FlashingFilterChip(
-                                  label: SizedBox(
-                                    width: _fixedChipWidth,
-                                    child: const Center(
-                                        child: Text('Alone',
-                                            style: TextStyle(fontSize: 12))),
-                                  ),
-                                  selected: _isSoloCelebration,
-                                  onSelected: (isSelected) {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _isSoloCelebration = true;
-                                        celebrateWith.clear();
-                                        _isBatterRunning = false;
-                                      } else {
-                                        _isSoloCelebration = false;
-                                      }
-                                      _updateCaption();
-                                    });
-                                  },
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                ),
-                                const SizedBox(width: 8.0),
-                                // With Teammates chip
-                                FlashingFilterChip(
-                                  label: SizedBox(
-                                    width: _fixedChipWidth,
-                                    child: const Center(
-                                        child: Text('With Teammates',
-                                            style: TextStyle(fontSize: 12))),
-                                  ),
-                                  selected: celebrateWith.isNotEmpty,
-                                  onSelected: (isSelected) async {
-                                    if (isSelected) {
-                                      _isSoloCelebration = false;
-                                      _isBatterRunning = false;
-                                      _showCelebrateDialog();
-                                    } else {
-                                      setState(() {
-                                        celebrateWith.clear();
-                                        _updateCaption();
-                                      });
-                                    }
-                                  },
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                ),
+                                // TOOLBAR ROW REPLACEMENT START (celebration)
                                 const SizedBox(width: 8.0),
                                 _buildArrow(),
-
+                                const SizedBox(width: 8.0),
                                 _buildActionToolbar(),
                                 // TOOLBAR ROW REPLACEMENT END
                               ],
@@ -1307,8 +986,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     if (_selectedVerb == 'Prior to Game') ...[
                       const SizedBox(width: 4),
                       _buildArrow(),
-                      const SizedBox(width: 4),
-                      _buildHitInningSelector(showWalkOffOption: true),
                       const SizedBox(width: 4),
                       Wrap(
                         spacing: 8.0,
@@ -1413,9 +1090,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               : null,
                         ),
                         if (_showLooksOn && _selectedVerb == 'Portrait') ...[
-                          const SizedBox(width: 8.0),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 8.0),
                           _buildArrow(),
                           const SizedBox(width: 2),
                           FlashingFilterChip(
@@ -1517,9 +1191,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ),
                         if (_showFieldingOptions &&
                             _selectedVerb == 'Fielding') ...[
-                          const SizedBox(width: 8.0),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 8.0),
                           _buildArrow(),
                           if (_selectedFieldingAction == null) ...[
                             Padding(
@@ -1884,10 +1555,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           ),
         ),
       ],
-      // Old RBI selector removed - using horizontal RBI selector below
-      // RBI selector removed - using horizontal RBI selector below
       // After home run choice, always show inning selector
-      const SizedBox(width: 8.0),
       _buildHitInningSelector(showWalkOffOption: true),
     ];
   }
@@ -1990,12 +1658,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // ── Info section ─────────────────────────────
   DateTime selectedDate = DateTime.now();
 
-  final stadiumController = TextEditingController();
-  final cityController = TextEditingController();
-  final TextEditingController provinceController = TextEditingController();
-
-  String? selectedHomeTeam;
-  String? selectedAwayTeam;
+  final stadiumController = TextEditingController(text: 'Rogers Centre');
+  final cityController = TextEditingController(text: 'Toronto');
+  final TextEditingController provinceController =
+      TextEditingController(text: 'Ontario'); // Unified controller name
+  String selectedState = 'Ontario';
+  String? selectedHomeTeam = 'Toronto Blue Jays';
+  String? selectedAwayTeam = 'Chicago White Sox';
   // ...rest of state...
   // UI BUILD
   // (Removed duplicate build method)
@@ -2016,9 +1685,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           onChanged: (String? newValue) {
             setState(() {
               selectedHomeTeam = newValue;
-              if (selectedHomeTeam != null) {
-                _loadTeam(selectedHomeTeam!, isHomeTeam: true);
-              }
+              _loadTeam(selectedHomeTeam!, isHomeTeam: true);
             });
           },
           items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
@@ -2033,9 +1700,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           onChanged: (String? newValue) {
             setState(() {
               selectedAwayTeam = newValue;
-              if (selectedAwayTeam != null) {
-                _loadTeam(selectedAwayTeam!, isHomeTeam: false);
-              }
+              _loadTeam(selectedAwayTeam!, isHomeTeam: false);
             });
           },
           items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
@@ -2154,19 +1819,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Getty Images metadata controllers
   final jobIdController = TextEditingController();
-  final descriptionWritersController = TextEditingController();
+  final descriptionWritersController = TextEditingController(text: 'MB');
   final headlineController = TextEditingController();
   final keywordsController = TextEditingController();
-  final creatorController = TextEditingController();
-  final creatorJobTitleController = TextEditingController();
-  final creditController = TextEditingController();
-  final copyrightController = TextEditingController();
-  final sourceController = TextEditingController();
+  final creatorController = TextEditingController(text: 'Mark Blinch');
+  final creatorJobTitleController = TextEditingController(text: 'Contributor');
+  final creditController = TextEditingController(text: 'Getty Images');
+  final copyrightController = TextEditingController(text: '2025 Mark Blinch');
+  final sourceController =
+      TextEditingController(text: 'Getty Images North America');
 
   // IPTC metadata controllers
-  final urgencyController = TextEditingController();
-  final countryController = TextEditingController();
-  final countryCodeController = TextEditingController();
+  final urgencyController = TextEditingController(text: '5');
+  final countryController = TextEditingController(text: 'Canada');
+  final countryCodeController = TextEditingController(text: 'CAN');
 
   // Country codes for dropdown
   final List<Map<String, String>> countryCodes = [
@@ -2257,7 +1923,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   void initState() {
     super.initState();
     captionController.clear();
-    _pastedRosterText = ''; // Initialize to empty string
     _initializeTeamData();
 
     // Initialize animation controllers - fast and subtle
@@ -2416,12 +2081,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _initializeTeamData() async {
-    // Only load the home team if one is selected
-    if (selectedHomeTeam != null) {
-      await _loadTeam(selectedHomeTeam!, isHomeTeam: true);
-    }
-    // Only load the away team if one is selected and widget is still mounted
-    if (mounted && selectedAwayTeam != null) {
+    // Load initial team data sequentially to prevent race conditions.
+    // First, load the home team (which includes location data).
+    await _loadTeam(selectedHomeTeam!, isHomeTeam: true);
+    // After the home team is loaded, load the away team.
+    // Check if the widget is still mounted before making the second call.
+    if (mounted) {
       await _loadTeam(selectedAwayTeam!, isHomeTeam: false);
     }
   }
@@ -3186,11 +2851,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         .toList();
     // Determine the team from the first player's code to infer if it's home or away
     final isHomeTeamPlayer = codes.first.startsWith('h');
-
-    // Add null checks before using the null check operator
-    if (isHomeTeamPlayer && selectedHomeTeam == null) return shorts.join(', ');
-    if (!isHomeTeamPlayer && selectedAwayTeam == null) return shorts.join(', ');
-
     final prefixTeam = isHomeTeamPlayer ? selectedHomeTeam! : selectedAwayTeam!;
 
     if (shorts.length == 1) {
@@ -3222,17 +2882,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final oppShorts = oppCodes
         .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
         .toList();
-
-    // Add null checks before using the null check operator
-    if (selectedHomeTeam == null || selectedAwayTeam == null) {
-      // If teams are not selected, just return player names without team info
-      final allShorts = [...homeShorts, ...oppShorts];
-      if (allShorts.isEmpty) return '';
-      if (allShorts.length == 1) return allShorts.first;
-      final last = allShorts.removeLast();
-      return '${allShorts.join(', ')}, and $last';
-    }
-
     String teamA = selectedHomeTeam!; // Assuming homeCodes are always home team
     String teamB = selectedAwayTeam!; // Assuming oppCodes are always away team
 
@@ -3360,29 +3009,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // New helper function for hit verb's inning selection
   Widget _buildHitInningSelector({bool showWalkOffOption = false}) {
-    return buildInlineInningSelector(
-      showWalkOffOption: showWalkOffOption,
-      selectedInning: _selectedRbiInning,
-      onInningSelected: (val) {
-        setState(() {
-          _selectedRbiInning = val;
-          // Save inning per hit type
-          if (_selectedHitType != null) {
-            _inningByHit[_selectedHitType!] = _selectedRbiInning;
-          }
-          _updateCaption();
-        });
-      },
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start, // Align children to the top
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 2),
+        _buildArrow(),
+        const SizedBox(width: 2),
+        buildInlineInningSelector(
+          showWalkOffOption: showWalkOffOption,
+          selectedInning: _selectedRbiInning,
+          onInningSelected: (val) {
+            setState(() {
+              _selectedRbiInning = val;
+              // Save inning per hit type
+              if (_selectedHitType != null) {
+                _inningByHit[_selectedHitType!] = _selectedRbiInning;
+              }
+              _updateCaption();
+            });
+          },
+        ),
+      ],
     );
   }
 
   // --- REVISED _updateCaption METHOD ---
   void _updateCaption() {
-    // Safety check: if no teams are selected, don't try to generate captions
-    if (selectedHomeTeam == null && selectedAwayTeam == null) {
-      return;
-    }
-
     final city = cityController.text;
     final prov = provinceController.text;
     final monLC = _month(selectedDate.month);
@@ -3397,11 +3050,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
       final playerName =
           _combinePlayersWithSingleTeam(selectedPlayers.toList());
-
-      // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
       final awayTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
       final stadium = stadiumController.text;
       final photoBy = creatorController.text;
@@ -3420,10 +3068,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
       final playerName =
           _combinePlayersWithSingleTeam(selectedPlayers.toList());
-
-      // Add null checks for teams
-      if (selectedHomeTeam == null || selectedAwayTeam == null) return;
-
       final homeTeam = selectedHomeTeam!;
       final awayTeam = selectedAwayTeam!;
       final stadium = stadiumController.text;
@@ -3438,11 +3082,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (_selectedHitType != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-
-      // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -3577,11 +3216,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     } else if (_selectedVerb == 'Fielding' && _selectedFieldingAction != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-
-      // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -3606,11 +3240,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     } else if (_selectedVerb == 'Portrait') {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-
-      // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -3632,11 +3261,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     } else if (_selectedVerb != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-
-      // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
       final opponentPlayers =
@@ -3826,32 +3450,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             k.startsWith('h') && codeReplacements[k]?.jerseyNumber != null)
         .toList()
       ..sort((a, b) {
-        try {
-          final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
-          final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
-          return jerseyA.compareTo(jerseyB);
-        } catch (e) {
-          // If jersey numbers can't be parsed as integers, sort alphabetically
-          final nameA = codeReplacements[a]!.full;
-          final nameB = codeReplacements[b]!.full;
-          return nameA.compareTo(nameB);
-        }
+        final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
+        final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
+        return jerseyA.compareTo(jerseyB);
       });
     final awayPlayers = codeReplacements.keys
         .where((k) =>
             k.startsWith('v') && codeReplacements[k]?.jerseyNumber != null)
         .toList()
       ..sort((a, b) {
-        try {
-          final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
-          final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
-          return jerseyA.compareTo(jerseyB);
-        } catch (e) {
-          // If jersey numbers can't be parsed as integers, sort alphabetically
-          final nameA = codeReplacements[a]!.full;
-          final nameB = codeReplacements[b]!.full;
-          return nameA.compareTo(nameB);
-        }
+        final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
+        final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
+        return jerseyA.compareTo(jerseyB);
       });
 
     return Shortcuts(
@@ -3902,13 +3512,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ],
               ),
               actions: [
-                // Paste Roster Button
-                IconButton(
-                  icon: const Icon(Icons.file_upload),
-                  tooltip: 'Paste Roster (copy and paste the roster)',
-                  onPressed: _showRosterParser,
-                ),
-                const SizedBox(width: 8),
                 // API Connection Indicator
                 Tooltip(
                   message: _isConnectedToApi
@@ -3957,9 +3560,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             onChanged: (v) async {
                               if (v == null) return;
                               setState(() => selectedHomeTeam = v);
-                              if (selectedHomeTeam != null) {
-                                _loadTeam(v, isHomeTeam: true);
-                              }
+                              await _loadTeam(v, isHomeTeam: true);
                               // Get the values to show in the dialog
                               final city = cityController.text;
                               final province = provinceController.text;
@@ -4044,9 +3645,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             onChanged: (v) {
                               if (v == null) return;
                               setState(() => selectedAwayTeam = v);
-                              if (selectedAwayTeam != null) {
-                                _loadTeam(v, isHomeTeam: false);
-                              }
+                              _loadTeam(v, isHomeTeam: false);
                             },
                           ),
 
@@ -4380,6 +3979,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 'FTP',
                                                 _onFtpPressed,
                                                 isBlue: true,
+                                              ),
+                                              const Spacer(),
+                                              _buildStyledButton(
+                                                'Load Template',
+                                                _loadTemplateFromFile,
                                               ),
                                               const Spacer(),
                                               _buildStyledButton(
@@ -5408,15 +5012,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           nameOnly =
                               nameOnly.substring(jerseyNumber.length + 1);
                         }
-                        // Remove trailing number if present
-                        nameOnly = nameOnly.split(' #').first;
 
                         final isSelected = isHomeList
                             ? selectedPlayers.contains(code)
                             : selectedOpponentPlayers.contains(code);
-                        final safeNumber = (jerseyNumber ?? '0').toString();
-                        final safeName = (nameOnly ?? '').trim();
-                        final displayText = '#$safeNumber $safeName';
                         return InkWell(
                           onTap: () {
                             setState(() {
@@ -5458,16 +5057,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             });
                           },
                           child: Container(
-                            color: isSelected
-                                ? Colors.grey.shade200
-                                : Colors.transparent,
                             padding: const EdgeInsets.symmetric(
-                                vertical: 2, horizontal: 8),
+                                vertical: 1.0,
+                                horizontal: 0.0), // Remove horizontal padding
+                            color: isSelected
+                                ? Colors.blue.shade50
+                                : Colors.transparent,
                             child: Row(
                               children: [
-                                Text(
-                                  displayText,
-                                  style: const TextStyle(fontSize: 12),
+                                SizedBox(
+                                  width:
+                                      20, // Fixed width for the number column
+                                  child: Text(
+                                    jerseyNumber ?? '',
+                                    textAlign: TextAlign
+                                        .right, // Right-align for number padding effect
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                                const SizedBox(
+                                    width: 8), // Space between number and name
+                                Expanded(
+                                  child: Text(nameOnly,
+                                      style: const TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
@@ -5849,668 +5461,185 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  // Roster parsing functionality
-  void _showRosterParser() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Paste Home Team Roster'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 500,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'First, select the home team and paste the home team roster.\n\n'
-                  'The parser will look for patterns like:\n'
-                  '• "John Smith #23" (first last #number)\n'
-                  '• "23 John Smith" (number first last)\n'
-                  '• "Smith, John 23" (last, first number)\n'
-                  '• "John Smith" (first last, no number)\n\n'
-                  'Works for any sport: baseball, basketball, football, hockey, etc.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-                // Home Team Selection Dropdown
-                Row(
-                  children: [
-                    const Text('Home Team: ',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: selectedHomeTeam,
-                        hint: const Text('Select home team'),
-                        isExpanded: true,
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            selectedHomeTeam = newValue;
-                          });
-                        },
-                        items: teamStates.keys
-                            .map<DropdownMenuItem<String>>((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Roster Text Field
-                Expanded(
-                  child: TextField(
-                    maxLines: null,
-                    expands: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Paste home team roster text here...',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      // Store the pasted text for parsing
-                      _pastedRosterText = value;
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // Check if home team is selected
-                if (selectedHomeTeam == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please select a home team first'),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                  return;
-                }
-
-                Navigator.of(context).pop();
-                _parseRosterText(_pastedRosterText, isHomeTeam: true);
-              },
-              child: const Text('Paste Home Roster'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _parseRosterText(String text, {required bool isHomeTeam}) {
-    final lines = text.split('\n');
-
-    final List<Map<String, String>> parsedPlayers = [];
-    final Set<String> foundPlayers =
-        {}; // Track which players we've already found
-
-    // Keywords that indicate this is not a player line
-    final skipKeywords = [
-      'roster',
-      'staff',
-      'active',
-      'depth',
-      'chart',
-      'non-roster',
-      'coaches',
-      'transactions',
-      'pitchers',
-      'catchers',
-      'infielders',
-      'outfielders',
-      'b/t',
-      'ht',
-      'wt',
-      'dob',
-      'designated',
-      'hitters',
-      'relievers',
-      'starters',
-      'bench',
-      'reserve'
-    ];
-
-    for (String line in lines) {
-      line = line.trim();
-      if (line.isEmpty) continue;
-
-      // Skip lines that are just numbers or very short
-      if (line.length < 3 || RegExp(r'^\d+$').hasMatch(line)) continue;
-
-      // Skip lines that contain header keywords
-      final lowerLine = line.toLowerCase();
-      bool shouldSkip = false;
-      for (String keyword in skipKeywords) {
-        if (lowerLine.contains(keyword)) {
-          shouldSkip = true;
-          break;
-        }
-      }
-      if (shouldSkip) continue;
-
-      // Process tab-separated lines FIRST - these contain the jersey numbers
-      if (line.contains('\t')) {
-        final parts = line.split('\t');
-
-        if (parts.length >= 3) {
-          final namePart = parts[0].trim();
-          final stancePart =
-              parts[1].trim(); // Batting stance is in second column
-          final heightPart = parts[2].trim(); // Height is in third column
-
-          // Extract name and number from the name part (e.g., "Chris Bassitt 40")
-          final nameNumberMatch =
-              RegExp(r'^(.+?)\s+(\d+)$').firstMatch(namePart);
-          if (nameNumberMatch != null) {
-            final fullName = nameNumberMatch.group(1)?.trim();
-            final playerNumber = nameNumberMatch.group(2);
-
-            // Extract first and last name from the full name
-            final nameMatch =
-                RegExp(r'^(.+?)\s+(.+)$').firstMatch(fullName ?? '');
-            if (nameMatch != null) {
-              final firstName = nameMatch.group(1)?.trim();
-              final lastName = nameMatch.group(2)?.trim();
-
-              if (firstName != null &&
-                  lastName != null &&
-                  firstName.length > 1 &&
-                  lastName.length > 1) {
-                // Skip if the names look like headers or metadata
-                if (!skipKeywords.any((keyword) =>
-                    (firstName.toLowerCase()).contains(keyword) ||
-                    (lastName.toLowerCase()).contains(keyword))) {
-                  // Create a unique key for this player
-                  final playerKey =
-                      '${firstName.toLowerCase()}_${lastName.toLowerCase()}';
-
-                  // Only add if we haven't seen this player before
-                  if (!foundPlayers.contains(playerKey)) {
-                    final player = {
-                      'firstName': firstName,
-                      'lastName': lastName,
-                      'number': playerNumber ?? '',
-                    };
-                    parsedPlayers.add(player);
-                    foundPlayers.add(playerKey);
-                  }
-                }
-              }
-            }
-          }
-        }
-        continue; // CRITICAL: Always skip regular parsing for tab-separated lines
-      }
-
-      // Only process non-tab lines with regular patterns
-      String? firstName;
-      String? lastName;
-      String? playerNumber;
-
-      // Skip lines that don't contain any numbers (these are name-only lines)
-      if (!RegExp(r'\d').hasMatch(line)) {
-        continue; // Skip name-only lines - we'll handle them in a second pass if needed
-      }
-
-      // Pattern 1: "John Smith #23" or "John Smith 23" (most common)
-      RegExp pattern1 = RegExp(r'^(.+?)\s+(.+?)\s*(?:#)?(\d+)$');
-      Match? match1 = pattern1.firstMatch(line);
-      if (match1 != null) {
-        firstName = match1.group(1)?.trim();
-        lastName = match1.group(2)?.trim();
-        playerNumber = match1.group(3);
-      }
-
-      // Pattern 2: "23 John Smith" (number first)
-      if (firstName == null) {
-        RegExp pattern2 = RegExp(r'^(\d+)\s+(.+?)\s+(.+)$');
-        Match? match2 = pattern2.firstMatch(line);
-        if (match2 != null) {
-          playerNumber = match2.group(1);
-          firstName = match2.group(2)?.trim();
-          lastName = match2.group(3)?.trim();
-        }
-      }
-
-      // Pattern 3: "Smith, John 23" or "Smith, John #23" (last, first number)
-      if (firstName == null) {
-        RegExp pattern3 = RegExp(r'^(.+?),\s*(.+?)\s*(?:#)?(\d+)$');
-        Match? match3 = pattern3.firstMatch(line);
-        if (match3 != null) {
-          lastName = match3.group(1)?.trim() ?? '';
-          firstName = match3.group(2)?.trim() ?? '';
-          playerNumber = match3.group(3);
-        }
-      }
-
-      // If we found a player, add them to the list
-      if (firstName != null && lastName != null) {
-        // Additional validation: make sure we have reasonable names
-        if (firstName.length > 1 && lastName.length > 1) {
-          // Skip if the names look like headers or metadata
-          if (!skipKeywords.any((keyword) =>
-              (firstName?.toLowerCase() ?? '').contains(keyword) ||
-              (lastName?.toLowerCase() ?? '').contains(keyword))) {
-            final player = {
-              'firstName': firstName,
-              'lastName': lastName,
-              'number': playerNumber ?? '',
-            };
-            parsedPlayers.add(player);
-          }
-        }
-      }
-    }
-
-    if (parsedPlayers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'No players found in the pasted text. Please check the format.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Show review dialog
-    _showParsedPlayersDialog(parsedPlayers, isHomeTeam: isHomeTeam);
-  }
-
-  void _showParsedPlayersDialog(List<Map<String, String>> players,
-      {required bool isHomeTeam}) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Found ${players.length} Players'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 400,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Found ${players.length} players for the ${isHomeTeam ? 'home' : 'visiting'} team.',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Review the parsed players:',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 300,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: players.map((player) {
-                        final firstName = player['firstName'] ?? '';
-                        final lastName = player['lastName'] ?? '';
-                        final number = player['number'] ?? '0';
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 50,
-                                child: Text(
-                                  '#$number',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text('$firstName $lastName'),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                // Wait a frame to ensure dialog is fully closed
-                await Future.delayed(Duration.zero);
-
-                // Process in a separate microtask to avoid blocking UI
-                Future.microtask(() {
-                  _addParsedPlayersToCodeReplacements(players,
-                      isHomeTeam: isHomeTeam);
-                });
-              },
-              child: const Text('Add Players'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _addParsedPlayersToCodeReplacements(List<Map<String, String>> players,
-      {required bool isHomeTeam}) {
-    print(
-        '_addParsedPlayersToCodeReplacements called with ${players.length} players');
-
-    // Use the specified team (home or away)
-    final prefix = isHomeTeam ? 'h' : 'v';
-    final Map<String, Replacement> newReplacements = {};
-
-    for (int i = 0; i < players.length; i++) {
-      final player = players[i];
-      final firstName = player['firstName'] ?? '';
-      final lastName = player['lastName'] ?? '';
-      final jerseyNumber =
-          (player['number'] ?? '0').isNotEmpty ? player['number']! : '0';
-
-      // Format for Getty style: Name #Number
-      final fullName = '$firstName $lastName';
-      final displayName = '$fullName #$jerseyNumber';
-      final code = '$prefix$i';
-
-      newReplacements[code] = Replacement(
-        displayName,
-        displayName,
-        firstName,
-        jerseyNumber,
-      );
-    }
-
-    // Check if widget is still mounted before calling setState
-    if (!mounted) return;
-
+  // Function to parse Getty IPTC template format
+  void _loadGettyTemplate(String templateContent) {
     try {
-      print('About to call setState');
-      setState(() {
-        print('Inside setState - removing existing players');
-        // Remove existing players of the specified team type
-        codeReplacements.removeWhere((key, _) => key.startsWith(prefix));
+      // Clear all IPTC fields first to start with a clean slate
+      categoryController.clear();
+      suppCat1Controller.clear();
+      suppCat2Controller.clear();
+      suppCat3Controller.clear();
+      specialInstructionsController.clear();
+      creatorController.clear();
+      creatorJobTitleController.text =
+          'Contributor'; // Set default instead of clearing
+      cityController.clear();
+      stadiumController.clear();
+      provinceController.clear();
+      countryCodeController.text = 'CAN'; // Set default instead of clearing
+      countryController.text = 'Canada'; // Set default instead of clearing
+      jobIdController.clear();
+      headlineController.clear();
+      creditController.clear();
+      sourceController.clear();
+      copyrightController.clear();
+      captionController.clear();
 
-        print('Inside setState - adding ${newReplacements.length} new players');
-        // Add new players
-        codeReplacements.addAll(newReplacements);
+      final lines = templateContent.split('\n');
+      print('Template loaded with ${lines.length} lines'); // Debug info
 
-        // Clear selected players of the specified team
-        if (isHomeTeam) {
-          selectedPlayers.clear();
-        } else {
-          selectedOpponentPlayers.clear();
+      for (String line in lines) {
+        if (line.trim().isEmpty) continue;
+
+        // Split only the first three colons
+        final firstColon = line.indexOf(':');
+        final secondColon = line.indexOf(':', firstColon + 1);
+        final thirdColon = line.indexOf(':', secondColon + 1);
+        if (firstColon == -1 || secondColon == -1 || thirdColon == -1) {
+          print('Skipping invalid line: $line');
+          continue;
         }
-        print('setState completed');
-      });
+        final fieldCode = line.substring(0, secondColon);
+        final length =
+            int.tryParse(line.substring(secondColon + 1, thirdColon)) ?? 0;
+        final value = line.substring(thirdColon + 1).trim();
 
-      print('setState finished, getting team name');
-      final teamName = isHomeTeam ? selectedHomeTeam : selectedAwayTeam;
-      if (mounted) {
+        print('Processing field: $fieldCode = $value'); // Debug info
+
+        switch (fieldCode) {
+          case '2:15': // Category
+            categoryController.text = value;
+            break;
+          case '2:20': // Supplemental Categories
+            // Handle multiple supplemental categories
+            if (suppCat1Controller.text.isEmpty) {
+              suppCat1Controller.text = value;
+            } else if (suppCat2Controller.text.isEmpty) {
+              suppCat2Controller.text = value;
+            } else if (suppCat3Controller.text.isEmpty) {
+              suppCat3Controller.text = value;
+            }
+            break;
+          case '2:40': // Special Instructions
+            specialInstructionsController.text = value;
+            break;
+          case '2:55': // Date
+            try {
+              // Parse date format YYYYMMDD
+              if (value.length >= 8) {
+                final year = int.parse(value.substring(0, 4));
+                final month = int.parse(value.substring(4, 6));
+                final day = int.parse(value.substring(6, 8));
+                selectedDate = DateTime(year, month, day);
+              } else {
+                print('Date value too short: $value');
+              }
+            } catch (e) {
+              print('Error parsing date: $value - $e'); // Debug info
+              // Keep current date if parsing fails
+            }
+            break;
+          case '2:80': // Creator
+            creatorController.text = value;
+            break;
+          case '2:85': // Creator Job Title
+            // Check if the value is a valid job title option
+            final validJobTitles = ['Contributor', 'Stringer', 'Staff'];
+            if (validJobTitles.contains(value)) {
+              creatorJobTitleController.text = value;
+            } else {
+              // Default to 'Contributor' if the value is not valid
+              creatorJobTitleController.text = 'Contributor';
+            }
+            break;
+          case '2:90': // City
+            cityController.text = value;
+            break;
+          case '2:92': // Sub-location/Stadium
+            stadiumController.text = value;
+            break;
+          case '2:95': // Province/State
+            provinceController.text = value;
+            break;
+          case '2:100': // Country Code
+            countryCodeController.text = value;
+            break;
+          case '2:101': // Country
+            countryController.text = value;
+            break;
+          case '2:103': // Transmission Reference (Job ID/MEID)
+            jobIdController.text = value;
+            break;
+          case '2:105': // Headline
+            headlineController.text = value;
+            break;
+          case '2:110': // Credit
+            creditController.text = value;
+            break;
+          case '2:115': // Source
+            sourceController.text = value;
+            break;
+          case '2:116': // Copyright
+            copyrightController.text = value;
+            break;
+          case '2:120': // Caption template
+            // Extract the caption part from the template
+            if (value.contains('<<enter caption here>>')) {
+              final captionTemplate =
+                  value.replaceAll('<<enter caption here>>', '');
+              captionController.text = captionTemplate;
+            }
+            break;
+          default:
+            print('Unknown field code: $fieldCode'); // Debug info
+            break;
+        }
+      }
+
+      // Update Object Name after loading template
+      _updateObjectName();
+      _updateCaption();
+
+      print('Template loading completed successfully'); // Debug info
+    } catch (e) {
+      print('Error in _loadGettyTemplate: $e'); // Debug info
+      rethrow; // Re-throw the error so it can be caught by the calling function
+    }
+  }
+
+  // Function to show file picker and load template
+  Future<void> _loadTemplateFromFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['txt'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = File(result.files.first.path!);
+        final content = await file.readAsString();
+
+        setState(() {
+          _loadGettyTemplate(content);
+        });
+
+        // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Added ${players.length} players to ${teamName ?? (isHomeTeam ? 'home' : 'visiting')} team'),
+          const SnackBar(
+            content: Text('Getty template loaded successfully'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
-      print('Error in _addParsedPlayersToCodeReplacements: $e');
-    }
-  }
-
-  // New helper for home run type selection dropdown
-  Widget _buildHomeRunTypeSelector() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 5.0),
-      child: MenuAnchor(
-        builder:
-            (BuildContext context, MenuController controller, Widget? child) {
-          return GestureDetector(
-            onTap: () {
-              if (controller.isOpen) {
-                controller.close();
-              } else {
-                controller.open();
-              }
-            },
-            child: SizedBox(
-              width: _dropdownWidth,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _selectedHomeRunType == null
-                            ? 'HR Type'
-                            : _selectedHomeRunType == 'solo'
-                                ? 'Solo HR'
-                                : _selectedHomeRunType == 'two-run'
-                                    ? '2 Run HR'
-                                    : _selectedHomeRunType == 'three-run'
-                                        ? '3 Run HR'
-                                        : 'Grand Slam',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, size: 20),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-        menuChildren: [
-          if (_selectedHomeRunType != null) ...[
-            MenuItemButton(
-              onPressed: () {
-                setState(() {
-                  _selectedHomeRunType = null;
-                  _updateCaption();
-                });
-              },
-              style: MenuItemButton.styleFrom(
-                minimumSize: const Size(0, 24),
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              ),
-              child: const Text('Clear Selection',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.redAccent)),
-            ),
-            const Divider(height: 1),
-          ],
-          MenuItemButton(
-            onPressed: () {
-              setState(() {
-                _selectedHomeRunType = 'solo';
-                _updateCaption();
-              });
-            },
-            style: MenuItemButton.styleFrom(
-              minimumSize: const Size(0, 24),
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            ),
-            child: const Text('Solo HR', style: TextStyle(fontSize: 12)),
-          ),
-          MenuItemButton(
-            onPressed: () {
-              setState(() {
-                _selectedHomeRunType = 'two-run';
-                _updateCaption();
-              });
-            },
-            style: MenuItemButton.styleFrom(
-              minimumSize: const Size(0, 24),
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            ),
-            child: const Text('2 Run HR', style: TextStyle(fontSize: 12)),
-          ),
-          MenuItemButton(
-            onPressed: () {
-              setState(() {
-                _selectedHomeRunType = 'three-run';
-                _updateCaption();
-              });
-            },
-            style: MenuItemButton.styleFrom(
-              minimumSize: const Size(0, 24),
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            ),
-            child: const Text('3 Run HR', style: TextStyle(fontSize: 12)),
-          ),
-          MenuItemButton(
-            onPressed: () {
-              setState(() {
-                _selectedHomeRunType = 'grand slam';
-                _updateCaption();
-              });
-            },
-            style: MenuItemButton.styleFrom(
-              minimumSize: const Size(0, 24),
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            ),
-            child: const Text('Grand Slam', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // New helper for horizontal RBI selection chips
-  Widget _buildHorizontalRbiSelector() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(width: 2),
-        _buildArrow(),
-        const SizedBox(width: 2),
-        Padding(
-          padding: const EdgeInsets.only(left: 5.0),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // No RBI option
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _rbiCount = null;
-                      if (_selectedHitType != null) {
-                        _rbiCountByHit.remove(_selectedHitType!);
-                      }
-                      _updateCaption();
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8.0, vertical: 8.0),
-                    decoration: BoxDecoration(
-                      color: _rbiCount == null
-                          ? Colors.grey.shade600
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.black,
-                      ),
-                    ),
-                    child: Text(
-                      'No RBI',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: _rbiCount == null
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                        color: _rbiCount == null ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // RBI options 1-3
-                ...List.generate(3, (i) => i + 1).map((rbi) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 4.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _rbiCount = rbi;
-                          _rbiCountByHit[_selectedHitType!] = rbi;
-                          _updateCaption();
-                        });
-                      },
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: _rbiCount == rbi
-                              ? Colors.grey.shade600
-                              : Colors.grey.shade200,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.black,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$rbi',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: _rbiCount == rbi
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: _rbiCount == rbi
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading template: $e'),
+          backgroundColor: Colors.red,
         ),
-      ],
-    );
+      );
+    }
   }
 }
