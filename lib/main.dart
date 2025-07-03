@@ -303,6 +303,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Wireframe mode for layout visualization
   bool _showWireframe = false;
 
+  // Burst detection
+  List<int> _burstIndices = [];
+  bool _isBurstMode = false;
+
+  // Sorting
+  bool _isSortedByDate = false;
+  bool _isSortedByFilename = false;
+
   // Wireframe overlay function
   Widget _buildWireframeOverlay(Widget child,
       {Color? borderColor, String? label}) {
@@ -402,6 +410,282 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   void _onZoomPressed() {}
 
+  // Sort images by filename
+  Future<void> _sortImagesByFilename() async {
+    if (imagePaths.isEmpty) return;
+
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sorting images by filename...')),
+      );
+
+      // Get filename data for all images
+      List<Map<String, dynamic>> imageData = [];
+
+      for (int i = 0; i < imagePaths.length; i++) {
+        final filename = p.basename(imagePaths[i]);
+        imageData.add({
+          'index': i,
+          'path': imagePaths[i],
+          'filename': filename,
+        });
+      }
+
+      // Sort by filename
+      imageData.sort((a, b) => a['filename'].compareTo(b['filename']));
+
+      // Update image paths and current index
+      final originalIndex = currentIndex;
+      final originalPath = imagePaths[originalIndex];
+
+      setState(() {
+        imagePaths = imageData.map((data) => data['path'] as String).toList();
+        // Find the new index of the current image
+        currentIndex = imagePaths.indexOf(originalPath);
+        if (currentIndex == -1) currentIndex = 0; // Fallback if not found
+        _isSortedByDate = false;
+        _isSortedByFilename = true;
+      });
+
+      // Reload metadata and detect burst for the current image
+      await _loadMetadata();
+      await _detectBurst(currentIndex);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Images sorted by filename (${imagePaths.length} images)'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error sorting images by filename: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sorting images by filename: $e')),
+      );
+    }
+  }
+
+  // Sort images by date/time taken
+  Future<void> _sortImagesByDate() async {
+    if (imagePaths.isEmpty) return;
+
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sorting images by date...')),
+      );
+
+      // Get metadata for all images
+      List<Map<String, dynamic>> imageData = [];
+
+      for (int i = 0; i < imagePaths.length; i++) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-DateTimeOriginal', imagePaths[i]]);
+
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (dateTime != null) {
+            try {
+              final parsedTime = DateTime.parse(
+                  dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+              imageData.add({
+                'index': i,
+                'path': imagePaths[i],
+                'dateTime': parsedTime,
+              });
+            } catch (e) {
+              // If parsing fails, use a default date
+              imageData.add({
+                'index': i,
+                'path': imagePaths[i],
+                'dateTime': DateTime(1900, 1, 1),
+              });
+            }
+          } else {
+            // No date found, use default
+            imageData.add({
+              'index': i,
+              'path': imagePaths[i],
+              'dateTime': DateTime(1900, 1, 1),
+            });
+          }
+        } else {
+          // Error reading metadata, use default
+          imageData.add({
+            'index': i,
+            'path': imagePaths[i],
+            'dateTime': DateTime(1900, 1, 1),
+          });
+        }
+      }
+
+      // Sort by date/time (oldest first)
+      print(
+          'Before sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+      imageData.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
+      print(
+          'After sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+
+      // Update image paths and current index
+      final originalIndex = currentIndex;
+      final originalPath = imagePaths[originalIndex];
+
+      setState(() {
+        imagePaths = imageData.map((data) => data['path'] as String).toList();
+        // Find the new index of the current image
+        currentIndex = imagePaths.indexOf(originalPath);
+        if (currentIndex == -1) currentIndex = 0; // Fallback if not found
+        _isSortedByDate = true;
+        _isSortedByFilename = false;
+        print(
+            'setState: imagePaths updated, currentIndex = $currentIndex, first 3: ${imagePaths.take(3).map((p) => p.split('/').last).toList()}');
+      });
+
+      // Reload metadata and detect burst for the current image
+      await _loadMetadata();
+      await _detectBurst(currentIndex);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Images sorted by date (oldest first) (${imagePaths.length} images)'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error sorting images: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sorting images: $e')),
+      );
+    }
+  }
+
+  // Burst detection function
+  Future<void> _detectBurst(int currentIndex) async {
+    if (imagePaths.isEmpty ||
+        currentIndex < 0 ||
+        currentIndex >= imagePaths.length) {
+      setState(() {
+        _burstIndices = [];
+        _isBurstMode = false;
+      });
+      return;
+    }
+
+    try {
+      // Get metadata for current image
+      final currentPath = imagePaths[currentIndex];
+      final currentResult = await Process.run(
+          'exiftool', ['-j', '-LensID', '-DateTimeOriginal', currentPath]);
+
+      if (currentResult.exitCode != 0) {
+        setState(() {
+          _burstIndices = [];
+          _isBurstMode = false;
+        });
+        return;
+      }
+
+      final currentData = jsonDecode(currentResult.stdout.toString())[0];
+      final currentLens = currentData['LensID']?.toString();
+      final currentDateTime = currentData['DateTimeOriginal']?.toString();
+
+      if (currentLens == null || currentDateTime == null) {
+        setState(() {
+          _burstIndices = [];
+          _isBurstMode = false;
+        });
+        return;
+      }
+
+      // Parse current image time
+      final currentTime = DateTime.parse(
+          currentDateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+
+      List<int> burstIndices = [currentIndex];
+
+      // Check images before current
+      for (int i = currentIndex - 1; i >= 0; i--) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final lens = data['LensID']?.toString();
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (lens == currentLens && dateTime != null) {
+            final time = DateTime.parse(
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+            final difference = currentTime.difference(time).abs();
+
+            // If same lens and within 1 second, it's part of the burst
+            if (difference.inSeconds <= 1) {
+              burstIndices.insert(0, i);
+            } else {
+              break; // Gap found, burst ended
+            }
+          } else {
+            break; // Different lens or no metadata, burst ended
+          }
+        } else {
+          break; // Error reading metadata, assume burst ended
+        }
+      }
+
+      // Check images after current
+      for (int i = currentIndex + 1; i < imagePaths.length; i++) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final lens = data['LensID']?.toString();
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (lens == currentLens && dateTime != null) {
+            final time = DateTime.parse(
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+            final difference = currentTime.difference(time).abs();
+
+            // If same lens and within 1 second, it's part of the burst
+            if (difference.inSeconds <= 1) {
+              burstIndices.add(i);
+            } else {
+              break; // Gap found, burst ended
+            }
+          } else {
+            break; // Different lens or no metadata, burst ended
+          }
+        } else {
+          break; // Error reading metadata, assume burst ended
+        }
+      }
+
+      setState(() {
+        _burstIndices = burstIndices;
+        _isBurstMode = burstIndices.length > 1;
+      });
+
+      if (_isBurstMode) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Burst detected: ${_burstIndices.length} images'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error detecting burst: $e');
+      setState(() {
+        _burstIndices = [];
+        _isBurstMode = false;
+      });
+    }
+  }
+
   Widget _buildActionToolbar() {
     return Row(
       mainAxisSize: MainAxisSize.min, // Prevent overflow by using minimum size
@@ -417,6 +701,66 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           tooltip: 'Next Image',
           onPressed: nextImage,
         ),
+        if (_isBurstMode) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.orange,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.orange.shade700, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.burst_mode,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'BURST (${_burstIndices.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_isSortedByDate || _isSortedByFilename) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.blue.shade700, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.sort,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isSortedByDate ? 'SORTED BY DATE' : 'SORTED BY NAME',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -2728,13 +3072,73 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         })
         .map((f) => f.path)
         .toList();
+
     if (files.isNotEmpty) {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Loading Images'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text('Sorting ${files.length} images by date...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Sort files by date BEFORE setting state
+      final sortedFiles = await _getFilesSortedByDate(files);
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
       setState(() {
-        imagePaths = files;
+        imagePaths = sortedFiles;
         currentIndex = 0;
       });
       _scrollToSelectedImage();
       await _loadMetadata();
+      await _detectBurst(currentIndex);
+    }
+  }
+
+  // Helper function to sort a list of file paths by DateTimeOriginal
+  Future<List<String>> _getFilesSortedByDate(List<String> files) async {
+    if (files.isEmpty) return [];
+    // Run exiftool once for all files
+    final result = await Process.run('exiftool', [
+      '-j',
+      '-DateTimeOriginal',
+      ...files,
+    ]);
+    List<Map<String, dynamic>> imageData = [];
+    if (result.exitCode == 0) {
+      final List<dynamic> data = jsonDecode(result.stdout.toString());
+      for (int i = 0; i < data.length; i++) {
+        final entry = data[i];
+        final path = entry['SourceFile'] as String;
+        DateTime date = DateTime(1900, 1, 1);
+        final dateTime = entry['DateTimeOriginal']?.toString();
+        if (dateTime != null) {
+          try {
+            date = DateTime.parse(
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+          } catch (_) {}
+        }
+        imageData.add({'path': path, 'dateTime': date});
+      }
+      imageData.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
+      return imageData.map((d) => d['path'] as String).toList();
+    } else {
+      // Fallback: return unsorted
+      return files;
     }
   }
 
@@ -3170,6 +3574,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       setState(() => currentIndex++);
       _scrollToSelectedImage();
       await _loadMetadata();
+      await _detectBurst(currentIndex);
     }
   }
 
@@ -3179,6 +3584,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       setState(() => currentIndex--);
       _scrollToSelectedImage();
       await _loadMetadata();
+      await _detectBurst(currentIndex);
     }
   }
 
@@ -3193,6 +3599,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
     await _loadMetadata();
+    await _detectBurst(currentIndex);
   }
 
   void _pickDate() async {
@@ -5068,6 +5475,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       ),
                                                                     ),
                                                                     const Spacer(),
+                                                                    // Sort button in middle
+                                                                    _buildCompactButton(
+                                                                      _isSortedByDate
+                                                                          ? 'Sorted by Date'
+                                                                          : _isSortedByFilename
+                                                                              ? 'Sorted by Name'
+                                                                              : 'Sort by Time/Date',
+                                                                      _isSortedByDate
+                                                                          ? _sortImagesByFilename
+                                                                          : _sortImagesByDate,
+                                                                      isBlue: _isSortedByDate ||
+                                                                          _isSortedByFilename,
+                                                                    ),
+                                                                    const Spacer(),
                                                                     // Action buttons on right
                                                                     _buildCompactButton(
                                                                       'Copy',
@@ -5288,7 +5709,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   void _scrollToSelectedImage() {
     if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
-      const double filmstripHeight = 140.0;
+      const double filmstripHeight = 100.0;
       const double imagePadding = 4.0;
       const imageWidth = filmstripHeight -
           (imagePadding * 2) +
@@ -5306,7 +5727,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildFilmstrip() {
-    const double filmstripHeight = 140.0;
+    const double filmstripHeight = 100.0;
     const double imagePadding = 4.0;
 
     return Padding(
@@ -5323,32 +5744,73 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               )
-            : ListView.builder(
+            : Scrollbar(
                 controller: _filmstripController,
-                scrollDirection: Axis.horizontal,
-                itemCount: imagePaths.length,
-                itemBuilder: (context, index) {
-                  final isSelected = index == currentIndex;
-                  return GestureDetector(
-                    onTap: () => _selectImage(index),
-                    child: Container(
-                      width: filmstripHeight - (imagePadding * 2),
-                      margin:
-                          const EdgeInsets.symmetric(horizontal: imagePadding),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.transparent,
-                          width: 3.0,
+                thumbVisibility: true,
+                trackVisibility: true,
+                thickness: 8.0,
+                radius: const Radius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: ListView.builder(
+                    controller: _filmstripController,
+                    scrollDirection: Axis.horizontal,
+                    itemCount: imagePaths.length,
+                    itemBuilder: (context, index) {
+                      final isSelected = index == currentIndex;
+                      return GestureDetector(
+                        onTap: () => _selectImage(index),
+                        child: Container(
+                          width: filmstripHeight - (imagePadding * 2),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: imagePadding),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : _burstIndices.contains(index)
+                                      ? Colors.orange
+                                      : Colors.transparent,
+                              width: isSelected
+                                  ? 3.0
+                                  : _burstIndices.contains(index)
+                                      ? 2.0
+                                      : 0.0,
+                            ),
+                          ),
+                          child: Stack(
+                            children: [
+                              Image.file(File(imagePaths[index]),
+                                  fit: BoxFit.contain),
+                              if (_burstIndices.contains(index) && !isSelected)
+                                Positioned(
+                                  top: 2,
+                                  right: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'BURST',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                      child: Image.file(File(imagePaths[index]),
-                          fit: BoxFit.contain),
-                    ),
-                  );
-                },
+                      );
+                    },
+                  ),
+                ),
               ),
       ),
     );
