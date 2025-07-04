@@ -7,6 +7,7 @@ import 'dart:convert'; // for jsonDecode
 import 'dart:io'; // for File, Directory, Process
 import 'dart:collection'; // for LinkedHashSet
 import 'dart:math'; // for sin, cos, pi
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // for firstOrNull
@@ -310,6 +311,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Sorting
   bool _isSortedByDate = false;
   bool _isSortedByFilename = false;
+
+  // Thumbnail caching
+  final Map<String, ui.Image?> _thumbnailCache = {};
+  final Map<String, bool> _thumbnailLoading = {};
+  int _loadedThumbnailCount = 0;
 
   // Wireframe overlay function
   Widget _buildWireframeOverlay(Widget child,
@@ -2615,6 +2621,34 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Filmstrip scroll controller
   final ScrollController _filmstripController = ScrollController();
 
+  void _onFilmstripScroll() {
+    if (!_filmstripController.hasClients) return;
+
+    final position = _filmstripController.position;
+    final viewportDimension = position.viewportDimension;
+    final offset = position.pixels;
+
+    // Calculate which images are visible
+    const double imageWidth = 100.0 - 8.0 + 8.0; // width - padding + margin
+    final startIndex = (offset / imageWidth).floor();
+    final endIndex = ((offset + viewportDimension) / imageWidth).ceil();
+
+    // Preload visible images and nearby ones
+    final preloadStart = (startIndex - 5).clamp(0, imagePaths.length - 1);
+    final preloadEnd = (endIndex + 5).clamp(0, imagePaths.length - 1);
+
+    for (int i = preloadStart; i <= preloadEnd; i++) {
+      if (i < imagePaths.length) {
+        _loadThumbnail(imagePaths[i]);
+      }
+    }
+
+    // Memory management for large collections
+    if (imagePaths.length > 200) {
+      _cleanupDistantThumbnails(startIndex);
+    }
+  }
+
   // API selection state
   bool _useMlbApi = true; // true for MLB Stats API, false for API-Sports
 
@@ -2768,6 +2802,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     captionController.clear();
     _pastedRosterText = ''; // Initialize to empty string
     _initializeTeamData();
+
+    // Add scroll listener for thumbnail preloading
+    _filmstripController.addListener(_onFilmstripScroll);
 
     // Initialize animation controllers - fast and subtle
     _captionGlowController = AnimationController(
@@ -3029,6 +3066,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _customPersonalityNotesController.dispose();
     _homeSearchController.dispose();
     _awaySearchController.dispose();
+    _filmstripController.removeListener(_onFilmstripScroll);
     _filmstripController.dispose();
     jobIdController.dispose();
     descriptionWritersController.dispose();
@@ -3106,6 +3144,207 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _scrollToSelectedImage();
       await _loadMetadata();
       await _detectBurst(currentIndex);
+
+      // Preload ALL thumbnails for instant scrolling
+      _preloadAllThumbnails();
+    }
+  }
+
+  // Load and cache thumbnail for a specific image
+  Future<void> _loadThumbnail(String imagePath, {Function? onProgress}) async {
+    if (_thumbnailCache.containsKey(imagePath) ||
+        _thumbnailLoading[imagePath] == true) {
+      return; // Already cached or loading
+    }
+
+    _thumbnailLoading[imagePath] = true;
+
+    try {
+      final file = File(imagePath);
+      final bytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+
+      setState(() {
+        _thumbnailCache[imagePath] = frame.image;
+        _thumbnailLoading[imagePath] = false;
+        _loadedThumbnailCount++;
+      });
+
+      // Call progress callback if provided
+      onProgress?.call();
+    } catch (e) {
+      print('Error loading thumbnail for $imagePath: $e');
+      setState(() {
+        _thumbnailCache[imagePath] = null;
+        _thumbnailLoading[imagePath] = false;
+      });
+    }
+  }
+
+  // Preload thumbnails for visible and nearby images
+  void _preloadThumbnails(int currentIndex) {
+    if (imagePaths.isEmpty) return;
+
+    final startIndex = (currentIndex - 10).clamp(0, imagePaths.length - 1);
+    final endIndex = (currentIndex + 10).clamp(0, imagePaths.length - 1);
+
+    for (int i = startIndex; i <= endIndex; i++) {
+      _loadThumbnail(imagePaths[i]);
+    }
+  }
+
+  // Smart thumbnail loading based on image count
+  void _preloadAllThumbnails() {
+    if (imagePaths.isEmpty) return;
+
+    // For large collections (>500 images), use smart loading
+    if (imagePaths.length > 500) {
+      _preloadSmartThumbnails();
+    } else {
+      // For smaller collections, preload all
+      _preloadAllThumbnailsDirect();
+    }
+  }
+
+  // Preload ALL thumbnails for instant scrolling (small collections)
+  void _preloadAllThumbnailsDirect() {
+    _loadedThumbnailCount = 0; // Reset counter
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Loading Thumbnails'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                  'Loading $_loadedThumbnailCount/${imagePaths.length} thumbnails...'),
+            ],
+          ),
+        );
+      },
+    );
+
+    Future.microtask(() async {
+      for (int i = 0; i < imagePaths.length; i++) {
+        await _loadThumbnail(imagePaths[i]);
+        // Update dialog every 3 images for smooth progress
+        if (i % 3 == 0) {
+          setState(() {});
+        }
+      }
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  // Smart loading for large collections
+  void _preloadSmartThumbnails() {
+    _loadedThumbnailCount = 0; // Reset counter
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Loading Thumbnails'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                  'Loading $_loadedThumbnailCount/${imagePaths.length} thumbnails...'),
+              const SizedBox(height: 8),
+              const Text('(Large collection - will load more as you scroll)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        );
+      },
+    );
+
+    // Load initial batch (first 100 + current area)
+    Future.microtask(() async {
+      final initialBatch = <int>[];
+
+      // First 100 images
+      initialBatch
+          .addAll(List.generate(100.clamp(0, imagePaths.length), (i) => i));
+
+      // Current area (around index 0)
+      final currentArea =
+          List.generate(50, (i) => i).where((i) => i < imagePaths.length);
+      initialBatch.addAll(currentArea);
+
+      // Remove duplicates and load
+      final uniqueIndices = initialBatch.toSet().toList();
+      for (int i = 0; i < uniqueIndices.length; i++) {
+        await _loadThumbnail(imagePaths[uniqueIndices[i]]);
+        // Update dialog every 5 images for smooth progress
+        if (i % 5 == 0) {
+          setState(() {});
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  // Memory management for large collections
+  void _cleanupDistantThumbnails(int currentIndex) {
+    if (imagePaths.length <= 200) return; // Only for large collections
+
+    final keepRange = 100; // Keep thumbnails within 100 images of current
+    final toRemove = <String>[];
+
+    for (final path in _thumbnailCache.keys) {
+      final index = imagePaths.indexOf(path);
+      if (index != -1 && (index - currentIndex).abs() > keepRange) {
+        toRemove.add(path);
+      }
+    }
+
+    for (final path in toRemove) {
+      _thumbnailCache.remove(path);
+      _thumbnailLoading.remove(path);
+    }
+  }
+
+  // Build cached thumbnail widget
+  Widget _buildCachedThumbnail(String imagePath) {
+    final cachedImage = _thumbnailCache[imagePath];
+    final isLoading = _thumbnailLoading[imagePath] == true;
+
+    if (cachedImage != null) {
+      return RawImage(
+        image: cachedImage,
+        fit: BoxFit.contain,
+      );
+    } else if (isLoading) {
+      return const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    } else {
+      // Fallback to regular Image.file if not cached
+      return Image.file(
+        File(imagePath),
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Icon(Icons.broken_image, color: Colors.grey),
+          );
+        },
+      );
     }
   }
 
@@ -3600,6 +3839,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _scrollToSelectedImage();
     await _loadMetadata();
     await _detectBurst(currentIndex);
+    _preloadThumbnails(index);
   }
 
   void _pickDate() async {
@@ -5769,41 +6009,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             border: Border.all(
                               color: isSelected
                                   ? Theme.of(context).colorScheme.primary
-                                  : _burstIndices.contains(index)
-                                      ? Colors.orange
-                                      : Colors.transparent,
-                              width: isSelected
-                                  ? 3.0
-                                  : _burstIndices.contains(index)
-                                      ? 2.0
-                                      : 0.0,
+                                  : Colors.transparent,
+                              width: isSelected ? 3.0 : 0.0,
                             ),
                           ),
                           child: Stack(
                             children: [
-                              Image.file(File(imagePaths[index]),
-                                  fit: BoxFit.contain),
-                              if (_burstIndices.contains(index) && !isSelected)
-                                Positioned(
-                                  top: 2,
-                                  right: 2,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 4, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'BURST',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              _buildCachedThumbnail(imagePaths[index]),
                             ],
                           ),
                         ),
