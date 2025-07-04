@@ -11,6 +11,7 @@ import 'dart:ui' as ui;
 import 'dart:async'; // for Timer
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // for firstOrNull
 
@@ -3433,9 +3434,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final file = File(imagePath);
       final bytes = await file.readAsBytes();
 
-      // Load images at full original resolution for sharp previews
+      // Decode and compress image while maintaining resolution
+      final image = img.decodeImage(bytes);
+      if (image == null) return null;
+
+      // Encode with reduced quality (85%) while keeping original dimensions
+      final compressedBytes = img.encodeJpg(image, quality: 85);
+
+      // Load compressed image at full resolution
       final codec = await ui.instantiateImageCodec(
-        bytes,
+        compressedBytes,
       );
       final frame = await codec.getNextFrame();
 
