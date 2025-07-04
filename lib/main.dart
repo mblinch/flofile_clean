@@ -8,7 +8,9 @@ import 'dart:io'; // for File, Directory, Process
 import 'dart:collection'; // for LinkedHashSet
 import 'dart:math'; // for sin, cos, pi
 import 'dart:ui' as ui;
+import 'dart:async'; // for Timer
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // for firstOrNull
 
@@ -47,6 +49,8 @@ const Map<String, String> teamStates = {
 };
 
 const double kInputTextSize = 14.0;
+const int kThumbnailSize =
+    100; // Size for thumbnails (smaller = faster loading, less memory)
 
 const kInputTitleStyle = TextStyle(
   fontSize: 24,
@@ -316,6 +320,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   final Map<String, ui.Image?> _thumbnailCache = {};
   final Map<String, bool> _thumbnailLoading = {};
   int _loadedThumbnailCount = 0;
+  final ValueNotifier<int> _thumbnailProgressNotifier = ValueNotifier<int>(0);
 
   // Wireframe overlay function
   Widget _buildWireframeOverlay(Widget child,
@@ -675,14 +680,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _isBurstMode = burstIndices.length > 1;
       });
 
-      if (_isBurstMode) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Burst detected: ${_burstIndices.length} images'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      // Burst detection notification removed
     } catch (e) {
       print('Error detecting burst: $e');
       setState(() {
@@ -2621,7 +2619,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Filmstrip scroll controller
   final ScrollController _filmstripController = ScrollController();
 
+  int _lastScrollIndex = -1;
+  Timer? _scrollDebounceTimer;
+
   void _onFilmstripScroll() {
+    if (!_filmstripController.hasClients) return;
+
+    // Debounce scroll events to prevent excessive processing
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      _processScrollEvent();
+    });
+  }
+
+  void _processScrollEvent() {
     if (!_filmstripController.hasClients) return;
 
     final position = _filmstripController.position;
@@ -2633,18 +2644,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final startIndex = (offset / imageWidth).floor();
     final endIndex = ((offset + viewportDimension) / imageWidth).ceil();
 
-    // Preload visible images and nearby ones
+    // Only process if we've moved to a different range
+    if (startIndex == _lastScrollIndex) return;
+    _lastScrollIndex = startIndex;
+
+    // Preload visible images and nearby ones (only if not already cached)
     final preloadStart = (startIndex - 5).clamp(0, imagePaths.length - 1);
     final preloadEnd = (endIndex + 5).clamp(0, imagePaths.length - 1);
 
     for (int i = preloadStart; i <= preloadEnd; i++) {
       if (i < imagePaths.length) {
-        _loadThumbnail(imagePaths[i]);
+        final imagePath = imagePaths[i];
+        // Only load if not already cached and not currently loading
+        if (!_thumbnailCache.containsKey(imagePath) &&
+            _thumbnailLoading[imagePath] != true) {
+          _loadThumbnail(imagePath);
+        }
       }
     }
 
-    // Memory management for large collections
-    if (imagePaths.length > 200) {
+    // Memory management for large collections (less aggressive)
+    if (imagePaths.length > 500) {
       _cleanupDistantThumbnails(startIndex);
     }
   }
@@ -3068,6 +3088,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _awaySearchController.dispose();
     _filmstripController.removeListener(_onFilmstripScroll);
     _filmstripController.dispose();
+    _scrollDebounceTimer?.cancel();
+    _thumbnailProgressNotifier.dispose();
     jobIdController.dispose();
     descriptionWritersController.dispose();
     headlineController.dispose();
@@ -3118,14 +3140,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         barrierDismissible: false,
         builder: (BuildContext context) {
           return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8.0), // Less rounded
+            ),
             title: const Text('Loading Images'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text('Sorting ${files.length} images by date...'),
-              ],
+            content: SizedBox(
+              width: 300, // Fixed width
+              height: 120, // Fixed height
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sorting ${files.length} images by date...',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w500),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -3162,23 +3196,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     try {
       final file = File(imagePath);
       final bytes = await file.readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
+
+      // Create smaller, lower-quality thumbnails for better performance
+      final codec = await ui.instantiateImageCodec(
+        bytes,
+        targetWidth: kThumbnailSize, // Use constant for easy adjustment
+        // Don't specify targetHeight to maintain aspect ratio
+      );
       final frame = await codec.getNextFrame();
 
-      setState(() {
-        _thumbnailCache[imagePath] = frame.image;
-        _thumbnailLoading[imagePath] = false;
-        _loadedThumbnailCount++;
-      });
+      if (mounted) {
+        setState(() {
+          _thumbnailCache[imagePath] = frame.image;
+          _thumbnailLoading[imagePath] = false;
+          _loadedThumbnailCount++;
+        });
+        print(
+            'Successfully loaded thumbnail: ${imagePath.split('/').last} (count: $_loadedThumbnailCount)');
+      }
 
       // Call progress callback if provided
       onProgress?.call();
     } catch (e) {
       print('Error loading thumbnail for $imagePath: $e');
-      setState(() {
-        _thumbnailCache[imagePath] = null;
-        _thumbnailLoading[imagePath] = false;
-      });
+      if (mounted) {
+        setState(() {
+          _thumbnailCache[imagePath] = null;
+          _thumbnailLoading[imagePath] = false;
+        });
+      }
     }
   }
 
@@ -3210,34 +3256,53 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Preload ALL thumbnails for instant scrolling (small collections)
   void _preloadAllThumbnailsDirect() {
     _loadedThumbnailCount = 0; // Reset counter
+    _thumbnailProgressNotifier.value = 0; // Reset progress
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0), // Less rounded
+          ),
           title: const Text('Loading Thumbnails'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                  'Loading $_loadedThumbnailCount/${imagePaths.length} thumbnails...'),
-            ],
+          content: SizedBox(
+            width: 300, // Fixed width
+            height: 120, // Fixed height
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: _thumbnailProgressNotifier,
+                  builder: (context, count, child) {
+                    return Text(
+                      'Loading $count/${imagePaths.length} thumbnails...',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
     );
 
     Future.microtask(() async {
+      print('Starting thumbnail preload for ${imagePaths.length} images');
       for (int i = 0; i < imagePaths.length; i++) {
         await _loadThumbnail(imagePaths[i]);
-        // Update dialog every 3 images for smooth progress
-        if (i % 3 == 0) {
-          setState(() {});
-        }
+        print(
+            'Loaded thumbnail $i: $_loadedThumbnailCount/${imagePaths.length}');
+        // Update progress notifier for real-time updates
+        _thumbnailProgressNotifier.value = _loadedThumbnailCount;
       }
+      print('Finished loading all thumbnails');
       if (mounted) Navigator.of(context).pop();
     });
   }
@@ -3245,24 +3310,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Smart loading for large collections
   void _preloadSmartThumbnails() {
     _loadedThumbnailCount = 0; // Reset counter
+    _thumbnailProgressNotifier.value = 0; // Reset progress
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0), // Less rounded
+          ),
           title: const Text('Loading Thumbnails'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                  'Loading $_loadedThumbnailCount/${imagePaths.length} thumbnails...'),
-              const SizedBox(height: 8),
-              const Text('(Large collection - will load more as you scroll)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
+          content: SizedBox(
+            width: 300, // Fixed width
+            height: 140, // Fixed height (slightly taller for extra text)
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                ValueListenableBuilder<int>(
+                  valueListenable: _thumbnailProgressNotifier,
+                  builder: (context, count, child) {
+                    return Text(
+                      'Loading $count/${imagePaths.length} thumbnails...',
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '(Large collection - will load more as you scroll)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -3283,23 +3368,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Remove duplicates and load
       final uniqueIndices = initialBatch.toSet().toList();
+      print(
+          'Starting smart thumbnail preload for ${uniqueIndices.length} images');
       for (int i = 0; i < uniqueIndices.length; i++) {
         await _loadThumbnail(imagePaths[uniqueIndices[i]]);
-        // Update dialog every 5 images for smooth progress
-        if (i % 5 == 0) {
-          setState(() {});
-        }
+        print(
+            'Loaded thumbnail $i: $_loadedThumbnailCount/${uniqueIndices.length}');
+        // Update progress notifier for real-time updates
+        _thumbnailProgressNotifier.value = _loadedThumbnailCount;
       }
-
+      print('Finished smart thumbnail loading');
       if (mounted) Navigator.of(context).pop();
     });
   }
 
   // Memory management for large collections
   void _cleanupDistantThumbnails(int currentIndex) {
-    if (imagePaths.length <= 200) return; // Only for large collections
+    if (imagePaths.length <= 500) return; // Only for very large collections
 
-    final keepRange = 100; // Keep thumbnails within 100 images of current
+    final keepRange =
+        200; // Keep thumbnails within 200 images of current (increased)
     final toRemove = <String>[];
 
     for (final path in _thumbnailCache.keys) {
@@ -3309,9 +3397,87 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
     }
 
-    for (final path in toRemove) {
-      _thumbnailCache.remove(path);
-      _thumbnailLoading.remove(path);
+    // Only remove if we have too many cached images (prevent aggressive cleanup)
+    if (_thumbnailCache.length > 300) {
+      for (final path in toRemove) {
+        _thumbnailCache.remove(path);
+        _thumbnailLoading.remove(path);
+      }
+    }
+  }
+
+  // Load and cache preview image with optimizations
+  final Map<String, ui.Image?> _previewCache = {};
+  final Map<String, bool> _previewLoading = {};
+  static const int _maxPreviewCacheSize =
+      20; // Limit cache to prevent memory issues
+
+  Future<ui.Image?> _loadPreviewImage(String imagePath,
+      {bool highQuality = true}) async {
+    // Check cache first
+    if (_previewCache.containsKey(imagePath)) {
+      return _previewCache[imagePath];
+    }
+
+    // Check if already loading
+    if (_previewLoading[imagePath] == true) {
+      // Wait for existing load to complete
+      while (_previewLoading[imagePath] == true) {
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+      return _previewCache[imagePath];
+    }
+
+    _previewLoading[imagePath] = true;
+
+    try {
+      final file = File(imagePath);
+      final bytes = await file.readAsBytes();
+
+      // Use different quality settings based on priority
+      final targetWidth =
+          highQuality ? 800 : 600; // Lower quality for distant preloads
+
+      // Create highly optimized preview image using compute for better performance
+      final codec = await compute(
+        (Map<String, dynamic> params) async {
+          return await ui.instantiateImageCodec(
+            params['bytes'] as Uint8List,
+            targetWidth: params['targetWidth'] as int,
+          );
+        },
+        {
+          'bytes': bytes,
+          'targetWidth': targetWidth,
+        },
+      );
+      final frame = await codec.getNextFrame();
+
+      if (mounted) {
+        // Manage cache size to prevent memory issues
+        if (_previewCache.length >= _maxPreviewCacheSize) {
+          // Remove oldest entries (simple FIFO)
+          final keysToRemove = _previewCache.keys
+              .take(_previewCache.length - _maxPreviewCacheSize + 1)
+              .toList();
+          for (final key in keysToRemove) {
+            _previewCache.remove(key);
+            _previewLoading.remove(key);
+          }
+        }
+
+        _previewCache[imagePath] = frame.image;
+        _previewLoading[imagePath] = false;
+      }
+
+      return frame.image;
+    } catch (e) {
+      print('Error loading preview image for $imagePath: $e');
+      if (mounted) {
+        _previewCache[imagePath] = null;
+        _previewLoading[imagePath] = false;
+      }
+      return null;
     }
   }
 
@@ -3321,9 +3487,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final isLoading = _thumbnailLoading[imagePath] == true;
 
     if (cachedImage != null) {
-      return RawImage(
-        image: cachedImage,
-        fit: BoxFit.contain,
+      return Center(
+        child: RawImage(
+          image: cachedImage,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+        ),
       );
     } else if (isLoading) {
       return const Center(
@@ -3334,16 +3503,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ),
       );
     } else {
-      // Fallback to regular Image.file if not cached
-      return Image.file(
-        File(imagePath),
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            color: Colors.grey.shade200,
-            child: const Icon(Icons.broken_image, color: Colors.grey),
-          );
-        },
+      // Show placeholder and trigger loading
+      _loadThumbnail(imagePath);
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Icon(Icons.image, color: Colors.grey, size: 30),
+        ),
       );
     }
   }
@@ -3840,6 +4006,73 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     await _loadMetadata();
     await _detectBurst(currentIndex);
     _preloadThumbnails(index);
+
+    // Immediately start preloading the current image with high priority
+    _loadPreviewImage(imagePaths[index], highQuality: true);
+
+    // Preload adjacent preview images for faster navigation
+    _preloadAdjacentImages(index);
+
+    // Also preload images 3-4 positions away for very fast navigation (lower quality)
+    for (int i = 3; i <= 4; i++) {
+      if (index + i < imagePaths.length) {
+        _loadPreviewImage(imagePaths[index + i], highQuality: false);
+      }
+      if (index - i >= 0) {
+        _loadPreviewImage(imagePaths[index - i], highQuality: false);
+      }
+    }
+  }
+
+  // Preload adjacent images for faster navigation
+  void _preloadAdjacentImages(int currentIndex) {
+    // Preload next 2 images for even snappier navigation
+    for (int i = 1; i <= 2; i++) {
+      if (currentIndex + i < imagePaths.length) {
+        _loadPreviewImage(imagePaths[currentIndex + i], highQuality: i == 1);
+      }
+    }
+    // Preload previous 2 images
+    for (int i = 1; i <= 2; i++) {
+      if (currentIndex - i >= 0) {
+        _loadPreviewImage(imagePaths[currentIndex - i], highQuality: i == 1);
+      }
+    }
+  }
+
+  // Build preview image widget with stable state management
+  Widget _buildPreviewImage(String imagePath) {
+    final cachedImage = _previewCache[imagePath];
+    final isLoading = _previewLoading[imagePath] == true;
+
+    if (cachedImage != null) {
+      return RawImage(
+        image: cachedImage,
+        fit: BoxFit.contain,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    } else if (isLoading) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    } else {
+      // Trigger loading with high priority and show placeholder
+      _loadPreviewImage(imagePath).then((image) {
+        if (mounted && image != null) {
+          setState(() {}); // Trigger rebuild to show the loaded image
+        }
+      });
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
   }
 
   void _pickDate() async {
@@ -5438,13 +5671,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                               4),
-                                                      child: Image.file(
-                                                        File(imagePaths[
-                                                            currentIndex]),
-                                                        fit: BoxFit.contain,
-                                                        width: double.infinity,
-                                                        height: double.infinity,
-                                                      ),
+                                                      child: _buildPreviewImage(
+                                                          imagePaths[
+                                                              currentIndex]),
                                                     )
                                                   : Container(
                                                       color: const Color(
@@ -5996,11 +6225,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     controller: _filmstripController,
                     scrollDirection: Axis.horizontal,
                     itemCount: imagePaths.length,
+                    key: const PageStorageKey('filmstrip'),
                     itemBuilder: (context, index) {
                       final isSelected = index == currentIndex;
+                      final imagePath = imagePaths[index];
                       return GestureDetector(
                         onTap: () => _selectImage(index),
                         child: Container(
+                          key: ValueKey(imagePath),
                           width: filmstripHeight - (imagePadding * 2),
                           margin: const EdgeInsets.symmetric(
                               horizontal: imagePadding),
@@ -6015,7 +6247,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                           child: Stack(
                             children: [
-                              _buildCachedThumbnail(imagePaths[index]),
+                              _buildCachedThumbnail(imagePath),
                             ],
                           ),
                         ),
