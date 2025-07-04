@@ -340,20 +340,49 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   void _onCopyPressed() {
-    Clipboard.setData(ClipboardData(text: captionController.text));
+    // Create a structured format with both caption and personality
+    final captionText = captionController.text;
+    final personalityText = personalityController.text;
+
+    String clipboardText = captionText;
+    if (personalityText.isNotEmpty) {
+      clipboardText += '\n\nPERSONALITY:\n$personalityText';
+    }
+
+    Clipboard.setData(ClipboardData(text: clipboardText));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Caption copied to clipboard!')),
+      const SnackBar(
+          content: Text('Caption and personality copied to clipboard!')),
     );
   }
 
   Future<void> _onPastePressed() async {
     final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
     if (clipboardData != null && clipboardData.text != null) {
+      final text = clipboardData.text!;
+
       setState(() {
-        captionController.text = clipboardData.text!;
+        // Check if the text contains personality data
+        if (text.contains('PERSONALITY:')) {
+          final parts = text.split('PERSONALITY:');
+          if (parts.length >= 2) {
+            // Set caption (everything before PERSONALITY:)
+            captionController.text = parts[0].trim();
+            // Set personality (everything after PERSONALITY:)
+            personalityController.text = parts[1].trim();
+          } else {
+            // Fallback: treat as caption only
+            captionController.text = text;
+          }
+        } else {
+          // No personality data, treat as caption only
+          captionController.text = text;
+        }
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Metadata pasted from clipboard!')),
+        const SnackBar(
+            content: Text('Caption and personality pasted from clipboard!')),
       );
     }
   }
@@ -1687,6 +1716,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   _rbiCount = null;
                                   _selectedFieldingAction = null;
                                   _showFieldingOptions = false;
+                                  _selectedRbiInning = null;
                                 } else {
                                   _selectedVerb = null;
                                 }
@@ -1696,8 +1726,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           : null,
                     ),
                     if (_selectedVerb == 'Prior to Game') ...[
-                      const SizedBox(width: 4),
-                      _buildHitInningSelector(showWalkOffOption: true),
                       const SizedBox(width: 4),
                       Wrap(
                         spacing: 8.0,
@@ -1825,16 +1853,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 const EdgeInsets.symmetric(horizontal: 8),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          const SizedBox(width: 8),
-                          buildInlineInningSelector(
-                            selectedInning: _selectedRbiInning,
-                            onInningSelected: (val) {
-                              setState(() {
-                                _selectedRbiInning = val;
-                                _updateCaption();
-                              });
-                            },
                           ),
                         ],
                       ],
@@ -4593,8 +4611,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final formattedDate = '$monLC $day, $year';
       final dateline = _formatDateline(city, prov, monthUpper, day);
       final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
-      final playerName =
-          _combinePlayersWithSingleTeam(selectedPlayers.toList());
+
+      // Use the correct player list based on which team is selected
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
 
       // Add null checks for teams
       if (_showHomeFirst && selectedAwayTeam == null) return;
@@ -4616,8 +4637,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final formattedDate = '$monLC $day, $year';
       final dateline = _formatDateline(city, prov, monthUpper, day);
       final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
-      final playerName =
-          _combinePlayersWithSingleTeam(selectedPlayers.toList());
+
+      // Use the correct player list based on which team is selected
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
 
       // Add null checks for teams
       if (selectedHomeTeam == null || selectedAwayTeam == null) return;
@@ -4821,13 +4845,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithoutTeam(activePlayers.toList());
+
+      // Get the player's own team name (not the opponent)
+      final playerTeamName =
+          _showHomeFirst ? selectedHomeTeam! : selectedAwayTeam!;
 
       if (_isLooksOn) {
-        mainCaptionPart = "$playersString of the $opponentTeamName looks on";
+        mainCaptionPart =
+            "$playersString of the $playerTeamName looks on against the $opponentTeamName";
       } else {
-        mainCaptionPart = "$playersString of the $opponentTeamName";
+        mainCaptionPart = "$playersString of the $playerTeamName";
       }
 
       // Add inning if picked
@@ -4924,6 +4952,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // No change, just set the text normally
       captionController.text = trimmedCaption;
     }
+
+    // Always update personality field when caption changes
+    _updatePersonality();
   }
 
   // Update personality field with selected players and celebration players
