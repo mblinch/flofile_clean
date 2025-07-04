@@ -3434,12 +3434,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final file = File(imagePath);
       final bytes = await file.readAsBytes();
 
-      // Decode and compress image while maintaining resolution
-      final image = img.decodeImage(bytes);
-      if (image == null) return null;
-
-      // Encode with reduced quality (85%) while keeping original dimensions
-      final compressedBytes = img.encodeJpg(image, quality: 85);
+      // Use compute for image compression to avoid blocking the UI thread
+      final compressedBytes = await compute(
+        (Uint8List imageBytes) {
+          final image = img.decodeImage(imageBytes);
+          if (image == null)
+            return imageBytes; // Fallback to original if decode fails
+          return img.encodeJpg(image, quality: 80);
+        },
+        bytes,
+      );
 
       // Load compressed image at full resolution
       final codec = await ui.instantiateImageCodec(
@@ -3997,6 +4001,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
     // Start loading the current image immediately at full resolution
     _loadPreviewImage(imagePaths[index]);
+
+    // Also start loading the next image immediately for faster navigation
+    if (index + 1 < imagePaths.length) {
+      _loadPreviewImage(imagePaths[index + 1]);
+    }
 
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
