@@ -3412,8 +3412,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   static const int _maxPreviewCacheSize =
       20; // Limit cache to prevent memory issues
 
-  Future<ui.Image?> _loadPreviewImage(String imagePath,
-      {bool highQuality = true}) async {
+  Future<ui.Image?> _loadPreviewImage(String imagePath) async {
     // Check cache first
     if (_previewCache.containsKey(imagePath)) {
       return _previewCache[imagePath];
@@ -3434,22 +3433,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final file = File(imagePath);
       final bytes = await file.readAsBytes();
 
-      // Use different quality settings based on priority
-      final targetWidth =
-          highQuality ? 800 : 600; // Lower quality for distant preloads
-
-      // Create highly optimized preview image using compute for better performance
-      final codec = await compute(
-        (Map<String, dynamic> params) async {
-          return await ui.instantiateImageCodec(
-            params['bytes'] as Uint8List,
-            targetWidth: params['targetWidth'] as int,
-          );
-        },
-        {
-          'bytes': bytes,
-          'targetWidth': targetWidth,
-        },
+      // Load images at full original resolution for sharp previews
+      final codec = await ui.instantiateImageCodec(
+        bytes,
       );
       final frame = await codec.getNextFrame();
 
@@ -4001,41 +3987,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (imagePaths.isNotEmpty) {
       await _saveCaptionToFile(imagePaths[currentIndex]);
     }
+    // Start loading the current image immediately at full resolution
+    _loadPreviewImage(imagePaths[index]);
+
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
     await _loadMetadata();
     await _detectBurst(currentIndex);
     _preloadThumbnails(index);
 
-    // Immediately start preloading the current image with high priority
-    _loadPreviewImage(imagePaths[index], highQuality: true);
-
     // Preload adjacent preview images for faster navigation
     _preloadAdjacentImages(index);
 
-    // Also preload images 3-4 positions away for very fast navigation (lower quality)
+    // Also preload images 3-4 positions away for very fast navigation
     for (int i = 3; i <= 4; i++) {
       if (index + i < imagePaths.length) {
-        _loadPreviewImage(imagePaths[index + i], highQuality: false);
+        _loadPreviewImage(imagePaths[index + i]);
       }
       if (index - i >= 0) {
-        _loadPreviewImage(imagePaths[index - i], highQuality: false);
+        _loadPreviewImage(imagePaths[index - i]);
       }
     }
   }
 
   // Preload adjacent images for faster navigation
   void _preloadAdjacentImages(int currentIndex) {
-    // Preload next 2 images for even snappier navigation
+    // Preload next 2 images for immediate next
     for (int i = 1; i <= 2; i++) {
       if (currentIndex + i < imagePaths.length) {
-        _loadPreviewImage(imagePaths[currentIndex + i], highQuality: i == 1);
+        _loadPreviewImage(imagePaths[currentIndex + i]);
       }
     }
-    // Preload previous 2 images
+    // Preload previous 2 images for immediate previous
     for (int i = 1; i <= 2; i++) {
       if (currentIndex - i >= 0) {
-        _loadPreviewImage(imagePaths[currentIndex - i], highQuality: i == 1);
+        _loadPreviewImage(imagePaths[currentIndex - i]);
       }
     }
   }
