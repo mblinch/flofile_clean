@@ -3320,8 +3320,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         RegExp(r'^\d+$').hasMatch(searchText) &&
         filteredCodes.isNotEmpty;
 
-    return Stack(
-      clipBehavior: Clip.none,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: 200,
@@ -3378,159 +3378,152 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ],
           ),
         ),
-        // Dropdown overlay
+        // Dropdown below search field
         if (showDropdown)
-          Positioned(
-            top: 34,
-            left: 0,
-            child: Material(
-              elevation: 12,
+          Container(
+            width: 200,
+            constraints: const BoxConstraints(maxHeight: 200, minHeight: 40),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade400),
               borderRadius: BorderRadius.circular(4),
-              child: Container(
-                width: 200,
-                constraints:
-                    const BoxConstraints(maxHeight: 200, minHeight: 40),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(4),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: filteredCodes.take(10).map((code) {
-                        final replacement = codeReplacements[code];
-                        if (replacement == null) return const SizedBox.shrink();
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: filteredCodes.take(10).map((code) {
+                      final replacement = codeReplacements[code];
+                      if (replacement == null) return const SizedBox.shrink();
 
-                        // Use the exact same logic as the regular player list
-                        final jerseyNumber = replacement.jerseyNumber;
-                        String nameOnly = replacement.short;
-                        if (jerseyNumber != null &&
-                            nameOnly.startsWith('$jerseyNumber ')) {
-                          nameOnly =
-                              nameOnly.substring(jerseyNumber.length + 1);
-                        }
-                        // Remove trailing number if present
-                        nameOnly = nameOnly.split(' #').first;
+                      // Use the exact same logic as the regular player list
+                      final jerseyNumber = replacement.jerseyNumber;
+                      String nameOnly = replacement.short;
+                      if (jerseyNumber != null &&
+                          nameOnly.startsWith('$jerseyNumber ')) {
+                        nameOnly = nameOnly.substring(jerseyNumber.length + 1);
+                      }
+                      // Remove trailing number if present
+                      nameOnly = nameOnly.split(' #').first;
 
-                        final safeNumber = (jerseyNumber ?? '0').toString();
-                        final safeName = (nameOnly ?? '').trim();
-                        final displayText = '#$safeNumber $safeName';
-                        final isSelected = isHomeList
-                            ? selectedPlayers.contains(code)
-                            : selectedOpponentPlayers.contains(code);
+                      final safeNumber = (jerseyNumber ?? '0').toString();
+                      final safeName = (nameOnly ?? '').trim();
+                      final displayText = '#$safeNumber $safeName';
+                      final isSelected = isHomeList
+                          ? selectedPlayers.contains(code)
+                          : selectedOpponentPlayers.contains(code);
 
-                        return InkWell(
-                          onTap: () {
-                            setState(() {
-                              if (isHomeList) {
-                                if (isSelected) {
-                                  selectedPlayers.remove(code);
-                                } else {
-                                  // Check for solo verbs
-                                  final soloOnlyVerbs = [
-                                    'hit',
-                                    'Fielding',
-                                    'pitches',
-                                    'At Bat',
-                                    'Base Running'
-                                  ];
-                                  if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedPlayers.isNotEmpty) {
-                                    selectedPlayers.clear();
-                                  }
-                                  selectedPlayers.add(code);
-                                  isHome = true;
-                                }
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            if (isHomeList) {
+                              if (isSelected) {
+                                selectedPlayers.remove(code);
                               } else {
-                                if (isSelected) {
-                                  selectedOpponentPlayers.remove(code);
-                                } else {
-                                  // Check for solo verbs
-                                  final soloOnlyVerbs = [
-                                    'hit',
-                                    'Fielding',
-                                    'pitches',
-                                    'At Bat',
-                                    'Base Running'
-                                  ];
-                                  if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedOpponentPlayers.isNotEmpty) {
-                                    selectedOpponentPlayers.clear();
-                                  }
-                                  selectedOpponentPlayers.add(code);
-                                  isHome = false;
+                                // Check for solo verbs
+                                final soloOnlyVerbs = [
+                                  'hit',
+                                  'Fielding',
+                                  'pitches',
+                                  'At Bat',
+                                  'Base Running'
+                                ];
+                                if (_selectedVerb != null &&
+                                    soloOnlyVerbs.contains(_selectedVerb) &&
+                                    selectedPlayers.isNotEmpty) {
+                                  selectedPlayers.clear();
                                 }
+                                selectedPlayers.add(code);
+                                isHome = true;
                               }
+                            } else {
+                              if (isSelected) {
+                                selectedOpponentPlayers.remove(code);
+                              } else {
+                                // Check for solo verbs
+                                final soloOnlyVerbs = [
+                                  'hit',
+                                  'Fielding',
+                                  'pitches',
+                                  'At Bat',
+                                  'Base Running'
+                                ];
+                                if (_selectedVerb != null &&
+                                    soloOnlyVerbs.contains(_selectedVerb) &&
+                                    selectedOpponentPlayers.isNotEmpty) {
+                                  selectedOpponentPlayers.clear();
+                                }
+                                selectedOpponentPlayers.add(code);
+                                isHome = false;
+                              }
+                            }
 
-                              // Update personality field
-                              final allSelectedCodes = [
-                                ...selectedPlayers,
-                                ...selectedOpponentPlayers
-                              ];
-                              final personalityText = allSelectedCodes
-                                  .map((c) {
-                                    final replacement = codeReplacements[c];
-                                    if (replacement == null) return null;
-                                    return replacement.short.split(' #').first;
-                                  })
-                                  .whereNotNull()
-                                  .join(';');
-                              personalityController.text = personalityText;
+                            // Update personality field
+                            final allSelectedCodes = [
+                              ...selectedPlayers,
+                              ...selectedOpponentPlayers
+                            ];
+                            final personalityText = allSelectedCodes
+                                .map((c) {
+                                  final replacement = codeReplacements[c];
+                                  if (replacement == null) return null;
+                                  return replacement.short.split(' #').first;
+                                })
+                                .whereNotNull()
+                                .join(';');
+                            personalityController.text = personalityText;
 
-                              // Clear search after selection
-                              searchController.clear();
-                              _updateCaption();
-                            });
-                          },
-                          child: Container(
-                            width: 200,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Colors.blue.shade100
-                                  : Colors.white,
-                              border: Border(
-                                bottom: BorderSide(
-                                    color: Colors.grey.shade300, width: 1),
-                              ),
+                            // Clear search after selection
+                            searchController.clear();
+                            _updateCaption();
+                          });
+                        },
+                        child: Container(
+                          width: 200,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.blue.shade100
+                                : Colors.white,
+                            border: Border(
+                              bottom: BorderSide(
+                                  color: Colors.grey.shade300, width: 1),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  displayText,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color: isSelected
-                                        ? Colors.blue.shade800
-                                        : Colors.black,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                displayText,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.blue.shade800
+                                      : Colors.black,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                        );
-                      }).toList(),
-                    ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ),
               ),
