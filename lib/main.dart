@@ -14,6 +14,11 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // for firstOrNull
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
+import 'package:extended_image/extended_image.dart';
+import 'package:path_provider/path_provider.dart';
 
 // MLB Team to State/Province mapping
 const Map<String, String> teamStates = {
@@ -51,7 +56,7 @@ const Map<String, String> teamStates = {
 
 const double kInputTextSize = 14.0;
 const int kThumbnailSize =
-    100; // Size for thumbnails (smaller = faster loading, less memory)
+    120; // Size for thumbnails (balanced for speed and visibility)
 
 const kInputTitleStyle = TextStyle(
   fontSize: 24,
@@ -317,11 +322,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _isSortedByDate = false;
   bool _isSortedByFilename = false;
 
-  // Thumbnail caching
-  final Map<String, ui.Image?> _thumbnailCache = {};
-  final Map<String, bool> _thumbnailLoading = {};
-  int _loadedThumbnailCount = 0;
-  final ValueNotifier<int> _thumbnailProgressNotifier = ValueNotifier<int>(0);
+  // Flutter's Image.file handles thumbnail caching automatically
 
   // Wireframe overlay function
   Widget _buildWireframeOverlay(Widget child,
@@ -2673,19 +2674,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     for (int i = preloadStart; i <= preloadEnd; i++) {
       if (i < imagePaths.length) {
-        final imagePath = imagePaths[i];
-        // Only load if not already cached and not currently loading
-        if (!_thumbnailCache.containsKey(imagePath) &&
-            _thumbnailLoading[imagePath] != true) {
-          _loadThumbnail(imagePath);
-        }
+        // Flutter's Image.file handles thumbnail loading automatically when visible
       }
     }
 
-    // Memory management for large collections (less aggressive)
-    if (imagePaths.length > 500) {
-      _cleanupDistantThumbnails(startIndex);
-    }
+    // Flutter's Image.file handles memory management automatically
   }
 
   // API selection state
@@ -3108,6 +3101,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _filmstripController.removeListener(_onFilmstripScroll);
     _filmstripController.dispose();
     _scrollDebounceTimer?.cancel();
+    // Flutter's Image.file handles thumbnail cleanup automatically
     _thumbnailProgressNotifier.dispose();
     jobIdController.dispose();
     descriptionWritersController.dispose();
@@ -3142,15 +3136,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Future<void> pickFolder() async {
     final dirPath = await FilePicker.platform.getDirectoryPath();
     if (dirPath == null) return;
-    final files = Directory(dirPath)
-        .listSync()
-        .whereType<File>()
-        .where((f) {
-          final ext = p.extension(f.path).toLowerCase();
-          return ['.jpg', '.jpeg', '.png', '.tif', '.tiff'].contains(ext);
-        })
-        .map((f) => f.path)
-        .toList();
+
+    // Use compute to load image files in background thread
+    final files = await compute(_listImageFiles, dirPath);
 
     if (files.isNotEmpty) {
       // Show loading dialog
@@ -3198,97 +3186,70 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       await _loadMetadata();
       await _detectBurst(currentIndex);
 
-      // Preload ALL thumbnails for instant scrolling
+      // Preload all thumbnails and current image for instant loading
       _preloadAllThumbnails();
+      _preloadCurrentAndAdjacentImages();
     }
   }
 
-  // Load and cache thumbnail for a specific image
-  Future<void> _loadThumbnail(String imagePath, {Function? onProgress}) async {
-    if (_thumbnailCache.containsKey(imagePath) ||
-        _thumbnailLoading[imagePath] == true) {
-      return; // Already cached or loading
-    }
+  // Flutter's Image.file handles thumbnail loading automatically - no manual loading needed
 
-    _thumbnailLoading[imagePath] = true;
-
-    try {
-      final file = File(imagePath);
-      final bytes = await file.readAsBytes();
-
-      // Create smaller, lower-quality thumbnails for better performance
-      final codec = await ui.instantiateImageCodec(
-        bytes,
-        targetWidth: kThumbnailSize, // Use constant for easy adjustment
-        // Don't specify targetHeight to maintain aspect ratio
-      );
-      final frame = await codec.getNextFrame();
-
-      if (mounted) {
-        setState(() {
-          _thumbnailCache[imagePath] = frame.image;
-          _thumbnailLoading[imagePath] = false;
-          _loadedThumbnailCount++;
-        });
-        print(
-            'Successfully loaded thumbnail: ${imagePath.split('/').last} (count: $_loadedThumbnailCount)');
-      }
-
-      // Call progress callback if provided
-      onProgress?.call();
-    } catch (e) {
-      print('Error loading thumbnail for $imagePath: $e');
-      if (mounted) {
-        setState(() {
-          _thumbnailCache[imagePath] = null;
-          _thumbnailLoading[imagePath] = false;
-        });
-      }
-    }
-  }
-
-  // Preload thumbnails for visible and nearby images
+  // Preload all thumbnails using Flutter's precacheImage for persistent loading
   void _preloadThumbnails(int currentIndex) {
     if (imagePaths.isEmpty) return;
 
-    final startIndex = (currentIndex - 10).clamp(0, imagePaths.length - 1);
-    final endIndex = (currentIndex + 10).clamp(0, imagePaths.length - 1);
-
-    for (int i = startIndex; i <= endIndex; i++) {
-      _loadThumbnail(imagePaths[i]);
+    // Preload all thumbnails into Flutter's image cache
+    for (int i = 0; i < imagePaths.length; i++) {
+      precacheImage(FileImage(File(imagePaths[i])), context);
     }
   }
 
-  // Smart thumbnail loading based on image count
+  // Removed duplicate function - using the improved version below
+
+  // Preload images using Flutter's precacheImage for faster loading
+  void _preloadCurrentAndAdjacentImages() {
+    if (imagePaths.isEmpty) return;
+
+    // Preload current image and adjacent images for instant navigation
+    final indices = <int>[
+      currentIndex,
+      if (currentIndex > 0) currentIndex - 1,
+      if (currentIndex < imagePaths.length - 1) currentIndex + 1,
+    ];
+
+    for (final index in indices) {
+      if (index >= 0 && index < imagePaths.length) {
+        precacheImage(FileImage(File(imagePaths[index])), context);
+      }
+    }
+  }
+
+  // Progress tracking for thumbnail preloading
+  final ValueNotifier<int> _thumbnailProgressNotifier = ValueNotifier<int>(0);
+
+  // Flag to track if all thumbnails are loaded
+  bool _allThumbnailsLoaded = false;
+
+  // Preload ALL images at full resolution for instant scrolling
   void _preloadAllThumbnails() {
     if (imagePaths.isEmpty) return;
 
-    // For large collections (>500 images), use smart loading
-    if (imagePaths.length > 500) {
-      _preloadSmartThumbnails();
-    } else {
-      // For smaller collections, preload all
-      _preloadAllThumbnailsDirect();
-    }
-  }
+    // Reset progress
+    _thumbnailProgressNotifier.value = 0;
 
-  // Preload ALL thumbnails for instant scrolling (small collections)
-  void _preloadAllThumbnailsDirect() {
-    _loadedThumbnailCount = 0; // Reset counter
-    _thumbnailProgressNotifier.value = 0; // Reset progress
-
+    // Show loading dialog with progress
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0), // Less rounded
+            borderRadius: BorderRadius.circular(8.0),
           ),
-          title: const Text('Loading Thumbnails'),
+          title: const Text('Loading Images'),
           content: SizedBox(
-            width: 300, // Fixed width
-            height: 120, // Fixed height
+            width: 300,
+            height: 120,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -3298,7 +3259,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   valueListenable: _thumbnailProgressNotifier,
                   builder: (context, count, child) {
                     return Text(
-                      'Loading $count/${imagePaths.length} thumbnails...',
+                      'Loading $count/${imagePaths.length} images...',
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w500),
                       textAlign: TextAlign.center,
@@ -3312,222 +3273,62 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       },
     );
 
+    // Preload ALL images at full resolution into Flutter's cache
     Future.microtask(() async {
-      print('Starting thumbnail preload for ${imagePaths.length} images');
       for (int i = 0; i < imagePaths.length; i++) {
-        await _loadThumbnail(imagePaths[i]);
-        print(
-            'Loaded thumbnail $i: $_loadedThumbnailCount/${imagePaths.length}');
-        // Update progress notifier for real-time updates
-        _thumbnailProgressNotifier.value = _loadedThumbnailCount;
-      }
-      print('Finished loading all thumbnails');
-      if (mounted) Navigator.of(context).pop();
-    });
-  }
+        final imagePath = imagePaths[i];
 
-  // Smart loading for large collections
-  void _preloadSmartThumbnails() {
-    _loadedThumbnailCount = 0; // Reset counter
-    _thumbnailProgressNotifier.value = 0; // Reset progress
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0), // Less rounded
-          ),
-          title: const Text('Loading Thumbnails'),
-          content: SizedBox(
-            width: 300, // Fixed width
-            height: 140, // Fixed height (slightly taller for extra text)
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                ValueListenableBuilder<int>(
-                  valueListenable: _thumbnailProgressNotifier,
-                  builder: (context, count, child) {
-                    return Text(
-                      'Loading $count/${imagePaths.length} thumbnails...',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.center,
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '(Large collection - will load more as you scroll)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
+        // Preload image at full resolution - this ensures it's truly cached
+        await precacheImage(
+          FileImage(File(imagePath)),
+          context,
         );
-      },
-    );
 
-    // Load initial batch (first 100 + current area)
-    Future.microtask(() async {
-      final initialBatch = <int>[];
+        // Update progress counter
+        _thumbnailProgressNotifier.value = i + 1;
 
-      // First 100 images
-      initialBatch
-          .addAll(List.generate(100.clamp(0, imagePaths.length), (i) => i));
-
-      // Current area (around index 0)
-      final currentArea =
-          List.generate(50, (i) => i).where((i) => i < imagePaths.length);
-      initialBatch.addAll(currentArea);
-
-      // Remove duplicates and load
-      final uniqueIndices = initialBatch.toSet().toList();
-      print(
-          'Starting smart thumbnail preload for ${uniqueIndices.length} images');
-      for (int i = 0; i < uniqueIndices.length; i++) {
-        await _loadThumbnail(imagePaths[uniqueIndices[i]]);
-        print(
-            'Loaded thumbnail $i: $_loadedThumbnailCount/${uniqueIndices.length}');
-        // Update progress notifier for real-time updates
-        _thumbnailProgressNotifier.value = _loadedThumbnailCount;
+        // Small delay to prevent UI blocking and show progress
+        if (i % 10 == 0) {
+          await Future.delayed(const Duration(milliseconds: 1));
+        }
       }
-      print('Finished smart thumbnail loading');
-      if (mounted) Navigator.of(context).pop();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        setState(() {
+          _allThumbnailsLoaded = true; // Mark all images as loaded
+        });
+      }
     });
   }
 
-  // Memory management for large collections
-  void _cleanupDistantThumbnails(int currentIndex) {
-    if (imagePaths.length <= 500) return; // Only for very large collections
+  // Flutter's Image.file handles thumbnail loading automatically - no manual loading needed
 
-    final keepRange =
-        200; // Keep thumbnails within 200 images of current (increased)
-    final toRemove = <String>[];
-
-    for (final path in _thumbnailCache.keys) {
-      final index = imagePaths.indexOf(path);
-      if (index != -1 && (index - currentIndex).abs() > keepRange) {
-        toRemove.add(path);
-      }
-    }
-
-    // Only remove if we have too many cached images (prevent aggressive cleanup)
-    if (_thumbnailCache.length > 300) {
-      for (final path in toRemove) {
-        _thumbnailCache.remove(path);
-        _thumbnailLoading.remove(path);
-      }
-    }
-  }
-
-  // Load and cache preview image with optimizations
-  final Map<String, ui.Image?> _previewCache = {};
-  final Map<String, bool> _previewLoading = {};
-  static const int _maxPreviewCacheSize =
-      20; // Limit cache to prevent memory issues
-
-  Future<ui.Image?> _loadPreviewImage(String imagePath) async {
-    // Check cache first
-    if (_previewCache.containsKey(imagePath)) {
-      return _previewCache[imagePath];
-    }
-
-    // Check if already loading
-    if (_previewLoading[imagePath] == true) {
-      // Wait for existing load to complete
-      while (_previewLoading[imagePath] == true) {
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-      return _previewCache[imagePath];
-    }
-
-    _previewLoading[imagePath] = true;
-
-    try {
-      final file = File(imagePath);
-      final bytes = await file.readAsBytes();
-
-      // Use compute for image compression to avoid blocking the UI thread
-      final compressedBytes = await compute(
-        (Uint8List imageBytes) {
-          final image = img.decodeImage(imageBytes);
-          if (image == null)
-            return imageBytes; // Fallback to original if decode fails
-          return img.encodeJpg(image, quality: 80);
-        },
-        bytes,
-      );
-
-      // Load compressed image at full resolution
-      final codec = await ui.instantiateImageCodec(
-        compressedBytes,
-      );
-      final frame = await codec.getNextFrame();
-
-      if (mounted) {
-        // Manage cache size to prevent memory issues
-        if (_previewCache.length >= _maxPreviewCacheSize) {
-          // Remove oldest entries (simple FIFO)
-          final keysToRemove = _previewCache.keys
-              .take(_previewCache.length - _maxPreviewCacheSize + 1)
-              .toList();
-          for (final key in keysToRemove) {
-            _previewCache.remove(key);
-            _previewLoading.remove(key);
-          }
-        }
-
-        _previewCache[imagePath] = frame.image;
-        _previewLoading[imagePath] = false;
-      }
-
-      return frame.image;
-    } catch (e) {
-      print('Error loading preview image for $imagePath: $e');
-      if (mounted) {
-        _previewCache[imagePath] = null;
-        _previewLoading[imagePath] = false;
-      }
-      return null;
-    }
-  }
-
-  // Build cached thumbnail widget
+  // Build thumbnail widget using preloaded images with simple proportional sizing
   Widget _buildCachedThumbnail(String imagePath) {
-    final cachedImage = _thumbnailCache[imagePath];
-    final isLoading = _thumbnailLoading[imagePath] == true;
-
-    if (cachedImage != null) {
-      return Center(
-        child: RawImage(
-          image: cachedImage,
-          fit: BoxFit.contain,
-          alignment: Alignment.center,
-        ),
-      );
-    } else if (isLoading) {
-      return const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    } else {
-      // Show placeholder and trigger loading
-      _loadThumbnail(imagePath);
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(Icons.image, color: Colors.grey, size: 30),
-        ),
-      );
-    }
+    return Container(
+      width: 120,
+      height: 80,
+      child: Image.file(
+        File(imagePath),
+        fit: BoxFit.contain, // Maintain aspect ratio within container
+        width: 120,
+        height: 80,
+        cacheWidth: 120,
+        cacheHeight: 80,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          return child;
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: Icon(Icons.image, color: Colors.grey, size: 20),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // Helper function to sort a list of file paths by DateTimeOriginal
@@ -3971,11 +3772,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               const EdgeInsets.symmetric(horizontal: 320, vertical: 240),
           child: GestureDetector(
             onTap: () => Navigator.of(context).pop(),
-            child: InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 2.0, // Reduced max zoom by 50%
-              child: Image.file(File(imagePath)),
+            child: ExtendedImage.file(
+              File(imagePath),
+              fit: BoxFit.contain,
+              mode: ExtendedImageMode.gesture, // Enable zoom/pan
+              initGestureConfigHandler: (state) {
+                return GestureConfig(
+                  minScale: 0.5,
+                  maxScale: 3.0,
+                  animationMinScale: 0.5,
+                  animationMaxScale: 3.0,
+                );
+              },
             ),
           ),
         );
@@ -3991,21 +3799,39 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Future<void> nextImage() async {
     if (currentIndex < imagePaths.length - 1) {
+      final nextIndex = currentIndex + 1;
+
       await _saveCaptionToFile(imagePaths[currentIndex]);
-      setState(() => currentIndex++);
+      setState(() => currentIndex = nextIndex);
       _scrollToSelectedImage();
-      await _loadMetadata();
-      await _detectBurst(currentIndex);
+
+      // Preload adjacent images for instant navigation
+      _preloadCurrentAndAdjacentImages();
+
+      // Load metadata and detect burst in parallel
+      await Future.wait([
+        _loadMetadata(),
+        _detectBurst(currentIndex),
+      ]);
     }
   }
 
   Future<void> previousImage() async {
     if (currentIndex > 0) {
+      final prevIndex = currentIndex - 1;
+
       await _saveCaptionToFile(imagePaths[currentIndex]);
-      setState(() => currentIndex--);
+      setState(() => currentIndex = prevIndex);
       _scrollToSelectedImage();
-      await _loadMetadata();
-      await _detectBurst(currentIndex);
+
+      // Preload adjacent images for instant navigation
+      _preloadCurrentAndAdjacentImages();
+
+      // Load metadata and detect burst in parallel
+      await Future.wait([
+        _loadMetadata(),
+        _detectBurst(currentIndex),
+      ]);
     }
   }
 
@@ -4013,87 +3839,59 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (index < 0 || index >= imagePaths.length || index == currentIndex) {
       return;
     }
+
     // Save the current caption before switching
     if (imagePaths.isNotEmpty) {
       await _saveCaptionToFile(imagePaths[currentIndex]);
     }
-    // Start loading the current image immediately at full resolution
-    _loadPreviewImage(imagePaths[index]);
-
-    // Also start loading the next image immediately for faster navigation
-    if (index + 1 < imagePaths.length) {
-      _loadPreviewImage(imagePaths[index + 1]);
-    }
 
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
-    await _loadMetadata();
-    await _detectBurst(currentIndex);
-    _preloadThumbnails(index);
 
-    // Preload adjacent preview images for faster navigation
-    _preloadAdjacentImages(index);
+    // Preload adjacent images for instant navigation
+    _preloadCurrentAndAdjacentImages();
 
-    // Also preload images 3-4 positions away for very fast navigation
-    for (int i = 3; i <= 4; i++) {
-      if (index + i < imagePaths.length) {
-        _loadPreviewImage(imagePaths[index + i]);
-      }
-      if (index - i >= 0) {
-        _loadPreviewImage(imagePaths[index - i]);
-      }
-    }
+    // Load metadata and detect burst in parallel
+    await Future.wait([
+      _loadMetadata(),
+      _detectBurst(currentIndex),
+    ]);
   }
 
-  // Preload adjacent images for faster navigation
-  void _preloadAdjacentImages(int currentIndex) {
-    // Preload next 2 images for immediate next
-    for (int i = 1; i <= 2; i++) {
-      if (currentIndex + i < imagePaths.length) {
-        _loadPreviewImage(imagePaths[currentIndex + i]);
-      }
-    }
-    // Preload previous 2 images for immediate previous
-    for (int i = 1; i <= 2; i++) {
-      if (currentIndex - i >= 0) {
-        _loadPreviewImage(imagePaths[currentIndex - i]);
-      }
-    }
-  }
-
-  // Build preview image widget with stable state management
+  // Build preview image widget with precacheImage optimization
   Widget _buildPreviewImage(String imagePath) {
-    final cachedImage = _previewCache[imagePath];
-    final isLoading = _previewLoading[imagePath] == true;
+    // Preload the current image for instant display
+    precacheImage(FileImage(File(imagePath)), context);
 
-    if (cachedImage != null) {
-      return RawImage(
-        image: cachedImage,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
-      );
-    } else if (isLoading) {
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    } else {
-      // Trigger loading with high priority and show placeholder
-      _loadPreviewImage(imagePath).then((image) {
-        if (mounted && image != null) {
-          setState(() {}); // Trigger rebuild to show the loaded image
+    return ExtendedImage.file(
+      File(imagePath),
+      fit: BoxFit.contain,
+      alignment: Alignment.center,
+      width: double.infinity,
+      height: double.infinity,
+      loadStateChanged: (ExtendedImageState state) {
+        switch (state.extendedImageLoadState) {
+          case LoadState.loading:
+            return Container(
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          case LoadState.completed:
+            return null; // Use default completed state
+          case LoadState.failed:
+            return Container(
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: Icon(Icons.error, color: Colors.red, size: 48),
+              ),
+            );
         }
-      });
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
+      },
+      // Photo Mechanic style: Load smaller previews faster
+      mode: ExtendedImageMode.none, // No zoom/pan for speed
+    );
   }
 
   void _pickDate() async {
@@ -6255,19 +6053,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 radius: const Radius.circular(4),
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
-                  child: ListView.builder(
+                  child: ListView(
                     controller: _filmstripController,
                     scrollDirection: Axis.horizontal,
-                    itemCount: imagePaths.length,
                     key: const PageStorageKey('filmstrip'),
-                    itemBuilder: (context, index) {
+                    children: imagePaths.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final imagePath = entry.value;
                       final isSelected = index == currentIndex;
-                      final imagePath = imagePaths[index];
                       return GestureDetector(
                         onTap: () => _selectImage(index),
                         child: Container(
                           key: ValueKey(imagePath),
-                          width: filmstripHeight - (imagePadding * 2),
+                          width:
+                              120, // Wider container for better portrait display
+                          height: 80, // Fixed height to match thumbnail height
                           margin: const EdgeInsets.symmetric(
                               horizontal: imagePadding),
                           decoration: BoxDecoration(
@@ -6286,7 +6086,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                         ),
                       );
-                    },
+                    }).toList(),
                   ),
                 ),
               ),
@@ -8057,4 +7857,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ],
     );
   }
+}
+
+// Helper function to list image files in background thread
+List<String> _listImageFiles(String path) {
+  return Directory(path)
+      .listSync()
+      .whereType<File>()
+      .where((f) {
+        final ext = p.extension(f.path).toLowerCase();
+        return ['.jpg', '.jpeg', '.png', '.tif', '.tiff'].contains(ext);
+      })
+      .map((f) => f.path)
+      .toList();
 }
