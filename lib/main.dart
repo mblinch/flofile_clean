@@ -5774,9 +5774,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Caption Field and Buttons (left side) - taking 60% of width
+                                  // Caption Field and Buttons (left side) - taking 50% of width
                                   Expanded(
-                                    flex: 6,
+                                    flex: 5,
                                     child: Column(
                                       children: [
                                         // Caption Field
@@ -5941,9 +5941,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ],
                                     ),
                                   ),
-                                  // Personality Field (right side) - taking 40% of width
+                                  // Personality Field (right side) - taking 50% of width
                                   Expanded(
-                                    flex: 4,
+                                    flex: 5,
                                     child: Padding(
                                       padding: const EdgeInsets.only(left: 8.0),
                                       child: Material(
