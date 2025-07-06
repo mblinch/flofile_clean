@@ -3313,6 +3313,233 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return completer.future;
   }
 
+  // Build search field with dropdown for number input
+  Widget _buildSearchWithDropdown(TextEditingController searchController,
+      String searchText, bool isHomeList, List<String> filteredCodes) {
+    final bool showDropdown = searchText.isNotEmpty &&
+        RegExp(r'^\d+$').hasMatch(searchText) &&
+        filteredCodes.isNotEmpty;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 200,
+          height: 32,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: 8.0),
+                child: Icon(Icons.search, size: 16, color: Colors.grey),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: searchController,
+                  onChanged: (value) {
+                    setState(() {}); // Rebuild to filter list and show dropdown
+                  },
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black,
+                    height: 1.0,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'Search...',
+                    hintStyle: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8.0,
+                      vertical: 0.0,
+                    ),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              if (searchText.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    searchController.clear();
+                    setState(() {}); // Rebuild
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.clear, size: 16, color: Colors.grey),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Dropdown overlay
+        if (showDropdown)
+          Positioned(
+            top: 34,
+            left: 0,
+            child: Material(
+              elevation: 12,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                width: 200,
+                constraints:
+                    const BoxConstraints(maxHeight: 200, minHeight: 40),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: filteredCodes.take(10).map((code) {
+                        final replacement = codeReplacements[code];
+                        if (replacement == null) return const SizedBox.shrink();
+
+                        // Use the exact same logic as the regular player list
+                        final jerseyNumber = replacement.jerseyNumber;
+                        String nameOnly = replacement.short;
+                        if (jerseyNumber != null &&
+                            nameOnly.startsWith('$jerseyNumber ')) {
+                          nameOnly =
+                              nameOnly.substring(jerseyNumber.length + 1);
+                        }
+                        // Remove trailing number if present
+                        nameOnly = nameOnly.split(' #').first;
+
+                        final safeNumber = (jerseyNumber ?? '0').toString();
+                        final safeName = (nameOnly ?? '').trim();
+                        final displayText = '#$safeNumber $safeName';
+                        final isSelected = isHomeList
+                            ? selectedPlayers.contains(code)
+                            : selectedOpponentPlayers.contains(code);
+
+                        return InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (isHomeList) {
+                                if (isSelected) {
+                                  selectedPlayers.remove(code);
+                                } else {
+                                  // Check for solo verbs
+                                  final soloOnlyVerbs = [
+                                    'hit',
+                                    'Fielding',
+                                    'pitches',
+                                    'At Bat',
+                                    'Base Running'
+                                  ];
+                                  if (_selectedVerb != null &&
+                                      soloOnlyVerbs.contains(_selectedVerb) &&
+                                      selectedPlayers.isNotEmpty) {
+                                    selectedPlayers.clear();
+                                  }
+                                  selectedPlayers.add(code);
+                                  isHome = true;
+                                }
+                              } else {
+                                if (isSelected) {
+                                  selectedOpponentPlayers.remove(code);
+                                } else {
+                                  // Check for solo verbs
+                                  final soloOnlyVerbs = [
+                                    'hit',
+                                    'Fielding',
+                                    'pitches',
+                                    'At Bat',
+                                    'Base Running'
+                                  ];
+                                  if (_selectedVerb != null &&
+                                      soloOnlyVerbs.contains(_selectedVerb) &&
+                                      selectedOpponentPlayers.isNotEmpty) {
+                                    selectedOpponentPlayers.clear();
+                                  }
+                                  selectedOpponentPlayers.add(code);
+                                  isHome = false;
+                                }
+                              }
+
+                              // Update personality field
+                              final allSelectedCodes = [
+                                ...selectedPlayers,
+                                ...selectedOpponentPlayers
+                              ];
+                              final personalityText = allSelectedCodes
+                                  .map((c) {
+                                    final replacement = codeReplacements[c];
+                                    if (replacement == null) return null;
+                                    return replacement.short.split(' #').first;
+                                  })
+                                  .whereNotNull()
+                                  .join(';');
+                              personalityController.text = personalityText;
+
+                              // Clear search after selection
+                              searchController.clear();
+                              _updateCaption();
+                            });
+                          },
+                          child: Container(
+                            width: 200,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.blue.shade100
+                                  : Colors.white,
+                              border: Border(
+                                bottom: BorderSide(
+                                    color: Colors.grey.shade300, width: 1),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  displayText,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Colors.blue.shade800
+                                        : Colors.black,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   // Helper function to sort a list of file paths by DateTimeOriginal
   Future<List<String>> _getFilesSortedByDate(List<String> files) async {
     if (files.isEmpty) return [];
@@ -6557,62 +6784,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 8),
-          Container(
-            width: 200,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Icon(Icons.search, size: 16, color: Colors.grey),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: (value) {
-                      setState(() {}); // Rebuild to filter list
-                    },
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black,
-                      height: 1.0,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'Search...',
-                      hintStyle: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8.0,
-                        vertical: 0.0,
-                      ),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                if (searchText.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      searchController.clear();
-                      setState(() {}); // Rebuild
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 8.0),
-                      child: Icon(Icons.clear, size: 16, color: Colors.grey),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
+          _buildSearchWithDropdown(
+              searchController, searchText, isHomeList, filteredCodes),
+          SizedBox(
+              height: (searchText.isNotEmpty &&
+                      RegExp(r'^\d+$').hasMatch(searchText) &&
+                      filteredCodes.isNotEmpty)
+                  ? 220
+                  : 8), // Extra space when dropdown is visible
           // Selected players chips
           if ((isHomeList && selectedPlayers.isNotEmpty) ||
               (!isHomeList && selectedOpponentPlayers.isNotEmpty))
@@ -6703,7 +6882,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           Flexible(
-            child: filteredCodes.isEmpty && searchText.isNotEmpty
+            child: (filteredCodes.isEmpty && searchText.isNotEmpty)
                 ? const Align(
                     alignment: Alignment.topLeft,
                     child: Padding(
@@ -6718,125 +6897,133 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                     ),
                   )
-                : ListView(
-                    children: [
-                      ...filteredCodes.map((code) {
-                        final replacement = codeReplacements[code];
-                        if (replacement == null) {
-                          return const SizedBox.shrink();
-                        }
-                        final jerseyNumber = replacement.jerseyNumber;
-                        // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
-                        String nameOnly = replacement.short;
-                        if (jerseyNumber != null &&
-                            nameOnly.startsWith('$jerseyNumber ')) {
-                          nameOnly =
-                              nameOnly.substring(jerseyNumber.length + 1);
-                        }
-                        // Remove trailing number if present
-                        nameOnly = nameOnly.split(' #').first;
+                : (searchText.isNotEmpty &&
+                        RegExp(r'^\d+$').hasMatch(searchText))
+                    ? const SizedBox
+                        .shrink() // Hide main list when dropdown is showing
+                    : ListView(
+                        children: [
+                          ...filteredCodes.map((code) {
+                            final replacement = codeReplacements[code];
+                            if (replacement == null) {
+                              return const SizedBox.shrink();
+                            }
+                            final jerseyNumber = replacement.jerseyNumber;
+                            // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
+                            String nameOnly = replacement.short;
+                            if (jerseyNumber != null &&
+                                nameOnly.startsWith('$jerseyNumber ')) {
+                              nameOnly =
+                                  nameOnly.substring(jerseyNumber.length + 1);
+                            }
+                            // Remove trailing number if present
+                            nameOnly = nameOnly.split(' #').first;
 
-                        final isSelected = isHomeList
-                            ? selectedPlayers.contains(code)
-                            : selectedOpponentPlayers.contains(code);
-                        final safeNumber = (jerseyNumber ?? '0').toString();
-                        final safeName = (nameOnly ?? '').trim();
-                        final displayText = '#$safeNumber $safeName';
-                        return InkWell(
-                          onTap: () {
-                            setState(() {
-                              if (isHomeList) {
-                                if (isSelected) {
-                                  // If already selected, deselect
-                                  selectedPlayers.remove(code);
-                                } else {
-                                  // Check if a solo verb is selected and we already have a player
-                                  final soloOnlyVerbs = [
-                                    'hit',
-                                    'Fielding',
-                                    'pitches',
-                                    'At Bat',
-                                    'Base Running'
-                                  ];
+                            final isSelected = isHomeList
+                                ? selectedPlayers.contains(code)
+                                : selectedOpponentPlayers.contains(code);
+                            final safeNumber = (jerseyNumber ?? '0').toString();
+                            final safeName = (nameOnly ?? '').trim();
+                            final displayText = '#$safeNumber $safeName';
+                            return InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isHomeList) {
+                                    if (isSelected) {
+                                      // If already selected, deselect
+                                      selectedPlayers.remove(code);
+                                    } else {
+                                      // Check if a solo verb is selected and we already have a player
+                                      final soloOnlyVerbs = [
+                                        'hit',
+                                        'Fielding',
+                                        'pitches',
+                                        'At Bat',
+                                        'Base Running'
+                                      ];
 
-                                  if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedPlayers.isNotEmpty) {
-                                    // For solo verbs, replace the existing player instead of adding
-                                    selectedPlayers.clear();
-                                    selectedPlayers.add(code);
-                                    // Force caption update for player replacement
+                                      if (_selectedVerb != null &&
+                                          soloOnlyVerbs
+                                              .contains(_selectedVerb) &&
+                                          selectedPlayers.isNotEmpty) {
+                                        // For solo verbs, replace the existing player instead of adding
+                                        selectedPlayers.clear();
+                                        selectedPlayers.add(code);
+                                        // Force caption update for player replacement
+                                      } else {
+                                        selectedPlayers.add(code);
+                                      }
+                                      isHome = true;
+                                    }
                                   } else {
-                                    selectedPlayers.add(code);
+                                    if (isSelected) {
+                                      selectedOpponentPlayers.remove(code);
+                                    } else {
+                                      // Check if a solo verb is selected and we already have an opponent player
+                                      final soloOnlyVerbs = [
+                                        'hit',
+                                        'Fielding',
+                                        'pitches',
+                                        'At Bat',
+                                        'Base Running'
+                                      ];
+
+                                      if (_selectedVerb != null &&
+                                          soloOnlyVerbs
+                                              .contains(_selectedVerb) &&
+                                          selectedOpponentPlayers.isNotEmpty) {
+                                        // For solo verbs, replace the existing player instead of adding
+                                        selectedOpponentPlayers.clear();
+                                        selectedOpponentPlayers.add(code);
+                                        // Force caption update for player replacement
+                                      } else {
+                                        selectedOpponentPlayers.add(code);
+                                      }
+                                      isHome = false;
+                                    }
                                   }
-                                  isHome = true;
-                                }
-                              } else {
-                                if (isSelected) {
-                                  selectedOpponentPlayers.remove(code);
-                                } else {
-                                  // Check if a solo verb is selected and we already have an opponent player
-                                  final soloOnlyVerbs = [
-                                    'hit',
-                                    'Fielding',
-                                    'pitches',
-                                    'At Bat',
-                                    'Base Running'
+
+                                  // When a player is selected or deselected, update the
+                                  // personality box to reflect the current selections.
+                                  final allSelectedCodes = [
+                                    ...selectedPlayers,
+                                    ...selectedOpponentPlayers
                                   ];
+                                  final personalityText = allSelectedCodes
+                                      .map((c) {
+                                        final replacement = codeReplacements[c];
+                                        if (replacement == null) return null;
+                                        // Get full name (FirstName LastName) from short name by removing number
+                                        return replacement.short
+                                            .split(' #')
+                                            .first;
+                                      })
+                                      .whereNotNull()
+                                      .join(';');
+                                  personalityController.text = personalityText;
 
-                                  if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedOpponentPlayers.isNotEmpty) {
-                                    // For solo verbs, replace the existing player instead of adding
-                                    selectedOpponentPlayers.clear();
-                                    selectedOpponentPlayers.add(code);
-                                    // Force caption update for player replacement
-                                  } else {
-                                    selectedOpponentPlayers.add(code);
-                                  }
-                                  isHome = false;
-                                }
-                              }
-
-                              // When a player is selected or deselected, update the
-                              // personality box to reflect the current selections.
-                              final allSelectedCodes = [
-                                ...selectedPlayers,
-                                ...selectedOpponentPlayers
-                              ];
-                              final personalityText = allSelectedCodes
-                                  .map((c) {
-                                    final replacement = codeReplacements[c];
-                                    if (replacement == null) return null;
-                                    // Get full name (FirstName LastName) from short name by removing number
-                                    return replacement.short.split(' #').first;
-                                  })
-                                  .whereNotNull()
-                                  .join(';');
-                              personalityController.text = personalityText;
-
-                              _updateCaption();
-                            });
-                          },
-                          child: Container(
-                            color: isSelected
-                                ? Colors.grey.shade400
-                                : Colors.transparent,
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 2, horizontal: 8),
-                            child: Row(
-                              children: [
-                                Text(
-                                  displayText,
-                                  style: const TextStyle(fontSize: 12),
+                                  _updateCaption();
+                                });
+                              },
+                              child: Container(
+                                color: isSelected
+                                    ? Colors.grey.shade400
+                                    : Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 2, horizontal: 8),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      displayText,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ],
-                  ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
           ),
         ],
       ),
