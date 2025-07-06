@@ -5427,7 +5427,94 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // LEFT: Personality and Caption fields
+                                    // LEFT: Image Display
+                                    Expanded(
+                                      flex:
+                                          1, // Changed from 2 to 1 to make image less wide
+                                      child: Column(
+                                        children: [
+                                          // Image Container
+                                          Expanded(
+                                            child: Container(
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                    0x09000000), // 3.5% opacity black background
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade400),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: imagePaths.isNotEmpty
+                                                  ? ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      child: _buildPreviewImage(
+                                                          imagePaths[
+                                                              currentIndex]),
+                                                    )
+                                                  : Container(
+                                                      color: const Color(
+                                                          0x0D000000),
+                                                      child: const Center(
+                                                        child: Column(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Icon(Icons.image,
+                                                                size: 48,
+                                                                color: const Color(
+                                                                    0xFF808080)),
+                                                            SizedBox(height: 8),
+                                                            Text(
+                                                                'No image selected',
+                                                                style: TextStyle(
+                                                                    color: const Color(
+                                                                        0xFF808080))),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+
+                                          // EXIF Data Display
+                                          if (imagePaths.isNotEmpty) ...[
+                                            Text(
+                                              [
+                                                if (_fileName != null)
+                                                  _fileName!,
+                                                if (_imageWidth != null &&
+                                                    _imageHeight != null)
+                                                  '${_imageWidth}x$_imageHeight',
+                                                if (_dateTimeOriginal != null)
+                                                  _dateTimeOriginal!,
+                                                if (_cameraModel != null)
+                                                  _cameraModel!,
+                                                if (_lensInfo != null)
+                                                  _lensInfo!,
+                                                if (_shutterSpeed != null)
+                                                  '1/$_shutterSpeed',
+                                                if (_aperture != null)
+                                                  _aperture!,
+                                                if (_iso != null) 'ISO $_iso',
+                                              ].join(' •  '),
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: const Color(0xFF808080),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+
+                                    // RIGHT: Personality and Caption fields
                                     Expanded(
                                       flex: 1,
                                       child: Column(
@@ -5676,93 +5763,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ],
 
                                           const Spacer(),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-
-                                    // RIGHT: Image Display
-                                    Expanded(
-                                      flex:
-                                          1, // Changed from 2 to 1 to make image less wide
-                                      child: Column(
-                                        children: [
-                                          // Image Container
-                                          Expanded(
-                                            child: Container(
-                                              width: double.infinity,
-                                              decoration: BoxDecoration(
-                                                color: const Color(
-                                                    0x09000000), // 3.5% opacity black background
-                                                border: Border.all(
-                                                    color:
-                                                        Colors.grey.shade400),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: imagePaths.isNotEmpty
-                                                  ? ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      child: _buildPreviewImage(
-                                                          imagePaths[
-                                                              currentIndex]),
-                                                    )
-                                                  : Container(
-                                                      color: const Color(
-                                                          0x0D000000),
-                                                      child: const Center(
-                                                        child: Column(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            Icon(Icons.image,
-                                                                size: 48,
-                                                                color: const Color(
-                                                                    0xFF808080)),
-                                                            SizedBox(height: 8),
-                                                            Text(
-                                                                'No image selected',
-                                                                style: TextStyle(
-                                                                    color: const Color(
-                                                                        0xFF808080))),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-
-                                          // EXIF Data Display
-                                          if (imagePaths.isNotEmpty) ...[
-                                            Text(
-                                              [
-                                                if (_fileName != null)
-                                                  _fileName!,
-                                                if (_imageWidth != null &&
-                                                    _imageHeight != null)
-                                                  '${_imageWidth}x$_imageHeight',
-                                                if (_dateTimeOriginal != null)
-                                                  _dateTimeOriginal!,
-                                                if (_cameraModel != null)
-                                                  _cameraModel!,
-                                                if (_lensInfo != null)
-                                                  _lensInfo!,
-                                                if (_shutterSpeed != null)
-                                                  '1/$_shutterSpeed',
-                                                if (_aperture != null)
-                                                  _aperture!,
-                                                if (_iso != null) 'ISO $_iso',
-                                              ].join(' •  '),
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: const Color(0xFF808080),
-                                              ),
-                                            ),
-                                          ],
                                         ],
                                       ),
                                     ),
