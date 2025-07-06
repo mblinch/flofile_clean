@@ -5769,430 +5769,299 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   ],
                                 ),
                               ),
+                              const SizedBox(height: 16),
+                              // Caption and Personality boxes in one row under the picture preview
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Caption Field and Buttons (left side) - taking 60% of width
                                   Expanded(
-                                    child: Container(
-                                      margin: const EdgeInsets.all(8),
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                            0x09000000), // 3.5% opacity black
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          SizedBox(
-                                            width:
-                                                290, // Reduced to 290px for more space
-                                            child: Column(
-                                              children: [
-                                                _buildPlayerContainer(
-                                                  title: (_showHomeFirst
-                                                          ? selectedHomeTeam
-                                                          : selectedAwayTeam) ??
-                                                      'Players',
-                                                  codes: _showHomeFirst
-                                                      ? homePlayers
-                                                      : awayPlayers,
-                                                  isHomeList: _showHomeFirst,
-                                                  toggle: true,
-                                                ),
-                                                if (_selectedVerb != null &&
-                                                    !soloVerbs.contains(
-                                                        _selectedVerb!))
-                                                  _buildPlayerContainer(
-                                                    title: (_showHomeFirst
-                                                            ? selectedAwayTeam
-                                                            : selectedHomeTeam) ??
-                                                        'Players',
-                                                    codes: _showHomeFirst
-                                                        ? awayPlayers
-                                                        : homePlayers,
-                                                    isHomeList: !_showHomeFirst,
-                                                    toggle: false,
+                                    flex: 6,
+                                    child: Column(
+                                      children: [
+                                        // Caption Field
+                                        AnimatedBuilder(
+                                          animation: _typewriterAnimation,
+                                          builder: (context, child) {
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                  right: 8.0),
+                                              child: Material(
+                                                elevation: 2.0,
+                                                color: Colors.white,
+                                                shadowColor: Colors.grey,
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                child: TextField(
+                                                  controller:
+                                                      TextEditingController(
+                                                    text: _typewriterController
+                                                            .isAnimating
+                                                        ? _displayedCaption
+                                                        : captionController
+                                                            .text,
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          // Nice divider line between player picker and caption builder
-                                          Container(
-                                            width: 1,
-                                            height: 500,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                begin: Alignment.topCenter,
-                                                end: Alignment.bottomCenter,
-                                                colors: [
-                                                  Colors.grey.shade300,
-                                                  Colors.grey.shade400,
-                                                  Colors.grey.shade300,
+                                                  maxLines: 4,
+                                                  minLines: 4,
+                                                  style: const TextStyle(
+                                                      fontSize: 14),
+                                                  decoration: InputDecoration(
+                                                    labelText: 'Caption',
+                                                    floatingLabelBehavior:
+                                                        FloatingLabelBehavior
+                                                            .always,
+                                                    isDense: true,
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 12),
+                                                    labelStyle: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        letterSpacing: -0.5),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0),
+                                                    ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0),
+                                                    ),
+                                                  ),
+                                                  readOnly:
+                                                      _typewriterController
+                                                          .isAnimating,
+                                                  onChanged: (value) {
+                                                    if (!_typewriterController
+                                                        .isAnimating) {
+                                                      captionController.text =
+                                                          value;
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 6),
+                                        // Row with Reset button on left and other buttons on right
+                                        Column(
+                                          children: [
+                                            // First row: Reset button on left, Copy/Paste/Previous/Next on right
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8.0),
+                                              child: Row(
+                                                children: [
+                                                  // Reset button on left moved 3px closer to edge
+                                                  Transform.translate(
+                                                    offset:
+                                                        const Offset(-3.0, 0),
+                                                    child: _buildCompactButton(
+                                                      'Reset Caption',
+                                                      _resetCaption,
+                                                    ),
+                                                  ),
+                                                  const Spacer(),
+                                                  // Sort button in middle
+                                                  _buildCompactButton(
+                                                    _isSortedByDate
+                                                        ? 'Sorted by Date'
+                                                        : _isSortedByFilename
+                                                            ? 'Sorted by Name'
+                                                            : 'Sort by Time/Date',
+                                                    _isSortedByDate
+                                                        ? _sortImagesByFilename
+                                                        : _sortImagesByDate,
+                                                    isBlue: _isSortedByDate ||
+                                                        _isSortedByFilename,
+                                                  ),
+                                                  const Spacer(),
+                                                  // Action buttons on right
+                                                  _buildCompactButton(
+                                                    'Copy',
+                                                    _onCopyPressed,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  _buildCompactButton(
+                                                    'Paste',
+                                                    _onPastePressed,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  _buildCompactButton(
+                                                    'Previous',
+                                                    imagePaths.isNotEmpty &&
+                                                            currentIndex > 0
+                                                        ? previousImage
+                                                        : null,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  _buildCompactButton(
+                                                    'Next',
+                                                    imagePaths.isNotEmpty &&
+                                                            currentIndex <
+                                                                imagePaths
+                                                                        .length -
+                                                                    1
+                                                        ? nextImage
+                                                        : null,
+                                                  ),
                                                 ],
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 16),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                const SizedBox(
-                                                    height:
-                                                        8), // Reduced spacing to move caption closer to top
-
-                                                const SizedBox(height: 4),
-                                                // Caption and Personality side by side
-                                                Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    // Caption Field and Buttons (left side) - taking 60% of width
-                                                    Expanded(
-                                                      flex: 6,
-                                                      child: Column(
-                                                        children: [
-                                                          // Caption Field
-                                                          AnimatedBuilder(
-                                                            animation:
-                                                                _typewriterAnimation,
-                                                            builder: (context,
-                                                                child) {
-                                                              return Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .only(
-                                                                        right:
-                                                                            8.0),
-                                                                child: Material(
-                                                                  elevation:
-                                                                      2.0,
-                                                                  color: Colors
-                                                                      .white,
-                                                                  shadowColor:
-                                                                      Colors
-                                                                          .grey,
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4),
-                                                                  child:
-                                                                      TextField(
-                                                                    controller:
-                                                                        TextEditingController(
-                                                                      text: _typewriterController
-                                                                              .isAnimating
-                                                                          ? _displayedCaption
-                                                                          : captionController
-                                                                              .text,
-                                                                    ),
-                                                                    maxLines: 4,
-                                                                    minLines: 4,
-                                                                    style: const TextStyle(
-                                                                        fontSize:
-                                                                            14),
-                                                                    decoration:
-                                                                        InputDecoration(
-                                                                      labelText:
-                                                                          'Caption',
-                                                                      floatingLabelBehavior:
-                                                                          FloatingLabelBehavior
-                                                                              .always,
-                                                                      isDense:
-                                                                          true,
-                                                                      contentPadding: const EdgeInsets
-                                                                          .symmetric(
-                                                                          horizontal:
-                                                                              8,
-                                                                          vertical:
-                                                                              12),
-                                                                      labelStyle: const TextStyle(
-                                                                          fontSize:
-                                                                              15,
-                                                                          fontWeight: FontWeight
-                                                                              .bold,
-                                                                          letterSpacing:
-                                                                              -0.5),
-                                                                      enabledBorder:
-                                                                          OutlineInputBorder(
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(4),
-                                                                        borderSide: BorderSide(
-                                                                            color:
-                                                                                Colors.grey.shade400,
-                                                                            width: 1.0),
-                                                                      ),
-                                                                      focusedBorder:
-                                                                          OutlineInputBorder(
-                                                                        borderRadius:
-                                                                            BorderRadius.circular(4),
-                                                                        borderSide: BorderSide(
-                                                                            color:
-                                                                                Colors.grey.shade400,
-                                                                            width: 1.0),
-                                                                      ),
-                                                                    ),
-                                                                    readOnly:
-                                                                        _typewriterController
-                                                                            .isAnimating,
-                                                                    onChanged:
-                                                                        (value) {
-                                                                      if (!_typewriterController
-                                                                          .isAnimating) {
-                                                                        captionController.text =
-                                                                            value;
-                                                                      }
-                                                                    },
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            },
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 6),
-                                                          // Row with Reset button on left and other buttons on right
-                                                          Column(
-                                                            children: [
-                                                              // First row: Reset button on left, Copy/Paste/Previous/Next on right
-                                                              Padding(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        8.0),
-                                                                child: Row(
-                                                                  children: [
-                                                                    // Reset button on left moved 3px closer to edge
-                                                                    Transform
-                                                                        .translate(
-                                                                      offset: const Offset(
-                                                                          -3.0,
-                                                                          0),
-                                                                      child:
-                                                                          _buildCompactButton(
-                                                                        'Reset Caption',
-                                                                        _resetCaption,
-                                                                      ),
-                                                                    ),
-                                                                    const Spacer(),
-                                                                    // Sort button in middle
-                                                                    _buildCompactButton(
-                                                                      _isSortedByDate
-                                                                          ? 'Sorted by Date'
-                                                                          : _isSortedByFilename
-                                                                              ? 'Sorted by Name'
-                                                                              : 'Sort by Time/Date',
-                                                                      _isSortedByDate
-                                                                          ? _sortImagesByFilename
-                                                                          : _sortImagesByDate,
-                                                                      isBlue: _isSortedByDate ||
-                                                                          _isSortedByFilename,
-                                                                    ),
-                                                                    const Spacer(),
-                                                                    // Action buttons on right
-                                                                    _buildCompactButton(
-                                                                      'Copy',
-                                                                      _onCopyPressed,
-                                                                    ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            6),
-                                                                    _buildCompactButton(
-                                                                      'Paste',
-                                                                      _onPastePressed,
-                                                                    ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            6),
-                                                                    _buildCompactButton(
-                                                                      'Previous',
-                                                                      imagePaths.isNotEmpty &&
-                                                                              currentIndex > 0
-                                                                          ? previousImage
-                                                                          : null,
-                                                                    ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            6),
-                                                                    _buildCompactButton(
-                                                                      'Next',
-                                                                      imagePaths.isNotEmpty &&
-                                                                              currentIndex < imagePaths.length - 1
-                                                                          ? nextImage
-                                                                          : null,
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 4),
-                                                              // Second row: FTP button aligned to right edge
-                                                              Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .only(
-                                                                        right:
-                                                                            8.0),
-                                                                child: Row(
-                                                                  children: [
-                                                                    const Spacer(),
-                                                                    _buildWideFtpButton(),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    // Personality Field (right side) - taking 40% of width
-                                                    Expanded(
-                                                      flex: 4,
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(
-                                                                left: 8.0),
-                                                        child: Material(
-                                                          elevation: 2,
-                                                          shadowColor: Colors
-                                                              .grey.shade400,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(8),
-                                                          child: TextField(
-                                                            controller:
-                                                                personalityController,
-                                                            maxLines: 4,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        14),
-                                                            decoration:
-                                                                InputDecoration(
-                                                              labelText:
-                                                                  'Personality',
-                                                              floatingLabelBehavior:
-                                                                  FloatingLabelBehavior
-                                                                      .always,
-                                                              labelStyle: const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 15,
-                                                                  letterSpacing:
-                                                                      -0.5),
-                                                              border:
-                                                                  OutlineInputBorder(
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            8),
-                                                                gapPadding: 0,
-                                                              ),
-                                                              enabledBorder:
-                                                                  OutlineInputBorder(
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            8),
-                                                                gapPadding: 0,
-                                                                borderSide: BorderSide(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade400),
-                                                              ),
-                                                              focusedBorder:
-                                                                  OutlineInputBorder(
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            8),
-                                                                gapPadding: 0,
-                                                                borderSide: BorderSide(
-                                                                    color: Theme.of(
-                                                                            context)
-                                                                        .colorScheme
-                                                                        .primary,
-                                                                    width: 2),
-                                                              ),
-                                                              contentPadding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          12,
-                                                                      vertical:
-                                                                          12),
-                                                              filled: true,
-                                                              fillColor:
-                                                                  Colors.white,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 16),
-                                                // Nice horizontal divider between caption boxes and caption builder
-                                                Container(
-                                                  height: 1,
-                                                  margin: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 8.0),
-                                                  decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      begin:
-                                                          Alignment.centerLeft,
-                                                      end:
-                                                          Alignment.centerRight,
-                                                      colors: [
-                                                        Colors.grey.shade300,
-                                                        Colors.grey.shade400,
-                                                        Colors.grey.shade300,
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 16),
-                                                Opacity(
-                                                  opacity: (_showHomeFirst
-                                                          ? selectedPlayers
-                                                              .isNotEmpty
-                                                          : selectedOpponentPlayers
-                                                              .isNotEmpty)
-                                                      ? 1.0
-                                                      : 0.3,
-                                                  child: Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 0.0,
-                                                        vertical: 0.0),
-                                                    child:
-                                                        SingleChildScrollView(
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          ..._buildAllVerbsList(),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
+                                            const SizedBox(height: 4),
+                                            // Second row: FTP button aligned to right edge
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  right: 8.0),
+                                              child: Row(
+                                                children: [
+                                                  const Spacer(),
+                                                  _buildWideFtpButton(),
+                                                ],
+                                              ),
                                             ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Personality Field (right side) - taking 40% of width
+                                  Expanded(
+                                    flex: 4,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 8.0),
+                                      child: Material(
+                                        elevation: 2,
+                                        shadowColor: Colors.grey.shade400,
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: TextField(
+                                          controller: personalityController,
+                                          maxLines: 4,
+                                          style: const TextStyle(fontSize: 14),
+                                          decoration: InputDecoration(
+                                            labelText: 'Personality',
+                                            floatingLabelBehavior:
+                                                FloatingLabelBehavior.always,
+                                            labelStyle: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                                letterSpacing: -0.5),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              gapPadding: 0,
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              gapPadding: 0,
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade400),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              gapPadding: 0,
+                                              borderSide: BorderSide(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                  width: 2),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 12),
+                                            filled: true,
+                                            fillColor: Colors.white,
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 16),
+                              // Player picker and verb chips side by side
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Player picker on the left
+                                  SizedBox(
+                                    width: 290,
+                                    child: Column(
+                                      children: [
+                                        _buildPlayerContainer(
+                                          title: (_showHomeFirst
+                                                  ? selectedHomeTeam
+                                                  : selectedAwayTeam) ??
+                                              'Players',
+                                          codes: _showHomeFirst
+                                              ? homePlayers
+                                              : awayPlayers,
+                                          isHomeList: _showHomeFirst,
+                                          toggle: true,
+                                        ),
+                                        if (_selectedVerb != null &&
+                                            !soloVerbs.contains(_selectedVerb!))
+                                          _buildPlayerContainer(
+                                            title: (_showHomeFirst
+                                                    ? selectedAwayTeam
+                                                    : selectedHomeTeam) ??
+                                                'Players',
+                                            codes: _showHomeFirst
+                                                ? awayPlayers
+                                                : homePlayers,
+                                            isHomeList: !_showHomeFirst,
+                                            toggle: false,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // Verb chips on the right
+                                  Expanded(
+                                    child: Opacity(
+                                      opacity: (_showHomeFirst
+                                              ? selectedPlayers.isNotEmpty
+                                              : selectedOpponentPlayers
+                                                  .isNotEmpty)
+                                          ? 1.0
+                                          : 0.3,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 0.0, vertical: 0.0),
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              ..._buildAllVerbsList(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
                               // Filmstrip remains below
                               _buildFilmstrip(),
                             ],
