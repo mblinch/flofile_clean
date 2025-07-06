@@ -2660,9 +2660,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final offset = position.pixels;
 
     // Calculate which images are visible
-    const double imageWidth = 100.0 - 8.0 + 8.0; // width - padding + margin
-    final startIndex = (offset / imageWidth).floor();
-    final endIndex = ((offset + viewportDimension) / imageWidth).ceil();
+    const double maxImageWidth = 100.0;
+    const double imagePadding = 4.0;
+    const double separatorWidth = 1.0;
+    const double separatorMargin = 4.0;
+    const double itemWidth = maxImageWidth +
+        (imagePadding * 2) +
+        separatorWidth +
+        (separatorMargin * 2);
+
+    final startIndex = (offset / itemWidth).floor();
+    final endIndex = ((offset + viewportDimension) / itemWidth).ceil();
 
     // Only process if we've moved to a different range
     if (startIndex == _lastScrollIndex) return;
@@ -3101,8 +3109,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _filmstripController.removeListener(_onFilmstripScroll);
     _filmstripController.dispose();
     _scrollDebounceTimer?.cancel();
-    // Flutter's Image.file handles thumbnail cleanup automatically
-    _thumbnailProgressNotifier.dispose();
+
     jobIdController.dispose();
     descriptionWritersController.dispose();
     headlineController.dispose();
@@ -3181,14 +3188,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       setState(() {
         imagePaths = sortedFiles;
         currentIndex = 0;
+        // print('Loaded imagePaths: $imagePaths');
       });
+      await _preloadThumbnailsWithDialog(context);
       _scrollToSelectedImage();
       await _loadMetadata();
       await _detectBurst(currentIndex);
-
-      // Preload all thumbnails and current image for instant loading
-      _preloadAllThumbnails();
-      _preloadCurrentAndAdjacentImages();
     }
   }
 
@@ -3224,111 +3229,88 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
-  // Progress tracking for thumbnail preloading
-  final ValueNotifier<int> _thumbnailProgressNotifier = ValueNotifier<int>(0);
-
-  // Flag to track if all thumbnails are loaded
-  bool _allThumbnailsLoaded = false;
-
-  // Preload ALL images at full resolution for instant scrolling
-  void _preloadAllThumbnails() {
-    if (imagePaths.isEmpty) return;
-
-    // Reset progress
-    _thumbnailProgressNotifier.value = 0;
-
-    // Show loading dialog with progress
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          title: const Text('Loading Images'),
-          content: SizedBox(
-            width: 300,
-            height: 120,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                ValueListenableBuilder<int>(
-                  valueListenable: _thumbnailProgressNotifier,
-                  builder: (context, count, child) {
-                    return Text(
-                      'Loading $count/${imagePaths.length} images...',
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w500),
-                      textAlign: TextAlign.center,
-                    );
-                  },
-                ),
-              ],
-            ),
+  // Simple thumbnail system
+  Widget _buildSimpleThumbnail(String imagePath) {
+    // print('Thumbnail path: $imagePath');
+    return Image.file(
+      File(imagePath),
+      fit: BoxFit.cover, // Fill the box, crop as needed, no letterboxing
+      width: 120,
+      height: 80,
+      cacheWidth: 120,
+      cacheHeight: 80,
+      errorBuilder: (context, error, stackTrace) {
+        // print('Error loading $imagePath: $error');
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Center(
+            child: Icon(Icons.image, color: Colors.grey, size: 20),
           ),
         );
       },
     );
-
-    // Preload ALL images at full resolution into Flutter's cache
-    Future.microtask(() async {
-      for (int i = 0; i < imagePaths.length; i++) {
-        final imagePath = imagePaths[i];
-
-        // Preload image at full resolution - this ensures it's truly cached
-        await precacheImage(
-          FileImage(File(imagePath)),
-          context,
-        );
-
-        // Update progress counter
-        _thumbnailProgressNotifier.value = i + 1;
-
-        // Small delay to prevent UI blocking and show progress
-        if (i % 10 == 0) {
-          await Future.delayed(const Duration(milliseconds: 1));
-        }
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop();
-        setState(() {
-          _allThumbnailsLoaded = true; // Mark all images as loaded
-        });
-      }
-    });
   }
 
-  // Flutter's Image.file handles thumbnail loading automatically - no manual loading needed
+  // Proportional thumbnail system - loads at 100px on longest side
+  Widget _buildProportionalThumbnail(String imagePath) {
+    return FutureBuilder<Size>(
+      future: _getImageDimensions(imagePath),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          final imageSize = snapshot.data!;
+          final isLandscape = imageSize.width > imageSize.height;
 
-  // Build thumbnail widget using preloaded images with simple proportional sizing
-  Widget _buildCachedThumbnail(String imagePath) {
-    return Container(
-      width: 120,
-      height: 80,
-      child: Image.file(
-        File(imagePath),
-        fit: BoxFit.contain, // Maintain aspect ratio within container
-        width: 120,
-        height: 80,
-        cacheWidth: 120,
-        cacheHeight: 80,
-        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-          return child;
-        },
-        errorBuilder: (context, error, stackTrace) {
+          // Calculate cache dimensions: 100px on longest side
+          int cacheWidth, cacheHeight;
+          if (isLandscape) {
+            cacheWidth = 100;
+            cacheHeight = (100 * imageSize.height / imageSize.width).round();
+          } else {
+            cacheHeight = 100;
+            cacheWidth = (100 * imageSize.width / imageSize.height).round();
+          }
+
+          return Image.file(
+            File(imagePath),
+            fit: BoxFit.contain, // Maintain proportions within container
+            cacheWidth: cacheWidth,
+            cacheHeight: cacheHeight,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey.shade200,
+                child: const Center(
+                  child: Icon(Icons.broken_image, color: Colors.red, size: 32),
+                ),
+              );
+            },
+          );
+        } else {
+          // Loading state - show placeholder
           return Container(
             color: Colors.grey.shade200,
             child: const Center(
-              child: Icon(Icons.image, color: Colors.grey, size: 20),
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
           );
-        },
-      ),
+        }
+      },
     );
+  }
+
+  // Get image dimensions efficiently
+  Future<Size> _getImageDimensions(String imagePath) async {
+    final completer = Completer<Size>();
+    final image = Image.file(File(imagePath));
+
+    image.image.resolve(const ImageConfiguration()).addListener(
+      ImageStreamListener((ImageInfo info, bool _) {
+        final width = info.image.width.toDouble();
+        final height = info.image.height.toDouble();
+        completer.complete(Size(width, height));
+      }),
+    );
+
+    return completer.future;
   }
 
   // Helper function to sort a list of file paths by DateTimeOriginal
@@ -6010,14 +5992,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   void _scrollToSelectedImage() {
     if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
-      const double filmstripHeight = 100.0;
+      const double maxImageWidth = 100.0;
       const double imagePadding = 4.0;
-      const imageWidth = filmstripHeight -
+      const double separatorWidth = 1.0;
+      const double separatorMargin = 4.0;
+
+      // Calculate the width each item takes up (image + margins + separator)
+      const double itemWidth = maxImageWidth +
           (imagePadding * 2) +
-          (imagePadding * 2); // image + margin
-      final targetOffset = (imageWidth * currentIndex) -
+          separatorWidth +
+          (separatorMargin * 2);
+
+      final targetOffset = (itemWidth * currentIndex) -
           (_filmstripController.position.viewportDimension / 2) +
-          (imageWidth / 2);
+          (itemWidth / 2);
 
       _filmstripController.animateTo(
         targetOffset.clamp(0.0, _filmstripController.position.maxScrollExtent),
@@ -6029,7 +6017,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Widget _buildFilmstrip() {
     const double filmstripHeight = 100.0;
-    const double imagePadding = 4.0;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
@@ -6053,40 +6040,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 radius: const Radius.circular(4),
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
-                  child: ListView(
+                  child: ListView.separated(
                     controller: _filmstripController,
                     scrollDirection: Axis.horizontal,
                     key: const PageStorageKey('filmstrip'),
-                    children: imagePaths.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final imagePath = entry.value;
-                      final isSelected = index == currentIndex;
+                    itemCount: imagePaths.length,
+                    separatorBuilder: (context, index) => Container(
+                      width: 1,
+                      height: double.infinity,
+                      color: Colors.grey.shade400,
+                      margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                    ),
+                    itemBuilder: (context, index) {
+                      final imagePath = imagePaths[index];
                       return GestureDetector(
-                        onTap: () => _selectImage(index),
+                        onTap: () {
+                          setState(() {
+                            currentIndex = index;
+                          });
+                        },
                         child: Container(
-                          key: ValueKey(imagePath),
-                          width:
-                              120, // Wider container for better portrait display
-                          height: 80, // Fixed height to match thumbnail height
-                          margin: const EdgeInsets.symmetric(
-                              horizontal: imagePadding),
+                          constraints: const BoxConstraints(
+                            maxWidth: 100,
+                            maxHeight: 100,
+                          ),
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             border: Border.all(
-                              color: isSelected
+                              color: index == currentIndex
                                   ? Theme.of(context).colorScheme.primary
                                   : Colors.transparent,
-                              width: isSelected ? 3.0 : 0.0,
+                              width: index == currentIndex ? 3.0 : 0.0,
                             ),
                           ),
-                          child: Stack(
-                            children: [
-                              _buildCachedThumbnail(imagePath),
-                            ],
-                          ),
+                          child: _buildProportionalThumbnail(imagePath),
                         ),
                       );
-                    }).toList(),
+                    },
                   ),
                 ),
               ),
@@ -6960,7 +6951,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildCountryCodeDropdown() {
     final validCodes = countryCodes.map((c) => c['code']).toSet();
     String currentValue = countryCodeController.text.trim();
-    print('CountryCodeDropdown: value="$currentValue" valid=$validCodes');
+    // print('CountryCodeDropdown: value="$currentValue" valid=$validCodes');
     if (!validCodes.contains(currentValue)) {
       currentValue = 'CAN';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -7028,7 +7019,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildUrgencyDropdown() {
     String currentValue = urgencyController.text.trim();
     final validCodes = urgencyLevels.map((u) => u['code']).toSet();
-    print('UrgencyDropdown: value="$currentValue" valid=$validCodes');
+    // print('UrgencyDropdown: value="$currentValue" valid=$validCodes');
     if (!validCodes.contains(currentValue)) {
       // Try to find a numeric match (e.g., if image has "3" but our codes are "3")
       final numericValue = int.tryParse(currentValue);
@@ -7108,7 +7099,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildJobTitleDropdown() {
     final List<String> jobTitles = ['Contributor', 'Stringer', 'Staff'];
     String currentValue = creatorJobTitleController.text.trim();
-    print('JobTitleDropdown: value="$currentValue" valid=$jobTitles');
+    // print('JobTitleDropdown: value="$currentValue" valid=$jobTitles');
     if (!jobTitles.contains(currentValue)) {
       currentValue = 'Contributor';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -7856,6 +7847,62 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ),
       ],
     );
+  }
+
+  Future<void> _preloadThumbnailsWithDialog(BuildContext context) async {
+    if (imagePaths.isEmpty) return;
+    int loaded = 0;
+    final total = imagePaths.length;
+    final ValueNotifier<int> progress = ValueNotifier<int>(0);
+
+    // Show dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: const Text('Loading Thumbnails'),
+          content: SizedBox(
+            width: 300,
+            height: 120,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: progress,
+                  builder: (context, value, child) {
+                    return Column(
+                      children: [
+                        LinearProgressIndicator(value: value / total),
+                        const SizedBox(height: 16),
+                        Text('Loading $value / $total thumbnails...'),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // Preload images
+    for (final imagePath in imagePaths) {
+      await precacheImage(
+        FileImage(File(imagePath)),
+        context,
+        size: const Size(120, 80),
+      );
+      loaded++;
+      progress.value = loaded;
+    }
+
+    // Dismiss dialog
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 }
 
