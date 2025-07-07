@@ -1007,37 +1007,105 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required ValueChanged<int?> onInningSelected,
     bool showWalkOffOption = false,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
-          child: Text(
-            'Inning:',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
+    return Container(
+      width: 80,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Gradient header
+          Container(
+            width: 80,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.grey.shade200,
+                  Colors.white,
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                children: [
+                  Text(
+                    'Inning',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Innings 1-9
-              ...List.generate(9, (i) => i + 1).map((inning) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
+          // Inning box content
+          Container(
+            padding: const EdgeInsets.all(4.0),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Innings 1-9
+                ...List.generate(9, (i) => i + 1).map((inning) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 2.0),
+                    child: GestureDetector(
+                      onTap: () => onInningSelected(inning),
+                      child: Container(
+                        width: 30,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: selectedInning == inning
+                              ? Colors.grey.shade600
+                              : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.black),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$inning',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: selectedInning == inning
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: selectedInning == inning
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                // Extras option
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2.0),
                   child: GestureDetector(
-                    onTap: () => onInningSelected(inning),
+                    onTap: () {
+                      _showExtraInningsDialog(onInningSelected);
+                    },
                     child: Container(
                       width: 30,
-                      height: 24,
+                      height: 20,
                       decoration: BoxDecoration(
-                        color: selectedInning == inning
+                        color: (selectedInning != null && selectedInning >= 10)
                             ? Colors.grey.shade600
                             : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(4),
@@ -1045,92 +1113,58 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                       child: Center(
                         child: Text(
-                          '$inning',
+                          'X',
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: selectedInning == inning
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: selectedInning == inning
-                                ? Colors.white
-                                : Colors.black,
+                            fontSize: 10,
+                            fontWeight:
+                                (selectedInning != null && selectedInning >= 10)
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                            color:
+                                (selectedInning != null && selectedInning >= 10)
+                                    ? Colors.white
+                                    : Colors.black,
                           ),
                         ),
                       ),
                     ),
                   ),
-                );
-              }),
-              // Extras option
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4.0),
-                child: GestureDetector(
-                  onTap: () {
-                    _showExtraInningsDialog(onInningSelected);
-                  },
-                  child: Container(
-                    width: 30,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: (selectedInning != null && selectedInning >= 10)
-                          ? Colors.grey.shade600
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.black),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'X',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight:
-                              (selectedInning != null && selectedInning >= 10)
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                          color:
-                              (selectedInning != null && selectedInning >= 10)
-                                  ? Colors.white
-                                  : Colors.black,
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
-              ),
 
-              // Walk-off win chip below the innings
-              if (showWalkOffOption &&
-                  selectedInning != null &&
-                  selectedInning >= 9)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: FlashingFilterChip(
-                    label: SizedBox(
-                      width: 80,
-                      child: const Center(
-                        child: Text(
-                          'Walk Off',
-                          style: TextStyle(fontSize: 11),
+                // Walk-off win chip below the innings
+                if (showWalkOffOption &&
+                    selectedInning != null &&
+                    selectedInning >= 9)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: FlashingFilterChip(
+                      label: SizedBox(
+                        width: 60,
+                        child: const Center(
+                          child: Text(
+                            'Walk Off',
+                            style: TextStyle(fontSize: 9),
+                          ),
                         ),
                       ),
+                      selected: _walkOff,
+                      onSelected: (isSelected) {
+                        setState(() {
+                          _walkOff = isSelected;
+                          _updateCaption();
+                        });
+                      },
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    selected: _walkOff,
-                    onSelected: (isSelected) {
-                      setState(() {
-                        _walkOff = isSelected;
-                        _updateCaption();
-                      });
-                    },
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
