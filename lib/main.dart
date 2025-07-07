@@ -1067,7 +1067,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     child: GestureDetector(
                       onTap: () => onInningSelected(inning),
                       child: Container(
-                        width: 30,
+                        width: 40,
                         height: 20,
                         decoration: BoxDecoration(
                           color: selectedInning == inning
@@ -1101,7 +1101,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       _showExtraInningsDialog(onInningSelected);
                     },
                     child: Container(
-                      width: 30,
+                      width: 40,
                       height: 20,
                       decoration: BoxDecoration(
                         color: (selectedInning != null && selectedInning >= 10)
