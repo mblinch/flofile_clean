@@ -1540,6 +1540,119 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ))
                                         .toList(),
                                   ),
+                                  // Celebration options when home run type is selected
+                                  if (_selectedHomeRunType != null) ...[
+                                    const SizedBox(height: 8),
+                                    const Padding(
+                                      padding: EdgeInsets.only(
+                                          left: 16.0, bottom: 2.0),
+                                      child: Text(
+                                        'Optional:',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  const Text(
+                                                    'Celebrates Alone',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected: _isSoloCelebration,
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              _isSoloCelebration = isSelected;
+                                              if (isSelected) {
+                                                celebrateWith.clear();
+                                                celebrateAgainst.clear();
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 8.0),
+                                          child: FlashingFilterChip(
+                                            label: SizedBox(
+                                              width: _fixedChipWidth,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                        Icons.chevron_right,
+                                                        size: 14,
+                                                        color: Colors.grey),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      'Celebrates With (${celebrateWith.length})',
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight
+                                                              .normal),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            selected: celebrateWith.isNotEmpty,
+                                            onSelected: (isSelected) async {
+                                              if (isSelected) {
+                                                setState(() {
+                                                  _isSoloCelebration =
+                                                      false; // Deselect celebrates alone
+                                                });
+                                                await _showCelebrateDialog();
+                                              } else {
+                                                setState(() {
+                                                  celebrateWith.clear();
+                                                  _isSoloCelebration = false;
+                                                  _updateCaption();
+                                                });
+                                              }
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ] else ...[
                                   // RBI options for other hit types
                                   Column(
