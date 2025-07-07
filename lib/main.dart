@@ -430,6 +430,53 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   void _onZoomPressed() {}
 
+  // Handle back button - go back one logical step
+  void _handleBack() {
+    setState(() {
+      // Go back one logical step depending on the current state
+      if (_selectedHitType != null) {
+        // If in hit type selection, go back to verb selection
+        _selectedHitType = null;
+        _selectedHomeRunType = null;
+        _rbiCount = null;
+        _selectedRbiInning = null;
+        _isBatterRunning = null;
+      } else if (_showFieldingOptions && _selectedVerb == 'Fielding') {
+        // If in fielding options, go back to verb selection
+        _showFieldingOptions = false;
+        _selectedFieldingAction = null;
+        _isDivingCatch = false;
+        _isDivingForGroundBall = false;
+      } else if (_selectedVerb == 'Celebrate' &&
+          (_isSoloCelebration ||
+              celebrateWith.isNotEmpty ||
+              celebrateAgainst.isNotEmpty ||
+              _selectedCelebrationType != null)) {
+        // If in celebration sub-options, go back to main celebration menu
+        _isSoloCelebration = false;
+        _selectedCelebrationType = null;
+        celebrateWith.clear();
+        celebrateAgainst.clear();
+      } else if (_selectedVerb != null) {
+        // If a verb is selected, go back to no verb selected
+        _selectedVerb = null;
+        _selectedHitType = null;
+        _selectedHomeRunType = null;
+        _rbiCount = null;
+        _selectedRbiInning = null;
+        _isBatterRunning = null;
+        _showFieldingOptions = false;
+        _selectedFieldingAction = null;
+        _isDivingCatch = false;
+        _isDivingForGroundBall = false;
+        _isSoloCelebration = false;
+        celebrateWith.clear();
+        celebrateAgainst.clear();
+      }
+      _updateCaption();
+    });
+  }
+
   // Sort images by filename
   Future<void> _sortImagesByFilename() async {
     if (imagePaths.isEmpty) return;
@@ -959,6 +1006,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _showGettyMetadata = true;
   bool _showHitTypes = false;
   bool _isSoloCelebration = false;
+  String? _selectedCelebrationType; // 'alone', 'with', 'against'
   bool _walkOff = false;
   String _pastedRosterText = '';
 
@@ -1389,63 +1437,63 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                'Single',
-                                'Double',
-                                'Triple',
-                                'Home Run'
-                              ]
-                                  .map((label) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
+                                // Hit type options
+                                ...['Single', 'Double', 'Triple', 'Home Run']
+                                    .map((label) => Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 8.0),
+                                          child: FlashingFilterChip(
+                                            label: SizedBox(
+                                              width: _fixedChipWidth,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                        Icons.chevron_right,
+                                                        size: 14,
+                                                        color: Colors.grey),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      label,
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight
+                                                              .normal),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          selected: _selectedHitType == label,
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              if (isSelected) {
-                                                _selectedHitType = label;
-                                                if (label != 'Home Run') {
-                                                  // Pre-select "No RBI" for non-HR hits
-                                                  _rbiCount = 0;
-                                                  _rbiCountByHit[label] = 0;
-                                                } else {
-                                                  // For home runs, RBI is determined by HR type, so clear general count
-                                                  _rbiCount = null;
+                                            selected: _selectedHitType == label,
+                                            onSelected: (isSelected) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedHitType = label;
+                                                  if (label != 'Home Run') {
+                                                    // Pre-select "No RBI" for non-HR hits
+                                                    _rbiCount = 0;
+                                                    _rbiCountByHit[label] = 0;
+                                                  } else {
+                                                    // For home runs, RBI is determined by HR type, so clear general count
+                                                    _rbiCount = null;
+                                                  }
                                                 }
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          key: UniqueKey(),
-                                        ),
-                                      ))
-                                  .toList(),
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            key: UniqueKey(),
+                                          ),
+                                        ))
+                                    .toList(),
+                              ],
                             ),
                           ] else ...[
                             // Show runs scored options when hit type is selected
@@ -2365,6 +2413,136 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           );
+        } else if (verb == 'Celebrate') {
+          // This block handles the 'Celebrate' verb and its sub-options
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    key: UniqueKey(),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (_selectedVerb != 'Celebrate') ...[
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text('Celebrate',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            selected: _selectedVerb == 'Celebrate',
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'Celebrate' : null;
+                              _isSoloCelebration = false;
+                              _selectedCelebrationType = null;
+                              celebrateWith.clear();
+                              celebrateAgainst.clear();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ] else ...[
+                          // Show celebration options when Celebrate is selected
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ...[
+                                'Celebrates Alone',
+                                'Celebrates With Teammates',
+                                'Celebrates Against'
+                              ]
+                                  .map((label) => Padding(
+                                        padding: const EdgeInsets.only(
+                                            right: 12.0, bottom: 8.0),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: 200.0,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected:
+                                              _getCelebrationSelectionState(
+                                                  label),
+                                          onSelected: (isSelected) async {
+                                            print(
+                                                'DEBUG: Clicked on celebration option: $label, isSelected: $isSelected');
+                                            setState(() {
+                                              if (isSelected) {
+                                                _setCelebrationState(label);
+                                              } else {
+                                                _clearCelebrationState();
+                                              }
+                                            });
+                                            // Set isHome based on which team the currently selected player belongs to
+                                            if (selectedPlayers.isNotEmpty) {
+                                              isHome = true;
+                                            } else if (selectedOpponentPlayers
+                                                .isNotEmpty) {
+                                              isHome = false;
+                                            }
+                                            if (isSelected &&
+                                                (label == 'Celebrates With' ||
+                                                    label ==
+                                                        'Celebrates With Teammates' ||
+                                                    label ==
+                                                        'Celebrates Against')) {
+                                              await _showCelebrationDialog(
+                                                  label);
+                                            }
+                                            _updateCaption();
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         } else {
           widgets.add(
             Padding(
@@ -2400,11 +2578,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           horizontal: 6), // Consistent padding
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       selected: _selectedVerb == verb,
-                      onSelected: (_showHomeFirst
-                              ? selectedPlayers.isNotEmpty
-                              : selectedOpponentPlayers.isNotEmpty)
-                          ? (isSelected) => _onVerbSelected(verb)
-                          : null,
+                      onSelected: (isSelected) => _onVerbSelected(verb),
                     ),
                     if (_selectedVerb == verb && verb != 'pitches') ...[
                       const SizedBox(width: 16.0),
@@ -2638,6 +2812,66 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         return 'Takes the Field';
       default:
         return key;
+    }
+  }
+
+  // Helper method to get celebration selection state
+  bool _getCelebrationSelectionState(String label) {
+    switch (label) {
+      case 'Celebrates Alone':
+        return _selectedCelebrationType == 'alone';
+      case 'Celebrates With':
+        return _selectedCelebrationType == 'with';
+      case 'Celebrates With Teammates':
+        return _selectedCelebrationType == 'with';
+      case 'Celebrates Against':
+        return _selectedCelebrationType == 'against';
+      default:
+        return false;
+    }
+  }
+
+  // Helper method to set celebration state
+  void _setCelebrationState(String label) {
+    print('DEBUG: _setCelebrationState called with label = $label');
+    switch (label) {
+      case 'Celebrates Alone':
+        _selectedCelebrationType = 'alone';
+        celebrateWith.clear();
+        celebrateAgainst.clear();
+        print('DEBUG: Set celebration type to alone');
+        break;
+      case 'Celebrates With':
+        _selectedCelebrationType = 'with';
+        celebrateAgainst.clear();
+        print('DEBUG: Set celebration type to with');
+        break;
+      case 'Celebrates With Teammates':
+        _selectedCelebrationType = 'with';
+        celebrateAgainst.clear();
+        print('DEBUG: Set celebration type to with (teammates)');
+        break;
+      case 'Celebrates Against':
+        _selectedCelebrationType = 'against';
+        celebrateWith.clear();
+        print('DEBUG: Set celebration type to against');
+        break;
+    }
+  }
+
+  // Helper method to clear celebration state
+  void _clearCelebrationState() {
+    _selectedCelebrationType = null;
+    celebrateWith.clear();
+    celebrateAgainst.clear();
+  }
+
+  // Helper method to show celebration dialog
+  Future<void> _showCelebrationDialog(String label) async {
+    if (label == 'Celebrates With' || label == 'Celebrates With Teammates') {
+      await _showCelebrateDialog();
+    } else if (label == 'Celebrates Against') {
+      await _showCelebrateAgainstDialog();
     }
   }
 
@@ -4738,8 +4972,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // --- REVISED _updateCaption METHOD ---
   void _updateCaption() {
-    // Safety check: if no teams are selected, don't try to generate captions
-    if (selectedHomeTeam == null && selectedAwayTeam == null) {
+    // Safety check: if either team is not selected, don't try to generate captions
+    if (selectedHomeTeam == null || selectedAwayTeam == null) {
       return;
     }
 
@@ -4927,8 +5161,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else if (celebrateAgainst.isNotEmpty) {
         final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart =
-            "celebrates a $formattedHitPhrase against $opponentStr";
+        final celebrationPart = "celebrates against the $opponentStr";
 
         if (_walkOff == true) {
           mainCaptionPart =
@@ -5032,6 +5265,45 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       mainCaptionPart =
           "$playersString ${actionReplacement.full} $opponentTeamName";
+
+      // Add inning if picked
+      if (_selectedRbiInning != null) {
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
+      }
+    } else if (_selectedVerb == 'Celebrate') {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      if (_selectedCelebrationType == 'alone') {
+        // Celebrates alone = celebrates against the other team
+        mainCaptionPart =
+            "$playersString celebrates against the $opponentTeamName";
+      } else if (_selectedCelebrationType == 'against' &&
+          celebrateAgainst.isNotEmpty) {
+        // Celebrates against = celebrates against specific players
+        final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+        mainCaptionPart = "$playersString celebrates against $opponentStr";
+      } else if (_selectedCelebrationType == 'with' &&
+          celebrateWith.isNotEmpty) {
+        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+        mainCaptionPart =
+            "$playersString celebrates with $teammatesStr against the $opponentTeamName";
+      } else {
+        // Default celebration should include opponent team name
+        mainCaptionPart =
+            "$playersString celebrates against the $opponentTeamName";
+      }
 
       // Add inning if picked
       if (_selectedRbiInning != null) {
@@ -5248,7 +5520,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'Arizona Diamondbacks',
       'Colorado Rockies',
       'Los Angeles Dodgers',
-      'San Diego Padres',
+      'San Diego Paders',
       'San Francisco Giants',
     ];
 
@@ -6862,6 +7134,67 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         .start,
                                                                 children: [
                                                                   ..._buildAllVerbsList(),
+                                                                  // Add the permanent Back button at the bottom
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .only(
+                                                                        top:
+                                                                            8.0),
+                                                                    child:
+                                                                        ConstrainedBox(
+                                                                      constraints:
+                                                                          BoxConstraints(
+                                                                        maxWidth:
+                                                                            _fixedChipWidth /
+                                                                                2,
+                                                                      ),
+                                                                      child:
+                                                                          Container(
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .lightBlue
+                                                                              .shade100,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(4),
+                                                                        ),
+                                                                        child:
+                                                                            FlashingFilterChip(
+                                                                          label:
+                                                                              SizedBox(
+                                                                            width:
+                                                                                _fixedChipWidth / 2,
+                                                                            child:
+                                                                                Align(
+                                                                              alignment: Alignment.centerLeft,
+                                                                              child: Row(
+                                                                                mainAxisSize: MainAxisSize.min,
+                                                                                children: [
+                                                                                  const Icon(Icons.arrow_back, size: 14, color: Colors.grey),
+                                                                                  const SizedBox(width: 4),
+                                                                                  const Text(
+                                                                                    'Back',
+                                                                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                                                                                    overflow: TextOverflow.ellipsis,
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          selected:
+                                                                              false,
+                                                                          onSelected: (_) =>
+                                                                              _handleBack(),
+                                                                          visualDensity:
+                                                                              VisualDensity.compact,
+                                                                          padding:
+                                                                              EdgeInsets.zero,
+                                                                          key:
+                                                                              UniqueKey(),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
                                                                 ],
                                                               ),
                                                             ),
@@ -7760,6 +8093,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             celebrateAgainst.clear();
                             captionController.clear();
                             personalityController.clear();
+                            // Update isHome based on the new team view
+                            isHome = _showHomeFirst;
                           });
                         },
                   style: TextButton.styleFrom(
@@ -8135,7 +8470,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildCountryCodeDropdown() {
     final validCodes = countryCodes.map((c) => c['code']).toSet();
     String currentValue = countryCodeController.text.trim();
-    // print('CountryCodeDropdown: value="$currentValue" valid=$validCodes');
     if (!validCodes.contains(currentValue)) {
       currentValue = 'CAN';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -8203,9 +8537,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildUrgencyDropdown() {
     String currentValue = urgencyController.text.trim();
     final validCodes = urgencyLevels.map((u) => u['code']).toSet();
-    // print('UrgencyDropdown: value="$currentValue" valid=$validCodes');
     if (!validCodes.contains(currentValue)) {
-      // Try to find a numeric match (e.g., if image has "3" but our codes are "3")
       final numericValue = int.tryParse(currentValue);
       if (numericValue != null) {
         final matchingUrgency = urgencyLevels.firstWhere(
@@ -8283,7 +8615,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildJobTitleDropdown() {
     final List<String> jobTitles = ['Contributor', 'Stringer', 'Staff'];
     String currentValue = creatorJobTitleController.text.trim();
-    // print('JobTitleDropdown: value="$currentValue" valid=$jobTitles');
     if (!jobTitles.contains(currentValue)) {
       currentValue = 'Contributor';
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -8332,7 +8663,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             if (value != null) {
               setState(() {
                 creatorJobTitleController.text = value;
-                // Autofill copyright field
                 String year = DateTime.now().year.toString();
                 if (_dateTimeOriginal != null &&
                     _dateTimeOriginal!.length >= 4) {
@@ -8363,7 +8693,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ),
       child: TextField(
         controller: titleObjectNameController,
-        readOnly: true, // Make it read-only since it's auto-generated
+        readOnly: true,
         cursorHeight: 10.0,
         decoration: InputDecoration(
           labelText: 'Title/Object Name',
@@ -8372,8 +8702,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           filled: true,
-          fillColor: Colors
-              .grey.shade50, // Slightly different color to indicate read-only
+          fillColor: Colors.grey.shade50,
           labelStyle: const TextStyle(fontSize: 10),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(4),
@@ -8452,7 +8781,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (value) {
-                      // Store the pasted text for parsing
                       _pastedRosterText = value;
                     },
                   ),
@@ -8467,7 +8795,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
             ElevatedButton(
               onPressed: () {
-                // Check if home team is selected
                 if (selectedHomeTeam == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -8493,10 +8820,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final lines = text.split('\n');
 
     final List<Map<String, String>> parsedPlayers = [];
-    final Set<String> foundPlayers =
-        {}; // Track which players we've already found
+    final Set<String> foundPlayers = {};
 
-    // Keywords that indicate this is not a player line
     final skipKeywords = [
       'roster',
       'staff',
@@ -8526,38 +8851,31 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       line = line.trim();
       if (line.isEmpty) continue;
 
-      // Skip lines that are just numbers or very short
       if (line.length < 3 || RegExp(r'^\d+$').hasMatch(line)) continue;
 
-      // Skip lines that contain header keywords
-      final lowerLine = line.toLowerCase();
       bool shouldSkip = false;
       for (String keyword in skipKeywords) {
-        if (lowerLine.contains(keyword)) {
+        if (line.toLowerCase().contains(keyword)) {
           shouldSkip = true;
           break;
         }
       }
       if (shouldSkip) continue;
 
-      // Process tab-separated lines FIRST - these contain the jersey numbers
       if (line.contains('\t')) {
         final parts = line.split('\t');
 
         if (parts.length >= 3) {
           final namePart = parts[0].trim();
-          final stancePart =
-              parts[1].trim(); // Batting stance is in second column
-          final heightPart = parts[2].trim(); // Height is in third column
+          final stancePart = parts[1].trim();
+          final heightPart = parts[2].trim();
 
-          // Extract name and number from the name part (e.g., "Chris Bassitt 40")
           final nameNumberMatch =
               RegExp(r'^(.+?)\s+(\d+)$').firstMatch(namePart);
           if (nameNumberMatch != null) {
             final fullName = nameNumberMatch.group(1)?.trim();
             final playerNumber = nameNumberMatch.group(2);
 
-            // Extract first and last name from the full name
             final nameMatch =
                 RegExp(r'^(.+?)\s+(.+)$').firstMatch(fullName ?? '');
             if (nameMatch != null) {
@@ -8568,15 +8886,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   lastName != null &&
                   firstName.length > 1 &&
                   lastName.length > 1) {
-                // Skip if the names look like headers or metadata
                 if (!skipKeywords.any((keyword) =>
                     (firstName.toLowerCase()).contains(keyword) ||
                     (lastName.toLowerCase()).contains(keyword))) {
-                  // Create a unique key for this player
                   final playerKey =
                       '${firstName.toLowerCase()}_${lastName.toLowerCase()}';
 
-                  // Only add if we haven't seen this player before
                   if (!foundPlayers.contains(playerKey)) {
                     final player = {
                       'firstName': firstName,
@@ -8591,20 +8906,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             }
           }
         }
-        continue; // CRITICAL: Always skip regular parsing for tab-separated lines
+        continue;
       }
 
-      // Only process non-tab lines with regular patterns
       String? firstName;
       String? lastName;
       String? playerNumber;
 
-      // Skip lines that don't contain any numbers (these are name-only lines)
       if (!RegExp(r'\d').hasMatch(line)) {
-        continue; // Skip name-only lines - we'll handle them in a second pass if needed
+        continue;
       }
 
-      // Pattern 1: "John Smith #23" or "John Smith 23" (most common)
       RegExp pattern1 = RegExp(r'^(.+?)\s+(.+?)\s*(?:#)?(\d+)$');
       Match? match1 = pattern1.firstMatch(line);
       if (match1 != null) {
@@ -8613,7 +8925,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         playerNumber = match1.group(3);
       }
 
-      // Pattern 2: "23 John Smith" (number first)
       if (firstName == null) {
         RegExp pattern2 = RegExp(r'^(\d+)\s+(.+?)\s+(.+)$');
         Match? match2 = pattern2.firstMatch(line);
@@ -8624,7 +8935,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       }
 
-      // Pattern 3: "Smith, John 23" or "Smith, John #23" (last, first number)
       if (firstName == null) {
         RegExp pattern3 = RegExp(r'^(.+?),\s*(.+?)\s*(?:#)?(\d+)$');
         Match? match3 = pattern3.firstMatch(line);
@@ -8635,11 +8945,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       }
 
-      // If we found a player, add them to the list
       if (firstName != null && lastName != null) {
-        // Additional validation: make sure we have reasonable names
         if (firstName.length > 1 && lastName.length > 1) {
-          // Skip if the names look like headers or metadata
           if (!skipKeywords.any((keyword) =>
               (firstName?.toLowerCase() ?? '').contains(keyword) ||
               (lastName?.toLowerCase() ?? '').contains(keyword))) {
@@ -8665,7 +8972,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       return;
     }
 
-    // Show review dialog
     _showParsedPlayersDialog(parsedPlayers, isHomeTeam: isHomeTeam);
   }
 
@@ -8736,10 +9042,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             TextButton(
               onPressed: () async {
                 Navigator.of(context).pop();
-                // Wait a frame to ensure dialog is fully closed
                 await Future.delayed(Duration.zero);
 
-                // Process in a separate microtask to avoid blocking UI
                 Future.microtask(() {
                   _addParsedPlayersToCodeReplacements(players,
                       isHomeTeam: isHomeTeam);
@@ -8758,7 +9062,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     print(
         '_addParsedPlayersToCodeReplacements called with ${players.length} players');
 
-    // Use the specified team (home or away)
     final prefix = isHomeTeam ? 'h' : 'v';
     final Map<String, Replacement> newReplacements = {};
 
@@ -8769,7 +9072,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final jerseyNumber =
           (player['number'] ?? '0').isNotEmpty ? player['number']! : '0';
 
-      // Format for Getty style: Name #Number
       final fullName = '$firstName $lastName';
       final displayName = '$fullName #$jerseyNumber';
       final code = '$prefix$i';
@@ -8782,21 +9084,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       );
     }
 
-    // Check if widget is still mounted before calling setState
     if (!mounted) return;
 
     try {
       print('About to call setState');
       setState(() {
         print('Inside setState - removing existing players');
-        // Remove existing players of the specified team type
         codeReplacements.removeWhere((key, _) => key.startsWith(prefix));
 
         print('Inside setState - adding ${newReplacements.length} new players');
-        // Add new players
         codeReplacements.addAll(newReplacements);
 
-        // Clear selected players of the specified team
         if (isHomeTeam) {
           selectedPlayers.clear();
         } else {
@@ -8821,7 +9119,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
-  // New helper for home run type selection dropdown
   Widget _buildHomeRunTypeSelector() {
     return Padding(
       padding: const EdgeInsets.only(left: 5.0),
