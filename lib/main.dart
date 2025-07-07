@@ -2515,6 +2515,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             } else if (selectedOpponentPlayers
                                                 .isNotEmpty) {
                                               isHome = false;
+                                            } else {
+                                              // Fallback: use the current team view if no players are selected
+                                              isHome = _showHomeFirst;
                                             }
                                             if (isSelected &&
                                                 (label == 'Celebrates With' ||
@@ -5271,15 +5274,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb == 'Celebrate') {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final activePlayers = isHome ? selectedPlayers : selectedOpponentPlayers;
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
+      if (isHome && selectedAwayTeam == null) return;
+      if (!isHome && selectedHomeTeam == null) return;
 
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
