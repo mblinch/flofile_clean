@@ -1079,7 +1079,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           child: Text(
                             _getOrdinalSuffix(inning),
                             style: TextStyle(
-                              fontSize: 8,
+                              fontSize: 12,
                               fontWeight: selectedInning == inning
                                   ? FontWeight.w600
                                   : FontWeight.normal,
