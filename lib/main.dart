@@ -2528,6 +2528,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   String? selectedHomeTeam;
   String? selectedAwayTeam;
+  final TextEditingController _playerPickerSearchController =
+      TextEditingController();
+  String _playerPickerSearchText = '';
   // ...rest of state...
   // UI BUILD
   // (Removed duplicate build method)
@@ -6058,7 +6061,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           Expanded(
                                             child: TabBarView(
                                               children: [
-                                                // Player Picker Tab (placeholder)
+                                                // Player Picker Tab
                                                 Container(
                                                   padding:
                                                       const EdgeInsets.all(16),
@@ -6070,14 +6073,65 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         BorderRadius.circular(
                                                             4),
                                                   ),
-                                                  child: const Center(
-                                                    child: Text(
-                                                      'Player Picker Placeholder',
-                                                      style: TextStyle(
-                                                        fontSize: 14,
-                                                        color: Colors.grey,
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      const Text(
+                                                        'Player Picker',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 14,
+                                                        ),
                                                       ),
-                                                    ),
+                                                      const SizedBox(
+                                                          height: 16),
+                                                      // Search input
+                                                      TextField(
+                                                        controller:
+                                                            _playerPickerSearchController,
+                                                        decoration:
+                                                            const InputDecoration(
+                                                          hintText:
+                                                              'Type player name or number...',
+                                                          border:
+                                                              OutlineInputBorder(),
+                                                          prefixIcon: Icon(
+                                                              Icons.search),
+                                                        ),
+                                                        onChanged: (value) {
+                                                          setState(() {
+                                                            _playerPickerSearchText =
+                                                                value;
+                                                          });
+                                                        },
+                                                      ),
+                                                      const SizedBox(
+                                                          height: 16),
+                                                      // Results
+                                                      Expanded(
+                                                        child: _playerPickerSearchText
+                                                                .isEmpty
+                                                            ? const Center(
+                                                                child: Text(
+                                                                  'Type a name or number to search for players',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color: Colors
+                                                                        .grey,
+                                                                    fontStyle:
+                                                                        FontStyle
+                                                                            .italic,
+                                                                  ),
+                                                                ),
+                                                              )
+                                                            : _buildPlayerPickerResults(),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                                 // Home Team Tab
@@ -6345,7 +6399,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         return 'CWS';
       case 'Cincinnati Reds':
         return 'CIN';
-      case 'Cleveland Indians':
+      case 'Cleveland Guardians':
         return 'CLE';
       case 'Colorado Rockies':
         return 'COL';
@@ -6398,6 +6452,118 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
+  Widget _buildPlayerPickerResults() {
+    if (_playerPickerSearchText.isEmpty) {
+      return const Center(
+        child: Text(
+          'Type a name or number to search for players',
+          style: TextStyle(
+              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+
+    // Combine players from both teams
+    List<Map<String, dynamic>> allPlayers = [];
+
+    // Add home team players
+    if (selectedHomeTeam != null) {
+      final homePlayers = codeReplacements.keys
+          .where((k) => k.startsWith('h'))
+          .toList()
+        ..sort();
+      for (String playerCode in homePlayers) {
+        final replacement = codeReplacements[playerCode];
+        if (replacement != null) {
+          allPlayers.add({
+            'code': playerCode,
+            'name': replacement.short,
+            'number': replacement.jerseyNumber ?? '',
+            'team': selectedHomeTeam!,
+            'isHome': true,
+          });
+        }
+      }
+    }
+
+    // Add away team players
+    if (selectedAwayTeam != null) {
+      final awayPlayers = codeReplacements.keys
+          .where((k) => k.startsWith('v'))
+          .toList()
+        ..sort();
+      for (String playerCode in awayPlayers) {
+        final replacement = codeReplacements[playerCode];
+        if (replacement != null) {
+          allPlayers.add({
+            'code': playerCode,
+            'name': replacement.short,
+            'number': replacement.jerseyNumber ?? '',
+            'team': selectedAwayTeam!,
+            'isHome': false,
+          });
+        }
+      }
+    }
+
+    // Filter players based on search text
+    List<Map<String, dynamic>> filteredPlayers = allPlayers.where((player) {
+      String playerName = player['name'].toString().toLowerCase();
+      String playerNumber = player['number'].toString().toLowerCase();
+      String searchText = _playerPickerSearchText.toLowerCase();
+      return playerName.contains(searchText) ||
+          playerNumber.contains(searchText);
+    }).toList();
+
+    if (filteredPlayers.isEmpty) {
+      return const Center(
+        child: Text(
+          'No players found',
+          style: TextStyle(
+              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: filteredPlayers.length,
+      itemBuilder: (context, index) {
+        final player = filteredPlayers[index];
+        final isHome = player['isHome'] as bool;
+
+        return _PlayerPickerItem(
+          player: player,
+          isHome: isHome,
+          onTap: () {
+            // Add player to caption
+            if (isHome) {
+              if (!selectedPlayers.contains(player['code'])) {
+                setState(() {
+                  selectedPlayers.add(player['code']);
+                });
+              }
+            } else {
+              if (!selectedOpponentPlayers.contains(player['code'])) {
+                setState(() {
+                  selectedOpponentPlayers.add(player['code']);
+                });
+              }
+            }
+
+            // Clear search
+            _playerPickerSearchController.clear();
+            setState(() {
+              _playerPickerSearchText = '';
+            });
+
+            // Update caption
+            _updateCaption();
+          },
+        );
+      },
+    );
+  }
+
   String _month(int m) {
     const names = [
       'January',
@@ -6414,6 +6580,63 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'December'
     ];
     return names[m - 1];
+  }
+
+  Widget _PlayerPickerItem({
+    required Map<String, dynamic> player,
+    required bool isHome,
+    required VoidCallback onTap,
+  }) {
+    return StatefulBuilder(
+      builder: (context, setState) {
+        bool isHovered = false;
+
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: isHovered ? Colors.blue.shade50 : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+                border: isHovered
+                    ? Border.all(color: Colors.blue.shade200, width: 1)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isHome ? Icons.home : Icons.flight,
+                    color: isHome ? Colors.blue : Colors.red,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      player['name'],
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight:
+                            isHovered ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    _getTeamShortName(player['team']),
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // Helper for condensed item rendering in popup columns
