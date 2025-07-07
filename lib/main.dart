@@ -2441,9 +2441,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               label: SizedBox(
                 width: _fixedChipWidth,
                 child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(hrDisplayLabels[type]!,
-                        style: const TextStyle(fontSize: 12))),
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.chevron_right,
+                          size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(hrDisplayLabels[type]!,
+                          style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
               ),
               selected: _selectedHomeRunType == type,
               onSelected: (_) => setState(() {
@@ -2453,6 +2462,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               }),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           );
         }).toList(),
@@ -2462,9 +2473,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: FlashingFilterChip(
             label: SizedBox(
               width: _fixedChipWidth,
-              child: Center(
-                  child: Text(hrDisplayLabels[_selectedHomeRunType!]!,
-                      style: const TextStyle(fontSize: 12))),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.chevron_right,
+                        size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(hrDisplayLabels[_selectedHomeRunType!]!,
+                        style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
             ),
             selected: true,
             showCheckmark: true,
@@ -2474,6 +2495,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             }),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
       ],
