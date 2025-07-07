@@ -5195,142 +5195,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   padding: const EdgeInsets.all(8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          _buildTeamDropdown(
-                            label: 'Home Team',
-                            value: selectedHomeTeam,
-                            allItems: teams,
-                            onChanged: (v) async {
-                              if (v == null) return;
-                              setState(() => selectedHomeTeam = v);
-                              if (selectedHomeTeam != null) {
-                                _loadTeam(v, isHomeTeam: true);
-                              }
-                              // Get the values to show in the dialog
-                              final city = cityController.text;
-                              final province = provinceController.text;
-                              final stadium = stadiumController.text;
-                              String country = 'United States';
-                              String code = 'USA';
-                              if (v == 'Toronto Blue Jays') {
-                                country = 'Canada';
-                                code = 'CAN';
-                              }
-                              final shouldFill = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  title: const Text(
-                                    'Auto-fill Metadata?',
-                                    style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                  content: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Would you like to auto-fill the following location fields for this team?',
-                                        style: TextStyle(fontSize: 15),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text('• City: $city',
-                                          style: const TextStyle(fontSize: 13)),
-                                      Text('• Province/State: $province',
-                                          style: const TextStyle(fontSize: 13)),
-                                      Text('• Country: $country',
-                                          style: const TextStyle(fontSize: 13)),
-                                      Text('• Country Code: $code',
-                                          style: const TextStyle(fontSize: 13)),
-                                      Text('• Stadium: $stadium',
-                                          style: const TextStyle(fontSize: 13)),
-                                    ],
-                                  ),
-                                  actionsPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
-                                  actions: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        _buildStyledButton(
-                                          'No',
-                                          () => Navigator.pop(context, false),
-                                          // Button text size
-                                          // style: TextStyle(fontSize: 13),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        _buildStyledButton(
-                                          'Yes',
-                                          () => Navigator.pop(context, true),
-                                          isBlue: true,
-                                          // style: TextStyle(fontSize: 13),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (shouldFill == true) {
-                                setState(() {
-                                  countryController.text = country;
-                                  countryCodeController.text = code;
-                                });
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          _buildTeamDropdown(
-                            label: 'Away Team',
-                            value: selectedAwayTeam,
-                            allItems: teams,
-                            onChanged: (v) {
-                              if (v == null) return;
-                              setState(() => selectedAwayTeam = v);
-                              if (selectedAwayTeam != null) {
-                                _loadTeam(v, isHomeTeam: false);
-                              }
-                            },
-                          ),
-
-                          const SizedBox(width: 8),
-                          // API Selection Dropdown
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('API Source: ',
-                                  style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  border:
-                                      Border.all(color: Colors.grey.shade400),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Text(
-                                  'MLB Stats API',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          // API Test button in its own row
-                          Row(
-                            children: [
-                              // buildTeamApiTestButton(), // Removed - using only MLB Stats API
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
+                    children: [],
                   ),
                 ),
 
@@ -5447,6 +5312,192 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
+                                          // Team Picker
+                                          Row(
+                                            children: [
+                                              _buildTeamDropdown(
+                                                label: 'Home Team',
+                                                value: selectedHomeTeam,
+                                                allItems: teams,
+                                                onChanged: (v) async {
+                                                  if (v == null) return;
+                                                  setState(() =>
+                                                      selectedHomeTeam = v);
+                                                  if (selectedHomeTeam !=
+                                                      null) {
+                                                    _loadTeam(v,
+                                                        isHomeTeam: true);
+                                                  }
+                                                  // Get the values to show in the dialog
+                                                  final city =
+                                                      cityController.text;
+                                                  final province =
+                                                      provinceController.text;
+                                                  final stadium =
+                                                      stadiumController.text;
+                                                  String country =
+                                                      'United States';
+                                                  String code = 'USA';
+                                                  if (v ==
+                                                      'Toronto Blue Jays') {
+                                                    country = 'Canada';
+                                                    code = 'CAN';
+                                                  }
+                                                  final shouldFill =
+                                                      await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (context) =>
+                                                        AlertDialog(
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                      ),
+                                                      title: const Text(
+                                                        'Auto-fill Metadata?',
+                                                        style: TextStyle(
+                                                            fontSize: 18,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold),
+                                                      ),
+                                                      content: Column(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          const Text(
+                                                            'Would you like to auto-fill the following location fields for this team?',
+                                                            style: TextStyle(
+                                                                fontSize: 15),
+                                                          ),
+                                                          const SizedBox(
+                                                              height: 12),
+                                                          Text('• City: $city',
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13)),
+                                                          Text(
+                                                              '• Province/State: $province',
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13)),
+                                                          Text(
+                                                              '• Country: $country',
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13)),
+                                                          Text(
+                                                              '• Country Code: $code',
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13)),
+                                                          Text(
+                                                              '• Stadium: $stadium',
+                                                              style:
+                                                                  const TextStyle(
+                                                                      fontSize:
+                                                                          13)),
+                                                        ],
+                                                      ),
+                                                      actionsPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              horizontal: 16,
+                                                              vertical: 12),
+                                                      actions: [
+                                                        Row(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .end,
+                                                          children: [
+                                                            _buildStyledButton(
+                                                              'No',
+                                                              () =>
+                                                                  Navigator.pop(
+                                                                      context,
+                                                                      false),
+                                                            ),
+                                                            const SizedBox(
+                                                                width: 12),
+                                                            _buildStyledButton(
+                                                              'Yes',
+                                                              () =>
+                                                                  Navigator.pop(
+                                                                      context,
+                                                                      true),
+                                                              isBlue: true,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (shouldFill == true) {
+                                                    setState(() {
+                                                      countryController.text =
+                                                          country;
+                                                      countryCodeController
+                                                          .text = code;
+                                                    });
+                                                  }
+                                                },
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildTeamDropdown(
+                                                label: 'Away Team',
+                                                value: selectedAwayTeam,
+                                                allItems: teams,
+                                                onChanged: (v) {
+                                                  if (v == null) return;
+                                                  setState(() =>
+                                                      selectedAwayTeam = v);
+                                                  if (selectedAwayTeam !=
+                                                      null) {
+                                                    _loadTeam(v,
+                                                        isHomeTeam: false);
+                                                  }
+                                                },
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Text('API Source: ',
+                                                      style: TextStyle(
+                                                          fontSize: 12)),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                          color: Colors
+                                                              .grey.shade400),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    child: const Text(
+                                                      'MLB Stats API',
+                                                      style: TextStyle(
+                                                          fontSize: 12),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
                                           // Getty Metadata Toggle
                                           Row(
                                             children: [
