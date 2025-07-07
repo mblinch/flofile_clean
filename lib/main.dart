@@ -5189,16 +5189,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
             body: Column(
               children: [
-                // Main Column for the entire body
-                // Info Section
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [],
-                  ),
-                ),
-
                 Expanded(
                   child: SingleChildScrollView(
                     // Make the main content area scrollable
