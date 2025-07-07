@@ -1449,15 +1449,42 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    children:
-                                        ['Solo', '2 Run', '3 Run', 'Grand Slam']
-                                            .map((hrType) => Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                          bottom: 8.0),
-                                                  child: FlashingFilterChip(
-                                                    label: Text(hrType),
-                                                    selected: (_selectedHomeRunType ==
+                                    children: [
+                                      'Solo',
+                                      '2 Run',
+                                      '3 Run',
+                                      'Grand Slam'
+                                    ]
+                                        .map((hrType) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 8.0),
+                                              child: FlashingFilterChip(
+                                                label: SizedBox(
+                                                  width: _fixedChipWidth,
+                                                  child: Align(
+                                                    alignment:
+                                                        Alignment.centerLeft,
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(
+                                                            Icons.chevron_right,
+                                                            size: 14,
+                                                            color: Colors.grey),
+                                                        const SizedBox(
+                                                            width: 4),
+                                                        Text(hrType,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        12)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                                selected:
+                                                    (_selectedHomeRunType ==
                                                                 'solo' &&
                                                             hrType == 'Solo') ||
                                                         (_selectedHomeRunType ==
@@ -1472,40 +1499,46 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 'grand slam' &&
                                                             hrType ==
                                                                 'Grand Slam'),
-                                                    onSelected: (isSelected) {
-                                                      setState(() {
-                                                        if (isSelected) {
-                                                          switch (hrType) {
-                                                            case 'Solo':
-                                                              _selectedHomeRunType =
-                                                                  'solo';
-                                                              break;
-                                                            case '2 Run':
-                                                              _selectedHomeRunType =
-                                                                  'two-run';
-                                                              break;
-                                                            case '3 Run':
-                                                              _selectedHomeRunType =
-                                                                  'three-run';
-                                                              break;
-                                                            case 'Grand Slam':
-                                                              _selectedHomeRunType =
-                                                                  'grand slam';
-                                                              break;
-                                                          }
-                                                        } else {
+                                                onSelected: (isSelected) {
+                                                  setState(() {
+                                                    if (isSelected) {
+                                                      switch (hrType) {
+                                                        case 'Solo':
                                                           _selectedHomeRunType =
-                                                              null;
-                                                        }
-                                                        _updateCaption();
-                                                      });
-                                                    },
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    padding: EdgeInsets.zero,
-                                                  ),
-                                                ))
-                                            .toList(),
+                                                              'solo';
+                                                          break;
+                                                        case '2 Run':
+                                                          _selectedHomeRunType =
+                                                              'two-run';
+                                                          break;
+                                                        case '3 Run':
+                                                          _selectedHomeRunType =
+                                                              'three-run';
+                                                          break;
+                                                        case 'Grand Slam':
+                                                          _selectedHomeRunType =
+                                                              'grand slam';
+                                                          break;
+                                                      }
+                                                    } else {
+                                                      _selectedHomeRunType =
+                                                          null;
+                                                    }
+                                                    _updateCaption();
+                                                  });
+                                                },
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                labelPadding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8),
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                            ))
+                                        .toList(),
                                   ),
                                 ] else ...[
                                   // RBI options for other hit types
