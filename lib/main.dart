@@ -317,6 +317,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _isSortedByFilename = false;
 
   // Flutter's Image.file handles thumbnail caching automatically
+  String _prevCustomCelebrationVerb = '';
 
   void _onCopyPressed() {
     // Create a structured format with both caption and personality
@@ -5421,10 +5422,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final previousCaption = captionController.text;
     final trimmedCaption = caption.trim();
 
-    // Trigger animation if caption changed and is not empty
+    // Disable typewriter effect when custom celebration verb is being typed
+    final wasCustomVerb = _prevCustomCelebrationVerb.isNotEmpty;
+    _prevCustomCelebrationVerb = _customCelebrationVerb;
+
     if (trimmedCaption != previousCaption && trimmedCaption.isNotEmpty) {
-      // Disable typewriter effect when custom celebration verb is being typed
-      if (_customCelebrationVerb.isNotEmpty) {
+      if (_customCelebrationVerb.isNotEmpty || wasCustomVerb) {
         // Stop any running typewriter effect
         _typewriterController.stop();
         // Set text immediately without animation for custom verbs
@@ -5433,8 +5436,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Start typewriter effect for new captions
         _startTypewriterEffect(trimmedCaption);
       }
-
-      // No visual animations
     } else {
       // No change, just set the text normally
       captionController.text = trimmedCaption;
