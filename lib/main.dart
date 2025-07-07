@@ -5922,19 +5922,51 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               isScrollable: false,
                                               labelPadding: EdgeInsets.zero,
                                               tabs: [
-                                                Tab(text: 'PLAYER PICKER'),
                                                 Tab(
-                                                    text: selectedHomeTeam !=
-                                                            null
-                                                        ? _getTeamShortName(
-                                                            selectedHomeTeam!)
-                                                        : 'Home'),
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.person_search,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .grey.shade700),
+                                                    SizedBox(width: 4),
+                                                    Text('PLAYERS'),
+                                                  ],
+                                                )),
                                                 Tab(
-                                                    text: selectedAwayTeam !=
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.flight,
+                                                        size: 12,
+                                                        color: Colors.red),
+                                                    SizedBox(width: 4),
+                                                    Text(selectedAwayTeam !=
                                                             null
                                                         ? _getTeamShortName(
                                                             selectedAwayTeam!)
                                                         : 'Away'),
+                                                  ],
+                                                )),
+                                                Tab(
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.home,
+                                                        size: 12,
+                                                        color: Colors.blue),
+                                                    SizedBox(width: 4),
+                                                    Text(selectedHomeTeam !=
+                                                            null
+                                                        ? _getTeamShortName(
+                                                            selectedHomeTeam!)
+                                                        : 'Home'),
+                                                  ],
+                                                )),
                                               ],
                                             ),
                                           ),
@@ -6000,18 +6032,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               .isNotEmpty ||
                                                           selectedOpponentPlayers
                                                               .isNotEmpty) ...[
-                                                        const Text(
-                                                          'Selected Players:',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            color:
-                                                                Colors.black87,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                            height: 4),
                                                         Wrap(
                                                           spacing: 4,
                                                           runSpacing: 4,
@@ -6043,7 +6063,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              12),
+                                                                              4),
                                                                   border: Border.all(
                                                                       color: Colors
                                                                           .blue
@@ -6092,7 +6112,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .blue
                                                                               .shade600,
                                                                           borderRadius:
-                                                                              BorderRadius.circular(6),
+                                                                              BorderRadius.circular(2),
                                                                         ),
                                                                         child:
                                                                             const Icon(
@@ -6136,7 +6156,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              12),
+                                                                              4),
                                                                   border: Border.all(
                                                                       color: Colors
                                                                           .red
@@ -6185,7 +6205,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .red
                                                                               .shade600,
                                                                           borderRadius:
-                                                                              BorderRadius.circular(6),
+                                                                              BorderRadius.circular(2),
                                                                         ),
                                                                         child:
                                                                             const Icon(
@@ -6231,20 +6251,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     ],
                                                   ),
                                                 ),
-                                                // Home Team Tab
-                                                _buildPlayerContainer(
-                                                  title: selectedHomeTeam ??
-                                                      'Home Team',
-                                                  codes: homePlayers,
-                                                  isHomeList: true,
-                                                  toggle: false,
-                                                ),
                                                 // Away Team Tab
                                                 _buildPlayerContainer(
-                                                  title: selectedAwayTeam ??
-                                                      'Away Team',
+                                                  title:
+                                                      selectedAwayTeam != null
+                                                          ? _getTeamShortName(
+                                                              selectedAwayTeam!)
+                                                          : 'Away Team',
                                                   codes: awayPlayers,
                                                   isHomeList: false,
+                                                  toggle: false,
+                                                ),
+                                                // Home Team Tab
+                                                _buildPlayerContainer(
+                                                  title:
+                                                      selectedHomeTeam != null
+                                                          ? _getTeamShortName(
+                                                              selectedHomeTeam!)
+                                                          : 'Home Team',
+                                                  codes: homePlayers,
+                                                  isHomeList: true,
                                                   toggle: false,
                                                 ),
                                               ],
@@ -7351,29 +7377,32 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name
-          RichText(
-            text: TextSpan(
-              // Default style for the team name
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize:
-                      12, // Reduced from 14 to 12 to make team name smaller
-                  color: Colors.black,
-                  fontFamily: 'RobotoCondensed'),
-              children: <TextSpan>[
-                TextSpan(text: '$title '),
-                TextSpan(
-                    text: '(${isHomeList ? 'Home' : 'Away'})',
-                    style: TextStyle(
-                        fontSize:
-                            10, // Reduced from 12 to 10 to keep proportion
-                        color: Colors.grey.shade600, // Lighter grey color
-                        fontWeight: FontWeight.normal)),
-              ],
-            ),
+          // Team name and search bar in a row
+          Row(
+            children: [
+              // Team name
+              RichText(
+                text: TextSpan(
+                  // Default style for the team name
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize:
+                          12, // Reduced from 14 to 12 to make team name smaller
+                      color: Colors.black,
+                      fontFamily: 'RobotoCondensed'),
+                  children: <TextSpan>[
+                    TextSpan(text: title),
+                  ],
+                ),
+              ),
+              const SizedBox(
+                  width: 8), // Space between team name and search bar
+              // Search bar
+              _buildSearchWithDropdown(
+                  searchController, searchText, isHomeList, filteredCodes),
+            ],
           ),
-          // Switch Team button directly below the team name
+          // Switch Team button below the row
           if (toggle)
             Align(
               alignment: Alignment.centerLeft,
@@ -7424,8 +7453,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 8),
-          _buildSearchWithDropdown(
-              searchController, searchText, isHomeList, filteredCodes),
           SizedBox(
               height: (searchText.isNotEmpty &&
                       RegExp(r'^\d+$').hasMatch(searchText) &&
