@@ -1077,9 +1077,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ),
                         child: Center(
                           child: Text(
-                            '$inning',
+                            _getOrdinalSuffix(inning),
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 8,
                               fontWeight: selectedInning == inning
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -1231,6 +1231,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         );
       },
     );
+  }
+
+  String _getOrdinalSuffix(int number) {
+    if (number >= 11 && number <= 13) {
+      return '${number}th';
+    }
+    switch (number % 10) {
+      case 1:
+        return '${number}st';
+      case 2:
+        return '${number}nd';
+      case 3:
+        return '${number}rd';
+      default:
+        return '${number}th';
+    }
   }
 
   String _getInningWord(int inning) {
