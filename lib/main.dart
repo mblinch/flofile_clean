@@ -1049,7 +1049,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           ),
           // Inning box content
           Container(
-            padding: const EdgeInsets.all(4.0),
+            padding: const EdgeInsets.all(6.0),
             decoration: BoxDecoration(
               border: Border.all(color: Colors.grey.shade300),
               borderRadius: const BorderRadius.only(
