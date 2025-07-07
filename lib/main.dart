@@ -286,7 +286,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
   String selectedState = '';
-  final double _fixedChipWidth = 90.0;
+  final double _fixedChipWidth = 120.0;
   final double _dropdownWidth = 120.0;
 
   // Animation controllers for caption effects
@@ -6368,12 +6368,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 Transform.translate(
                                                   offset: const Offset(0, -30),
                                                   child: Container(
-                                                    width: 490,
+                                                    width: 400,
                                                     child: Column(
                                                       children: [
                                                         // App bar style header
                                                         Container(
-                                                          width: 490,
+                                                          width: 400,
                                                           height: 28,
                                                           decoration:
                                                               BoxDecoration(
@@ -6456,13 +6456,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           4),
                                                             ),
                                                           ),
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              ..._buildAllVerbsList(),
-                                                            ],
+                                                          child: ConstrainedBox(
+                                                            constraints:
+                                                                const BoxConstraints(
+                                                              minWidth: 400,
+                                                            ),
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                ..._buildAllVerbsList(),
+                                                              ],
+                                                            ),
                                                           ),
                                                         ),
                                                       ],
