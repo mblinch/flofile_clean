@@ -6365,26 +6365,106 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                Container(
-                                                  width: 490,
+                                                Transform.translate(
+                                                  offset: const Offset(0, -30),
                                                   child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            16.0),
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                    ),
+                                                    width: 490,
                                                     child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
                                                       children: [
-                                                        ..._buildAllVerbsList(),
+                                                        // App bar style header
+                                                        Container(
+                                                          width: 490,
+                                                          height: 28,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            gradient:
+                                                                LinearGradient(
+                                                              begin: Alignment
+                                                                  .centerLeft,
+                                                              end: Alignment
+                                                                  .centerRight,
+                                                              colors: [
+                                                                Colors.grey
+                                                                    .shade200,
+                                                                Colors.white,
+                                                              ],
+                                                            ),
+                                                            borderRadius:
+                                                                const BorderRadius
+                                                                    .only(
+                                                              topLeft: Radius
+                                                                  .circular(4),
+                                                              topRight: Radius
+                                                                  .circular(4),
+                                                            ),
+                                                          ),
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        16.0),
+                                                            child: Row(
+                                                              children: [
+                                                                Icon(
+                                                                  Icons
+                                                                      .sports_baseball,
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade700,
+                                                                  size: 20,
+                                                                ),
+                                                                SizedBox(
+                                                                    width: 8),
+                                                                Text(
+                                                                  'Action Verbs',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade700,
+                                                                    fontSize:
+                                                                        14,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        // Verb box content
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(16.0),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            border: Border.all(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade400),
+                                                            borderRadius:
+                                                                const BorderRadius
+                                                                    .only(
+                                                              bottomLeft: Radius
+                                                                  .circular(4),
+                                                              bottomRight:
+                                                                  Radius
+                                                                      .circular(
+                                                                          4),
+                                                            ),
+                                                          ),
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              ..._buildAllVerbsList(),
+                                                            ],
+                                                          ),
+                                                        ),
                                                       ],
                                                     ),
                                                   ),
