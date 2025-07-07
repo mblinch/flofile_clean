@@ -1058,7 +1058,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 // Innings 1-9
                 ...List.generate(9, (i) => i + 1).map((inning) {
