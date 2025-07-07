@@ -1007,6 +1007,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _showHitTypes = false;
   bool _isSoloCelebration = false;
   String? _selectedCelebrationType; // 'alone', 'with', 'against'
+  String _customCelebrationVerb = ''; // Custom celebration verb input
+  final TextEditingController _customCelebrationController =
+      TextEditingController();
   bool _walkOff = false;
   String _pastedRosterText = '';
 
@@ -2536,6 +2539,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ),
                                       ))
                                   .toList(),
+                              // Custom verb input
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: SizedBox(
+                                  width: 200.0,
+                                  child: TextField(
+                                    controller: _customCelebrationController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Custom celebration verb...',
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 8.0,
+                                        vertical: 8.0,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.all(
+                                          Radius.circular(4.0),
+                                        ),
+                                      ),
+                                    ),
+                                    style: const TextStyle(fontSize: 12),
+                                    onChanged: (value) {
+                                      print(
+                                          'DEBUG: Custom celebration verb changed to: $value');
+                                      _customCelebrationVerb = value;
+                                      _updateCaption();
+                                    },
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -2842,21 +2875,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedCelebrationType = 'alone';
         celebrateWith.clear();
         celebrateAgainst.clear();
+        _customCelebrationVerb = '';
+        _customCelebrationController.clear();
         print('DEBUG: Set celebration type to alone');
         break;
       case 'Celebrates With':
         _selectedCelebrationType = 'with';
         celebrateAgainst.clear();
+        _customCelebrationVerb = '';
+        _customCelebrationController.clear();
         print('DEBUG: Set celebration type to with');
         break;
       case 'Celebrates With Teammates':
         _selectedCelebrationType = 'with';
         celebrateAgainst.clear();
+        _customCelebrationVerb = '';
+        _customCelebrationController.clear();
         print('DEBUG: Set celebration type to with (teammates)');
         break;
       case 'Celebrates Against':
         _selectedCelebrationType = 'against';
         celebrateWith.clear();
+        _customCelebrationVerb = '';
+        _customCelebrationController.clear();
         print('DEBUG: Set celebration type to against');
         break;
     }
@@ -5286,7 +5327,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final playersString =
           _combinePlayersWithSingleTeam(activePlayers.toList());
 
-      if (_selectedCelebrationType == 'alone') {
+      if (_customCelebrationVerb.isNotEmpty) {
+        // Custom celebration verb - add after "celebrates"
+        print('DEBUG: Using custom celebration verb: $_customCelebrationVerb');
+        mainCaptionPart = "$playersString celebrates $_customCelebrationVerb";
+        if (celebrateAgainst.isNotEmpty) {
+          final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+          mainCaptionPart += " against $opponentStr";
+        } else if (celebrateWith.isNotEmpty) {
+          final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+          mainCaptionPart += " with $teammatesStr";
+        } else {
+          mainCaptionPart += " against the $opponentTeamName";
+        }
+      } else if (_selectedCelebrationType == 'alone') {
         // Celebrates alone = celebrates against the other team
         mainCaptionPart =
             "$playersString celebrates against the $opponentTeamName";
@@ -5361,14 +5415,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final caption =
         "$dateline $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate $locationSuffix. (Photo by ${creatorController.text}/Getty Images)";
 
+    print('DEBUG: Final caption: $caption');
+
     // Store previous caption to detect changes
     final previousCaption = captionController.text;
     final trimmedCaption = caption.trim();
 
     // Trigger animation if caption changed and is not empty
     if (trimmedCaption != previousCaption && trimmedCaption.isNotEmpty) {
-      // Start typewriter effect for new captions
-      _startTypewriterEffect(trimmedCaption);
+      // Disable typewriter effect when custom celebration verb is being typed
+      if (_customCelebrationVerb.isNotEmpty) {
+        // Stop any running typewriter effect
+        _typewriterController.stop();
+        // Set text immediately without animation for custom verbs
+        captionController.text = trimmedCaption;
+      } else {
+        // Start typewriter effect for new captions
+        _startTypewriterEffect(trimmedCaption);
+      }
 
       // No visual animations
     } else {
@@ -6225,9 +6289,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     child: Column(
                                       children: [
                                         // Caption Field
-                                        AnimatedBuilder(
-                                          animation: _typewriterAnimation,
-                                          builder: (context, child) {
+                                        ValueListenableBuilder<
+                                            TextEditingValue>(
+                                          valueListenable: captionController,
+                                          builder: (context, value, child) {
                                             return Padding(
                                               padding: const EdgeInsets.only(
                                                   right: 8.0),
@@ -6243,8 +6308,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     text: _typewriterController
                                                             .isAnimating
                                                         ? _displayedCaption
-                                                        : captionController
-                                                            .text,
+                                                        : value.text,
                                                   ),
                                                   maxLines: 4,
                                                   minLines: 4,
