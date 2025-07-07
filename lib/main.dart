@@ -5904,64 +5904,69 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 8.0),
-                                            child: Row(
+                                            child: Column(
                                               children: [
-                                                // Reset button on left moved 3px closer to edge
-                                                Transform.translate(
-                                                  offset: const Offset(-3.0, 0),
-                                                  child: _buildCompactButton(
-                                                    'Reset Caption',
-                                                    _resetCaption,
-                                                  ),
+                                                // First row: Reset and Sort buttons
+                                                Row(
+                                                  children: [
+                                                    // Reset button on left
+                                                    _buildCompactButton(
+                                                      'Reset Caption',
+                                                      _resetCaption,
+                                                    ),
+                                                    const Spacer(),
+                                                    // Sort button in middle
+                                                    _buildCompactButton(
+                                                      _isSortedByDate
+                                                          ? 'Sorted by Date'
+                                                          : _isSortedByFilename
+                                                              ? 'Sorted by Name'
+                                                              : 'Sort by Time/Date',
+                                                      _isSortedByDate
+                                                          ? _sortImagesByFilename
+                                                          : _sortImagesByDate,
+                                                      isBlue: _isSortedByDate ||
+                                                          _isSortedByFilename,
+                                                    ),
+                                                  ],
                                                 ),
-                                                const Spacer(),
-                                                // Sort button in middle
-                                                _buildCompactButton(
-                                                  _isSortedByDate
-                                                      ? 'Sorted by Date'
-                                                      : _isSortedByFilename
-                                                          ? 'Sorted by Name'
-                                                          : 'Sort by Time/Date',
-                                                  _isSortedByDate
-                                                      ? _sortImagesByFilename
-                                                      : _sortImagesByDate,
-                                                  isBlue: _isSortedByDate ||
-                                                      _isSortedByFilename,
-                                                ),
-                                                const Spacer(),
-                                                // Action buttons on right
-                                                _buildCompactButton(
-                                                  'FTP',
-                                                  _onFtpPressed,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildCompactButton(
-                                                  'Copy',
-                                                  _onCopyPressed,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildCompactButton(
-                                                  'Paste',
-                                                  _onPastePressed,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildCompactButton(
-                                                  'Previous',
-                                                  imagePaths.isNotEmpty &&
-                                                          currentIndex > 0
-                                                      ? previousImage
-                                                      : null,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                _buildCompactButton(
-                                                  'Next',
-                                                  imagePaths.isNotEmpty &&
-                                                          currentIndex <
-                                                              imagePaths
-                                                                      .length -
-                                                                  1
-                                                      ? nextImage
-                                                      : null,
+                                                const SizedBox(height: 4),
+                                                // Second row: Action buttons
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceEvenly,
+                                                  children: [
+                                                    _buildCompactButton(
+                                                      'FTP',
+                                                      _onFtpPressed,
+                                                    ),
+                                                    _buildCompactButton(
+                                                      'Copy',
+                                                      _onCopyPressed,
+                                                    ),
+                                                    _buildCompactButton(
+                                                      'Paste',
+                                                      _onPastePressed,
+                                                    ),
+                                                    _buildCompactButton(
+                                                      'Previous',
+                                                      imagePaths.isNotEmpty &&
+                                                              currentIndex > 0
+                                                          ? previousImage
+                                                          : null,
+                                                    ),
+                                                    _buildCompactButton(
+                                                      'Next',
+                                                      imagePaths.isNotEmpty &&
+                                                              currentIndex <
+                                                                  imagePaths
+                                                                          .length -
+                                                                      1
+                                                          ? nextImage
+                                                          : null,
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
@@ -6353,7 +6358,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             selectedOpponentPlayers.isNotEmpty)
                                         ? Padding(
                                             padding: const EdgeInsets.only(
-                                                top: 43.0,
+                                                top: 30.0,
                                                 left: 0.0,
                                                 right: 0.0),
                                             child: Row(
@@ -6362,7 +6367,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               children: [
                                                 Expanded(
                                                   flex: 2,
-                                                  child: SingleChildScrollView(
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            16.0),
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                          color: Colors
+                                                              .grey.shade400),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
                                                     child: Column(
                                                       crossAxisAlignment:
                                                           CrossAxisAlignment
