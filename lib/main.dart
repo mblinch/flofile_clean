@@ -257,7 +257,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
             height: 24,
             decoration: BoxDecoration(
               color:
-                  widget.selected ? Colors.grey.shade600 : Colors.grey.shade300,
+                  widget.selected ? Colors.grey.shade500 : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
                 color: Colors.black,
@@ -1055,8 +1055,40 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // No IN option
-
+                    // Pre option
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4.0),
+                      child: GestureDetector(
+                        onTap: () => onInningSelected(0), // Use 0 for Pre
+                        child: Container(
+                          width: 28,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: selectedInning == 0
+                                ? Colors.grey.shade600
+                                : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.black,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Pre',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: selectedInning == 0
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: selectedInning == 0
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                     // Innings 1-9
                     ...List.generate(9, (i) => i + 1).map((inning) {
                       return Padding(
@@ -1125,6 +1157,40 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       selectedInning >= 10)
                                   ? Colors.white
                                   : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Post option
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4.0),
+                      child: GestureDetector(
+                        onTap: () => onInningSelected(-1), // Use -1 for Post
+                        child: Container(
+                          width: 28,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: selectedInning == -1
+                                ? Colors.grey.shade600
+                                : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.black,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Post',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: selectedInning == -1
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: selectedInning == -1
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
                             ),
                           ),
                         ),
@@ -1322,6 +1388,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Permanent inning picker above Hit verb
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: _buildHitInningSelector(showWalkOffOption: true),
+                  ),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -1357,17 +1428,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         if (_selectedVerb == 'hit') ...[
                           const SizedBox(width: 16.0),
                           // Vertical divider line
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line between inning and hit type selection
                           Container(
                             width: 1,
                             height: 24,
@@ -5861,86 +5921,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           },
                                         ),
                                         const SizedBox(height: 6),
-                                        // Row with Reset button on left and other buttons on right
-                                        Column(
-                                          children: [
-                                            // First row: Reset button on left, Copy/Paste/Previous/Next on right
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8.0),
-                                              child: Row(
-                                                children: [
-                                                  // Reset button on left moved 3px closer to edge
-                                                  Transform.translate(
-                                                    offset:
-                                                        const Offset(-3.0, 0),
-                                                    child: _buildCompactButton(
-                                                      'Reset Caption',
-                                                      _resetCaption,
-                                                    ),
-                                                  ),
-                                                  const Spacer(),
-                                                  // Sort button in middle
-                                                  _buildCompactButton(
-                                                    _isSortedByDate
-                                                        ? 'Sorted by Date'
-                                                        : _isSortedByFilename
-                                                            ? 'Sorted by Name'
-                                                            : 'Sort by Time/Date',
-                                                    _isSortedByDate
-                                                        ? _sortImagesByFilename
-                                                        : _sortImagesByDate,
-                                                    isBlue: _isSortedByDate ||
-                                                        _isSortedByFilename,
-                                                  ),
-                                                  const Spacer(),
-                                                  // Action buttons on right
-                                                  _buildCompactButton(
-                                                    'Copy',
-                                                    _onCopyPressed,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  _buildCompactButton(
-                                                    'Paste',
-                                                    _onPastePressed,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  _buildCompactButton(
-                                                    'Previous',
-                                                    imagePaths.isNotEmpty &&
-                                                            currentIndex > 0
-                                                        ? previousImage
-                                                        : null,
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  _buildCompactButton(
-                                                    'Next',
-                                                    imagePaths.isNotEmpty &&
-                                                            currentIndex <
-                                                                imagePaths
-                                                                        .length -
-                                                                    1
-                                                        ? nextImage
-                                                        : null,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            // Second row: FTP button aligned to right edge
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  right: 8.0),
-                                              child: Row(
-                                                children: [
-                                                  const Spacer(),
-                                                  _buildWideFtpButton(),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
                                       ],
                                     ),
                                   ),
@@ -5949,58 +5929,136 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     flex: 5,
                                     child: Padding(
                                       padding: const EdgeInsets.only(left: 8.0),
-                                      child: Material(
-                                        elevation: 2,
-                                        shadowColor: Colors.grey.shade400,
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: TextField(
-                                          controller: personalityController,
-                                          maxLines: 4,
-                                          style: const TextStyle(fontSize: 14),
-                                          decoration: InputDecoration(
-                                            labelText: 'Personality',
-                                            floatingLabelBehavior:
-                                                FloatingLabelBehavior.always,
-                                            labelStyle: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                                letterSpacing: -0.5),
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              gapPadding: 0,
+                                      child: Column(
+                                        children: [
+                                          Material(
+                                            elevation: 2,
+                                            shadowColor: Colors.grey.shade400,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            child: TextField(
+                                              controller: personalityController,
+                                              maxLines: 1,
+                                              style:
+                                                  const TextStyle(fontSize: 14),
+                                              decoration: InputDecoration(
+                                                labelText: 'Personality',
+                                                floatingLabelBehavior:
+                                                    FloatingLabelBehavior
+                                                        .always,
+                                                labelStyle: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                    letterSpacing: -0.5),
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  gapPadding: 0,
+                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  gapPadding: 0,
+                                                  borderSide: BorderSide(
+                                                      color:
+                                                          Colors.grey.shade400),
+                                                ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  gapPadding: 0,
+                                                  borderSide: BorderSide(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .primary,
+                                                      width: 2),
+                                                ),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 12),
+                                                filled: true,
+                                                fillColor: Colors.white,
+                                              ),
                                             ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              gapPadding: 0,
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade400),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              gapPadding: 0,
-                                              borderSide: BorderSide(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .primary,
-                                                  width: 2),
-                                            ),
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 12),
-                                            filled: true,
-                                            fillColor: Colors.white,
                                           ),
-                                        ),
+                                          const SizedBox(height: 8),
+                                          // Row with Reset button on left and other buttons on right
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8.0),
+                                            child: Row(
+                                              children: [
+                                                // Reset button on left moved 3px closer to edge
+                                                Transform.translate(
+                                                  offset: const Offset(-3.0, 0),
+                                                  child: _buildCompactButton(
+                                                    'Reset Caption',
+                                                    _resetCaption,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                // Sort button in middle
+                                                _buildCompactButton(
+                                                  _isSortedByDate
+                                                      ? 'Sorted by Date'
+                                                      : _isSortedByFilename
+                                                          ? 'Sorted by Name'
+                                                          : 'Sort by Time/Date',
+                                                  _isSortedByDate
+                                                      ? _sortImagesByFilename
+                                                      : _sortImagesByDate,
+                                                  isBlue: _isSortedByDate ||
+                                                      _isSortedByFilename,
+                                                ),
+                                                const Spacer(),
+                                                // Action buttons on right
+                                                _buildCompactButton(
+                                                  'FTP',
+                                                  _onFtpPressed,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                _buildCompactButton(
+                                                  'Copy',
+                                                  _onCopyPressed,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                _buildCompactButton(
+                                                  'Paste',
+                                                  _onPastePressed,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                _buildCompactButton(
+                                                  'Previous',
+                                                  imagePaths.isNotEmpty &&
+                                                          currentIndex > 0
+                                                      ? previousImage
+                                                      : null,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                _buildCompactButton(
+                                                  'Next',
+                                                  imagePaths.isNotEmpty &&
+                                                          currentIndex <
+                                                              imagePaths
+                                                                      .length -
+                                                                  1
+                                                      ? nextImage
+                                                      : null,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+
+                              const SizedBox(height: 2),
                               // Tabbed interface and verb chips side by side
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -6080,7 +6138,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     children: [
                                                       // Search input
                                                       SizedBox(
-                                                        height: 32,
+                                                        height: 24,
                                                         child: TextField(
                                                           controller:
                                                               _playerPickerSearchController,
@@ -6114,6 +6172,218 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         ),
                                                       ),
                                                       const SizedBox(height: 8),
+                                                      // Selected players chips
+                                                      if (selectedPlayers
+                                                              .isNotEmpty ||
+                                                          selectedOpponentPlayers
+                                                              .isNotEmpty) ...[
+                                                        const Text(
+                                                          'Selected Players:',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                Colors.black87,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(
+                                                            height: 4),
+                                                        Wrap(
+                                                          spacing: 4,
+                                                          runSpacing: 4,
+                                                          children: [
+                                                            ...selectedPlayers
+                                                                .map((code) {
+                                                              final replacement =
+                                                                  codeReplacements[
+                                                                          code] ??
+                                                                      Replacement(
+                                                                          '',
+                                                                          '',
+                                                                          '');
+                                                              final playerName =
+                                                                  replacement
+                                                                      .short;
+                                                              return Container(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        3),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .blue
+                                                                      .shade100,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              12),
+                                                                  border: Border.all(
+                                                                      color: Colors
+                                                                          .blue
+                                                                          .shade300),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Text(
+                                                                      playerName,
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            11,
+                                                                        color: Colors
+                                                                            .blue
+                                                                            .shade800,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedPlayers
+                                                                              .remove(code);
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Container(
+                                                                        width:
+                                                                            12,
+                                                                        height:
+                                                                            12,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .blue
+                                                                              .shade600,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(6),
+                                                                        ),
+                                                                        child:
+                                                                            const Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              8,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              );
+                                                            }).toList(),
+                                                            ...selectedOpponentPlayers
+                                                                .map((code) {
+                                                              final replacement =
+                                                                  codeReplacements[
+                                                                          code] ??
+                                                                      Replacement(
+                                                                          '',
+                                                                          '',
+                                                                          '');
+                                                              final playerName =
+                                                                  replacement
+                                                                      .short;
+                                                              return Container(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        3),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .red
+                                                                      .shade100,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              12),
+                                                                  border: Border.all(
+                                                                      color: Colors
+                                                                          .red
+                                                                          .shade300),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Text(
+                                                                      playerName,
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            11,
+                                                                        color: Colors
+                                                                            .red
+                                                                            .shade800,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedOpponentPlayers
+                                                                              .remove(code);
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Container(
+                                                                        width:
+                                                                            12,
+                                                                        height:
+                                                                            12,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .red
+                                                                              .shade600,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(6),
+                                                                        ),
+                                                                        child:
+                                                                            const Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              8,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              );
+                                                            }).toList(),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                            height: 8),
+                                                      ],
                                                       // Results
                                                       Expanded(
                                                         child: _playerPickerSearchText
@@ -6164,27 +6434,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   const SizedBox(width: 16),
                                   // Verb chips on the right
                                   Expanded(
-                                    child: Opacity(
-                                      opacity: (_showHomeFirst
-                                              ? selectedPlayers.isNotEmpty
-                                              : selectedOpponentPlayers
-                                                  .isNotEmpty)
-                                          ? 1.0
-                                          : 0.3,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 0.0, vertical: 0.0),
-                                        child: SingleChildScrollView(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              ..._buildAllVerbsList(),
-                                            ],
+                                    child: (selectedPlayers.isNotEmpty ||
+                                            selectedOpponentPlayers.isNotEmpty)
+                                        ? Padding(
+                                            padding: const EdgeInsets.only(
+                                                top: 43.0,
+                                                left: 0.0,
+                                                right: 0.0),
+                                            child: SingleChildScrollView(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  ..._buildAllVerbsList(),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                        : Container(
+                                            padding: const EdgeInsets.only(
+                                                left: 3, top: 47),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons.arrow_back,
+                                                      size: 32,
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                    Text(
+                                                      'Start here!',
+                                                      style: TextStyle(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ),
-                                    ),
                                   ),
                                 ],
                               ),
@@ -6602,12 +6899,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               }
             }
 
-            // Clear search
-            _playerPickerSearchController.clear();
-            setState(() {
-              _playerPickerSearchText = '';
-            });
-
             // Update caption
             _updateCaption();
           },
@@ -6639,10 +6930,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required bool isHome,
     required VoidCallback onTap,
   }) {
+    bool isHovered = false;
+
     return StatefulBuilder(
       builder: (context, setState) {
-        bool isHovered = false;
-
         return MouseRegion(
           cursor: SystemMouseCursors.click,
           onEnter: (_) => setState(() => isHovered = true),
@@ -6653,11 +6944,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               height: 20,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: isHovered ? Colors.blue.shade200 : Colors.transparent,
+                color: isHovered ? Colors.grey.shade300 : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
-                border: isHovered
-                    ? Border.all(color: Colors.blue.shade400, width: 1)
-                    : null,
               ),
               child: Row(
                 children: [
@@ -6669,16 +6957,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   const SizedBox(width: 4),
                   Text(
                     _getTeamShortName(player['team']),
-                    style: const TextStyle(fontSize: 15, color: Colors.grey),
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       player['name'],
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            isHovered ? FontWeight.w600 : FontWeight.normal,
+                        fontSize: 13,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
