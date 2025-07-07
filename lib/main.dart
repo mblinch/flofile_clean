@@ -4916,7 +4916,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (_selectedHitType == 'home run') {
         String? hrType = _selectedHomeRunType;
-        if (hrType == null) {
+        // Only fall back to RBI count if no home run type is explicitly selected
+        if (hrType == null && _rbiCount != null) {
           switch (_rbiCount) {
             case 0:
               hrType = 'solo';
@@ -5020,7 +5021,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       } else if (celebrateAgainst.isNotEmpty) {
         final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
-        final celebrationPart = "celebrates a $hitPhrase against $opponentStr";
+        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
+        final celebrationPart =
+            "celebrates a $formattedHitPhrase against $opponentStr";
 
         if (_walkOff == true) {
           mainCaptionPart =
@@ -8194,12 +8197,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Always reset inning state when the verb selection changes.
       _selectedRbiInning = null;
 
-      // Also reset hit-related state to ensure caption is clean
-      _showHitTypes = false;
-      _selectedHitType = null;
-      _selectedHomeRunType = null;
-      _rbiCount = null;
-      _isBatterRunning = null;
+      // Only reset hit-related state if we're changing away from 'hit' verb
+      if (_selectedVerb != 'hit' || isTogglingOff) {
+        _showHitTypes = false;
+        _selectedHitType = null;
+        _selectedHomeRunType = null;
+        _rbiCount = null;
+        _isBatterRunning = null;
+      }
 
       // Reset fielding-related state
       _showFieldingOptions = false;
