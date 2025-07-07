@@ -1008,14 +1008,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     bool showWalkOffOption = false,
   }) {
     return Container(
-      width: 50,
+      width: 60,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           // Gradient header
           Container(
-            width: 50,
+            width: 60,
             height: 28,
             decoration: BoxDecoration(
               gradient: LinearGradient(
