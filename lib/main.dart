@@ -5202,10 +5202,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Format hit phrase for caption (RBI capitalized, rest lowercase)
   String _formatHitPhraseForCaption(String hitPhrase) {
     // Replace "RBI" with "RBI" (keep capitalized) and make the rest lowercase
-    return hitPhrase.replaceAllMapped(
+    String formatted = hitPhrase.replaceAllMapped(
       RegExp(r'RBI\s+(\w+)', caseSensitive: false),
       (match) => 'RBI ${match.group(1)!.toLowerCase()}',
     );
+
+    // Replace "Home Run" with "home run" (make lowercase)
+    formatted = formatted.replaceAll('Home Run', 'home run');
+
+    return formatted;
   }
 
   // Update personality field with selected players and celebration players
