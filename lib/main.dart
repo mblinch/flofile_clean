@@ -311,9 +311,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _targetPersonality = '';
   String _previousPersonality = '';
 
-  // Wireframe mode for layout visualization
-  bool _showWireframe = false;
-
   // Burst detection
   List<int> _burstIndices = [];
   bool _isBurstMode = false;
@@ -323,22 +320,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _isSortedByFilename = false;
 
   // Flutter's Image.file handles thumbnail caching automatically
-
-  // Wireframe overlay function
-  Widget _buildWireframeOverlay(Widget child,
-      {Color? borderColor, String? label}) {
-    if (!_showWireframe) return child;
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: borderColor ?? Colors.red,
-          width: 3.0,
-        ),
-      ),
-      child: child,
-    );
-  }
 
   void _onCopyPressed() {
     // Create a structured format with both caption and personality
@@ -5144,9 +5125,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            backgroundColor: _showWireframe
-                ? Colors.yellow.withOpacity(0.1)
-                : const Color(0xFFF5F5F5),
+            backgroundColor: const Color(0xFFF5F5F5),
             appBar: AdaptiveAppBar(
               title: Row(
                 children: [
@@ -5180,25 +5159,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       },
                     ),
                   ),
-                  if (_showWireframe) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'WIREFRAME',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
               actions: [
@@ -5226,18 +5186,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     icon: const Icon(Icons.upload_file),
                     onPressed: pickCodeFile),
               ],
-            ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () {
-                print(
-                    'FAB Wireframe toggle pressed! Current state: $_showWireframe');
-                setState(() {
-                  _showWireframe = !_showWireframe;
-                });
-                print('FAB Wireframe state changed to: $_showWireframe');
-              },
-              child: Icon(_showWireframe ? Icons.grid_off : Icons.grid_on),
-              backgroundColor: _showWireframe ? Colors.red : Colors.blue,
             ),
             body: Column(
               children: [
