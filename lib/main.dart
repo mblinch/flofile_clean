@@ -1489,19 +1489,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: Text(
-                                    _selectedHitType == 'home run'
-                                        ? 'HR Type:'
-                                        : 'Runs Scored:',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black87,
+                                if (_selectedHitType == 'home run') ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Text(
+                                      'HR Type:',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                                 if (_selectedHitType == 'home run') ...[
                                   // Home run specific options
                                   Wrap(
@@ -1559,47 +1559,40 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     }).toList(),
                                   ),
                                 ] else ...[
-                                  // Regular runs scored for other hit types
-                                  Wrap(
-                                    spacing: 8.0,
-                                    runSpacing: 8.0,
-                                    children: List.generate(3, (i) => i + 1)
-                                        .map((rbi) {
-                                      return GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _rbiCount = rbi;
-                                            _rbiCountByHit[_selectedHitType!] =
-                                                rbi;
-                                            _updateCaption();
-                                          });
-                                        },
-                                        child: Container(
-                                          width: 22,
-                                          height: 22,
-                                          decoration: BoxDecoration(
-                                            color: _rbiCount == rbi
-                                                ? Colors.grey.shade600
-                                                : Colors.grey.shade200,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              '$rbi',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: _rbiCount == rbi
-                                                    ? FontWeight.w600
-                                                    : FontWeight.normal,
-                                                color: _rbiCount == rbi
-                                                    ? Colors.white
-                                                    : Colors.black,
-                                              ),
-                                            ),
-                                          ),
+                                  // RBI options for other hit types
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      'RBI single',
+                                      'two RBI single',
+                                      'three RBI single',
+                                    ].asMap().entries.map((entry) {
+                                      final index = entry.key;
+                                      final label = entry.value;
+                                      final rbi = index + 1;
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: FlashingFilterChip(
+                                          label: Text(label),
+                                          selected: _rbiCount == rbi,
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                _rbiCount = rbi;
+                                                _rbiCountByHit[
+                                                    _selectedHitType!] = rbi;
+                                              } else {
+                                                _rbiCount = null;
+                                                _rbiCountByHit
+                                                    .remove(_selectedHitType!);
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
                                         ),
                                       );
                                     }).toList(),
