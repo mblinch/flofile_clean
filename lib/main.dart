@@ -1063,7 +1063,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 // Innings 1-9
                 ...List.generate(9, (i) => i + 1).map((inning) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 2.0),
+                    padding: const EdgeInsets.only(bottom: 4.0),
                     child: GestureDetector(
                       onTap: () => onInningSelected(inning),
                       child: Container(
@@ -1095,7 +1095,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 }),
                 // Extras option
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 2.0),
+                  padding: const EdgeInsets.only(bottom: 4.0),
                   child: GestureDetector(
                     onTap: () {
                       _showExtraInningsDialog(onInningSelected);
