@@ -1007,170 +1007,170 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required ValueChanged<int?> onInningSelected,
     bool showWalkOffOption = false,
   }) {
-    return Container(
-      width: 60,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Gradient header
-          Container(
-            width: 60,
-            height: 28,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.grey.shade200,
-                  Colors.white,
-                ],
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: Row(
-                children: [
-                  Text(
-                    'INNING',
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 60,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Gradient header
+              Container(
+                width: 60,
+                height: 28,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.grey.shade200,
+                      Colors.white,
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-          // Inning box content
-          Container(
-            padding: const EdgeInsets.all(6.0),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(4),
-                bottomRight: Radius.circular(4),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Innings 1-9
-                ...List.generate(9, (i) => i + 1).map((inning) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4.0),
-                    child: GestureDetector(
-                      onTap: () => onInningSelected(inning),
-                      child: Container(
-                        width: 40,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: selectedInning == inning
-                              ? Colors.grey.shade600
-                              : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Center(
-                          child: Text(
-                            _getOrdinalSuffix(inning),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: selectedInning == inning
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: selectedInning == inning
-                                  ? Colors.white
-                                  : Colors.black,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-                // Extras option
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      _showExtraInningsDialog(onInningSelected);
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: (selectedInning != null && selectedInning >= 10)
-                            ? Colors.grey.shade600
-                            : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'X',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight:
-                                (selectedInning != null && selectedInning >= 10)
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                            color:
-                                (selectedInning != null && selectedInning >= 10)
-                                    ? Colors.white
-                                    : Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
                   ),
                 ),
-
-                // Walk-off win chip below the innings
-                if (showWalkOffOption &&
-                    selectedInning != null &&
-                    selectedInning >= 9)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _walkOff = !_walkOff;
-                          _updateCaption();
-                        });
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: _walkOff
-                              ? Colors.grey.shade600
-                              : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Row(
+                    children: [
+                      Text(
+                        'INNING',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
                         ),
-                        child: Center(
-                          child: Text(
-                            'WO',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: _walkOff
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: _walkOff ? Colors.white : Colors.black,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Inning box content
+              Container(
+                padding: const EdgeInsets.all(6.0),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(4),
+                    bottomRight: Radius.circular(4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Innings 1-9
+                    ...List.generate(9, (i) => i + 1).map((inning) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4.0),
+                        child: GestureDetector(
+                          onTap: () => onInningSelected(inning),
+                          child: Container(
+                            width: 40,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: selectedInning == inning
+                                  ? Colors.grey.shade600
+                                  : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _getOrdinalSuffix(inning),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: selectedInning == inning
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: selectedInning == inning
+                                      ? Colors.white
+                                      : Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    // Extras option
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: GestureDetector(
+                        onTap: () {
+                          _showExtraInningsDialog(onInningSelected);
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color:
+                                (selectedInning != null && selectedInning >= 10)
+                                    ? Colors.grey.shade600
+                                    : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'X',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: (selectedInning != null &&
+                                        selectedInning >= 10)
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: (selectedInning != null &&
+                                        selectedInning >= 10)
+                                    ? Colors.white
+                                    : Colors.black,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Walk-off option beside the inning box
+        if (showWalkOffOption && selectedInning != null && selectedInning >= 9)
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0, top: 34.0),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _walkOff = !_walkOff;
+                  _updateCaption();
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _walkOff ? Colors.grey.shade600 : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color:
+                        _walkOff ? Colors.grey.shade700 : Colors.grey.shade400,
                   ),
-              ],
+                ),
+                child: Text(
+                  'Walk Off',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: _walkOff ? FontWeight.w600 : FontWeight.normal,
+                    color: _walkOff ? Colors.white : Colors.black,
+                  ),
+                ),
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -2067,319 +2067,180 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        FlashingFilterChip(
-                          label: SizedBox(
-                            width: _fixedChipWidth,
-                            child: const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.chevron_right,
-                                      size: 14, color: Colors.grey),
-                                  SizedBox(width: 4),
-                                  Text('Fielding',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis),
-                                ],
+                        if (_selectedVerb != 'Fielding') ...[
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text('Fielding',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          labelPadding:
-                              const EdgeInsets.symmetric(horizontal: 6),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          selected: _selectedVerb == 'Fielding',
-                          onSelected: (_showHomeFirst
-                                  ? selectedPlayers.isNotEmpty
-                                  : selectedOpponentPlayers.isNotEmpty)
-                              ? (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedVerb = 'Fielding';
-                                      _showFieldingOptions = true;
-                                      _selectedFieldingAction = null;
-                                      // Reset other states
-                                      _selectedRbiInning = null;
-                                      _showHitTypes = false;
-                                      _selectedHitType = null;
-                                      _selectedHomeRunType = null;
-                                      _rbiCount = null;
-                                    } else {
-                                      _selectedVerb = null;
-                                      _showFieldingOptions = false;
-                                      _selectedFieldingAction = null;
-                                      _showDivingCatch = false;
-                                      _isDivingCatch = false;
-                                    }
-                                    _updateCaption();
-                                  });
-                                }
-                              : null,
-                        ),
-                        if (_showFieldingOptions &&
-                            _selectedVerb == 'Fielding') ...[
-                          const SizedBox(width: 8.0),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 8.0),
-                          if (_selectedFieldingAction == null) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: FlashingFilterChip(
-                                key: UniqueKey(),
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: const Center(
-                                    child: Text(
-                                      'Catch',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected:
-                                    _selectedFieldingAction == 'makes a catch',
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedFieldingAction = 'makes a catch';
-                                    } else {
+                            selected: _selectedVerb == 'Fielding',
+                            onSelected: (_showHomeFirst
+                                    ? selectedPlayers.isNotEmpty
+                                    : selectedOpponentPlayers.isNotEmpty)
+                                ? (isSelected) => setState(() {
+                                      _selectedVerb =
+                                          isSelected ? 'Fielding' : null;
                                       _selectedFieldingAction = null;
                                       _isDivingCatch = false;
-                                    }
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: FlashingFilterChip(
-                                key: UniqueKey(),
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: const Center(
-                                    child: Text(
-                                      'Ground Ball',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected: _selectedFieldingAction ==
-                                    'fields a ground ball',
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedFieldingAction =
-                                          'fields a ground ball';
-                                    } else {
-                                      _selectedFieldingAction = null;
                                       _isDivingForGroundBall = false;
-                                    }
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
+                                      _selectedRbiInning = null;
+                                      _updateCaption();
+                                    })
+                                : null,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ] else ...[
+                          // Show fielding action options when Fielding is selected (but no action selected yet)
+                          if (_selectedFieldingAction == null) ...[
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                'Catch',
+                                'Ground Ball',
+                                'Throws',
+                                'Fielding Position',
+                                'Takes the Field'
+                              ]
+                                  .map((label) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected: _selectedFieldingAction ==
+                                              _getFieldingActionKey(label),
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                _selectedFieldingAction =
+                                                    _getFieldingActionKey(
+                                                        label);
+                                              } else {
+                                                _selectedFieldingAction = null;
+                                                _isDivingCatch = false;
+                                                _isDivingForGroundBall = false;
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ))
+                                  .toList(),
                             ),
-                            const SizedBox(width: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: FlashingFilterChip(
-                                key: UniqueKey(),
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: const Center(
-                                    child: Text(
-                                      'Throws',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
+                          ] else ...[
+                            // Show selected fielding action and optional diving options
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Show selected action as a chip
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: FlashingFilterChip(
+                                    label: SizedBox(
+                                      width: _fixedChipWidth,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.chevron_right,
+                                                size: 14, color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _getFieldingActionLabel(
+                                                  _selectedFieldingAction!),
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight:
+                                                      FontWeight.normal),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
+                                    selected: true,
+                                    showCheckmark: true,
+                                    onSelected: (_) => setState(() {
+                                      _selectedFieldingAction = null;
+                                      _isDivingCatch = false;
+                                      _isDivingForGroundBall = false;
+                                      _updateCaption();
+                                    }),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    key: UniqueKey(),
                                   ),
                                 ),
-                                selected:
-                                    _selectedFieldingAction == 'throws a ball',
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedFieldingAction = 'throws a ball';
-                                    } else {
-                                      _selectedFieldingAction = null;
-                                    }
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: FlashingFilterChip(
-                                key: UniqueKey(),
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: const Center(
+                                // Show diving options if applicable
+                                if (_selectedFieldingAction ==
+                                        'makes a catch' ||
+                                    _selectedFieldingAction ==
+                                        'fields a ground ball') ...[
+                                  const Padding(
+                                    padding: EdgeInsets.only(
+                                        left: 16.0, bottom: 2.0),
                                     child: Text(
-                                      'Fielding Position',
+                                      'Optional:',
                                       style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                selected: _selectedFieldingAction ==
-                                    'stands in fielding position',
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedFieldingAction =
-                                          'stands in fielding position';
-                                    } else {
-                                      _selectedFieldingAction = null;
-                                    }
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: FlashingFilterChip(
-                                key: UniqueKey(),
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: const Center(
-                                    child: Text(
-                                      'Takes the Field',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: _selectedFieldingAction ==
+                                            'makes a catch'
+                                        ? _buildDivingCatchOption()
+                                        : _buildDivingForGroundBallOption(),
                                   ),
-                                ),
-                                selected: _selectedFieldingAction ==
-                                    'takes the field',
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedFieldingAction =
-                                          'takes the field';
-                                    } else {
-                                      _selectedFieldingAction = null;
-                                    }
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                labelPadding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
+                                ],
+                              ],
                             ),
                           ],
-                          if (_selectedFieldingAction != null) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: ActionChip(
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: Center(
-                                    child: Text(
-                                      _selectedFieldingAction == 'makes a catch'
-                                          ? 'Catch'
-                                          : _selectedFieldingAction ==
-                                                  'fields a ground ball'
-                                              ? 'Ground Ball'
-                                              : _selectedFieldingAction ==
-                                                      'throws a ball'
-                                                  ? 'Throws'
-                                                  : _selectedFieldingAction ==
-                                                          'stands in fielding position'
-                                                      ? 'Fielding Position'
-                                                      : _selectedFieldingAction ==
-                                                              'takes the field'
-                                                          ? 'Takes the Field'
-                                                          : _capitalize(
-                                                              _selectedFieldingAction!),
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedFieldingAction = null;
-                                    _isDivingCatch = false;
-                                    _isDivingForGroundBall = false;
-                                    _selectedRbiInning = null;
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.all(2),
-                                elevation: 2, // Add shadow
-                                shape: RoundedRectangleBorder(
-                                  // Add thin dark grey border
-                                  borderRadius: BorderRadius.circular(4),
-                                  side: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.0),
-                                ),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                            // Diving options inline to the right of selected action
-                            if (_selectedFieldingAction == 'makes a catch') ...[
-                              const SizedBox(width: 8.0),
-                              _buildDivingCatchOption(),
-                            ],
-                            if (_selectedFieldingAction ==
-                                'fields a ground ball') ...[
-                              const SizedBox(width: 8.0),
-                              _buildDivingForGroundBallOption(),
-                            ],
-                          ],
-                        ]
+                        ],
                       ],
                     ),
                   ),
@@ -2545,7 +2406,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ? (isSelected) => _onVerbSelected(verb)
                           : null,
                     ),
-                    if (_selectedVerb == verb) ...[
+                    if (_selectedVerb == verb && verb != 'pitches') ...[
                       const SizedBox(width: 16.0),
                       // Vertical divider line
                       Container(
@@ -2742,6 +2603,42 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       labelPadding: const EdgeInsets.symmetric(horizontal: 8),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
+  }
+
+  // Helper method to get fielding action key from label
+  String _getFieldingActionKey(String label) {
+    switch (label) {
+      case 'Catch':
+        return 'makes a catch';
+      case 'Ground Ball':
+        return 'fields a ground ball';
+      case 'Throws':
+        return 'throws a ball';
+      case 'Fielding Position':
+        return 'stands in fielding position';
+      case 'Takes the Field':
+        return 'takes the field';
+      default:
+        return label;
+    }
+  }
+
+  // Helper method to get fielding action label from key
+  String _getFieldingActionLabel(String key) {
+    switch (key) {
+      case 'makes a catch':
+        return 'Catch';
+      case 'fields a ground ball':
+        return 'Ground Ball';
+      case 'throws a ball':
+        return 'Throws';
+      case 'stands in fielding position':
+        return 'Fielding Position';
+      case 'takes the field':
+        return 'Takes the Field';
+      default:
+        return key;
+    }
   }
 
   final List<String> soloVerbs = const [
@@ -8202,8 +8099,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     setState(() {
       _selectedVerb = isTogglingOff ? null : verb;
-      // Always reset inning state when the verb selection changes.
-      _selectedRbiInning = null;
+      // Reset inning state when the verb selection changes, except for 'pitches'
+      if (verb != 'pitches') {
+        _selectedRbiInning = null;
+      }
 
       // Only reset hit-related state if we're changing away from 'hit' verb
       if (_selectedVerb != 'hit' || isTogglingOff) {
