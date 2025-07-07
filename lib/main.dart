@@ -6460,6 +6460,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             constraints:
                                                                 const BoxConstraints(
                                                               minWidth: 400,
+                                                              minHeight: 450,
                                                             ),
                                                             child: Column(
                                                               crossAxisAlignment:
