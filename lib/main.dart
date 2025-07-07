@@ -259,9 +259,6 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
               color:
                   widget.selected ? Colors.grey.shade500 : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: Colors.black,
-              ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Center(
@@ -286,7 +283,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
   String selectedState = '';
-  final double _fixedChipWidth = 120.0;
+  final double _fixedChipWidth = 250.0;
   final double _dropdownWidth = 120.0;
 
   // Animation controllers for caption effects
@@ -1298,13 +1295,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
-                              child: const Center(
-                                child: Text(
-                                  'Hit',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.normal),
-                                  overflow: TextOverflow.ellipsis,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Hit',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -1504,10 +1510,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     FlashingFilterChip(
                       label: SizedBox(
                         width: _fixedChipWidth,
-                        child: const Center(
-                            child: Text('Prior to Game',
-                                style: TextStyle(fontSize: 12),
-                                overflow: TextOverflow.ellipsis)),
+                        child: const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.chevron_right,
+                                  size: 14, color: Colors.grey),
+                              SizedBox(width: 4),
+                              Text('Prior to Game',
+                                  style: TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
                       ),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
@@ -1553,7 +1569,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             child: FlashingFilterChip(
                               label: SizedBox(
                                 width: _fixedChipWidth,
-                                child: Center(
+                                child: Align(
+                                    alignment: Alignment.centerLeft,
                                     child: Text(label,
                                         style: const TextStyle(fontSize: 12),
                                         overflow: TextOverflow.ellipsis)),
@@ -1603,10 +1620,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         FlashingFilterChip(
                           label: SizedBox(
                             width: _fixedChipWidth,
-                            child: const Center(
-                                child: Text('Portrait',
-                                    style: TextStyle(fontSize: 12),
-                                    overflow: TextOverflow.ellipsis)),
+                            child: const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chevron_right,
+                                      size: 14, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text('Portrait',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ),
                           ),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
@@ -1648,7 +1675,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
-                              child: const Center(
+                              child: const Align(
+                                  alignment: Alignment.centerLeft,
                                   child: Text('Looks on',
                                       style: TextStyle(fontSize: 12))),
                             ),
@@ -1691,10 +1719,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         FlashingFilterChip(
                           label: SizedBox(
                             width: _fixedChipWidth,
-                            child: const Center(
-                                child: Text('Fielding',
-                                    style: TextStyle(fontSize: 12),
-                                    overflow: TextOverflow.ellipsis)),
+                            child: const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chevron_right,
+                                      size: 14, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text('Fielding',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ),
                           ),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
@@ -2014,13 +2052,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         FlashingFilterChip(
                           label: SizedBox(
                             width: _fixedChipWidth,
-                            child: const Center(
-                              child: Text(
-                                'At Bat',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal),
-                                overflow: TextOverflow.ellipsis,
+                            child: const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chevron_right,
+                                      size: 14, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'At Bat',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -2074,7 +2121,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     child: FlashingFilterChip(
                                       label: SizedBox(
                                         width: _fixedChipWidth,
-                                        child: Center(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
                                           child: Text(
                                             label,
                                             style: const TextStyle(
@@ -2119,10 +2167,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       // Changed from InkWell/Container
                       label: SizedBox(
                         width: _fixedChipWidth,
-                        child: Center(
-                            child: Text(_capitalize(verb),
-                                style: const TextStyle(fontSize: 12),
-                                overflow: TextOverflow.ellipsis)),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.chevron_right,
+                                  size: 14, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text(_capitalize(verb),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
                       ),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
@@ -2185,7 +2243,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             child: FlashingFilterChip(
               label: SizedBox(
                 width: _fixedChipWidth,
-                child: Center(
+                child: Align(
+                    alignment: Alignment.centerLeft,
                     child: Text(hrDisplayLabels[type]!,
                         style: const TextStyle(fontSize: 12))),
               ),
@@ -5829,7 +5888,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 children: [
                                   // Tabbed interface on the left
                                   SizedBox(
-                                    width: 350,
+                                    width: 280,
                                     height: 550,
                                     child: DefaultTabController(
                                       length: 3,
@@ -5863,7 +5922,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               isScrollable: false,
                                               labelPadding: EdgeInsets.zero,
                                               tabs: [
-                                                Tab(text: 'Player Picker'),
+                                                Tab(text: 'PLAYER PICKER'),
                                                 Tab(
                                                     text: selectedHomeTeam !=
                                                             null
@@ -6212,12 +6271,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Container(
-                                                      width: 400,
+                                                      width: 280,
                                                       child: Column(
                                                         children: [
                                                           // App bar style header
                                                           Container(
-                                                            width: 400,
+                                                            width: 280,
                                                             height: 28,
                                                             decoration:
                                                                 BoxDecoration(
@@ -6442,7 +6501,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 ConstrainedBox(
                                                               constraints:
                                                                   const BoxConstraints(
-                                                                minWidth: 400,
+                                                                minWidth: 280,
                                                                 minHeight: 450,
                                                               ),
                                                               child: Column(
