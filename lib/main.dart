@@ -1135,27 +1135,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     selectedInning >= 9)
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0),
-                    child: FlashingFilterChip(
-                      label: SizedBox(
-                        width: 60,
-                        child: const Center(
-                          child: Text(
-                            'Walk Off',
-                            style: TextStyle(fontSize: 9),
-                          ),
-                        ),
-                      ),
-                      selected: _walkOff,
-                      onSelected: (isSelected) {
+                    child: GestureDetector(
+                      onTap: () {
                         setState(() {
-                          _walkOff = isSelected;
+                          _walkOff = !_walkOff;
                           _updateCaption();
                         });
                       },
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      child: Container(
+                        width: 40,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: _walkOff
+                              ? Colors.grey.shade600
+                              : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'WO',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: _walkOff
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: _walkOff ? Colors.white : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
               ],
