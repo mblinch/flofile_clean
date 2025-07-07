@@ -6007,7 +6007,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 children: [
                                   // Tabbed interface on the left
                                   SizedBox(
-                                    width: 290,
+                                    width: 350,
                                     height: 550,
                                     child: DefaultTabController(
                                       length: 3,
@@ -6078,38 +6078,42 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         CrossAxisAlignment
                                                             .start,
                                                     children: [
-                                                      const Text(
-                                                        'Player Picker',
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 14,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(
-                                                          height: 16),
                                                       // Search input
-                                                      TextField(
-                                                        controller:
-                                                            _playerPickerSearchController,
-                                                        decoration:
-                                                            const InputDecoration(
-                                                          hintText:
-                                                              'Type player name or number...',
-                                                          border:
-                                                              OutlineInputBorder(),
-                                                          prefixIcon: Icon(
-                                                              Icons.search),
+                                                      SizedBox(
+                                                        height: 32,
+                                                        child: TextField(
+                                                          controller:
+                                                              _playerPickerSearchController,
+                                                          decoration:
+                                                              const InputDecoration(
+                                                            hintText:
+                                                                'Type player name or number...',
+                                                            border:
+                                                                OutlineInputBorder(),
+                                                            prefixIcon: Icon(
+                                                                Icons.search,
+                                                                size: 16),
+                                                            isDense: true,
+                                                            contentPadding:
+                                                                EdgeInsets
+                                                                    .symmetric(
+                                                                        horizontal:
+                                                                            8,
+                                                                        vertical:
+                                                                            4),
+                                                          ),
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontSize: 12),
+                                                          onChanged: (value) {
+                                                            setState(() {
+                                                              _playerPickerSearchText =
+                                                                  value;
+                                                            });
+                                                          },
                                                         ),
-                                                        onChanged: (value) {
-                                                          setState(() {
-                                                            _playerPickerSearchText =
-                                                                value;
-                                                          });
-                                                        },
                                                       ),
-                                                      const SizedBox(
-                                                          height: 16),
+                                                      const SizedBox(height: 8),
                                                       // Results
                                                       Expanded(
                                                         child: _playerPickerSearchText
@@ -6511,9 +6515,57 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       String playerName = player['name'].toString().toLowerCase();
       String playerNumber = player['number'].toString().toLowerCase();
       String searchText = _playerPickerSearchText.toLowerCase();
+
+      // Check if search text matches h/v + number pattern (e.g., "h5", "v10") or number + h/v pattern (e.g., "5h", "10v")
+      if (searchText.length >= 2) {
+        String? prefix;
+        String? numberPart;
+
+        // Pattern 1: letter + number (e.g., "h23", "v10")
+        if (searchText.startsWith('h') || searchText.startsWith('v')) {
+          prefix = searchText.substring(0, 1);
+          numberPart = searchText.substring(1);
+        }
+        // Pattern 2: number + letter (e.g., "23h", "10v")
+        else if (searchText.endsWith('h') || searchText.endsWith('v')) {
+          prefix = searchText.substring(searchText.length - 1);
+          numberPart = searchText.substring(0, searchText.length - 1);
+        }
+
+        // If we found a valid pattern, filter by team and number
+        if (prefix != null &&
+            numberPart != null &&
+            RegExp(r'^\d+$').hasMatch(numberPart)) {
+          bool isHomeTeam = prefix == 'h';
+          if (player['isHome'] != isHomeTeam) {
+            return false; // Wrong team
+          }
+          // Check if player number matches
+          return playerNumber == numberPart;
+        }
+      }
+
+      // Regular search logic
       return playerName.contains(searchText) ||
           playerNumber.contains(searchText);
     }).toList();
+
+    // Sort results to prioritize exact number matches for single digits
+    if (_playerPickerSearchText.length == 1 &&
+        RegExp(r'^\d$').hasMatch(_playerPickerSearchText)) {
+      filteredPlayers.sort((a, b) {
+        String aNumber = a['number'].toString();
+        String bNumber = b['number'].toString();
+
+        // Check if numbers are exact matches
+        bool aExact = aNumber == _playerPickerSearchText;
+        bool bExact = bNumber == _playerPickerSearchText;
+
+        if (aExact && !bExact) return -1; // a comes first
+        if (!aExact && bExact) return 1; // b comes first
+        return 0; // both same, maintain original order
+      });
+    }
 
     if (filteredPlayers.isEmpty) {
       return const Center(
@@ -6601,10 +6653,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               height: 20,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: isHovered ? Colors.blue.shade50 : Colors.transparent,
+                color: isHovered ? Colors.blue.shade200 : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
                 border: isHovered
-                    ? Border.all(color: Colors.blue.shade200, width: 1)
+                    ? Border.all(color: Colors.blue.shade400, width: 1)
                     : null,
               ),
               child: Row(
@@ -6613,6 +6665,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     isHome ? Icons.home : Icons.flight,
                     color: isHome ? Colors.blue : Colors.red,
                     size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _getTeamShortName(player['team']),
+                    style: const TextStyle(fontSize: 15, color: Colors.grey),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -6625,10 +6682,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Text(
-                    _getTeamShortName(player['team']),
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
               ),
