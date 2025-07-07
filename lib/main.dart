@@ -4914,7 +4914,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // 1. Determine the detailed hit phrase.
       String hitPhrase = '';
 
-      if (_selectedHitType == 'home run') {
+      if (_selectedHitType == 'Home Run') {
         String? hrType = _selectedHomeRunType;
         // Only fall back to RBI count if no home run type is explicitly selected
         if (hrType == null && _rbiCount != null) {
@@ -4986,7 +4986,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // 2. Construct the sentence based on flags
       String coreActionPart;
       if (_walkOff == true && _isBatterRunning == true) {
-        if (_selectedHitType == 'home run') {
+        if (_selectedHitType == 'Home Run') {
           coreActionPart =
               "$playersString rounds the bases after hitting a walk-off $hitPhrase";
         } else {
@@ -4996,7 +4996,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else if (_walkOff == true) {
         coreActionPart = "$playersString hits a walk-off $hitPhrase";
       } else if (_isBatterRunning == true) {
-        if (_selectedHitType == 'home run') {
+        if (_selectedHitType == 'Home Run') {
           coreActionPart =
               "$playersString rounds the bases after hitting a $hitPhrase";
         } else {
@@ -6822,7 +6822,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               ),
                                                                             ),
                                                                           ],
-                                                                          if (_selectedHitType == 'home run' &&
+                                                                          if (_selectedHitType == 'Home Run' &&
                                                                               _selectedHomeRunType != null) ...[
                                                                             Padding(
                                                                               padding: const EdgeInsets.symmetric(horizontal: 3.0),
@@ -6861,7 +6861,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             ),
                                                                           ],
                                                                           if (_selectedHitType != null &&
-                                                                              _selectedHitType != 'home run' &&
+                                                                              _selectedHitType != 'Home Run' &&
                                                                               _rbiCount != null &&
                                                                               _rbiCount! > 0) ...[
                                                                             Padding(
