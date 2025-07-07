@@ -5998,40 +5998,109 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ],
                               ),
                               const SizedBox(height: 16),
-                              // Player picker and verb chips side by side
+                              // Tabbed interface and verb chips side by side
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Player picker on the left
+                                  // Tabbed interface on the left
                                   SizedBox(
                                     width: 290,
-                                    child: Column(
-                                      children: [
-                                        _buildPlayerContainer(
-                                          title: (_showHomeFirst
-                                                  ? selectedHomeTeam
-                                                  : selectedAwayTeam) ??
-                                              'Players',
-                                          codes: _showHomeFirst
-                                              ? homePlayers
-                                              : awayPlayers,
-                                          isHomeList: _showHomeFirst,
-                                          toggle: true,
-                                        ),
-                                        if (_selectedVerb != null &&
-                                            !soloVerbs.contains(_selectedVerb!))
-                                          _buildPlayerContainer(
-                                            title: (_showHomeFirst
-                                                    ? selectedAwayTeam
-                                                    : selectedHomeTeam) ??
-                                                'Players',
-                                            codes: _showHomeFirst
-                                                ? awayPlayers
-                                                : homePlayers,
-                                            isHomeList: !_showHomeFirst,
-                                            toggle: false,
+                                    height: 550,
+                                    child: DefaultTabController(
+                                      length: 3,
+                                      child: Column(
+                                        children: [
+                                          // Tab bar
+                                          Container(
+                                            height: 30,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade200,
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                topLeft: Radius.circular(4),
+                                                topRight: Radius.circular(4),
+                                              ),
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                              ),
+                                            ),
+                                            child: TabBar(
+                                              labelColor: Colors.black,
+                                              unselectedLabelColor: Colors.grey,
+                                              indicatorColor: Colors.blue,
+                                              labelStyle:
+                                                  TextStyle(fontSize: 11),
+                                              unselectedLabelStyle:
+                                                  TextStyle(fontSize: 11),
+                                              indicatorWeight: 2,
+                                              isScrollable: false,
+                                              labelPadding: EdgeInsets.zero,
+                                              tabs: [
+                                                Tab(text: 'Player Picker'),
+                                                Tab(
+                                                    text: selectedHomeTeam !=
+                                                            null
+                                                        ? _getTeamShortName(
+                                                            selectedHomeTeam!)
+                                                        : 'Home'),
+                                                Tab(
+                                                    text: selectedAwayTeam !=
+                                                            null
+                                                        ? _getTeamShortName(
+                                                            selectedAwayTeam!)
+                                                        : 'Away'),
+                                              ],
+                                            ),
                                           ),
-                                      ],
+                                          // Tab content
+                                          Expanded(
+                                            child: TabBarView(
+                                              children: [
+                                                // Player Picker Tab (placeholder)
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(16),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                  child: const Center(
+                                                    child: Text(
+                                                      'Player Picker Placeholder',
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                // Home Team Tab
+                                                _buildPlayerContainer(
+                                                  title: selectedHomeTeam ??
+                                                      'Home Team',
+                                                  codes: homePlayers,
+                                                  isHomeList: true,
+                                                  toggle: false,
+                                                ),
+                                                // Away Team Tab
+                                                _buildPlayerContainer(
+                                                  title: selectedAwayTeam ??
+                                                      'Away Team',
+                                                  codes: awayPlayers,
+                                                  isHomeList: false,
+                                                  toggle: false,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -6258,6 +6327,75 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ),
       ),
     );
+  }
+
+  String _getTeamShortName(String fullName) {
+    switch (fullName) {
+      case 'Arizona Diamondbacks':
+        return 'ARI';
+      case 'Atlanta Braves':
+        return 'ATL';
+      case 'Baltimore Orioles':
+        return 'BAL';
+      case 'Boston Red Sox':
+        return 'BOS';
+      case 'Chicago Cubs':
+        return 'CHC';
+      case 'Chicago White Sox':
+        return 'CWS';
+      case 'Cincinnati Reds':
+        return 'CIN';
+      case 'Cleveland Indians':
+        return 'CLE';
+      case 'Colorado Rockies':
+        return 'COL';
+      case 'Detroit Tigers':
+        return 'DET';
+      case 'Florida Marlins':
+        return 'FLA';
+      case 'Houston Astros':
+        return 'HOU';
+      case 'Kansas City Royals':
+        return 'KAN';
+      case 'Los Angeles Angels of Anaheim':
+        return 'LAA';
+      case 'Los Angeles Angels':
+        return 'LAA';
+      case 'Los Angeles Dodgers':
+        return 'LAD';
+      case 'Milwaukee Brewers':
+        return 'MIL';
+      case 'Minnesota Twins':
+        return 'MIN';
+      case 'New York Mets':
+        return 'NYM';
+      case 'New York Yankees':
+        return 'NYY';
+      case 'Oakland Athletics':
+        return 'OAK';
+      case 'Philadelphia Phillies':
+        return 'PHI';
+      case 'Pittsburgh Pirates':
+        return 'PIT';
+      case 'San Diego Padres':
+        return 'SD';
+      case 'San Francisco Giants':
+        return 'SF';
+      case 'Seattle Mariners':
+        return 'SEA';
+      case 'St. Louis Cardinals':
+        return 'STL';
+      case 'Tampa Bay Rays':
+        return 'TB';
+      case 'Texas Rangers':
+        return 'TEX';
+      case 'Toronto Blue Jays':
+        return 'TOR';
+      case 'Washington Nationals':
+        return 'WAS';
+      default:
+        return fullName.length > 8 ? fullName.substring(0, 8) : fullName;
+    }
   }
 
   String _month(int m) {
