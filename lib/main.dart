@@ -1064,6 +1064,47 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ...List.generate(9, (i) => i + 1).map((inning) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 2.0),
+                    child: SizedBox(
+                      width: 30,
+                      child: FlashingFilterChip(
+                        label: SizedBox(
+                          width: 30,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.chevron_right,
+                                    size: 10, color: Colors.grey),
+                                const SizedBox(width: 1),
+                                Text(
+                                  '$inning',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: selectedInning == inning
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        selected: selectedInning == inning,
+                        onSelected: (isSelected) => onInningSelected(inning),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  );
+                }),
+                // Extras option
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2.0),
+                  child: SizedBox(
+                    width: 30,
                     child: FlashingFilterChip(
                       label: SizedBox(
                         width: 30,
@@ -1076,10 +1117,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   size: 10, color: Colors.grey),
                               const SizedBox(width: 1),
                               Text(
-                                '$inning',
+                                'X',
                                 style: TextStyle(
                                   fontSize: 9,
-                                  fontWeight: selectedInning == inning
+                                  fontWeight: (selectedInning != null &&
+                                          selectedInning >= 10)
                                       ? FontWeight.w600
                                       : FontWeight.normal,
                                 ),
@@ -1088,51 +1130,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                         ),
                       ),
-                      selected: selectedInning == inning,
-                      onSelected: (isSelected) => onInningSelected(inning),
+                      selected:
+                          (selectedInning != null && selectedInning >= 10),
+                      onSelected: (isSelected) {
+                        _showExtraInningsDialog(onInningSelected);
+                      },
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                  );
-                }),
-                // Extras option
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2.0),
-                  child: FlashingFilterChip(
-                    label: SizedBox(
-                      width: 30,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.chevron_right,
-                                size: 10, color: Colors.grey),
-                            const SizedBox(width: 1),
-                            Text(
-                              'X',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: (selectedInning != null &&
-                                        selectedInning >= 10)
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    selected: (selectedInning != null && selectedInning >= 10),
-                    onSelected: (isSelected) {
-                      _showExtraInningsDialog(onInningSelected);
-                    },
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
 
