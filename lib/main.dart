@@ -1036,7 +1036,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Row(
                 children: [
                   Text(
-                    'Inning',
+                    'INNING',
                     style: TextStyle(
                       color: Colors.grey.shade700,
                       fontSize: 10,
