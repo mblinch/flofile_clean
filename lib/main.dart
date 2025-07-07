@@ -1393,115 +1393,104 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: _buildHitInningSelector(showWalkOffOption: true),
                   ),
+                  // Divider line under innings
+                  Container(
+                    height: 1,
+                    color: Colors.grey.shade400,
+                    margin: const EdgeInsets.only(bottom: 8.0),
+                  ),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       key: UniqueKey(),
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        FlashingFilterChip(
-                          label: SizedBox(
-                            width: _fixedChipWidth,
-                            child: const Center(
-                              child: Text(
-                                'Hit',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.normal),
-                                overflow: TextOverflow.ellipsis,
+                        if (_selectedVerb != 'hit') ...[
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Center(
+                                child: Text(
+                                  'Hit',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.normal),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
+                            selected: _selectedVerb == 'hit',
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'hit' : null;
+                              _selectedHitType = null;
+                              _selectedHomeRunType = null;
+                              _rbiCount = null;
+                              _selectedRbiInning = null;
+                              _isBatterRunning = null;
+                              _updateCaption();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
                           ),
-                          selected: _selectedVerb == 'hit',
-                          onSelected: (isSelected) => setState(() {
-                            _selectedVerb = isSelected ? 'hit' : null;
-                            _selectedHitType = null;
-                            _selectedHomeRunType = null;
-                            _rbiCount = null;
-                            _selectedRbiInning = null;
-                            _isBatterRunning = null;
-                            _updateCaption();
-                          }),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        if (_selectedVerb == 'hit') ...[
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 16.0),
-                          ...(_selectedHitType == null
-                                  ? ['single', 'double', 'triple', 'home run']
-                                  : [_selectedHitType!])
-                              .map((label) => Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: FlashingFilterChip(
-                                      label: SizedBox(
-                                        width: _fixedChipWidth,
-                                        child: Center(
-                                          child: Text(
-                                            label,
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal),
-                                            overflow: TextOverflow.ellipsis,
+                        ] else ...[
+                          // Show hit type options when hit is selected (but no hit type selected yet)
+                          if (_selectedHitType == null) ...[
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                'single',
+                                'double',
+                                'triple',
+                                'home run'
+                              ]
+                                  .map((label) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Center(
+                                              child: Text(
+                                                label,
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.normal),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
                                           ),
+                                          selected: _selectedHitType == label,
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                _selectedHitType = label;
+                                                if (label != 'home run') {
+                                                  // Pre-select "No RBI" for non-HR hits
+                                                  _rbiCount = 0;
+                                                  _rbiCountByHit[label] = 0;
+                                                } else {
+                                                  // For home runs, RBI is determined by HR type, so clear general count
+                                                  _rbiCount = null;
+                                                }
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
                                         ),
-                                      ),
-                                      selected: _selectedHitType == label,
-                                      onSelected: (isSelected) {
-                                        setState(() {
-                                          _selectedHitType =
-                                              isSelected ? label : null;
-                                          if (isSelected) {
-                                            if (label != 'home run') {
-                                              // Pre-select "No RBI" for non-HR hits
-                                              _rbiCount = 0;
-                                              _rbiCountByHit[label] = 0;
-                                            } else {
-                                              // For home runs, RBI is determined by HR type, so clear general count
-                                              _rbiCount = null;
-                                            }
-                                          } else {
-                                            // Deselecting the hit type
-                                            _rbiCount = null;
-                                          }
-                                          _updateCaption();
-                                        });
-                                      },
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      key: UniqueKey(),
-                                    ),
-                                  )),
-                          // Add runs scored selector inline after hit type selection
-                          if (_selectedHitType != null) ...[
-                            const SizedBox(width: 16.0),
-                            // Vertical divider line before runs scored
-                            Container(
-                              width: 1,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                borderRadius: BorderRadius.circular(0.5),
-                              ),
+                                      ))
+                                  .toList(),
                             ),
-                            const SizedBox(width: 16.0),
-                            // Inline runs scored selector
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
+                          ] else ...[
+                            // Show runs scored options when hit type is selected
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.only(
-                                      left: 0.0, right: 8.0),
+                                  padding: const EdgeInsets.only(bottom: 8.0),
                                   child: Text(
                                     _selectedHitType == 'home run'
                                         ? 'HR Type:'
@@ -1515,12 +1504,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                                 if (_selectedHitType == 'home run') ...[
                                   // Home run specific options
-                                  ...['Solo', '2 Run', '3 Run', 'Grand Slam']
-                                      .map((hrType) {
-                                    return Padding(
-                                      padding:
-                                          const EdgeInsets.only(right: 4.0),
-                                      child: FlashingFilterChip(
+                                  Wrap(
+                                    spacing: 8.0,
+                                    runSpacing: 8.0,
+                                    children: [
+                                      'Solo',
+                                      '2 Run',
+                                      '3 Run',
+                                      'Grand Slam'
+                                    ].map((hrType) {
+                                      return FlashingFilterChip(
                                         label: Text(hrType),
                                         selected:
                                             (_selectedHomeRunType == 'solo' &&
@@ -1562,16 +1555,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         },
                                         visualDensity: VisualDensity.compact,
                                         padding: EdgeInsets.zero,
-                                      ),
-                                    );
-                                  }),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ] else ...[
                                   // Regular runs scored for other hit types
-                                  ...List.generate(3, (i) => i + 1).map((rbi) {
-                                    return Padding(
-                                      padding:
-                                          const EdgeInsets.only(right: 4.0),
-                                      child: GestureDetector(
+                                  Wrap(
+                                    spacing: 8.0,
+                                    runSpacing: 8.0,
+                                    children: List.generate(3, (i) => i + 1)
+                                        .map((rbi) {
+                                      return GestureDetector(
                                         onTap: () {
                                           setState(() {
                                             _rbiCount = rbi;
@@ -1607,130 +1601,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  }),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ],
                               ],
-                            ),
-                            // Add divider and celebration/batter running options
-                            const SizedBox(width: 16.0),
-                            // Vertical divider line before celebration options
-                            Container(
-                              width: 1,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                borderRadius: BorderRadius.circular(0.5),
-                              ),
-                            ),
-                            const SizedBox(width: 16.0),
-                            // Optional label
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8.0),
-                              child: Text(
-                                'Optional',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            // Celebration chip
-                            FlashingFilterChip(
-                              label: const Text('Celebrates Alone'),
-                              selected: _isSoloCelebration ||
-                                  celebrateWith.isNotEmpty ||
-                                  celebrateAgainst.isNotEmpty,
-                              onSelected: (isSelected) async {
-                                if (isSelected) {
-                                  // Set default to solo celebration
-                                  setState(() {
-                                    _isSoloCelebration = true;
-                                    celebrateWith.clear();
-                                    celebrateAgainst.clear();
-                                    _isBatterRunning = false;
-                                  });
-                                  _updateCaption();
-                                } else {
-                                  setState(() {
-                                    _isSoloCelebration = false;
-                                    celebrateWith.clear();
-                                    celebrateAgainst.clear();
-                                  });
-                                  _updateCaption();
-                                }
-                              },
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                            ),
-                            // Only show celebrates with teammates for home runs
-                            if (_selectedHitType == 'home run') ...[
-                              const SizedBox(width: 8.0),
-                              // Celebrates with teammates chip
-                              FlashingFilterChip(
-                                label: const Text('Celebrates with teammates'),
-                                selected: celebrateWith.isNotEmpty,
-                                onSelected: (isSelected) async {
-                                  if (isSelected) {
-                                    setState(() {
-                                      celebrateAgainst.clear();
-                                    });
-                                    _showCelebrateDialog();
-                                  } else {
-                                    setState(() {
-                                      celebrateWith.clear();
-                                      _updateCaption();
-                                      _updatePersonality();
-                                    });
-                                  }
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                              ),
-                            ],
-                            const SizedBox(width: 8.0),
-                            // Celebrates against chip (available for all hit types)
-                            FlashingFilterChip(
-                              label: const Text('Celebrates against'),
-                              selected: celebrateAgainst.isNotEmpty,
-                              onSelected: (isSelected) async {
-                                if (isSelected) {
-                                  setState(() {
-                                    _isSoloCelebration = false;
-                                    celebrateWith.clear();
-                                  });
-                                  _showCelebrateAgainstDialog();
-                                } else {
-                                  setState(() {
-                                    celebrateAgainst.clear();
-                                    _updateCaption();
-                                    _updatePersonality();
-                                  });
-                                }
-                              },
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                            ),
-                            const SizedBox(width: 8.0),
-                            // Batter running chip
-                            FlashingFilterChip(
-                              label: const Text('Batter running'),
-                              selected: _isBatterRunning == true,
-                              onSelected: (isSelected) {
-                                setState(() {
-                                  _isBatterRunning = isSelected;
-                                  if (isSelected) {
-                                    _isSoloCelebration = false;
-                                    celebrateWith.clear();
-                                    celebrateAgainst.clear();
-                                  }
-                                  _updateCaption();
-                                });
-                              },
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
                             ),
                           ],
                         ],
