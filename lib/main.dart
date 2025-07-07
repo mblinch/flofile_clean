@@ -1399,6 +1399,151 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     color: Colors.grey.shade400,
                     margin: const EdgeInsets.only(bottom: 8.0),
                   ),
+                  // Breadcrumb menu
+                  if (_selectedVerb == 'hit') ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedVerb = null;
+                                _selectedHitType = null;
+                                _selectedHomeRunType = null;
+                                _rbiCount = null;
+                                _selectedRbiInning = null;
+                                _isBatterRunning = null;
+                                _updateCaption();
+                              });
+                            },
+                            child: Text(
+                              'HIT',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                          if (_selectedHitType != null) ...[
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: Text(
+                                '→',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedHitType = null;
+                                  _selectedHomeRunType = null;
+                                  _rbiCount = null;
+                                  _selectedRbiInning = null;
+                                  _isBatterRunning = null;
+                                  _updateCaption();
+                                });
+                              },
+                              child: Text(
+                                _selectedHitType!.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (_selectedHitType == 'home run' &&
+                              _selectedHomeRunType != null) ...[
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: Text(
+                                '→',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedHomeRunType = null;
+                                  _updateCaption();
+                                });
+                              },
+                              child: Text(
+                                _selectedHomeRunType == 'solo'
+                                    ? 'SOLO'
+                                    : _selectedHomeRunType == 'two-run'
+                                        ? '2 RUN'
+                                        : _selectedHomeRunType == 'three-run'
+                                            ? '3 RUN'
+                                            : _selectedHomeRunType ==
+                                                    'grand slam'
+                                                ? 'GRAND SLAM'
+                                                : '',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (_selectedHitType != null &&
+                              _selectedHitType != 'home run' &&
+                              _rbiCount != null &&
+                              _rbiCount! > 0) ...[
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: Text(
+                                '→',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _rbiCount = null;
+                                  _rbiCountByHit.remove(_selectedHitType!);
+                                  _updateCaption();
+                                });
+                              },
+                              child: Text(
+                                _rbiCount == 1
+                                    ? 'RBI SINGLE'
+                                    : _rbiCount == 2
+                                        ? 'TWO RBI SINGLE'
+                                        : _rbiCount == 3
+                                            ? 'THREE RBI SINGLE'
+                                            : '',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -1490,73 +1635,67 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 if (_selectedHitType == 'home run') ...[
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Text(
-                                      'HR Type:',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (_selectedHitType == 'home run') ...[
                                   // Home run specific options
-                                  Wrap(
-                                    spacing: 8.0,
-                                    runSpacing: 8.0,
-                                    children: [
-                                      'Solo',
-                                      '2 Run',
-                                      '3 Run',
-                                      'Grand Slam'
-                                    ].map((hrType) {
-                                      return FlashingFilterChip(
-                                        label: Text(hrType),
-                                        selected:
-                                            (_selectedHomeRunType == 'solo' &&
-                                                    hrType == 'Solo') ||
-                                                (_selectedHomeRunType ==
-                                                        'two-run' &&
-                                                    hrType == '2 Run') ||
-                                                (_selectedHomeRunType ==
-                                                        'three-run' &&
-                                                    hrType == '3 Run') ||
-                                                (_selectedHomeRunType ==
-                                                        'grand slam' &&
-                                                    hrType == 'Grand Slam'),
-                                        onSelected: (isSelected) {
-                                          setState(() {
-                                            if (isSelected) {
-                                              switch (hrType) {
-                                                case 'Solo':
-                                                  _selectedHomeRunType = 'solo';
-                                                  break;
-                                                case '2 Run':
-                                                  _selectedHomeRunType =
-                                                      'two-run';
-                                                  break;
-                                                case '3 Run':
-                                                  _selectedHomeRunType =
-                                                      'three-run';
-                                                  break;
-                                                case 'Grand Slam':
-                                                  _selectedHomeRunType =
-                                                      'grand slam';
-                                                  break;
-                                              }
-                                            } else {
-                                              _selectedHomeRunType = null;
-                                            }
-                                            _updateCaption();
-                                          });
-                                        },
-                                        visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
-                                      );
-                                    }).toList(),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children:
+                                        ['Solo', '2 Run', '3 Run', 'Grand Slam']
+                                            .map((hrType) => Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 8.0),
+                                                  child: FlashingFilterChip(
+                                                    label: Text(hrType),
+                                                    selected: (_selectedHomeRunType ==
+                                                                'solo' &&
+                                                            hrType == 'Solo') ||
+                                                        (_selectedHomeRunType ==
+                                                                'two-run' &&
+                                                            hrType ==
+                                                                '2 Run') ||
+                                                        (_selectedHomeRunType ==
+                                                                'three-run' &&
+                                                            hrType ==
+                                                                '3 Run') ||
+                                                        (_selectedHomeRunType ==
+                                                                'grand slam' &&
+                                                            hrType ==
+                                                                'Grand Slam'),
+                                                    onSelected: (isSelected) {
+                                                      setState(() {
+                                                        if (isSelected) {
+                                                          switch (hrType) {
+                                                            case 'Solo':
+                                                              _selectedHomeRunType =
+                                                                  'solo';
+                                                              break;
+                                                            case '2 Run':
+                                                              _selectedHomeRunType =
+                                                                  'two-run';
+                                                              break;
+                                                            case '3 Run':
+                                                              _selectedHomeRunType =
+                                                                  'three-run';
+                                                              break;
+                                                            case 'Grand Slam':
+                                                              _selectedHomeRunType =
+                                                                  'grand slam';
+                                                              break;
+                                                          }
+                                                        } else {
+                                                          _selectedHomeRunType =
+                                                              null;
+                                                        }
+                                                        _updateCaption();
+                                                      });
+                                                    },
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    padding: EdgeInsets.zero,
+                                                  ),
+                                                ))
+                                            .toList(),
                                   ),
                                 ] else ...[
                                   // RBI options for other hit types
