@@ -6365,8 +6365,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               crossAxisAlignment:
                                                   CrossAxisAlignment.start,
                                               children: [
-                                                Expanded(
-                                                  flex: 2,
+                                                Container(
+                                                  width: 490,
                                                   child: Container(
                                                     padding:
                                                         const EdgeInsets.all(
