@@ -7315,246 +7315,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ),
                                             ),
                                           const SizedBox(height: 8),
-                                          // Getty Metadata Toggle
-                                          Row(
-                                            children: [
-                                              const Text('Getty Metadata',
-                                                  style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.bold)),
-                                              const Spacer(),
-                                              Material(
-                                                elevation: 1.0,
-                                                color: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  side: BorderSide(
-                                                      color:
-                                                          Colors.grey.shade400,
-                                                      width: 1.0),
-                                                ),
-                                                child: InkWell(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      _showGettyMetadata =
-                                                          !_showGettyMetadata;
-                                                    });
-                                                  },
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  child: Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 6),
-                                                    child: Text(
-                                                      _showGettyMetadata
-                                                          ? 'Hide'
-                                                          : 'Show',
-                                                      style: const TextStyle(
-                                                        fontSize: 11,
-                                                        color: Colors.black87,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-
-                                          // Getty Metadata Fields (conditionally shown)
-                                          if (_showGettyMetadata) ...[
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Photographer',
-                                                        creatorController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField('MEID',
-                                                        jobIdController)),
-                                                const SizedBox(width: 8),
-                                                SizedBox(
-                                                    width: 120,
-                                                    child: _buildField(
-                                                        'Description Writers',
-                                                        descriptionWritersController)),
-                                                const SizedBox(width: 8),
-                                                _buildJobTitleDropdown(),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Copyright',
-                                                        copyrightController)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Material(
-                                                    elevation: 2.0,
-                                                    color: Colors.transparent,
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                    ),
-                                                    child: InkWell(
-                                                      onTap: _pickDate,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      child: InputDecorator(
-                                                        decoration:
-                                                            InputDecoration(
-                                                          labelText: 'Date',
-                                                          floatingLabelBehavior:
-                                                              FloatingLabelBehavior
-                                                                  .always,
-                                                          isDense: true,
-                                                          contentPadding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 12),
-                                                          filled: true,
-                                                          fillColor:
-                                                              Colors.white,
-                                                          labelStyle:
-                                                              const TextStyle(
-                                                                  fontSize: 10),
-                                                          enabledBorder:
-                                                              OutlineInputBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        4),
-                                                            borderSide: BorderSide(
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade400,
-                                                                width: 1.0),
-                                                          ),
-                                                          focusedBorder:
-                                                              OutlineInputBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        4),
-                                                            borderSide: BorderSide(
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade400,
-                                                                width: 1.0),
-                                                          ),
-                                                        ),
-                                                        child: Text(
-                                                          '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
-                                                          style:
-                                                              const TextStyle(
-                                                                  fontSize: 11),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Stadium',
-                                                        stadiumController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField('City',
-                                                        cityController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'State/Province',
-                                                        provinceController)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Headline',
-                                                        headlineController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Keywords',
-                                                        keywordsController)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildField('Credit',
-                                                        creditController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField('Source',
-                                                        sourceController)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                _buildUrgencyDropdown(),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Country',
-                                                        countryController)),
-                                                const SizedBox(width: 8),
-                                                _buildCountryCodeDropdown(),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Title/Object Name',
-                                                        titleObjectNameController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Category',
-                                                        categoryController)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Supp Cat 1',
-                                                        suppCat1Controller)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Supp Cat 2',
-                                                        suppCat2Controller)),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                    child: _buildField(
-                                                        'Supp Cat 3',
-                                                        suppCat3Controller)),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            _buildField('Special Instructions',
-                                                specialInstructionsController),
-                                            const SizedBox(height: 8),
-                                          ],
 
                                           const Spacer(),
                                         ],
@@ -7563,172 +7323,181 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   ],
                                 ),
                               ),
+
+                              // Caption and Personality boxes under the image preview
                               const SizedBox(height: 16),
-                              // Caption and Personality boxes in one row under the picture preview
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Caption Field and Buttons (left side) - taking 50% of width
-                                  Expanded(
-                                    flex: 5,
-                                    child: Column(
+                                  // Caption and Personality fields - together taking 45% of screen width
+                                  SizedBox(
+                                    width: MediaQuery.of(context).size.width *
+                                        0.45,
+                                    child: Row(
                                       children: [
-                                        // Caption Field
-                                        ValueListenableBuilder<
-                                            TextEditingValue>(
-                                          valueListenable: captionController,
-                                          builder: (context, value, child) {
-                                            return Padding(
-                                              padding: const EdgeInsets.only(
-                                                  right: 8.0),
-                                              child: Material(
-                                                elevation: 2.0,
-                                                color: Colors.white,
-                                                shadowColor: Colors.grey,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                child: TextField(
-                                                  controller:
-                                                      TextEditingController(
-                                                    text: _typewriterController
-                                                            .isAnimating
-                                                        ? _displayedCaption
-                                                        : value.text,
-                                                  ),
-                                                  maxLines: 4,
-                                                  minLines: 4,
-                                                  style: const TextStyle(
-                                                      fontSize: 14),
-                                                  decoration: InputDecoration(
-                                                    labelText: 'Caption',
-                                                    floatingLabelBehavior:
-                                                        FloatingLabelBehavior
-                                                            .always,
-                                                    isDense: true,
-                                                    contentPadding:
-                                                        const EdgeInsets
-                                                            .symmetric(
-                                                            horizontal: 8,
-                                                            vertical: 12),
-                                                    labelStyle: const TextStyle(
-                                                        fontSize: 15,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        letterSpacing: -0.5),
-                                                    enabledBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                          width: 1.0),
+                                        // Caption Field - taking more space within the 50%
+                                        Expanded(
+                                          flex: 7,
+                                          child: ValueListenableBuilder<
+                                              TextEditingValue>(
+                                            valueListenable: captionController,
+                                            builder: (context, value, child) {
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    right: 8.0),
+                                                child: Material(
+                                                  elevation: 2.0,
+                                                  color: Colors.white,
+                                                  shadowColor: Colors.grey,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  child: TextField(
+                                                    controller:
+                                                        TextEditingController(
+                                                      text: _typewriterController
+                                                              .isAnimating
+                                                          ? _displayedCaption
+                                                          : value.text,
                                                     ),
-                                                    focusedBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                          width: 1.0),
+                                                    maxLines: 4,
+                                                    minLines: 4,
+                                                    style: const TextStyle(
+                                                        fontSize: 14),
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Caption',
+                                                      floatingLabelBehavior:
+                                                          FloatingLabelBehavior
+                                                              .always,
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 12),
+                                                      labelStyle:
+                                                          const TextStyle(
+                                                              fontSize: 15,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              letterSpacing:
+                                                                  -0.5),
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                            width: 1.0),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                            width: 1.0),
+                                                      ),
                                                     ),
+                                                    readOnly:
+                                                        _typewriterController
+                                                            .isAnimating,
+                                                    onChanged: (value) {
+                                                      if (!_typewriterController
+                                                          .isAnimating) {
+                                                        captionController.text =
+                                                            value;
+                                                      }
+                                                    },
                                                   ),
-                                                  readOnly:
-                                                      _typewriterController
-                                                          .isAnimating,
-                                                  onChanged: (value) {
-                                                    if (!_typewriterController
-                                                        .isAnimating) {
-                                                      captionController.text =
-                                                          value;
-                                                    }
-                                                  },
                                                 ),
-                                              ),
-                                            );
-                                          },
+                                              );
+                                            },
+                                          ),
                                         ),
-                                        const SizedBox(height: 6),
-                                      ],
-                                    ),
-                                  ),
-                                  // Personality Field (right side) - taking 50% of width
-                                  Expanded(
-                                    flex: 5,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(left: 8.0),
-                                      child: Column(
-                                        children: [
-                                          Material(
-                                            elevation: 2,
-                                            shadowColor: Colors.grey.shade400,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            child: TextField(
-                                              controller: personalityController,
-                                              maxLines: 1,
-                                              style:
-                                                  const TextStyle(fontSize: 14),
-                                              decoration: InputDecoration(
-                                                labelText: 'Personality',
-                                                floatingLabelBehavior:
-                                                    FloatingLabelBehavior
-                                                        .always,
-                                                labelStyle: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                    letterSpacing: -0.5),
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  gapPadding: 0,
+                                        // Personality Field (right side) - taking less space
+                                        Expanded(
+                                          flex: 3,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                                left: 8.0),
+                                            child: Material(
+                                              elevation: 2,
+                                              shadowColor: Colors.grey.shade400,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: TextField(
+                                                controller:
+                                                    personalityController,
+                                                maxLines: 1,
+                                                style: const TextStyle(
+                                                    fontSize: 14),
+                                                decoration: InputDecoration(
+                                                  labelText: 'Personality',
+                                                  floatingLabelBehavior:
+                                                      FloatingLabelBehavior
+                                                          .always,
+                                                  labelStyle: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 15,
+                                                      letterSpacing: -0.5),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                    borderSide: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                  ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                    borderSide: BorderSide(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
+                                                        width: 2),
+                                                  ),
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 12),
+                                                  filled: true,
+                                                  fillColor: Colors.white,
                                                 ),
-                                                enabledBorder:
-                                                    OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  gapPadding: 0,
-                                                  borderSide: BorderSide(
-                                                      color:
-                                                          Colors.grey.shade400),
-                                                ),
-                                                focusedBorder:
-                                                    OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  gapPadding: 0,
-                                                  borderSide: BorderSide(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .primary,
-                                                      width: 2),
-                                                ),
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 12),
-                                                filled: true,
-                                                fillColor: Colors.white,
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
 
-                              const SizedBox(height: 2),
-                              // Tabbed interface and verb chips side by side
+                              const SizedBox(height: 16),
+                              // Main horizontal layout: Left side (player picker/verbs) and Right side (metadata only)
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Tabbed interface on the left
+                                  // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
                                   SizedBox(
                                     width: 280,
                                     height: 550,
@@ -8525,6 +8294,225 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   ],
                                                 ),
                                               ),
+                                  ),
+
+                                  const SizedBox(width: 16),
+
+                                  // RIGHT SIDE: Metadata only - taking 50% of screen width
+                                  SizedBox(
+                                    width:
+                                        MediaQuery.of(context).size.width * 0.5,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Metadata section
+                                        SizedBox(
+                                          width: MediaQuery.of(context)
+                                                  .size
+                                                  .width *
+                                              0.5,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Getty Metadata Fields (at the top)
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Photographer',
+                                                          creatorController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField('MEID',
+                                                          jobIdController)),
+                                                  const SizedBox(width: 8),
+                                                  SizedBox(
+                                                      width: 120,
+                                                      child: _buildField(
+                                                          'Description Writers',
+                                                          descriptionWritersController)),
+                                                  const SizedBox(width: 8),
+                                                  _buildJobTitleDropdown(),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Copyright',
+                                                          copyrightController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Material(
+                                                      elevation: 2.0,
+                                                      color: Colors.transparent,
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                      ),
+                                                      child: InkWell(
+                                                        onTap: _pickDate,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        child: InputDecorator(
+                                                          decoration:
+                                                              InputDecoration(
+                                                            labelText: 'Date',
+                                                            floatingLabelBehavior:
+                                                                FloatingLabelBehavior
+                                                                    .always,
+                                                            isDense: true,
+                                                            contentPadding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical:
+                                                                        12),
+                                                            filled: true,
+                                                            fillColor:
+                                                                Colors.white,
+                                                            labelStyle:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        10),
+                                                            enabledBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                            focusedBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        11),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Stadium',
+                                                          stadiumController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField('City',
+                                                          cityController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'State/Province',
+                                                          provinceController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Headline',
+                                                          headlineController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Keywords',
+                                                          keywordsController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Credit',
+                                                          creditController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Source',
+                                                          sourceController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  _buildUrgencyDropdown(),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Country',
+                                                          countryController)),
+                                                  const SizedBox(width: 8),
+                                                  _buildCountryCodeDropdown(),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Title/Object Name',
+                                                          titleObjectNameController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Category',
+                                                          categoryController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 1',
+                                                          suppCat1Controller)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 2',
+                                                          suppCat2Controller)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 3',
+                                                          suppCat3Controller)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              _buildField(
+                                                  'Special Instructions',
+                                                  specialInstructionsController),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
