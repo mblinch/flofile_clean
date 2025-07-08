@@ -448,6 +448,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedFieldingAction = null;
         _isDivingCatch = false;
         _isDivingForGroundBall = false;
+      } else if (_selectedVerb == 'Base Running' &&
+          _selectedBaseRunningAction != null) {
+        // If in base running options, go back to verb selection
+        if (_selectedBaseRunningAction == 'steals' &&
+            _selectedStealBase != null) {
+          // If steal base is selected, go back to base selection
+          _selectedStealBase = null;
+          _showStealAgainstPlayer = false;
+        } else {
+          // Go back to base running action selection
+          _selectedBaseRunningAction = null;
+          _selectedStealBase = null;
+          _showStealAgainstPlayer = false;
+        }
       } else if (_selectedVerb == 'Celebrate' &&
           (_isSoloCelebration ||
               celebrateWith.isNotEmpty ||
@@ -470,6 +484,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedFieldingAction = null;
         _isDivingCatch = false;
         _isDivingForGroundBall = false;
+        _selectedBaseRunningAction = null;
+        _selectedStealBase = null;
+        _showStealAgainstPlayer = false;
         _isSoloCelebration = false;
         celebrateWith.clear();
         celebrateAgainst.clear();
@@ -2300,6 +2317,290 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           );
+        } else if (verb == 'Base Running') {
+          // This block handles the 'Base Running' verb and its sub-options
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    key: UniqueKey(),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (_selectedVerb != 'Base Running') ...[
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text('Base Running',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            selected: _selectedVerb == 'Base Running',
+                            onSelected: (_showHomeFirst
+                                    ? selectedPlayers.isNotEmpty
+                                    : selectedOpponentPlayers.isNotEmpty)
+                                ? (isSelected) => setState(() {
+                                      _selectedVerb =
+                                          isSelected ? 'Base Running' : null;
+                                      _selectedBaseRunningAction = null;
+                                      _updateCaption();
+                                    })
+                                : null,
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ] else ...[
+                          // Show base running action options when Base Running is selected
+                          if (_stealsClicked) ...[
+                            // Show base options when Steals is clicked
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Base options
+                                ...['Second Base', 'Third Base', 'Home Plate']
+                                    .map((base) => Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 8.0),
+                                          child: FlashingFilterChip(
+                                            label: SizedBox(
+                                              width: _fixedChipWidth,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                        Icons.chevron_right,
+                                                        size: 14,
+                                                        color: Colors.grey),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      base,
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight: FontWeight
+                                                              .normal),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            selected: _selectedStealBase ==
+                                                _getStealBaseKey(base),
+                                            onSelected: (isSelected) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedBaseRunningAction =
+                                                      'steals';
+                                                  _selectedStealBase =
+                                                      _getStealBaseKey(base);
+                                                } else {
+                                                  _selectedBaseRunningAction =
+                                                      null;
+                                                  _selectedStealBase = null;
+                                                }
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            key: UniqueKey(),
+                                          ),
+                                        ))
+                                    .toList(),
+                              ],
+                            ),
+                          ] else if (_selectedBaseRunningAction == null) ...[
+                            // Show main base running options
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                'Steals',
+                                'Slides',
+                                'Runs the Bases',
+                                'Rounds the Bases'
+                              ]
+                                  .map((label) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected:
+                                              _selectedBaseRunningAction ==
+                                                  _getBaseRunningActionKey(
+                                                      label),
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                if (label == 'Steals') {
+                                                  _stealsClicked = true;
+                                                  _selectedBaseRunningAction =
+                                                      null;
+                                                } else {
+                                                  _selectedBaseRunningAction =
+                                                      _getBaseRunningActionKey(
+                                                          label);
+                                                }
+                                              } else {
+                                                _selectedBaseRunningAction =
+                                                    null;
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
+                          ] else ...[
+                            // Show selected base running action and sub-options
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Show selected action as a chip
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: FlashingFilterChip(
+                                    label: SizedBox(
+                                      width: _fixedChipWidth,
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.chevron_right,
+                                                size: 14, color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _getBaseRunningActionLabel(
+                                                  _selectedBaseRunningAction!),
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight:
+                                                      FontWeight.normal),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    selected: true,
+                                    showCheckmark: true,
+                                    onSelected: (_) => setState(() {
+                                      _selectedBaseRunningAction = null;
+                                      _selectedStealBase = null;
+                                      _showStealAgainstPlayer = false;
+                                      _updateCaption();
+                                    }),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    key: UniqueKey(),
+                                  ),
+                                ),
+
+                                // Show against player option if steal base is selected
+                                if (_selectedBaseRunningAction == 'steals' &&
+                                    _selectedStealBase != null) ...[
+                                  const Padding(
+                                    padding: EdgeInsets.only(
+                                        left: 16.0, bottom: 2.0),
+                                    child: Text(
+                                      'Against:',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: FlashingFilterChip(
+                                      label: SizedBox(
+                                        width: _fixedChipWidth,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            _showStealAgainstPlayer
+                                                ? 'Against Player'
+                                                : 'Against Team',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      selected: _showStealAgainstPlayer,
+                                      onSelected: (isSelected) {
+                                        setState(() {
+                                          _showStealAgainstPlayer = isSelected;
+                                          _updateCaption();
+                                        });
+                                      },
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      key: UniqueKey(),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         } else if (verb == 'At Bat') {
           widgets.add(
             Padding(
@@ -2852,6 +3153,52 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
+  // Helper method to get base running action key from label
+  String _getBaseRunningActionKey(String label) {
+    switch (label) {
+      case 'Steals':
+        return 'steals';
+      case 'Slides':
+        return 'slides';
+      case 'Runs the Bases':
+        return 'runs the bases';
+      case 'Rounds the Bases':
+        return 'rounds the bases';
+      default:
+        return label;
+    }
+  }
+
+  // Helper method to get base running action label from key
+  String _getBaseRunningActionLabel(String key) {
+    switch (key) {
+      case 'steals':
+        return 'Steals';
+      case 'slides':
+        return 'Slides';
+      case 'runs the bases':
+        return 'Runs the Bases';
+      case 'rounds the bases':
+        return 'Rounds the Bases';
+      default:
+        return key;
+    }
+  }
+
+  // Helper method to get steal base key from label
+  String _getStealBaseKey(String label) {
+    switch (label) {
+      case 'Second Base':
+        return 'second base';
+      case 'Third Base':
+        return 'third base';
+      case 'Home Plate':
+        return 'home plate';
+      default:
+        return label;
+    }
+  }
+
   // Helper method to get celebration selection state
   bool _getCelebrationSelectionState(String label) {
     switch (label) {
@@ -3044,6 +3391,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _isDivingForGroundBall =
       false; // Added: State for 'Diving' on ground ball
   bool _isDivingCatch = false;
+  bool _showBaseRunningOptions = false;
+  String? _selectedBaseRunningAction;
+  String? _selectedStealBase;
+  bool _showStealAgainstPlayer = false;
+  bool _showStealBaseOptions = false;
+  bool _stealsClicked = false;
   List<String> celebrateWith = [];
   List<String> celebrateAgainst = [];
 
@@ -3404,6 +3757,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'celebrates defeating': 'celebrates defeating the',
       'Celebrate': 'celebrates', // New single celebrate verb
       'Base Running': 'runs the bases against the',
+      'steals': 'steals against the',
+      'slides': 'slides against the',
+      'runs the bases': 'runs the bases against the',
+      'rounds the bases': 'rounds the bases against the',
       'swings': 'swings against the', // At Bat sub-option
       'runs to first base':
           'runs to first base against the', // At Bat sub-option
@@ -5258,6 +5615,50 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       mainCaptionPart =
           "$playersString $actionPhrase against the $opponentTeamName";
       // Add inning to Fielding caption
+      if (_selectedRbiInning != null) {
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
+      }
+    } else if (_selectedVerb == 'Base Running' &&
+        _selectedBaseRunningAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      if (_selectedBaseRunningAction == 'steals' &&
+          _selectedStealBase != null) {
+        // Handle steals with base specification
+        String stealPhrase = "steals $_selectedStealBase";
+
+        if (_showStealAgainstPlayer && selectedOpponentPlayers.isNotEmpty) {
+          // Against specific player
+          final opponentStr =
+              _combinePlayersWithSingleTeam(selectedOpponentPlayers.toList());
+          mainCaptionPart = "$playersString $stealPhrase against $opponentStr";
+        } else {
+          // Against team
+          mainCaptionPart =
+              "$playersString $stealPhrase against the $opponentTeamName";
+        }
+      } else {
+        // Handle other base running actions
+        final actionReplacement = codeReplacements[_selectedBaseRunningAction!];
+        if (actionReplacement == null) return; // Should not happen
+
+        mainCaptionPart =
+            "$playersString ${actionReplacement.full} $opponentTeamName";
+      }
+
+      // Add inning to Base Running caption
       if (_selectedRbiInning != null) {
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
