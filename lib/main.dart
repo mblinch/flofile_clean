@@ -5229,8 +5229,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _showPostGameTeammatesDialog() async {
-    // Simple fallback - just use the existing celebrate dialog
-    await _showCelebrateDialog();
+    // For post-game celebrations, determine the celebrating team based on context
+    // If we have players selected, use their team; otherwise use the current view team
+    bool celebratingTeamIsHome;
+    if (selectedPlayers.isNotEmpty) {
+      celebratingTeamIsHome = true;
+    } else if (selectedOpponentPlayers.isNotEmpty) {
+      celebratingTeamIsHome = false;
+    } else {
+      // No players selected, use the current team view
+      celebratingTeamIsHome = _showHomeFirst;
+    }
+
+    await _showPostGameCelebrateDialog(celebratingTeamIsHome);
 
     // After the dialog closes, set the Post Game action
     if (celebrateWith.isNotEmpty) {
@@ -5241,6 +5252,146 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       });
       _updateCaption();
     }
+  }
+
+  Future<void> _showPostGameCelebrateDialog(bool celebratingTeamIsHome) async {
+    // Determine which roster to show based on the celebrating team
+    final roster = (celebratingTeamIsHome
+            ? codeReplacements.keys.where((k) => k.startsWith('h'))
+            : codeReplacements.keys.where((k) => k.startsWith('v')))
+        .toList()
+      ..sort();
+
+    Set<String> temp = celebrateWith.toSet();
+    String search = '';
+
+    await showDialog(
+        context: context,
+        builder: (BuildContext ctx) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 80.0),
+              child: StatefulBuilder(
+                builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                  final filtered = roster.where((code) {
+                    final replacement = codeReplacements[code];
+                    if (replacement == null) return false;
+                    final player = replacement.short.toLowerCase();
+                    return player.contains(search.toLowerCase());
+                  }).toList();
+
+                  return AlertDialog(
+                    title: Text(
+                        'Select ${celebratingTeamIsHome ? selectedHomeTeam : selectedAwayTeam} Teammates'),
+                    content: SizedBox(
+                      width: 300,
+                      height: MediaQuery.of(ctx).size.height * 0.4,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 1. Search Field
+                          TextField(
+                            decoration: const InputDecoration(
+                              hintText: 'Search...',
+                              prefixIcon: Icon(Icons.search),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: kInputTextSize),
+                            cursorHeight: 12.0,
+                            onChanged: (value) =>
+                                setSheetState(() => search = value),
+                          ),
+                          const SizedBox(height: 8),
+                          // 2. Selected Chips Row
+                          if (temp.isNotEmpty)
+                            Wrap(
+                              spacing: 4.0,
+                              runSpacing: 4.0,
+                              children: temp.map((code) {
+                                final replacement = codeReplacements[code]!;
+                                return InputChip(
+                                  label: Text(replacement.short,
+                                      style: const TextStyle(
+                                          fontSize: kInputTextSize)),
+                                  onDeleted: () =>
+                                      setSheetState(() => temp.remove(code)),
+                                  elevation: 2,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                    side: BorderSide(
+                                        color: Colors.grey.shade400,
+                                        width: 1.0),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          if (temp.isNotEmpty) const SizedBox(height: 8),
+                          // 3. Player List
+                          Expanded(
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              itemCount: filtered.length,
+                              itemBuilder: (ctx, idx) {
+                                final code = filtered[idx];
+                                final replacement = codeReplacements[code]!;
+                                final isSelected = temp.contains(code);
+                                return ListTile(
+                                  title: Text(replacement.short),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check, size: 16)
+                                      : null,
+                                  onTap: () {
+                                    setSheetState(() {
+                                      if (isSelected) {
+                                        temp.remove(code);
+                                      } else {
+                                        temp.add(code);
+                                      }
+                                    });
+                                  },
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 0, vertical: 0),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                          onPressed: () {
+                            setSheetState(() => temp.clear());
+                            setState(() {
+                              celebrateWith.clear();
+                              celebrateAgainst.clear();
+                              _isSoloCelebration = false;
+                              _updateCaption();
+                              _updatePersonality();
+                            });
+                          },
+                          child: const Text('Clear')),
+                      TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () {
+                          celebrateWith = temp.toList();
+                          _updateCaption();
+                          _updatePersonality();
+                          Navigator.of(ctx).pop();
+                        },
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        });
   }
 
   Future<void> _showCelebrateDialog() async {
