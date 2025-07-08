@@ -38,7 +38,7 @@ const Map<String, String> teamStates = {
   'Seattle Mariners': 'Washington',
   'Texas Rangers': 'Texas',
   'Atlanta Braves': 'Georgia',
-  'Miami Marlins': 'Florida',
+  'Miami Marlins': 'MIA',
   'New York Mets': 'New York',
   'Philadelphia Phillies': 'Pennsylvania',
   'Washington Nationals': 'DC',
@@ -3685,6 +3685,30 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // API selection state
   bool _useMlbApi = true; // true for MLB Stats API, false for API-Sports
 
+  // Favorite teams functionality
+  Set<String> _favoriteTeams = {};
+
+  void _toggleFavoriteTeam(String teamName) {
+    setState(() {
+      if (_favoriteTeams.contains(teamName)) {
+        _favoriteTeams.remove(teamName);
+      } else {
+        _favoriteTeams.add(teamName);
+      }
+    });
+  }
+
+  void _autoSelectFavoriteTeams() {
+    if (_favoriteTeams.isNotEmpty && selectedHomeTeam == null) {
+      // Auto-select the first favorite team as home team
+      final firstFavorite = _favoriteTeams.first;
+      setState(() {
+        selectedHomeTeam = firstFavorite;
+      });
+      _loadTeam(firstFavorite, isHomeTeam: true);
+    }
+  }
+
   // Mapping from MLB team names to API-Sports team names
   String _mapMlbToApiSportsTeam(String mlbTeamName) {
     final mapping = {
@@ -3835,6 +3859,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     captionController.clear();
     _pastedRosterText = ''; // Initialize to empty string
     _initializeTeamData();
+
+    // Auto-select favorite teams if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoSelectFavoriteTeams();
+    });
 
     // Add scroll listener for thumbnail preloading
     _filmstripController.addListener(_onFilmstripScroll);
@@ -6464,36 +6493,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   @override
   Widget build(BuildContext context) {
     final teams = [
-      'Toronto Blue Jays',
-      'Chicago White Sox',
-      'Boston Red Sox',
-      'New York Yankees',
-      'Tampa Bay Rays',
-      'Baltimore Orioles',
-      'Cleveland Guardians',
-      'Detroit Tigers',
-      'Kansas City Royals',
-      'Minnesota Twins',
-      'Houston Astros',
-      'Los Angeles Angels',
-      'Oakland Athletics',
-      'Seattle Mariners',
-      'Texas Rangers',
-      'Atlanta Braves',
-      'Miami Marlins',
-      'New York Mets',
-      'Philadelphia Phillies',
-      'Washington Nationals',
-      'Chicago Cubs',
-      'Cincinnati Reds',
-      'Milwaukee Brewers',
-      'Pittsburgh Pirates',
-      'St. Louis Cardinals',
       'Arizona Diamondbacks',
+      'Atlanta Braves',
+      'Baltimore Orioles',
+      'Boston Red Sox',
+      'Chicago Cubs',
+      'Chicago White Sox',
+      'Cincinnati Reds',
+      'Cleveland Guardians',
       'Colorado Rockies',
+      'Detroit Tigers',
+      'Houston Astros',
+      'Kansas City Royals',
+      'Los Angeles Angels',
       'Los Angeles Dodgers',
+      'Miami Marlins',
+      'Milwaukee Brewers',
+      'Minnesota Twins',
+      'New York Mets',
+      'New York Yankees',
+      'Oakland Athletics',
+      'Philadelphia Phillies',
+      'Pittsburgh Pirates',
       'San Diego Paders',
       'San Francisco Giants',
+      'Seattle Mariners',
+      'St. Louis Cardinals',
+      'Tampa Bay Rays',
+      'Texas Rangers',
+      'Toronto Blue Jays',
+      'Washington Nationals',
     ];
 
     final innings = [
@@ -6936,6 +6965,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ),
                                             ],
                                           ),
+                                          // Favorite teams info
+                                          if (_favoriteTeams.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 4),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.star,
+                                                      size: 12,
+                                                      color: Colors.amber),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Favorites: ${_favoriteTeams.join(', ')}',
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.grey,
+                                                      fontStyle:
+                                                          FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                           const SizedBox(height: 8),
                                           // Getty Metadata Toggle
                                           Row(
@@ -8377,6 +8429,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required List<String> allItems,
     required ValueChanged<String?> onChanged,
   }) {
+    // Sort teams with favorites first, then alphabetically
+    final sortedTeams = List<String>.from(allItems);
+    sortedTeams.sort((a, b) {
+      final aIsFavorite = _favoriteTeams.contains(a);
+      final bIsFavorite = _favoriteTeams.contains(b);
+
+      if (aIsFavorite && !bIsFavorite) return -1;
+      if (!aIsFavorite && bIsFavorite) return 1;
+
+      return a.compareTo(b);
+    });
+
     return Expanded(
       child: Material(
         elevation: 2.0,
@@ -8405,12 +8469,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
             ),
           ),
-          items: allItems
+          items: sortedTeams
               .map((item) => DropdownMenuItem(
                   value: item,
-                  child: Text(item,
-                      style: const TextStyle(
-                          fontSize: kInputTextSize, color: Colors.black))))
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(item,
+                            style: const TextStyle(
+                                fontSize: kInputTextSize, color: Colors.black)),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          _toggleFavoriteTeam(item);
+                          // Prevent dropdown from closing
+                        },
+                        child: Icon(
+                          _favoriteTeams.contains(item)
+                              ? Icons.star
+                              : Icons.star_border,
+                          size: 16,
+                          color: _favoriteTeams.contains(item)
+                              ? Colors.amber
+                              : Colors.grey,
+                        ),
+                      ),
+                    ],
+                  )))
               .toList(),
           onChanged: onChanged,
           style: const TextStyle(fontSize: kInputTextSize, color: Colors.black),
