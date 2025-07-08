@@ -7087,7 +7087,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       if (_selectedFolderPath != null) ...[
                         Flexible(
                           child: Text(
-                            p.basename(_selectedFolderPath!),
+                            _selectedFolderPath!,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w400,
