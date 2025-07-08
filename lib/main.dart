@@ -56,7 +56,7 @@ const Map<String, String> teamStates = {
 
 const double kInputTextSize = 14.0;
 const int kThumbnailSize =
-    120; // Size for thumbnails (balanced for speed and visibility)
+    240; // Size for thumbnails (increased for better quality on modern displays)
 
 const kInputTitleStyle = TextStyle(
   fontSize: 24,
@@ -3664,10 +3664,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final offset = position.pixels;
 
     // Calculate which images are visible
-    const double maxImageWidth = 100.0;
-    const double imagePadding = 4.0;
+    const double maxImageWidth = 40.0; // Made a little smaller
+    const double imagePadding = 8.0; // Updated for more spacing
     const double separatorWidth = 1.0;
-    const double separatorMargin = 4.0;
+    const double separatorMargin = 10.0; // Updated for more spacing
     const double itemWidth = maxImageWidth +
         (imagePadding * 2) +
         separatorWidth +
@@ -4364,29 +4364,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
-  // Simple thumbnail system
+  // Simple thumbnail system - improved quality
   Widget _buildSimpleThumbnail(String imagePath) {
     // print('Thumbnail path: $imagePath');
-    return Image.file(
-      File(imagePath),
-      fit: BoxFit.cover, // Fill the box, crop as needed, no letterboxing
-      width: 120,
-      height: 80,
-      cacheWidth: 120,
-      cacheHeight: 80,
-      errorBuilder: (context, error, stackTrace) {
-        // print('Error loading $imagePath: $error');
-        return Container(
-          color: Colors.grey.shade200,
-          child: const Center(
-            child: Icon(Icons.image, color: Colors.grey, size: 20),
-          ),
-        );
-      },
+    return Container(
+      decoration: BoxDecoration(
+        color:
+            Colors.grey.shade300, // More visible grey background for thumbnails
+        borderRadius: BorderRadius.circular(4), // Rounded corners
+      ),
+      padding: const EdgeInsets.all(
+          8), // Maximum padding for very small images in thumbnail boxes
+      child: ClipRRect(
+        borderRadius:
+            BorderRadius.circular(3), // Slightly smaller for inner image
+        child: Image.file(
+          File(imagePath),
+          fit: BoxFit.cover, // Fill the box, crop as needed, no letterboxing
+          width: 120,
+          height: 80,
+          cacheWidth: kThumbnailSize, // Use higher quality cache
+          cacheHeight:
+              (kThumbnailSize * 0.67).round(), // Maintain 3:2 aspect ratio
+          filterQuality: FilterQuality.medium, // Better scaling quality
+          errorBuilder: (context, error, stackTrace) {
+            // print('Error loading $imagePath: $error');
+            return Container(
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: Icon(Icons.image, color: Colors.grey, size: 20),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
-  // Proportional thumbnail system - loads at 100px on longest side
+  // Proportional thumbnail system - loads at higher resolution for better quality
   Widget _buildProportionalThumbnail(String imagePath) {
     return FutureBuilder<Size>(
       future: _getImageDimensions(imagePath),
@@ -4395,34 +4410,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           final imageSize = snapshot.data!;
           final isLandscape = imageSize.width > imageSize.height;
 
-          // Calculate cache dimensions: 100px on longest side
+          // Calculate cache dimensions: Use kThumbnailSize (240px) on longest side for better quality
           int cacheWidth, cacheHeight;
           if (isLandscape) {
-            cacheWidth = 100;
-            cacheHeight = (100 * imageSize.height / imageSize.width).round();
+            cacheWidth = kThumbnailSize;
+            cacheHeight =
+                (kThumbnailSize * imageSize.height / imageSize.width).round();
           } else {
-            cacheHeight = 100;
-            cacheWidth = (100 * imageSize.width / imageSize.height).round();
+            cacheHeight = kThumbnailSize;
+            cacheWidth =
+                (kThumbnailSize * imageSize.width / imageSize.height).round();
           }
 
-          return Image.file(
-            File(imagePath),
-            fit: BoxFit.contain, // Maintain proportions within container
-            cacheWidth: cacheWidth,
-            cacheHeight: cacheHeight,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: Colors.grey.shade200,
-                child: const Center(
-                  child: Icon(Icons.broken_image, color: Colors.red, size: 32),
-                ),
-              );
-            },
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors
+                  .grey.shade300, // More visible grey background for thumbnails
+              borderRadius: BorderRadius.circular(4), // Rounded corners
+            ),
+            padding: const EdgeInsets.all(
+                8), // Maximum padding for very small images in thumbnail boxes
+            child: ClipRRect(
+              borderRadius:
+                  BorderRadius.circular(3), // Slightly smaller for inner image
+              child: Image.file(
+                File(imagePath),
+                fit: BoxFit.contain, // Maintain proportions within container
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
+                filterQuality: FilterQuality.medium, // Better scaling quality
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.grey.shade200,
+                    child: const Center(
+                      child:
+                          Icon(Icons.broken_image, color: Colors.red, size: 32),
+                    ),
+                  );
+                },
+              ),
+            ),
           );
         } else {
           // Loading state - show placeholder
           return Container(
-            color: Colors.grey.shade200,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300, // Consistent visible grey background
+              borderRadius: BorderRadius.circular(4), // Rounded corners
+            ),
             child: const Center(
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
@@ -7226,14 +7261,89 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     ),
                                     const SizedBox(width: 16),
 
-                                    // RIGHT: Personality and Caption fields
+                                    // RIGHT: Thumbnails
                                     Expanded(
                                       flex: 1,
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Spacer(),
+                                          // Thumbnails grid
+                                          Expanded(
+                                            child: imagePaths.isEmpty
+                                                ? const Center(
+                                                    child: Text(
+                                                      'No images loaded',
+                                                      style: TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : GridView.builder(
+                                                    gridDelegate:
+                                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                                      crossAxisCount:
+                                                          8, // Made a little smaller (more columns)
+                                                      childAspectRatio: 1.0,
+                                                      crossAxisSpacing:
+                                                          6, // More spacing between thumbnails
+                                                      mainAxisSpacing:
+                                                          6, // More spacing between thumbnails
+                                                    ),
+                                                    itemCount:
+                                                        imagePaths.length,
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final imagePath =
+                                                          imagePaths[index];
+                                                      return GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            currentIndex =
+                                                                index;
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          width: 150,
+                                                          height: 150,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors
+                                                                .white, // Clean white container
+                                                            border: Border.all(
+                                                              color: index ==
+                                                                      currentIndex
+                                                                  ? Theme.of(
+                                                                          context)
+                                                                      .colorScheme
+                                                                      .primary
+                                                                  : Colors.grey
+                                                                      .shade300,
+                                                              width: index ==
+                                                                      currentIndex
+                                                                  ? 2.0
+                                                                  : 1.0,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4), // Rounded corners
+                                                          ),
+                                                          child: ClipRRect(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4), // Match container corners
+                                                            child:
+                                                                _buildProportionalThumbnail(
+                                                                    imagePath),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -8445,8 +8555,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ],
                               ),
 
-                              // Filmstrip remains below
-                              _buildFilmstrip(),
+                              // Filmstrip removed - thumbnails now on the right side
                             ],
                           ),
                         ),
@@ -8464,10 +8573,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   void _scrollToSelectedImage() {
     if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
-      const double maxImageWidth = 100.0;
-      const double imagePadding = 4.0;
+      const double maxImageWidth = 40.0; // Made a little smaller
+      const double imagePadding = 8.0; // Updated for more spacing
       const double separatorWidth = 1.0;
-      const double separatorMargin = 4.0;
+      const double separatorMargin = 10.0; // Updated for more spacing
 
       // Calculate the width each item takes up (image + margins + separator)
       const double itemWidth = maxImageWidth +
@@ -8488,7 +8597,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildFilmstrip() {
-    const double filmstripHeight = 100.0;
+    const double filmstripHeight = 40.0; // Made a little smaller
 
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
@@ -8521,7 +8630,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       width: 1,
                       height: double.infinity,
                       color: Colors.grey.shade400,
-                      margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 10.0), // More spacing between sections
                     ),
                     itemBuilder: (context, index) {
                       final imagePath = imagePaths[index];
@@ -8533,12 +8643,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         },
                         child: Container(
                           constraints: const BoxConstraints(
-                            maxWidth: 100,
-                            maxHeight: 100,
+                            maxWidth: 40, // Made a little smaller
+                            maxHeight: 40, // Made a little smaller
                           ),
-                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal:
+                                  8.0), // More spacing between thumbnails
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: Colors.white, // Clean white container
+                            borderRadius:
+                                BorderRadius.circular(4), // Rounded corners
                             border: Border.all(
                               color: index == currentIndex
                                   ? Theme.of(context).colorScheme.primary
@@ -8546,7 +8660,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               width: index == currentIndex ? 3.0 : 0.0,
                             ),
                           ),
-                          child: _buildProportionalThumbnail(imagePath),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                                4), // Match container corners
+                            child: _buildProportionalThumbnail(imagePath),
+                          ),
                         ),
                       );
                     },
@@ -10599,12 +10717,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       },
     );
 
-    // Preload images
+    // Preload images with improved quality
     for (final imagePath in imagePaths) {
       await precacheImage(
         FileImage(File(imagePath)),
         context,
-        size: const Size(120, 80),
+        size: Size(kThumbnailSize.toDouble(), kThumbnailSize.toDouble()),
       );
       loaded++;
       progress.value = loaded;
