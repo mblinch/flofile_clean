@@ -1031,6 +1031,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _customPriorAction = ''; // Custom prior to game action input
   final TextEditingController _customPriorActionController =
       TextEditingController();
+
+  // Post Game state variables
+  String? _selectedPostGameAction;
+  String _customPostGameAction = ''; // Custom post game action input
+  final TextEditingController _customPostGameActionController =
+      TextEditingController();
   bool _walkOff = false;
   String _pastedRosterText = '';
 
@@ -2068,6 +2074,160 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             _customPriorAction = value;
                             if (value.isNotEmpty) {
                               _selectedPriorAction = null;
+                            }
+                            _updateCaption();
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        } else if (verb == 'Post Game') {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Show the main chip only if not selected
+                  if (_selectedVerb != 'Post Game')
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text('Post Game',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            labelPadding:
+                                const EdgeInsets.symmetric(horizontal: 6),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            selected: _selectedVerb == 'Post Game',
+                            onSelected: (isSelected) {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedVerb = 'Post Game';
+                                  _selectedPostGameAction = null;
+                                  _customPostGameAction = '';
+                                  _customPostGameActionController.clear();
+                                } else {
+                                  _selectedVerb = null;
+                                  _selectedPostGameAction = null;
+                                  _customPostGameAction = '';
+                                  _customPostGameActionController.clear();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Post Game options in a new row
+                  if (_selectedVerb == 'Post Game') ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: [
+                        'Celebrates alone',
+                        'Celebrates with teammates',
+                      ]
+                          .map((label) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: _selectedPostGameAction == label,
+                                  onSelected: (isSelected) async {
+                                    if (isSelected &&
+                                        label == 'Celebrates with teammates') {
+                                      // Show teammate selection dialog
+                                      await _showPostGameTeammatesDialog();
+                                    } else {
+                                      setState(() {
+                                        _selectedPostGameAction =
+                                            isSelected ? label : null;
+                                        _customPostGameAction = '';
+                                        _customPostGameActionController.clear();
+                                        _updateCaption();
+                                      });
+                                    }
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                    // Custom post game action input
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: TextField(
+                          controller: _customPostGameActionController,
+                          maxLines: 1,
+                          textAlignVertical: TextAlignVertical.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black,
+                            height: 1.0,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Custom post game action...',
+                            hintStyle: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8.0,
+                              vertical: 8.0,
+                            ),
+                            isDense: true,
+                          ),
+                          onChanged: (value) {
+                            print(
+                                'DEBUG: Custom post game action changed to: $value');
+                            _customPostGameAction = value;
+                            if (value.isNotEmpty) {
+                              _selectedPostGameAction = null;
                             }
                             _updateCaption();
                           },
@@ -3332,6 +3492,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     'At Bat',
     'Portrait',
     'Prior to Game',
+    'Post Game',
   ];
 
   final List<String> celebrationVerbs = const [
@@ -4945,6 +5106,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
+  Future<void> _showPostGameTeammatesDialog() async {
+    // Simple fallback - just use the existing celebrate dialog
+    await _showCelebrateDialog();
+
+    // After the dialog closes, set the Post Game action
+    if (celebrateWith.isNotEmpty) {
+      setState(() {
+        _selectedPostGameAction = 'Celebrates with teammates';
+        _customPostGameAction = '';
+        _customPostGameActionController.clear();
+      });
+      _updateCaption();
+    }
+  }
+
   Future<void> _showCelebrateDialog() async {
     // Determine which roster to show based on `isHome` for the "celebrator"
     final roster = (isHome
@@ -5640,6 +5816,127 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
       print('DEBUG: Generated caption: $caption');
+      captionController.text = caption;
+      return;
+    }
+
+    // Handle Post Game caption
+    if (_selectedVerb == 'Post Game' &&
+        (_selectedPostGameAction != null || _customPostGameAction.isNotEmpty)) {
+      final monthUpper = monLC.toUpperCase();
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+
+      // Debug prints to help diagnose the issue
+      print('DEBUG Post Game:');
+      print('  selectedPlayers: $selectedPlayers');
+      print('  selectedOpponentPlayers: $selectedOpponentPlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+
+      // For Post Game, if we have opponent players but no active players,
+      // treat the first opponent player as the active player
+      Set<String> activePlayers;
+      Set<String> opponentPlayers;
+
+      if (_showHomeFirst) {
+        if (selectedPlayers.isEmpty && selectedOpponentPlayers.isNotEmpty) {
+          // Move first opponent player to active players
+          final firstOpponent = selectedOpponentPlayers.first;
+          activePlayers = {firstOpponent};
+          opponentPlayers = selectedOpponentPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedPlayers;
+          opponentPlayers = selectedOpponentPlayers;
+        }
+      } else {
+        if (selectedOpponentPlayers.isEmpty && selectedPlayers.isNotEmpty) {
+          // Move first home player to active players
+          final firstPlayer = selectedPlayers.first;
+          activePlayers = {firstPlayer};
+          opponentPlayers = selectedPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedOpponentPlayers;
+          opponentPlayers = selectedPlayers;
+        }
+      }
+
+      print('DEBUG: Active players after adjustment: $activePlayers');
+      print('DEBUG: Opponent players after adjustment: $opponentPlayers');
+
+      if (activePlayers.isEmpty) {
+        print('DEBUG: No active players selected!');
+        return; // Don't generate caption if no active players
+      }
+
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      print('DEBUG: Combined player name: $playerName');
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      // Determine the opponent team based on which team the active player is NOT on
+      // Check the prefix of the first active player to determine their team
+      String opponentTeam;
+      if (activePlayers.isNotEmpty) {
+        final firstActivePlayer = activePlayers.first;
+        if (firstActivePlayer.startsWith('h')) {
+          // Active player is from home team, so opponent is away team
+          opponentTeam = selectedAwayTeam!;
+        } else {
+          // Active player is from away team, so opponent is home team
+          opponentTeam = selectedHomeTeam!;
+        }
+      } else {
+        // Fallback to original logic
+        opponentTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      }
+
+      print(
+          'DEBUG: Active player team prefix (post game): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+      print('DEBUG: Final opponent team (post game): $opponentTeam');
+
+      final stadium = stadiumController.text;
+      final photoBy = creatorController.text;
+
+      // Use custom action if available, otherwise use selected action
+      String action;
+      if (_customPostGameAction.isNotEmpty) {
+        action = _customPostGameAction.toLowerCase();
+      } else if (_selectedPostGameAction == 'Celebrates alone') {
+        action = 'celebrates';
+      } else {
+        action = _selectedPostGameAction!.toLowerCase();
+      }
+
+      // Handle opponent players if selected
+      String opponentPart = '';
+      if (opponentPlayers.isNotEmpty) {
+        final opponentNames =
+            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        opponentPart = '$opponentNames and the $opponentTeam';
+      } else {
+        opponentPart = 'the $opponentTeam';
+      }
+
+      // Build the caption based on whether teammates are selected
+      String caption;
+      if (_selectedPostGameAction == 'Celebrates with teammates' &&
+          celebrateWith.isNotEmpty) {
+        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+        caption = '$dateline '
+            '$playerName celebrates with $teammatesStr after their team defeated $opponentPart '
+            'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+      } else {
+        caption = '$dateline '
+            '$playerName $action after their team defeated $opponentPart '
+            'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+      }
+
+      print('DEBUG: Generated post game caption: $caption');
       captionController.text = caption;
       return;
     }
