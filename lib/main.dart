@@ -7079,7 +7079,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       const Text(
                         'Manage Favorites',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -7095,7 +7095,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       const Text(
                         'Images Folder: ',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -7104,9 +7104,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           child: Text(
                             _selectedFolderPath!,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 12,
                               fontWeight: FontWeight.w400,
-                              color: Colors.blue,
+                              color: Colors.black,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
