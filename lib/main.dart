@@ -7246,15 +7246,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Caption and Personality fields - together taking 45% of screen width
+                                  // Caption and Personality fields - taking 49% of screen width
                                   SizedBox(
                                     width: MediaQuery.of(context).size.width *
-                                        0.45,
+                                        0.49,
                                     child: Row(
                                       children: [
                                         // Caption Field - taking more space within the 50%
                                         Expanded(
-                                          flex: 7,
+                                          flex: 12,
                                           child: ValueListenableBuilder<
                                               TextEditingValue>(
                                             valueListenable: captionController,
@@ -7338,7 +7338,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ),
                                         // Personality Field (right side) - taking less space
                                         Expanded(
-                                          flex: 3,
+                                          flex: 5,
                                           child: Padding(
                                             padding: const EdgeInsets.only(
                                                 left: 8.0),
@@ -7350,7 +7350,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: TextField(
                                                 controller:
                                                     personalityController,
-                                                maxLines: 1,
+                                                maxLines: 4,
+                                                minLines: 4,
                                                 style: const TextStyle(
                                                     fontSize: 14),
                                                 decoration: InputDecoration(
@@ -8233,6 +8234,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
+                                              // Metadata Title
+                                              const Text(
+                                                'Metadata',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
                                               // Getty Metadata Fields (at the top)
                                               Row(
                                                 children: [
