@@ -8218,7 +8218,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   // RIGHT SIDE: Metadata only - taking 46% of screen width
                                   SizedBox(
                                     width: MediaQuery.of(context).size.width *
-                                        0.46,
+                                        0.49,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -8228,7 +8228,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           width: MediaQuery.of(context)
                                                   .size
                                                   .width *
-                                              0.46,
+                                              0.49,
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
