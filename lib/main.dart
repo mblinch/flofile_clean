@@ -1922,38 +1922,42 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           widgets.add(
             Padding(
               padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    FlashingFilterChip(
-                      label: SizedBox(
-                        width: _fixedChipWidth,
-                        child: const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.chevron_right,
-                                  size: 14, color: Colors.grey),
-                              SizedBox(width: 4),
-                              Text('Prior to Game',
-                                  style: TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis),
-                            ],
-                          ),
-                        ),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      selected: _selectedVerb == 'Prior to Game',
-                      onSelected: (_showHomeFirst
-                              ? selectedPlayers.isNotEmpty
-                              : selectedOpponentPlayers.isNotEmpty)
-                          ? (isSelected) {
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Show the main chip only if not selected
+                  if (_selectedVerb != 'Prior to Game')
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.chevron_right,
+                                        size: 14, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text('Prior to Game',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            labelPadding:
+                                const EdgeInsets.symmetric(horizontal: 6),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            selected: _selectedVerb == 'Prior to Game',
+                            onSelected: (isSelected) {
                               setState(() {
                                 if (isSelected) {
                                   _selectedVerb = 'Prior to Game';
@@ -1967,59 +1971,58 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   _selectedRbiInning = null;
                                 } else {
                                   _selectedVerb = null;
+                                  _selectedPriorAction = null;
                                 }
-                                _updateCaption();
                               });
-                            }
-                          : null,
-                    ),
-                    if (_selectedVerb == 'Prior to Game') ...[
-                      const SizedBox(width: 4),
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 4.0,
-                        children: [
-                          'Looks on',
-                          'Warm ups',
-                          'Walk to dugout',
-                          'Takes the field',
-                        ].map((label) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 2.0),
-                            child: FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(label,
-                                        style: const TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis)),
-                              ),
-                              selected: _selectedPriorAction == label,
-                              onSelected: (_showHomeFirst
-                                      ? selectedPlayers.isNotEmpty
-                                      : selectedOpponentPlayers.isNotEmpty)
-                                  ? (isSelected) {
-                                      setState(() {
-                                        _selectedPriorAction =
-                                            isSelected ? label : null;
-                                        _updateCaption();
-                                      });
-                                    }
-                                  : null,
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              labelPadding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          );
-                        }).toList(),
+                            },
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  // Prior to Game options in a new row
+                  if (_selectedVerb == 'Prior to Game') ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      children: [
+                        'Looks on',
+                        'Warms up',
+                        'Signs autographs',
+                        'Takes the field',
+                        'Stretches',
+                      ]
+                          .map((label) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: _selectedPriorAction == label,
+                                  onSelected: (isSelected) {
+                                    setState(() {
+                                      _selectedPriorAction =
+                                          isSelected ? label : null;
+                                      _updateCaption();
+                                    });
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
+                                ),
+                              ))
+                          .toList(),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           );
