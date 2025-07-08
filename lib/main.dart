@@ -1084,6 +1084,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required int? selectedInning,
     required ValueChanged<int?> onInningSelected,
     bool showWalkOffOption = false,
+    Widget? trailing,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1247,6 +1248,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ),
             ),
+          ),
+        // Trailing widget beside the inning box
+        if (trailing != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 8.0),
+            child: trailing,
           ),
       ],
     );
@@ -2883,6 +2890,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               });
                             },
                           ),
+
                           const SizedBox(width: 16.0),
                           // Vertical divider line between inning and at bat action selection
                           Container(
@@ -5874,6 +5882,59 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           _updateCaption();
         });
       },
+      trailing: Padding(
+        padding: const EdgeInsets.only(top: 34.0),
+        child: Column(
+          children: [
+            // First row: FTP, Previous, Next
+            Row(
+              children: [
+                _buildCompactButton('FTP', _onFtpPressed),
+                const SizedBox(width: 4),
+                _buildCompactButton(
+                  'Previous',
+                  imagePaths.isNotEmpty && currentIndex > 0
+                      ? previousImage
+                      : null,
+                ),
+                const SizedBox(width: 4),
+                _buildCompactButton(
+                  'Next',
+                  imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1
+                      ? nextImage
+                      : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Second row: Copy, Paste
+            Row(
+              children: [
+                _buildCompactButton('Copy', _onCopyPressed),
+                const SizedBox(width: 4),
+                _buildCompactButton('Paste', _onPastePressed),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Third row: Reset Caption, Sort
+            Row(
+              children: [
+                _buildCompactButton('Reset Caption', _resetCaption),
+                const SizedBox(width: 4),
+                _buildCompactButton(
+                  _isSortedByDate
+                      ? 'Sorted by Date'
+                      : _isSortedByFilename
+                          ? 'Sorted by Name'
+                          : 'Sort by Time/Date',
+                  _isSortedByDate ? _sortImagesByFilename : _sortImagesByDate,
+                  isBlue: _isSortedByDate || _isSortedByFilename,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -7655,77 +7716,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ),
                                           ),
                                           const SizedBox(height: 8),
-                                          // Row with Reset button on left and other buttons on right
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8.0),
-                                            child: Column(
-                                              children: [
-                                                // First row: Reset and Sort buttons
-                                                Row(
-                                                  children: [
-                                                    // Reset button on left
-                                                    _buildCompactButton(
-                                                      'Reset Caption',
-                                                      _resetCaption,
-                                                    ),
-                                                    const Spacer(),
-                                                    // Sort button in middle
-                                                    _buildCompactButton(
-                                                      _isSortedByDate
-                                                          ? 'Sorted by Date'
-                                                          : _isSortedByFilename
-                                                              ? 'Sorted by Name'
-                                                              : 'Sort by Time/Date',
-                                                      _isSortedByDate
-                                                          ? _sortImagesByFilename
-                                                          : _sortImagesByDate,
-                                                      isBlue: _isSortedByDate ||
-                                                          _isSortedByFilename,
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                // Second row: Action buttons
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceEvenly,
-                                                  children: [
-                                                    _buildCompactButton(
-                                                      'FTP',
-                                                      _onFtpPressed,
-                                                    ),
-                                                    _buildCompactButton(
-                                                      'Copy',
-                                                      _onCopyPressed,
-                                                    ),
-                                                    _buildCompactButton(
-                                                      'Paste',
-                                                      _onPastePressed,
-                                                    ),
-                                                    _buildCompactButton(
-                                                      'Previous',
-                                                      imagePaths.isNotEmpty &&
-                                                              currentIndex > 0
-                                                          ? previousImage
-                                                          : null,
-                                                    ),
-                                                    _buildCompactButton(
-                                                      'Next',
-                                                      imagePaths.isNotEmpty &&
-                                                              currentIndex <
-                                                                  imagePaths
-                                                                          .length -
-                                                                      1
-                                                          ? nextImage
-                                                          : null,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
                                         ],
                                       ),
                                     ),
@@ -8499,6 +8489,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               showWalkOffOption:
                                                                   true),
                                                     ),
+                                                    const SizedBox(width: 16),
                                                   ],
                                                 ),
                                               )
