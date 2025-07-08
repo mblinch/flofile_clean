@@ -6945,6 +6945,114 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ],
               ),
               actions: [
+                // Away Team Dropdown
+                SizedBox(
+                  width: 140,
+                  child: _buildTeamDropdown(
+                    label: 'Away Team',
+                    value: selectedAwayTeam,
+                    allItems: teams,
+                    excludeTeam: selectedHomeTeam,
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => selectedAwayTeam = v);
+                      if (selectedAwayTeam != null) {
+                        _loadTeam(v, isHomeTeam: false);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Home Team Dropdown
+                SizedBox(
+                  width: 140,
+                  child: _buildTeamDropdown(
+                    label: 'Home Team',
+                    value: selectedHomeTeam,
+                    allItems: teams,
+                    excludeTeam: selectedAwayTeam,
+                    onChanged: (v) async {
+                      if (v == null) return;
+                      setState(() => selectedHomeTeam = v);
+                      if (selectedHomeTeam != null) {
+                        _loadTeam(v, isHomeTeam: true);
+                      }
+                      // Auto-fill metadata dialog
+                      final city = cityController.text;
+                      final province = provinceController.text;
+                      final stadium = stadiumController.text;
+                      String country = 'United States';
+                      String code = 'USA';
+                      if (v == 'Toronto Blue Jays') {
+                        country = 'Canada';
+                        code = 'CAN';
+                      }
+                      final shouldFill = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          title: const Text(
+                            'Auto-fill Metadata?',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Would you like to auto-fill the following location fields for this team?',
+                                style: TextStyle(fontSize: 15),
+                              ),
+                              const SizedBox(height: 12),
+                              Text('• City: $city',
+                                  style: const TextStyle(fontSize: 13)),
+                              Text('• Province/State: $province',
+                                  style: const TextStyle(fontSize: 13)),
+                              Text('• Country: $country',
+                                  style: const TextStyle(fontSize: 13)),
+                              Text('• Country Code: $code',
+                                  style: const TextStyle(fontSize: 13)),
+                              Text('• Stadium: $stadium',
+                                  style: const TextStyle(fontSize: 13)),
+                            ],
+                          ),
+                          actionsPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          actions: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                _buildStyledButton(
+                                    'No', () => Navigator.pop(context, false)),
+                                const SizedBox(width: 12),
+                                _buildStyledButton(
+                                    'Yes', () => Navigator.pop(context, true),
+                                    isBlue: true),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                      if (shouldFill == true) {
+                        setState(() {
+                          countryController.text = country;
+                          countryCodeController.text = code;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Favorites Button
+                IconButton(
+                  icon: const Icon(Icons.star),
+                  tooltip: 'Manage Favorite Teams',
+                  onPressed: _showManageFavoritesDialog,
+                ),
+                const SizedBox(width: 8),
                 // Paste Roster Button
                 IconButton(
                   icon: const Icon(Icons.file_upload),
@@ -7085,237 +7193,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          // Team Picker
-                                          Row(
-                                            children: [
-                                              _buildTeamDropdown(
-                                                label: 'Away Team',
-                                                value: selectedAwayTeam,
-                                                allItems: teams,
-                                                excludeTeam:
-                                                    selectedHomeTeam, // Exclude home team from away dropdown
-                                                onChanged: (v) {
-                                                  if (v == null) return;
-                                                  setState(() =>
-                                                      selectedAwayTeam = v);
-                                                  if (selectedAwayTeam !=
-                                                      null) {
-                                                    _loadTeam(v,
-                                                        isHomeTeam: false);
-                                                  }
-                                                },
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildTeamDropdown(
-                                                label: 'Home Team',
-                                                value: selectedHomeTeam,
-                                                allItems: teams,
-                                                excludeTeam:
-                                                    selectedAwayTeam, // Exclude away team from home dropdown
-                                                onChanged: (v) async {
-                                                  if (v == null) return;
-                                                  setState(() =>
-                                                      selectedHomeTeam = v);
-                                                  if (selectedHomeTeam !=
-                                                      null) {
-                                                    _loadTeam(v,
-                                                        isHomeTeam: true);
-                                                  }
-                                                  // Get the values to show in the dialog
-                                                  final city =
-                                                      cityController.text;
-                                                  final province =
-                                                      provinceController.text;
-                                                  final stadium =
-                                                      stadiumController.text;
-                                                  String country =
-                                                      'United States';
-                                                  String code = 'USA';
-                                                  if (v ==
-                                                      'Toronto Blue Jays') {
-                                                    country = 'Canada';
-                                                    code = 'CAN';
-                                                  }
-                                                  final shouldFill =
-                                                      await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (context) =>
-                                                        AlertDialog(
-                                                      shape:
-                                                          RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(12),
-                                                      ),
-                                                      title: const Text(
-                                                        'Auto-fill Metadata?',
-                                                        style: TextStyle(
-                                                            fontSize: 18,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold),
-                                                      ),
-                                                      content: Column(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          const Text(
-                                                            'Would you like to auto-fill the following location fields for this team?',
-                                                            style: TextStyle(
-                                                                fontSize: 15),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 12),
-                                                          Text('• City: $city',
-                                                              style:
-                                                                  const TextStyle(
-                                                                      fontSize:
-                                                                          13)),
-                                                          Text(
-                                                              '• Province/State: $province',
-                                                              style:
-                                                                  const TextStyle(
-                                                                      fontSize:
-                                                                          13)),
-                                                          Text(
-                                                              '• Country: $country',
-                                                              style:
-                                                                  const TextStyle(
-                                                                      fontSize:
-                                                                          13)),
-                                                          Text(
-                                                              '• Country Code: $code',
-                                                              style:
-                                                                  const TextStyle(
-                                                                      fontSize:
-                                                                          13)),
-                                                          Text(
-                                                              '• Stadium: $stadium',
-                                                              style:
-                                                                  const TextStyle(
-                                                                      fontSize:
-                                                                          13)),
-                                                        ],
-                                                      ),
-                                                      actionsPadding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                              horizontal: 16,
-                                                              vertical: 12),
-                                                      actions: [
-                                                        Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .end,
-                                                          children: [
-                                                            _buildStyledButton(
-                                                              'No',
-                                                              () =>
-                                                                  Navigator.pop(
-                                                                      context,
-                                                                      false),
-                                                            ),
-                                                            const SizedBox(
-                                                                width: 12),
-                                                            _buildStyledButton(
-                                                              'Yes',
-                                                              () =>
-                                                                  Navigator.pop(
-                                                                      context,
-                                                                      true),
-                                                              isBlue: true,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                  if (shouldFill == true) {
-                                                    setState(() {
-                                                      countryController.text =
-                                                          country;
-                                                      countryCodeController
-                                                          .text = code;
-                                                    });
-                                                  }
-                                                },
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Text('API Source: ',
-                                                      style: TextStyle(
-                                                          fontSize: 12)),
-                                                  const SizedBox(width: 8),
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 4),
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                    ),
-                                                    child: const Text(
-                                                      'MLB Stats API',
-                                                      style: TextStyle(
-                                                          fontSize: 12),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(width: 8),
-                                              TextButton.icon(
-                                                onPressed: () =>
-                                                    _showManageFavoritesDialog(),
-                                                icon: const Icon(Icons.star,
-                                                    size: 12),
-                                                label: const Text('Favorites',
-                                                    style: TextStyle(
-                                                        fontSize: 10)),
-                                                style: TextButton.styleFrom(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2),
-                                                  minimumSize: Size.zero,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          // Favorite teams info
-                                          if (_favoriteTeams.isNotEmpty)
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.only(top: 4),
-                                              child: Row(
-                                                children: [
-                                                  const Icon(Icons.star,
-                                                      size: 12,
-                                                      color: Colors.amber),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    'Favorites: ${_favoriteTeams.join(', ')}',
-                                                    style: const TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors.grey,
-                                                      fontStyle:
-                                                          FontStyle.italic,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          const SizedBox(height: 8),
-
                                           const Spacer(),
                                         ],
                                       ),
@@ -7324,7 +7201,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                               ),
 
-                              // Caption and Personality boxes under the image preview
+                              // Caption and Personality boxes under the team pickers
                               const SizedBox(height: 16),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -8298,10 +8175,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                                   const SizedBox(width: 16),
 
-                                  // RIGHT SIDE: Metadata only - taking 50% of screen width
+                                  // RIGHT SIDE: Metadata only - taking 46% of screen width
                                   SizedBox(
-                                    width:
-                                        MediaQuery.of(context).size.width * 0.5,
+                                    width: MediaQuery.of(context).size.width *
+                                        0.46,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
@@ -8311,7 +8188,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           width: MediaQuery.of(context)
                                                   .size
                                                   .width *
-                                              0.5,
+                                              0.46,
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
