@@ -7077,6 +7077,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                          icon: const Icon(Icons.folder_open),
+                          onPressed: pickFolder),
                       const Text(
                         'Images Folder: ',
                         style: TextStyle(
@@ -7096,11 +7099,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 4),
                       ],
-                      IconButton(
-                          icon: const Icon(Icons.folder_open),
-                          onPressed: pickFolder),
                     ],
                   ),
                 ],
