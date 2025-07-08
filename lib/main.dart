@@ -7065,13 +7065,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   tooltip: 'Manage Favorite Teams',
                   onPressed: _showManageFavoritesDialog,
                 ),
-                const SizedBox(width: 8),
-                // Paste Roster Button
-                IconButton(
-                  icon: const Icon(Icons.file_upload),
-                  tooltip: 'Paste Roster (copy and paste the roster)',
-                  onPressed: _showRosterParser,
-                ),
+
                 const SizedBox(width: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
