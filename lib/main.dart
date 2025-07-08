@@ -7073,7 +7073,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     tooltip: 'Manage Favorite Teams',
                     onPressed: _showManageFavoritesDialog,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 16),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
