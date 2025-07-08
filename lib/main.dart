@@ -6961,6 +6961,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     child: Icon(
                       _isConnectedToApi ? Icons.cloud_done : Icons.cloud_off,
                       color: _isConnectedToApi ? Colors.green : Colors.red,
+                      size: 18,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -7072,7 +7073,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.star),
+                        icon: const Icon(Icons.star, size: 18),
                         tooltip: 'Manage Favorite Teams',
                         onPressed: _showManageFavoritesDialog,
                       ),
@@ -7090,7 +7091,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                          icon: const Icon(Icons.folder_open),
+                          icon: const Icon(Icons.folder_open, size: 18),
                           onPressed: pickFolder),
                       const Text(
                         'Images Folder: ',
