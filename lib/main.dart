@@ -6877,6 +6877,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           Row(
                                             children: [
                                               _buildTeamDropdown(
+                                                label: 'Away Team',
+                                                value: selectedAwayTeam,
+                                                allItems: teams,
+                                                excludeTeam:
+                                                    selectedHomeTeam, // Exclude home team from away dropdown
+                                                onChanged: (v) {
+                                                  if (v == null) return;
+                                                  setState(() =>
+                                                      selectedAwayTeam = v);
+                                                  if (selectedAwayTeam !=
+                                                      null) {
+                                                    _loadTeam(v,
+                                                        isHomeTeam: false);
+                                                  }
+                                                },
+                                              ),
+                                              const SizedBox(width: 8),
+                                              _buildTeamDropdown(
                                                 label: 'Home Team',
                                                 value: selectedHomeTeam,
                                                 allItems: teams,
@@ -7010,24 +7028,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       countryCodeController
                                                           .text = code;
                                                     });
-                                                  }
-                                                },
-                                              ),
-                                              const SizedBox(width: 8),
-                                              _buildTeamDropdown(
-                                                label: 'Away Team',
-                                                value: selectedAwayTeam,
-                                                allItems: teams,
-                                                excludeTeam:
-                                                    selectedHomeTeam, // Exclude home team from away dropdown
-                                                onChanged: (v) {
-                                                  if (v == null) return;
-                                                  setState(() =>
-                                                      selectedAwayTeam = v);
-                                                  if (selectedAwayTeam !=
-                                                      null) {
-                                                    _loadTeam(v,
-                                                        isHomeTeam: false);
                                                   }
                                                 },
                                               ),
@@ -8571,15 +8571,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: DropdownButtonFormField<String>(
           isExpanded: true,
           value: value,
+          iconSize: 16, // Smaller dropdown arrow
           decoration: InputDecoration(
             labelText: label,
             floatingLabelBehavior: FloatingLabelBehavior.always,
             isDense: true,
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             filled: true,
             fillColor: Colors.white,
-            labelStyle: const TextStyle(fontSize: kInputTextSize),
+            labelStyle: const TextStyle(fontSize: 11),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
               borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
@@ -8592,20 +8593,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           items: sortedTeams
               .map((item) => DropdownMenuItem(
                   value: item,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(item,
-                            style: const TextStyle(
-                                fontSize: kInputTextSize, color: Colors.black)),
-                      ),
-                      if (_favoriteTeams.contains(item))
-                        const Icon(Icons.star, size: 16, color: Colors.amber),
-                    ],
+                  child: Container(
+                    height: 32,
+                    padding: EdgeInsets.zero,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(item,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black)),
+                        ),
+                        if (_favoriteTeams.contains(item))
+                          const Icon(Icons.star, size: 14, color: Colors.amber),
+                      ],
+                    ),
                   )))
               .toList(),
           onChanged: onChanged,
-          style: const TextStyle(fontSize: kInputTextSize, color: Colors.black),
+          style: const TextStyle(fontSize: 11, color: Colors.black),
         ),
       ),
     );
