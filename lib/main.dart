@@ -6945,6 +6945,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ],
               ),
               actions: [
+                // API Connection Indicator
+                Tooltip(
+                  message: _isConnectedToApi
+                      ? 'Connected to MLB Stats API'
+                      : 'MLB Stats API Disconnected',
+                  child: Icon(
+                    _isConnectedToApi ? Icons.cloud_done : Icons.cloud_off,
+                    color: _isConnectedToApi ? Colors.green : Colors.red,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 // Away Team Dropdown
                 SizedBox(
                   width: 140,
@@ -7060,17 +7071,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   icon: const Icon(Icons.file_upload),
                   tooltip: 'Paste Roster (copy and paste the roster)',
                   onPressed: _showRosterParser,
-                ),
-                const SizedBox(width: 8),
-                // API Connection Indicator
-                Tooltip(
-                  message: _isConnectedToApi
-                      ? 'Connected to MLB Stats API'
-                      : 'MLB Stats API Disconnected',
-                  child: Icon(
-                    _isConnectedToApi ? Icons.cloud_done : Icons.cloud_off,
-                    color: _isConnectedToApi ? Colors.green : Colors.red,
-                  ),
                 ),
                 const SizedBox(width: 8),
                 Row(
