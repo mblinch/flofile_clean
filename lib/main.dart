@@ -3643,6 +3643,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   int _lastScrollIndex = -1;
   Timer? _scrollDebounceTimer;
 
+  // Selected folder path for display in AppBar
+  String? _selectedFolderPath;
+
   void _onFilmstripScroll() {
     if (!_filmstripController.hasClients) return;
 
@@ -4270,6 +4273,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Future<void> pickFolder() async {
     final dirPath = await FilePicker.platform.getDirectoryPath();
     if (dirPath == null) return;
+
+    // Store the selected folder path
+    setState(() {
+      _selectedFolderPath = dirPath;
+    });
 
     // Use compute to load image files in background thread
     final files = await compute(_listImageFiles, dirPath);
@@ -7070,13 +7078,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
-                        'Images Folder:',
+                        'Images Folder: ',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      if (_selectedFolderPath != null) ...[
+                        Flexible(
+                          child: Text(
+                            p.basename(_selectedFolderPath!),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.blue,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       IconButton(
                           icon: const Icon(Icons.folder_open),
                           onPressed: pickFolder),
