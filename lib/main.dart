@@ -3686,7 +3686,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _useMlbApi = true; // true for MLB Stats API, false for API-Sports
 
   // Favorite teams functionality
-  Set<String> _favoriteTeams = {};
+  Set<String> _favoriteTeams = {
+    'Toronto Blue Jays'
+  }; // Default favorite for testing
 
   void _toggleFavoriteTeam(String teamName) {
     setState(() {
@@ -3707,6 +3709,97 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       });
       _loadTeam(firstFavorite, isHomeTeam: true);
     }
+  }
+
+  void _showManageFavoritesDialog() {
+    final allTeams = [
+      'Arizona Diamondbacks',
+      'Atlanta Braves',
+      'Baltimore Orioles',
+      'Boston Red Sox',
+      'Chicago Cubs',
+      'Chicago White Sox',
+      'Cincinnati Reds',
+      'Cleveland Guardians',
+      'Colorado Rockies',
+      'Detroit Tigers',
+      'Houston Astros',
+      'Kansas City Royals',
+      'Los Angeles Angels',
+      'Los Angeles Dodgers',
+      'Miami Marlins',
+      'Milwaukee Brewers',
+      'Minnesota Twins',
+      'New York Mets',
+      'New York Yankees',
+      'Oakland Athletics',
+      'Philadelphia Phillies',
+      'Pittsburgh Pirates',
+      'San Diego Paders',
+      'San Francisco Giants',
+      'Seattle Mariners',
+      'St. Louis Cardinals',
+      'Tampa Bay Rays',
+      'Texas Rangers',
+      'Toronto Blue Jays',
+      'Washington Nationals',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Manage Favorite Teams'),
+              content: SizedBox(
+                width: 300,
+                height: 400,
+                child: Column(
+                  children: [
+                    const Text(
+                        'Click the stars to add/remove teams from favorites:'),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: allTeams.length,
+                        itemBuilder: (context, index) {
+                          final team = allTeams[index];
+                          final isFavorite = _favoriteTeams.contains(team);
+                          return ListTile(
+                            title: Text(team),
+                            trailing: IconButton(
+                              icon: Icon(
+                                isFavorite ? Icons.star : Icons.star_border,
+                                color: isFavorite ? Colors.amber : Colors.grey,
+                              ),
+                              onPressed: () {
+                                _toggleFavoriteTeam(team);
+                                setDialogState(() {}); // Update dialog state
+                              },
+                            ),
+                            onTap: () {
+                              _toggleFavoriteTeam(team);
+                              setDialogState(() {}); // Update dialog state
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // Mapping from MLB team names to API-Sports team names
@@ -6787,6 +6880,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 label: 'Home Team',
                                                 value: selectedHomeTeam,
                                                 allItems: teams,
+                                                excludeTeam:
+                                                    selectedAwayTeam, // Exclude away team from home dropdown
                                                 onChanged: (v) async {
                                                   if (v == null) return;
                                                   setState(() =>
@@ -6923,6 +7018,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 label: 'Away Team',
                                                 value: selectedAwayTeam,
                                                 allItems: teams,
+                                                excludeTeam:
+                                                    selectedHomeTeam, // Exclude home team from away dropdown
                                                 onChanged: (v) {
                                                   if (v == null) return;
                                                   setState(() =>
@@ -6962,6 +7059,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     ),
                                                   ),
                                                 ],
+                                              ),
+                                              const SizedBox(width: 8),
+                                              TextButton.icon(
+                                                onPressed: () =>
+                                                    _showManageFavoritesDialog(),
+                                                icon: const Icon(Icons.star,
+                                                    size: 12),
+                                                label: const Text('Favorites',
+                                                    style: TextStyle(
+                                                        fontSize: 10)),
+                                                style: TextButton.styleFrom(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                                  minimumSize: Size.zero,
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -8428,9 +8542,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required String? value,
     required List<String> allItems,
     required ValueChanged<String?> onChanged,
+    String? excludeTeam, // Team to exclude from this dropdown
   }) {
+    // Filter out the excluded team
+    final availableTeams = excludeTeam != null
+        ? allItems.where((team) => team != excludeTeam).toList()
+        : allItems;
+
     // Sort teams with favorites first, then alphabetically
-    final sortedTeams = List<String>.from(allItems);
+    final sortedTeams = List<String>.from(availableTeams);
     sortedTeams.sort((a, b) {
       final aIsFavorite = _favoriteTeams.contains(a);
       final bIsFavorite = _favoriteTeams.contains(b);
@@ -8479,21 +8599,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             style: const TextStyle(
                                 fontSize: kInputTextSize, color: Colors.black)),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          _toggleFavoriteTeam(item);
-                          // Prevent dropdown from closing
-                        },
-                        child: Icon(
-                          _favoriteTeams.contains(item)
-                              ? Icons.star
-                              : Icons.star_border,
-                          size: 16,
-                          color: _favoriteTeams.contains(item)
-                              ? Colors.amber
-                              : Colors.grey,
-                        ),
-                      ),
+                      if (_favoriteTeams.contains(item))
+                        const Icon(Icons.star, size: 16, color: Colors.amber),
                     ],
                   )))
               .toList(),
