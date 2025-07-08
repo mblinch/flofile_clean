@@ -7083,9 +7083,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         onPressed: pickFolder),
                   ],
                 ),
-                IconButton(
-                    icon: const Icon(Icons.upload_file),
-                    onPressed: pickCodeFile),
               ],
             ),
             body: Column(
