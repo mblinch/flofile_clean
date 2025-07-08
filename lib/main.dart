@@ -7068,10 +7068,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   ),
                   const SizedBox(width: 8),
                   // Favorites Button
-                  IconButton(
-                    icon: const Icon(Icons.star),
-                    tooltip: 'Manage Favorite Teams',
-                    onPressed: _showManageFavoritesDialog,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.star),
+                        tooltip: 'Manage Favorite Teams',
+                        onPressed: _showManageFavoritesDialog,
+                      ),
+                      const Text(
+                        'Manage Favorites',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 24),
                   Row(
