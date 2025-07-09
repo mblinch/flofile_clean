@@ -464,10 +464,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (countryCode.isNotEmpty) countryCodeController.text = countryCode;
     });
 
+    // Immediately save after pasting metadata
+    await _saveCaptionToFile(imagePath);
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
           content: Text(
-              'Selected and pasted metadata to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
+              'Selected, pasted, and saved metadata to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
     );
   }
 
@@ -1213,13 +1216,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _buildSquareIconButton(
           icon: Icons.arrow_back,
           tooltip: 'Previous Image',
-          onPressed: previousImage,
+          onPressed: imagePaths.isNotEmpty ? () => previousImage() : null,
         ),
         const SizedBox(width: 8),
         _buildSquareIconButton(
           icon: Icons.arrow_forward,
           tooltip: 'Next Image',
-          onPressed: nextImage,
+          onPressed: imagePaths.isNotEmpty ? () => nextImage() : null,
         ),
         if (_isBurstMode) ...[
           const SizedBox(width: 8),
@@ -1288,7 +1291,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildSquareIconButton({
     required IconData icon,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isBlue = false,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -5647,6 +5650,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> nextImage() async {
+    if (imagePaths.isEmpty) return;
+
     if (currentIndex < imagePaths.length - 1) {
       final nextIndex = currentIndex + 1;
 
@@ -5665,10 +5670,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _loadMetadata(),
         _detectBurst(currentIndex),
       ]);
+    } else {
+      // Show feedback when at the last image
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already at the last image')),
+      );
     }
   }
 
   Future<void> previousImage() async {
+    if (imagePaths.isEmpty) return;
+
     if (currentIndex > 0) {
       final prevIndex = currentIndex - 1;
 
@@ -5687,6 +5699,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _loadMetadata(),
         _detectBurst(currentIndex),
       ]);
+    } else {
+      // Show feedback when at the first image
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already at the first image')),
+      );
     }
   }
 
@@ -6415,28 +6432,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         padding: const EdgeInsets.only(top: 34.0),
         child: Column(
           children: [
-            // First row: FTP, Previous, Next
-            Row(
-              children: [
-                _buildCompactButton('FTP', _onFtpPressed),
-                const SizedBox(width: 4),
-                _buildCompactButton(
-                  'Previous',
-                  imagePaths.isNotEmpty && currentIndex > 0
-                      ? previousImage
-                      : null,
-                ),
-                const SizedBox(width: 4),
-                _buildCompactButton(
-                  'Next',
-                  imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1
-                      ? nextImage
-                      : null,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Second row: Copy, Paste
+            // First row: Copy, Paste
             Row(
               children: [
                 _buildCompactButton('Copy', _onCopyPressed),
@@ -6445,7 +6441,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ],
             ),
             const SizedBox(height: 4),
-            // Third row: Reset Caption, Sort
+            // Second row: Reset Caption, Sort
             Row(
               children: [
                 _buildCompactButton('Reset Caption', _resetCaption),
@@ -8122,69 +8118,109 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         // Personality Field (right side) - taking less space
                                         Expanded(
                                           flex: 5,
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(
-                                                left: 8.0),
-                                            child: Material(
-                                              elevation: 2,
-                                              shadowColor: Colors.grey.shade400,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              child: TextField(
-                                                controller:
-                                                    personalityController,
-                                                maxLines: 3,
-                                                minLines: 3,
-                                                style: const TextStyle(
-                                                    fontSize: 14),
-                                                decoration: InputDecoration(
-                                                  labelText: 'Personality',
-                                                  floatingLabelBehavior:
-                                                      FloatingLabelBehavior
-                                                          .always,
-                                                  labelStyle: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 15,
-                                                      letterSpacing: -0.5),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                    gapPadding: 0,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 8.0),
+                                                child: Material(
+                                                  elevation: 2,
+                                                  shadowColor:
+                                                      Colors.grey.shade400,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: TextField(
+                                                    controller:
+                                                        personalityController,
+                                                    maxLines: 3,
+                                                    minLines: 3,
+                                                    style: const TextStyle(
+                                                        fontSize: 14),
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Personality',
+                                                      floatingLabelBehavior:
+                                                          FloatingLabelBehavior
+                                                              .always,
+                                                      labelStyle:
+                                                          const TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              fontSize: 15,
+                                                              letterSpacing:
+                                                                  -0.5),
+                                                      border:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                        gapPadding: 0,
+                                                      ),
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                        gapPadding: 0,
+                                                        borderSide: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade400),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                        gapPadding: 0,
+                                                        borderSide: BorderSide(
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .primary,
+                                                            width: 2),
+                                                      ),
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              horizontal: 12,
+                                                              vertical: 12),
+                                                      filled: true,
+                                                      fillColor: Colors.white,
+                                                    ),
                                                   ),
-                                                  enabledBorder:
-                                                      OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                    gapPadding: 0,
-                                                    borderSide: BorderSide(
-                                                        color: Colors
-                                                            .grey.shade400),
-                                                  ),
-                                                  focusedBorder:
-                                                      OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                    gapPadding: 0,
-                                                    borderSide: BorderSide(
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .primary,
-                                                        width: 2),
-                                                  ),
-                                                  contentPadding:
-                                                      const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 12),
-                                                  filled: true,
-                                                  fillColor: Colors.white,
                                                 ),
                                               ),
-                                            ),
+                                              // Navigation Buttons directly under Personality field
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 8.0, top: 8.0),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.end,
+                                                  children: [
+                                                    _buildCompactButton(
+                                                        'FTP', _onFtpPressed),
+                                                    const SizedBox(width: 8),
+                                                    _buildCompactButton(
+                                                      'Previous',
+                                                      imagePaths.isNotEmpty
+                                                          ? () =>
+                                                              previousImage()
+                                                          : null,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    _buildCompactButton(
+                                                      'Next',
+                                                      imagePaths.isNotEmpty
+                                                          ? () => nextImage()
+                                                          : null,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
