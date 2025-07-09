@@ -463,6 +463,118 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
+  // Show context menu for thumbnails
+  void _showThumbnailContextMenu(BuildContext context, int index) {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(Icons.content_copy, size: 16),
+              const SizedBox(width: 8),
+              const Text('Copy Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'paste',
+          enabled: _copiedMetadata != null,
+          child: Row(
+            children: [
+              const Icon(Icons.content_paste, size: 16),
+              const SizedBox(width: 8),
+              const Text('Paste Metadata'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == 'copy') {
+        // Select thumbnail first, then copy metadata
+        if (index != currentIndex) {
+          setState(() {
+            currentIndex = index;
+          });
+          await _loadMetadata();
+        }
+        await _copyMetadataFromIndex(index);
+      } else if (value == 'paste') {
+        // Select thumbnail first, then paste metadata
+        if (index != currentIndex) {
+          setState(() {
+            currentIndex = index;
+          });
+          await _loadMetadata();
+        }
+        await _pasteMetadataToCurrentImage();
+      }
+    });
+  }
+
+  // Show context menu for picture preview
+  void _showPicturePreviewContextMenu(BuildContext context) {
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(Icons.content_copy, size: 16),
+              const SizedBox(width: 8),
+              const Text('Copy Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'paste',
+          enabled: _copiedMetadata != null,
+          child: Row(
+            children: [
+              const Icon(Icons.content_paste, size: 16),
+              const SizedBox(width: 8),
+              const Text('Paste Metadata'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == 'copy') {
+        await _copyMetadataFromIndex(currentIndex);
+      } else if (value == 'paste') {
+        await _pasteMetadataToCurrentImage();
+      }
+    });
+  }
+
   void _onCopyPressed() {
     // Create a structured format with both caption and personality
     final captionText = captionController.text;
@@ -7376,18 +7488,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   // Image area
                                                   Expanded(
                                                     child: imagePaths.isNotEmpty
-                                                        ? ClipRRect(
-                                                            borderRadius:
-                                                                const BorderRadius
-                                                                    .only(
-                                                              topLeft: Radius
-                                                                  .circular(4),
-                                                              topRight: Radius
-                                                                  .circular(4),
+                                                        ? GestureDetector(
+                                                            onSecondaryTap: () {
+                                                              _showPicturePreviewContextMenu(
+                                                                  context);
+                                                            },
+                                                            child: ClipRRect(
+                                                              borderRadius:
+                                                                  const BorderRadius
+                                                                      .only(
+                                                                topLeft: Radius
+                                                                    .circular(
+                                                                        4),
+                                                                topRight: Radius
+                                                                    .circular(
+                                                                        4),
+                                                              ),
+                                                              child: _buildPreviewImage(
+                                                                  imagePaths[
+                                                                      currentIndex]),
                                                             ),
-                                                            child: _buildPreviewImage(
-                                                                imagePaths[
-                                                                    currentIndex]),
                                                           )
                                                         : Container(
                                                             color: const Color(
@@ -7520,6 +7640,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           imagePaths[index];
                                                       return MouseRegion(
                                                         child: GestureDetector(
+                                                          onSecondaryTap: () {
+                                                            _showThumbnailContextMenu(
+                                                                context, index);
+                                                          },
                                                           onTap: () async {
                                                             // Check for modifier keys - use Option to avoid conflicts with normal selection
                                                             if (HardwareKeyboard
