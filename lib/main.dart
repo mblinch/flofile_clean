@@ -322,10 +322,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Metadata copy/paste functionality
   Map<String, dynamic>? _copiedMetadata;
 
-  // Multi-selection for Option+click mode
-  Set<int> _selectedThumbnails = {};
-  bool _isOptionMode = false;
-
   // Copy metadata from the thumbnail at the given index
   Future<void> _copyMetadataFromIndex(int index) async {
     if (index < 0 || index >= imagePaths.length) return;
@@ -398,48 +394,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Metadata copied from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
+                  'Selected and copied metadata from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
         );
       }
     }
-  }
-
-  // Handle keyboard events to detect when Option is released
-  bool _handleKeyEvent(KeyEvent event) {
-    if (event is KeyUpEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.altLeft ||
-          event.logicalKey == LogicalKeyboardKey.altRight) {
-        // Option key was released, exit option mode if no thumbnails selected
-        if (_isOptionMode && _selectedThumbnails.isEmpty) {
-          setState(() {
-            _isOptionMode = false;
-          });
-        }
-      }
-    }
-    return false; // Don't consume the event
-  }
-
-  // Copy metadata from multiple selected thumbnails
-  Future<void> _copyMetadataFromMultipleThumbnails() async {
-    if (_selectedThumbnails.isEmpty) return;
-
-    // For now, copy from the first selected thumbnail
-    // In the future, we could merge metadata from multiple images
-    final firstIndex = _selectedThumbnails.first;
-    await _copyMetadataFromIndex(firstIndex);
-
-    // Clear selection after copying
-    setState(() {
-      _selectedThumbnails.clear();
-      _isOptionMode = false;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-              'Metadata copied from ${_selectedThumbnails.length} selected thumbnails')),
-    );
   }
 
   // Paste copied metadata to the currently selected thumbnail
@@ -4149,9 +4107,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _pastedRosterText = ''; // Initialize to empty string
     _initializeTeamData();
 
-    // Add keyboard listener to detect when Option is released
-    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
-
     // Auto-select favorite teams if available
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoSelectFavoriteTeams();
@@ -4427,9 +4382,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _filmstripController.removeListener(_onFilmstripScroll);
     _filmstripController.dispose();
     _scrollDebounceTimer?.cancel();
-
-    // Remove keyboard handler
-    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
 
     jobIdController.dispose();
     descriptionWritersController.dispose();
@@ -7567,18 +7519,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       final imagePath =
                                                           imagePaths[index];
                                                       return MouseRegion(
-                                                        onEnter: (_) {
-                                                          // If in option mode, add thumbnail to selection on hover
-                                                          if (_isOptionMode &&
-                                                              !_selectedThumbnails
-                                                                  .contains(
-                                                                      index)) {
-                                                            setState(() {
-                                                              _selectedThumbnails
-                                                                  .add(index);
-                                                            });
-                                                          }
-                                                        },
                                                         child: GestureDetector(
                                                           onTap: () async {
                                                             // Check for modifier keys - use Option to avoid conflicts with normal selection
@@ -7611,27 +7551,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 await _pasteMetadataToCurrentImage();
                                                                 return;
                                                               } else {
-                                                                // Option+click: Enter multi-selection mode or copy from single thumbnail
-                                                                if (_isOptionMode) {
-                                                                  // Already in option mode, copy from all selected thumbnails
-                                                                  await _copyMetadataFromMultipleThumbnails();
-                                                                } else {
-                                                                  // Start option mode and add this thumbnail to selection
+                                                                // Option+click: Select thumbnail first, then copy metadata
+                                                                if (index !=
+                                                                    currentIndex) {
                                                                   setState(() {
-                                                                    _isOptionMode =
-                                                                        true;
-                                                                    _selectedThumbnails
-                                                                        .add(
-                                                                            index);
+                                                                    currentIndex =
+                                                                        index;
                                                                   });
-                                                                  ScaffoldMessenger.of(
-                                                                          context)
-                                                                      .showSnackBar(
-                                                                    SnackBar(
-                                                                        content:
-                                                                            Text('Option mode: Click another thumbnail to add to selection, or click again to copy from ${_selectedThumbnails.length} thumbnails')),
-                                                                  );
+                                                                  await _loadMetadata();
                                                                 }
+                                                                await _copyMetadataFromIndex(
+                                                                    index);
                                                                 return;
                                                               }
                                                             }
@@ -7655,27 +7585,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   .shade100, // Light grey background
                                                               border:
                                                                   Border.all(
-                                                                color: _isOptionMode &&
-                                                                        _selectedThumbnails.contains(
-                                                                            index)
-                                                                    ? Colors
-                                                                        .orange // Orange for selected thumbnails in option mode
-                                                                    : index ==
-                                                                            currentIndex
-                                                                        ? Theme.of(context)
-                                                                            .colorScheme
-                                                                            .primary
-                                                                        : Colors
-                                                                            .grey
-                                                                            .shade400,
-                                                                width: _isOptionMode &&
-                                                                        _selectedThumbnails.contains(
-                                                                            index)
-                                                                    ? 3.0 // Thicker border for selected thumbnails
-                                                                    : index ==
-                                                                            currentIndex
-                                                                        ? 2.5
-                                                                        : 1.5,
+                                                                color: index ==
+                                                                        currentIndex
+                                                                    ? Theme.of(
+                                                                            context)
+                                                                        .colorScheme
+                                                                        .primary
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                width: index ==
+                                                                        currentIndex
+                                                                    ? 2.5
+                                                                    : 1.5,
                                                               ),
                                                               borderRadius:
                                                                   BorderRadius
