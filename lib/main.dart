@@ -319,6 +319,150 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Flutter's Image.file handles thumbnail caching automatically
   String _prevCustomCelebrationVerb = '';
 
+  // Metadata copy/paste functionality
+  Map<String, dynamic>? _copiedMetadata;
+
+  // Copy metadata from the thumbnail at the given index
+  Future<void> _copyMetadataFromIndex(int index) async {
+    if (index < 0 || index >= imagePaths.length) return;
+
+    final imagePath = imagePaths[index];
+
+    // Extract metadata via exiftool in JSON format
+    final proc = await Process.run(
+      'exiftool',
+      [
+        '-j', // JSON output
+        '-Caption-Abstract',
+        '-ImageDescription',
+        '-XMP-getty:Personality',
+        '-TransmissionReference',
+        '-DescriptionWriter',
+        '-Headline',
+        '-Keywords',
+        '-Creator',
+        '-CreatorJobTitle',
+        '-Credit',
+        '-Copyright',
+        '-Source',
+        '-ObjectName',
+        '-Category',
+        '-SupplementalCategories',
+        '-XMP-photoshop:Instructions',
+        '-Sub-location',
+        '-City',
+        '-Province-State',
+        '-Urgency',
+        '-Country',
+        '-CountryCode',
+        imagePath
+      ],
+    );
+
+    if (proc.exitCode == 0) {
+      final List data = jsonDecode(proc.stdout as String);
+      if (data.isNotEmpty) {
+        final meta = data.first as Map<String, dynamic>;
+
+        // Store only the metadata fields we want to copy (excluding time/date fields)
+        _copiedMetadata = {
+          'Caption-Abstract': meta['Caption-Abstract'] ?? '',
+          'ImageDescription': meta['ImageDescription'] ?? '',
+          'Personality': meta['Personality'] ?? '',
+          'TransmissionReference': meta['TransmissionReference'] ?? '',
+          'DescriptionWriter': meta['DescriptionWriter'] ?? '',
+          'Headline': meta['Headline'] ?? '',
+          'Keywords': meta['Keywords'] ?? '',
+          'Creator': meta['Creator'] ?? '',
+          'CreatorJobTitle': meta['CreatorJobTitle'] ?? '',
+          'Credit': meta['Credit'] ?? '',
+          'Copyright': meta['Copyright'] ?? '',
+          'Source': meta['Source'] ?? '',
+          'ObjectName': meta['ObjectName'] ?? '',
+          'Category': meta['Category'] ?? '',
+          'SupplementalCategories': meta['SupplementalCategories'] ?? '',
+          'XMP-photoshop:Instructions':
+              meta['XMP-photoshop:Instructions'] ?? '',
+          'Sub-location': meta['Sub-location'] ?? '',
+          'City': meta['City'] ?? '',
+          'Province-State': meta['Province-State'] ?? '',
+          'Urgency': meta['Urgency'] ?? '',
+          'Country': meta['Country'] ?? '',
+          'CountryCode': meta['CountryCode'] ?? '',
+        };
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Metadata copied from ${p.basenameWithoutExtension(imagePath)}')),
+        );
+      }
+    }
+  }
+
+  // Paste copied metadata to the currently selected thumbnail
+  Future<void> _pasteMetadataToCurrentImage() async {
+    if (_copiedMetadata == null || imagePaths.isEmpty) return;
+
+    final imagePath = imagePaths[currentIndex];
+
+    // Update UI controllers with copied metadata
+    setState(() {
+      captionController.text =
+          _copiedMetadata!['Caption-Abstract']?.toString() ??
+              _copiedMetadata!['ImageDescription']?.toString() ??
+              '';
+
+      final personality = _copiedMetadata!['Personality'];
+      personalityController.text = (personality is List)
+          ? personality.join(';')
+          : (personality?.toString() ?? '');
+
+      // Update Getty metadata fields
+      jobIdController.text =
+          _copiedMetadata!['TransmissionReference']?.toString() ?? '';
+
+      final descriptionWriter =
+          _copiedMetadata!['DescriptionWriter']?.toString() ?? '';
+      if (descriptionWriter.isNotEmpty)
+        descriptionWritersController.text = descriptionWriter;
+
+      headlineController.text = _copiedMetadata!['Headline']?.toString() ?? '';
+      keywordsController.text = _copiedMetadata!['Keywords']?.toString() ?? '';
+
+      final creator = _copiedMetadata!['Creator']?.toString() ?? '';
+      if (creator.isNotEmpty) creatorController.text = creator;
+
+      final jobTitle = _copiedMetadata!['CreatorJobTitle']?.toString() ?? '';
+      if (jobTitle.isNotEmpty) creatorJobTitleController.text = jobTitle;
+
+      final credit = _copiedMetadata!['Credit']?.toString() ?? '';
+      if (credit.isNotEmpty) creditController.text = credit;
+
+      final copyright = _copiedMetadata!['Copyright']?.toString() ?? '';
+      if (copyright.isNotEmpty) copyrightController.text = copyright;
+
+      final source = _copiedMetadata!['Source']?.toString() ?? '';
+      if (source.isNotEmpty) sourceController.text = source;
+
+      // Update IPTC metadata fields
+      final urgency = _copiedMetadata!['Urgency']?.toString() ?? '';
+      if (urgency.isNotEmpty) urgencyController.text = urgency;
+
+      final country = _copiedMetadata!['Country']?.toString() ?? '';
+      if (country.isNotEmpty) countryController.text = country;
+
+      final countryCode = _copiedMetadata!['CountryCode']?.toString() ?? '';
+      if (countryCode.isNotEmpty) countryCodeController.text = countryCode;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(
+              'Metadata pasted to ${p.basenameWithoutExtension(imagePath)}')),
+    );
+  }
+
   void _onCopyPressed() {
     // Create a structured format with both caption and personality
     final captionText = captionController.text;
@@ -7374,108 +7518,152 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         (context, index) {
                                                       final imagePath =
                                                           imagePaths[index];
-                                                      return GestureDetector(
-                                                        onTap: () async {
-                                                          setState(() {
-                                                            currentIndex =
-                                                                index;
-                                                          });
-                                                          // Load metadata from the newly selected image
-                                                          await _loadMetadata();
-                                                        },
-                                                        child: Container(
-                                                          width: 50,
-                                                          height: 50,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: Colors.grey
-                                                                .shade100, // Light grey background
-                                                            border: Border.all(
-                                                              color: index ==
-                                                                      currentIndex
-                                                                  ? Theme.of(
-                                                                          context)
-                                                                      .colorScheme
-                                                                      .primary
-                                                                  : Colors.grey
-                                                                      .shade400,
-                                                              width: index ==
-                                                                      currentIndex
-                                                                  ? 2.5
-                                                                  : 1.5,
+                                                      return MouseRegion(
+                                                        child: GestureDetector(
+                                                          onTap: () async {
+                                                            // Check for modifier keys
+                                                            if (HardwareKeyboard
+                                                                    .instance
+                                                                    .logicalKeysPressed
+                                                                    .contains(
+                                                                        LogicalKeyboardKey
+                                                                            .metaLeft) ||
+                                                                HardwareKeyboard
+                                                                    .instance
+                                                                    .logicalKeysPressed
+                                                                    .contains(
+                                                                        LogicalKeyboardKey
+                                                                            .metaRight)) {
+                                                              // Command+click: Copy metadata from this thumbnail
+                                                              await _copyMetadataFromIndex(
+                                                                  index);
+                                                              return;
+                                                            }
+
+                                                            if (HardwareKeyboard
+                                                                    .instance
+                                                                    .logicalKeysPressed
+                                                                    .contains(
+                                                                        LogicalKeyboardKey
+                                                                            .shiftLeft) ||
+                                                                HardwareKeyboard
+                                                                    .instance
+                                                                    .logicalKeysPressed
+                                                                    .contains(
+                                                                        LogicalKeyboardKey
+                                                                            .shiftRight)) {
+                                                              // Shift+click: Paste metadata to currently selected thumbnail
+                                                              await _pasteMetadataToCurrentImage();
+                                                              return;
+                                                            }
+
+                                                            // Regular click: Select thumbnail and load metadata
+                                                            if (index !=
+                                                                currentIndex) {
+                                                              setState(() {
+                                                                currentIndex =
+                                                                    index;
+                                                              });
+                                                              await _loadMetadata();
+                                                            }
+                                                          },
+                                                          child: Container(
+                                                            width: 50,
+                                                            height: 50,
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: Colors.grey
+                                                                  .shade100, // Light grey background
+                                                              border:
+                                                                  Border.all(
+                                                                color: index ==
+                                                                        currentIndex
+                                                                    ? Theme.of(
+                                                                            context)
+                                                                        .colorScheme
+                                                                        .primary
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                width: index ==
+                                                                        currentIndex
+                                                                    ? 2.5
+                                                                    : 1.5,
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4), // Rounded corners
                                                             ),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        4), // Rounded corners
-                                                          ),
-                                                          child: Column(
-                                                            children: [
-                                                              // Thumbnail image (smaller with padding for border effect)
-                                                              Expanded(
-                                                                child:
-                                                                    Container(
-                                                                  margin: const EdgeInsets
-                                                                      .all(
-                                                                      3), // Creates border effect
+                                                            child: Column(
+                                                              children: [
+                                                                // Thumbnail image (smaller with padding for border effect)
+                                                                Expanded(
                                                                   child:
-                                                                      ClipRRect(
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(2),
-                                                                    child: _buildProportionalThumbnail(
-                                                                        imagePath),
+                                                                      Container(
+                                                                    margin: const EdgeInsets
+                                                                        .all(
+                                                                        3), // Creates border effect
+                                                                    child:
+                                                                        ClipRRect(
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              2),
+                                                                      child: _buildProportionalThumbnail(
+                                                                          imagePath),
+                                                                    ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                              // Filename display
-                                                              Container(
-                                                                width: double
-                                                                    .infinity,
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        2,
-                                                                    vertical:
-                                                                        1),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade200,
-                                                                  borderRadius:
-                                                                      const BorderRadius
-                                                                          .only(
-                                                                    bottomLeft:
-                                                                        Radius.circular(
-                                                                            4),
-                                                                    bottomRight:
-                                                                        Radius.circular(
-                                                                            4),
-                                                                  ),
-                                                                ),
-                                                                child: Text(
-                                                                  p.basenameWithoutExtension(
-                                                                      imagePath),
-                                                                  style:
-                                                                      const TextStyle(
+                                                                // Filename display
+                                                                Container(
+                                                                  width: double
+                                                                      .infinity,
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          2,
+                                                                      vertical:
+                                                                          1),
+                                                                  decoration:
+                                                                      BoxDecoration(
                                                                     color: Colors
-                                                                        .black,
-                                                                    fontSize: 8,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
+                                                                        .grey
+                                                                        .shade200,
+                                                                    borderRadius:
+                                                                        const BorderRadius
+                                                                            .only(
+                                                                      bottomLeft:
+                                                                          Radius.circular(
+                                                                              4),
+                                                                      bottomRight:
+                                                                          Radius.circular(
+                                                                              4),
+                                                                    ),
                                                                   ),
-                                                                  textAlign:
-                                                                      TextAlign
-                                                                          .center,
-                                                                  maxLines: 1,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
+                                                                  child: Text(
+                                                                    p.basenameWithoutExtension(
+                                                                        imagePath),
+                                                                    style:
+                                                                        const TextStyle(
+                                                                      color: Colors
+                                                                          .black,
+                                                                      fontSize:
+                                                                          8,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w500,
+                                                                    ),
+                                                                    textAlign:
+                                                                        TextAlign
+                                                                            .center,
+                                                                    maxLines: 1,
+                                                                    overflow:
+                                                                        TextOverflow
+                                                                            .ellipsis,
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                            ],
+                                                              ],
+                                                            ),
                                                           ),
                                                         ),
                                                       );
