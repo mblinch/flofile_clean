@@ -394,7 +394,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Metadata copied from ${p.basenameWithoutExtension(imagePath)} (Cmd+Option+click)')),
+                  'Metadata copied from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
         );
       }
     }
@@ -459,7 +459,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
           content: Text(
-              'Metadata pasted to ${p.basenameWithoutExtension(imagePath)} (Cmd+Option+Shift+click)')),
+              'Metadata pasted to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
     );
   }
 
@@ -7521,61 +7521,39 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       return MouseRegion(
                                                         child: GestureDetector(
                                                           onTap: () async {
-                                                            // Check for modifier keys - use Command+Option to avoid conflicts with normal selection
+                                                            // Check for modifier keys - use Option to avoid conflicts with normal selection
                                                             if (HardwareKeyboard
                                                                     .instance
                                                                     .logicalKeysPressed
                                                                     .contains(
                                                                         LogicalKeyboardKey
-                                                                            .metaLeft) ||
+                                                                            .altLeft) ||
                                                                 HardwareKeyboard
                                                                     .instance
                                                                     .logicalKeysPressed
                                                                     .contains(
                                                                         LogicalKeyboardKey
-                                                                            .metaRight)) {
-                                                              // Check if Option is also pressed (Command+Option+click for copy)
+                                                                            .altRight)) {
+                                                              // Check if Shift is also pressed (Option+Shift+click for paste)
                                                               if (HardwareKeyboard
                                                                       .instance
                                                                       .logicalKeysPressed
                                                                       .contains(
                                                                           LogicalKeyboardKey
-                                                                              .altLeft) ||
+                                                                              .shiftLeft) ||
                                                                   HardwareKeyboard
                                                                       .instance
                                                                       .logicalKeysPressed
                                                                       .contains(
                                                                           LogicalKeyboardKey
-                                                                              .altRight)) {
-                                                                // Command+Option+click: Copy metadata from this thumbnail
+                                                                              .shiftRight)) {
+                                                                // Option+Shift+click: Paste metadata to currently selected thumbnail
+                                                                await _pasteMetadataToCurrentImage();
+                                                                return;
+                                                              } else {
+                                                                // Option+click: Copy metadata from this thumbnail
                                                                 await _copyMetadataFromIndex(
                                                                     index);
-                                                                return;
-                                                              }
-
-                                                              // Check if Option+Shift is also pressed (Command+Option+Shift+click for paste)
-                                                              if ((HardwareKeyboard
-                                                                          .instance
-                                                                          .logicalKeysPressed
-                                                                          .contains(LogicalKeyboardKey
-                                                                              .altLeft) ||
-                                                                      HardwareKeyboard
-                                                                          .instance
-                                                                          .logicalKeysPressed
-                                                                          .contains(LogicalKeyboardKey
-                                                                              .altRight)) &&
-                                                                  (HardwareKeyboard
-                                                                          .instance
-                                                                          .logicalKeysPressed
-                                                                          .contains(LogicalKeyboardKey
-                                                                              .shiftLeft) ||
-                                                                      HardwareKeyboard
-                                                                          .instance
-                                                                          .logicalKeysPressed
-                                                                          .contains(
-                                                                              LogicalKeyboardKey.shiftRight))) {
-                                                                // Command+Option+Shift+click: Paste metadata to currently selected thumbnail
-                                                                await _pasteMetadataToCurrentImage();
                                                                 return;
                                                               }
                                                             }
