@@ -4374,7 +4374,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       padding: const EdgeInsets.all(8), // Padding around image
       child: ClipRRect(
         borderRadius:
-            BorderRadius.circular(3), // Slightly smaller for inner image
+            BorderRadius.circular(2.5), // Slightly smaller for inner image
         child: Image.file(
           File(imagePath),
           fit: BoxFit.cover, // Fill the box, crop as needed, no letterboxing
@@ -4450,8 +4450,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
             padding: const EdgeInsets.all(8), // Padding around image
             child: ClipRRect(
-              borderRadius:
-                  BorderRadius.circular(3), // Slightly smaller for inner image
+              borderRadius: BorderRadius.circular(
+                  2.5), // Slightly smaller for inner image
               child: Image.file(
                 File(imagePath),
                 fit: BoxFit.contain, // Maintain proportions within container
@@ -5254,9 +5254,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
 
-    // Reset caption builder state when selecting a new image
-    _resetCaption();
-
     // Preload adjacent images for instant navigation
     _preloadCurrentAndAdjacentImages();
 
@@ -6020,16 +6017,350 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // --- REVISED _updateCaption METHOD ---
   void _updateCaption() {
+    // Safety check: if either team is not selected, don't try to generate captions
+    if (selectedHomeTeam == null || selectedAwayTeam == null) {
+      return;
+    }
+
     final city = cityController.text;
     final prov = provinceController.text;
     final monLC = _month(selectedDate.month);
     final day = selectedDate.day;
     final year = selectedDate.year;
 
+    // Handle any Prior to Game action caption
+    if (_selectedVerb == 'Prior to Game' &&
+        (_selectedPriorAction != null || _customPriorAction.isNotEmpty)) {
+      final monthUpper = monLC.toUpperCase();
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+
+      // Debug prints to help diagnose the issue
+      print('DEBUG Prior to Game (action):');
+      print('  selectedPlayers: $selectedPlayers');
+      print('  selectedOpponentPlayers: $selectedOpponentPlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+
+      // For "Prior to Game" actions, if we have opponent players but no active players,
+      // treat the first opponent player as the active player
+      Set<String> activePlayers;
+      Set<String> opponentPlayers;
+
+      if (_showHomeFirst) {
+        if (selectedPlayers.isEmpty && selectedOpponentPlayers.isNotEmpty) {
+          // Move first opponent player to active players
+          final firstOpponent = selectedOpponentPlayers.first;
+          activePlayers = {firstOpponent};
+          opponentPlayers = selectedOpponentPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedPlayers;
+          opponentPlayers = selectedOpponentPlayers;
+        }
+      } else {
+        if (selectedOpponentPlayers.isEmpty && selectedPlayers.isNotEmpty) {
+          // Move first home player to active players
+          final firstPlayer = selectedPlayers.first;
+          activePlayers = {firstPlayer};
+          opponentPlayers = selectedPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedOpponentPlayers;
+          opponentPlayers = selectedPlayers;
+        }
+      }
+
+      print('DEBUG: Active players after adjustment: $activePlayers');
+      print('DEBUG: Opponent players after adjustment: $opponentPlayers');
+
+      if (activePlayers.isEmpty) {
+        print('DEBUG: No active players selected!');
+        return; // Don't generate caption if no active players
+      }
+
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      print('DEBUG: Combined player name: $playerName');
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      // Determine the opponent team based on which team the active player is NOT on
+      // Check the prefix of the first active player to determine their team
+      String opponentTeam;
+      if (activePlayers.isNotEmpty) {
+        final firstActivePlayer = activePlayers.first;
+        if (firstActivePlayer.startsWith('h')) {
+          // Active player is from home team, so opponent is away team
+          opponentTeam = selectedAwayTeam!;
+        } else {
+          // Active player is from away team, so opponent is home team
+          opponentTeam = selectedHomeTeam!;
+        }
+      } else {
+        // Fallback to original logic
+        opponentTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      }
+
+      print(
+          'DEBUG: Active player team prefix: ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+      print('DEBUG: Final opponent team: $opponentTeam');
+      final stadium = stadiumController.text;
+      final photoBy = creatorController.text;
+
+      // Use custom action if available, otherwise use selected action
+      final action = _customPriorAction.isNotEmpty
+          ? _customPriorAction.toLowerCase()
+          : _selectedPriorAction!.toLowerCase();
+
+      // Handle opponent players if selected
+      String opponentPart = '';
+      if (opponentPlayers.isNotEmpty) {
+        final opponentNames =
+            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        opponentPart = '$opponentNames and the $opponentTeam';
+      } else {
+        opponentPart = 'the $opponentTeam';
+      }
+
+      final caption = '$dateline '
+          '$playerName $action prior to playing against $opponentPart '
+          'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+
+      print('DEBUG: Generated caption: $caption');
+      captionController.text = caption;
+      return;
+    }
+
+    // Handle "Prior to Game" caption
+    if (_selectedVerb == 'Prior to Game' && _isLooksOn == true) {
+      final monthUpper = monLC.toUpperCase();
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+
+      // Debug prints to help diagnose the issue
+      print('DEBUG Prior to Game (looks on):');
+      print('  selectedPlayers: $selectedPlayers');
+      print('  selectedOpponentPlayers: $selectedOpponentPlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+
+      // For "looks on", if we have opponent players but no active players,
+      // treat the first opponent player as the active player
+      Set<String> activePlayers;
+      Set<String> opponentPlayers;
+
+      if (_showHomeFirst) {
+        if (selectedPlayers.isEmpty && selectedOpponentPlayers.isNotEmpty) {
+          // Move first opponent player to active players
+          final firstOpponent = selectedOpponentPlayers.first;
+          activePlayers = {firstOpponent};
+          opponentPlayers = selectedOpponentPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedPlayers;
+          opponentPlayers = selectedOpponentPlayers;
+        }
+      } else {
+        if (selectedOpponentPlayers.isEmpty && selectedPlayers.isNotEmpty) {
+          // Move first home player to active players
+          final firstPlayer = selectedPlayers.first;
+          activePlayers = {firstPlayer};
+          opponentPlayers = selectedPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedOpponentPlayers;
+          opponentPlayers = selectedPlayers;
+        }
+      }
+
+      print('DEBUG: Active players after adjustment: $activePlayers');
+      print('DEBUG: Opponent players after adjustment: $opponentPlayers');
+
+      if (activePlayers.isEmpty) {
+        print('DEBUG: No active players selected!');
+        return; // Don't generate caption if no active players
+      }
+
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      print('DEBUG: Combined player name: $playerName');
+
+      // Add null checks for teams
+      if (selectedHomeTeam == null || selectedAwayTeam == null) return;
+
+      // Determine the opponent team based on which team the active player is NOT on
+      // Check the prefix of the first active player to determine their team
+      String opponentTeam;
+      if (activePlayers.isNotEmpty) {
+        final firstActivePlayer = activePlayers.first;
+        if (firstActivePlayer.startsWith('h')) {
+          // Active player is from home team, so opponent is away team
+          opponentTeam = selectedAwayTeam!;
+        } else {
+          // Active player is from away team, so opponent is home team
+          opponentTeam = selectedHomeTeam!;
+        }
+      } else {
+        // Fallback to original logic
+        opponentTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      }
+
+      print(
+          'DEBUG: Active player team prefix (looks on): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+      print('DEBUG: Final opponent team (looks on): $opponentTeam');
+      final stadium = stadiumController.text;
+      final photoBy = creatorController.text;
+
+      // Handle opponent players if selected
+      String opponentPart = '';
+      if (opponentPlayers.isNotEmpty) {
+        final opponentNames =
+            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        opponentPart = '$opponentNames and the $opponentTeam';
+      } else {
+        opponentPart = 'the $opponentTeam';
+      }
+
+      final caption = '$dateline '
+          '$playerName looks on prior to playing against $opponentPart '
+          'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+
+      print('DEBUG: Generated caption: $caption');
+      captionController.text = caption;
+      return;
+    }
+
+    // Handle Post Game caption
+    if (_selectedVerb == 'Post Game' &&
+        (_selectedPostGameAction != null || _customPostGameAction.isNotEmpty)) {
+      final monthUpper = monLC.toUpperCase();
+      final formattedDate = '$monLC $day, $year';
+      final dateline = _formatDateline(city, prov, monthUpper, day);
+      final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+
+      // Debug prints to help diagnose the issue
+      print('DEBUG Post Game:');
+      print('  selectedPlayers: $selectedPlayers');
+      print('  selectedOpponentPlayers: $selectedOpponentPlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+
+      // For Post Game, if we have opponent players but no active players,
+      // treat the first opponent player as the active player
+      Set<String> activePlayers;
+      Set<String> opponentPlayers;
+
+      if (_showHomeFirst) {
+        if (selectedPlayers.isEmpty && selectedOpponentPlayers.isNotEmpty) {
+          // Move first opponent player to active players
+          final firstOpponent = selectedOpponentPlayers.first;
+          activePlayers = {firstOpponent};
+          opponentPlayers = selectedOpponentPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedPlayers;
+          opponentPlayers = selectedOpponentPlayers;
+        }
+      } else {
+        if (selectedOpponentPlayers.isEmpty && selectedPlayers.isNotEmpty) {
+          // Move first home player to active players
+          final firstPlayer = selectedPlayers.first;
+          activePlayers = {firstPlayer};
+          opponentPlayers = selectedPlayers.skip(1).toSet();
+        } else {
+          activePlayers = selectedOpponentPlayers;
+          opponentPlayers = selectedPlayers;
+        }
+      }
+
+      print('DEBUG: Active players after adjustment: $activePlayers');
+      print('DEBUG: Opponent players after adjustment: $opponentPlayers');
+
+      if (activePlayers.isEmpty) {
+        print('DEBUG: No active players selected!');
+        return; // Don't generate caption if no active players
+      }
+
+      final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      print('DEBUG: Combined player name: $playerName');
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      // Determine the opponent team based on which team the active player is NOT on
+      // Check the prefix of the first active player to determine their team
+      String opponentTeam;
+      if (activePlayers.isNotEmpty) {
+        final firstActivePlayer = activePlayers.first;
+        if (firstActivePlayer.startsWith('h')) {
+          // Active player is from home team, so opponent is away team
+          opponentTeam = selectedAwayTeam!;
+        } else {
+          // Active player is from away team, so opponent is home team
+          opponentTeam = selectedHomeTeam!;
+        }
+      } else {
+        // Fallback to original logic
+        opponentTeam = _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      }
+
+      print(
+          'DEBUG: Active player team prefix (post game): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+      print('DEBUG: Final opponent team (post game): $opponentTeam');
+
+      final stadium = stadiumController.text;
+      final photoBy = creatorController.text;
+
+      // Use custom action if available, otherwise use selected action
+      String action;
+      if (_customPostGameAction.isNotEmpty) {
+        action = _customPostGameAction.toLowerCase();
+      } else if (_selectedPostGameAction == 'Celebrates alone') {
+        action = 'celebrates';
+      } else {
+        action = _selectedPostGameAction!.toLowerCase();
+      }
+
+      // Handle opponent players if selected
+      String opponentPart = '';
+      if (opponentPlayers.isNotEmpty) {
+        final opponentNames =
+            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        opponentPart = '$opponentNames and the $opponentTeam';
+      } else {
+        opponentPart = 'the $opponentTeam';
+      }
+
+      // Build the caption based on whether teammates are selected
+      String caption;
+      if (_selectedPostGameAction == 'Celebrates with teammates' &&
+          celebrateWith.isNotEmpty) {
+        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+        caption = '$dateline '
+            '$playerName celebrates with $teammatesStr after their team defeated $opponentPart '
+            'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+      } else {
+        caption = '$dateline '
+            '$playerName $action after their team defeated $opponentPart '
+            'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+      }
+
+      print('DEBUG: Generated post game caption: $caption');
+      captionController.text = caption;
+      return;
+    }
+
     String mainCaptionPart = '';
-    if (_selectedHitType != null) {
+    if (_selectedVerb == 'hit' && _selectedHitType != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -6042,7 +6373,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (_selectedHitType == 'Home Run') {
         String? hrType = _selectedHomeRunType;
-        if (hrType == null) {
+        // Only fall back to RBI count if no home run type is explicitly selected
+        if (hrType == null && _rbiCount != null) {
           switch (_rbiCount) {
             case 0:
               hrType = 'solo';
@@ -6077,7 +6409,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             hitPhrase = 'home run';
         }
       } else {
-        // Single, Double, Triple
+        // single, double, triple
         if (_walkOff == true) {
           // Use "two-run double" style phrasing for walk-offs
           String rbiPart = '';
@@ -6091,11 +6423,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   : '$_rbiCount-run';
             }
           }
-          hitPhrase = '$rbiPart ${_selectedHitType!.toLowerCase()}'.trim();
+          hitPhrase = '$rbiPart $_selectedHitType'.trim();
         } else {
           // Use "two RBI double" style phrasing for standard hits
           if (_rbiCount == null || _rbiCount == 0) {
-            hitPhrase = _selectedHitType!.toLowerCase();
+            hitPhrase = _selectedHitType!;
           } else {
             final rbiWords = ['one', 'two', 'three'];
             final rbiString = _rbiCount == 1
@@ -6103,67 +6435,85 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 : _rbiCount! <= 3
                     ? '${rbiWords[_rbiCount! - 1]} RBI'
                     : '$_rbiCount RBI';
-            hitPhrase = '$rbiString ${_selectedHitType!.toLowerCase()}';
+            hitPhrase = '$rbiString $_selectedHitType';
           }
         }
       }
 
       // 2. Construct the sentence based on flags
+      String coreActionPart;
       if (_walkOff == true && _isBatterRunning == true) {
         if (_selectedHitType == 'Home Run') {
-          mainCaptionPart =
-              "$playersString rounds the bases after hitting a walk-off $hitPhrase to defeat the $opponentTeamName";
+          coreActionPart =
+              "$playersString rounds the bases after hitting a walk-off $hitPhrase";
         } else {
-          mainCaptionPart =
-              "$playersString runs after hitting a walk-off $hitPhrase to defeat the $opponentTeamName";
+          coreActionPart =
+              "$playersString runs after hitting a walk-off $hitPhrase";
         }
       } else if (_walkOff == true) {
-        mainCaptionPart =
-            "$playersString hits a walk-off $hitPhrase to defeat the $opponentTeamName";
+        coreActionPart = "$playersString hits a walk-off $hitPhrase";
       } else if (_isBatterRunning == true) {
         if (_selectedHitType == 'Home Run') {
-          mainCaptionPart =
-              "$playersString rounds the bases after hitting a $hitPhrase against the $opponentTeamName";
+          coreActionPart =
+              "$playersString rounds the bases after hitting a $hitPhrase";
         } else {
-          mainCaptionPart =
-              "$playersString runs after hitting a $hitPhrase against the $opponentTeamName";
+          coreActionPart = "$playersString runs after hitting a $hitPhrase";
         }
       } else {
-        mainCaptionPart =
-            "$playersString hits a $hitPhrase against the $opponentTeamName";
+        coreActionPart = "$playersString hits a $hitPhrase";
       }
 
+      if (celebrateWith.isNotEmpty) {
+        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
+        final celebrationPart =
+            "celebrates a $formattedHitPhrase with $teammatesStr";
+
+        if (_walkOff == true) {
+          mainCaptionPart =
+              "$playersString $celebrationPart to defeat the $opponentTeamName";
+        } else {
+          mainCaptionPart =
+              "$playersString $celebrationPart against the $opponentTeamName";
+        }
+      } else if (celebrateAgainst.isNotEmpty) {
+        final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
+        final celebrationPart = "celebrates against the $opponentStr";
+
+        if (_walkOff == true) {
+          mainCaptionPart =
+              "$playersString $celebrationPart to defeat the $opponentTeamName";
+        } else {
+          mainCaptionPart = "$playersString $celebrationPart";
+        }
+      } else if (_isSoloCelebration) {
+        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
+        final celebrationPart = "celebrates a $formattedHitPhrase";
+        if (_walkOff == true) {
+          mainCaptionPart =
+              "$playersString $celebrationPart to defeat the $opponentTeamName";
+        } else {
+          mainCaptionPart =
+              "$playersString $celebrationPart against the $opponentTeamName";
+        }
+      } else {
+        mainCaptionPart = (_walkOff == true)
+            ? "$coreActionPart to defeat the $opponentTeamName"
+            : "$coreActionPart against the $opponentTeamName";
+      }
       // 3. Add inning
       if (_selectedRbiInning != null) {
-        // Map 1–18 to written words
-        const inningWords = [
-          'first',
-          'second',
-          'third',
-          'fourth',
-          'fifth',
-          'sixth',
-          'seventh',
-          'eighth',
-          'ninth',
-          'tenth',
-          'eleventh',
-          'twelfth',
-          'thirteenth',
-          'fourteenth',
-          'fifteenth',
-          'sixteenth',
-          'seventeenth',
-          'eighteenth'
-        ];
-        String word = (_selectedRbiInning! >= 1 && _selectedRbiInning! <= 18)
-            ? inningWords[_selectedRbiInning! - 1]
-            : '${_selectedRbiInning}th';
-        mainCaptionPart += ' in the $word inning';
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb == 'Fielding' && _selectedFieldingAction != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -6182,35 +6532,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           "$playersString $actionPhrase against the $opponentTeamName";
       // Add inning to Fielding caption
       if (_selectedRbiInning != null) {
-        const inningWords = [
-          'first',
-          'second',
-          'third',
-          'fourth',
-          'fifth',
-          'sixth',
-          'seventh',
-          'eighth',
-          'ninth',
-          'tenth',
-          'eleventh',
-          'twelfth',
-          'thirteenth',
-          'fourteenth',
-          'fifteenth',
-          'sixteenth',
-          'seventeenth',
-          'eighteenth'
-        ];
-        final idx = _selectedRbiInning! - 1;
-        final word = (idx >= 0 && idx < inningWords.length)
-            ? inningWords[idx]
-            : '${_selectedRbiInning}th';
-        mainCaptionPart += ' in the $word inning';
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
-    } else if (_selectedVerb == 'Portrait') {
+    } else if (_selectedVerb == 'Base Running' &&
+        _selectedBaseRunningAction != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
 
@@ -6218,147 +6550,150 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final playersString =
           _combinePlayersWithSingleTeam(activePlayers.toList());
 
-      if (_isLooksOn) {
-        mainCaptionPart = "$playersString looks on";
+      if (_selectedBaseRunningAction == 'steals' &&
+          _selectedStealBase != null) {
+        // Handle steals with base specification
+        String stealPhrase = "steals $_selectedStealBase";
+
+        if (_showStealAgainstPlayer && selectedOpponentPlayers.isNotEmpty) {
+          // Against specific player
+          final opponentStr =
+              _combinePlayersWithSingleTeam(selectedOpponentPlayers.toList());
+          mainCaptionPart = "$playersString $stealPhrase against $opponentStr";
+        } else {
+          // Against team
+          mainCaptionPart =
+              "$playersString $stealPhrase against the $opponentTeamName";
+        }
       } else {
-        mainCaptionPart = "$playersString";
+        // Handle other base running actions
+        final actionReplacement = codeReplacements[_selectedBaseRunningAction!];
+        if (actionReplacement == null) return; // Should not happen
+
+        mainCaptionPart =
+            "$playersString ${actionReplacement.full} $opponentTeamName";
+      }
+
+      // Add inning to Base Running caption
+      if (_selectedRbiInning != null) {
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
+      }
+    } else if (_selectedVerb == 'Portrait') {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString = _combinePlayersWithoutTeam(activePlayers.toList());
+
+      // Get the player's own team name (not the opponent)
+      final playerTeamName =
+          _showHomeFirst ? selectedHomeTeam! : selectedAwayTeam!;
+
+      if (_isLooksOn) {
+        mainCaptionPart =
+            "$playersString of the $playerTeamName looks on against the $opponentTeamName";
+      } else {
+        mainCaptionPart = "$playersString of the $playerTeamName";
       }
 
       // Add inning if picked
       if (_selectedRbiInning != null) {
-        const inningWords = [
-          'first',
-          'second',
-          'third',
-          'fourth',
-          'fifth',
-          'sixth',
-          'seventh',
-          'eighth',
-          'ninth',
-          'tenth',
-          'eleventh',
-          'twelfth',
-          'thirteenth',
-          'fourteenth',
-          'fifteenth',
-          'sixteenth',
-          'seventeenth',
-          'eighteenth'
-        ];
-        final idx = _selectedRbiInning! - 1;
-        final word = (idx >= 0 && idx < inningWords.length)
-            ? inningWords[idx]
-            : '${_selectedRbiInning}th';
-        mainCaptionPart += ' in the $word inning';
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
-    } else if (_selectedVerb == 'Prior to Game' &&
-        _selectedPriorAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-      if (activePlayers.isEmpty) return;
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
-      mainCaptionPart = "$playersString ${_selectedPriorAction!.toLowerCase()}";
-    } else if (_selectedVerb == 'Post Game' &&
-        _selectedPostGameAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-      if (activePlayers.isEmpty) return;
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
-      mainCaptionPart =
-          "$playersString ${_selectedPostGameAction!.toLowerCase()}";
     } else if (_selectedVerb == 'At Bat' && _selectedAtBatAction != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
-      if (activePlayers.isEmpty) return;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
           _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      final actionReplacement = codeReplacements[_selectedAtBatAction!];
+      if (actionReplacement == null) return; // Should not happen
+
       mainCaptionPart =
-          "$playersString ${_selectedAtBatAction!.toLowerCase()} against the $opponentTeamName";
+          "$playersString ${actionReplacement.full} $opponentTeamName";
 
       // Add inning if picked
       if (_selectedRbiInning != null) {
-        const inningWords = [
-          'first',
-          'second',
-          'third',
-          'fourth',
-          'fifth',
-          'sixth',
-          'seventh',
-          'eighth',
-          'ninth',
-          'tenth',
-          'eleventh',
-          'twelfth',
-          'thirteenth',
-          'fourteenth',
-          'fifteenth',
-          'sixteenth',
-          'seventeenth',
-          'eighteenth'
-        ];
-        final idx = _selectedRbiInning! - 1;
-        final word = (idx >= 0 && idx < inningWords.length)
-            ? inningWords[idx]
-            : '${_selectedRbiInning}th';
-        mainCaptionPart += ' in the $word inning';
-      }
-    } else if (_selectedVerb == 'Base Running' &&
-        _selectedBaseRunningAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
-      if (activePlayers.isEmpty) return;
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
-
-      if (_selectedBaseRunningAction == 'steals' &&
-          _selectedStealBase != null) {
-        String againstText = '';
-        if (_showStealAgainstPlayer && selectedOpponentPlayers.isNotEmpty) {
-          final opponentPlayersString =
-              _combinePlayersWithoutTeam(selectedOpponentPlayers.toList());
-          againstText = " against $opponentPlayersString";
-        } else {
-          againstText = " against the $opponentTeamName";
-        }
-        mainCaptionPart =
-            "$playersString steals $_selectedStealBase$againstText";
-      } else {
-        mainCaptionPart =
-            "$playersString ${_selectedBaseRunningAction!.toLowerCase()} against the $opponentTeamName";
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb == 'Celebrate') {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
-      if (activePlayers.isEmpty) return;
+      final activePlayers = isHome ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (isHome && selectedAwayTeam == null) return;
+      if (!isHome && selectedHomeTeam == null) return;
+
+      final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
           _combinePlayersWithSingleTeam(activePlayers.toList());
 
-      if (_isSoloCelebration) {
-        mainCaptionPart = "$playersString celebrates alone";
-      } else if (celebrateWith.isNotEmpty) {
-        final teammatesString = _combinePlayersWithoutTeam(celebrateWith);
-        mainCaptionPart = "$playersString celebrates with $teammatesString";
-      } else if (celebrateAgainst.isNotEmpty) {
-        final opponentsString = _combinePlayersWithoutTeam(celebrateAgainst);
-        mainCaptionPart = "$playersString celebrates against $opponentsString";
-      } else if (_customCelebrationVerb.isNotEmpty) {
-        mainCaptionPart = "$playersString $_customCelebrationVerb";
+      if (_customCelebrationVerb.isNotEmpty) {
+        // Custom celebration verb - add after "celebrates"
+        print('DEBUG: Using custom celebration verb: $_customCelebrationVerb');
+        mainCaptionPart = "$playersString celebrates $_customCelebrationVerb";
+        if (celebrateAgainst.isNotEmpty) {
+          final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+          mainCaptionPart += " against $opponentStr";
+        } else if (celebrateWith.isNotEmpty) {
+          final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+          mainCaptionPart += " with $teammatesStr";
+        } else {
+          mainCaptionPart += " against the $opponentTeamName";
+        }
+      } else if (_selectedCelebrationType == 'alone') {
+        // Celebrates alone = celebrates against the other team
+        mainCaptionPart =
+            "$playersString celebrates against the $opponentTeamName";
+      } else if (_selectedCelebrationType == 'against' &&
+          celebrateAgainst.isNotEmpty) {
+        // Celebrates against = celebrates against specific players
+        final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+        mainCaptionPart = "$playersString celebrates against $opponentStr";
+      } else if (_selectedCelebrationType == 'with' &&
+          celebrateWith.isNotEmpty) {
+        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+        mainCaptionPart =
+            "$playersString celebrates with $teammatesStr against the $opponentTeamName";
       } else {
-        mainCaptionPart = "$playersString celebrates";
+        // Default celebration should include opponent team name
+        mainCaptionPart =
+            "$playersString celebrates against the $opponentTeamName";
+      }
+
+      // Add inning if picked
+      if (_selectedRbiInning != null) {
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb != null) {
       final activePlayers =
           _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (_showHomeFirst && selectedAwayTeam == null) return;
+      if (!_showHomeFirst && selectedHomeTeam == null) return;
+
       final opponentTeamName =
           _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      final opponentPlayers =
+          _showHomeFirst ? selectedOpponentPlayers : selectedPlayers;
       final verbReplacement = codeReplacements[_selectedVerb!];
 
       if (verbReplacement == null) return; // Should not happen
@@ -6373,31 +6708,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Add inning if picked
       if (mainCaptionPart.isNotEmpty && _selectedRbiInning != null) {
-        const inningWords = [
-          'first',
-          'second',
-          'third',
-          'fourth',
-          'fifth',
-          'sixth',
-          'seventh',
-          'eighth',
-          'ninth',
-          'tenth',
-          'eleventh',
-          'twelfth',
-          'thirteenth',
-          'fourteenth',
-          'fifteenth',
-          'sixteenth',
-          'seventeenth',
-          'eighteenth'
-        ];
-        final idx = _selectedRbiInning! - 1;
-        final word = (idx >= 0 && idx < inningWords.length)
-            ? inningWords[idx]
-            : '${_selectedRbiInning}th';
-        mainCaptionPart += ' in the $word inning';
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (selectedPlayers.isNotEmpty ||
         selectedOpponentPlayers.isNotEmpty) {
@@ -6417,39 +6728,2439 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     // Write final caption
     final formattedDate = '$monLC $day, $year';
+    final dateline = _formatDateline(city, prov, monLC.toUpperCase(), day);
+    final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
     final caption =
-        "TORONTO, ON - ${monLC.toUpperCase()} $day: $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate in ${_capitalize(city)}, ${_capitalize(prov)}, Canada. (Photo by ${creatorController.text}/Getty Images)";
-    captionController.text = caption.trim();
+        "$dateline $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate $locationSuffix. (Photo by ${creatorController.text}/Getty Images)";
+
+    print('DEBUG: Final caption: $caption');
+
+    // Store previous caption to detect changes
+    final previousCaption = captionController.text;
+    final trimmedCaption = caption.trim();
+
+    // Disable typewriter effect when custom celebration verb is being typed
+    final wasCustomVerb = _prevCustomCelebrationVerb.isNotEmpty;
+    _prevCustomCelebrationVerb = _customCelebrationVerb;
+
+    if (trimmedCaption != previousCaption && trimmedCaption.isNotEmpty) {
+      if (_customCelebrationVerb.isNotEmpty || wasCustomVerb) {
+        // Stop any running typewriter effect
+        _typewriterController.stop();
+        // Set text immediately without animation for custom verbs
+        captionController.text = trimmedCaption;
+      } else {
+        // Start typewriter effect for new captions
+        _startTypewriterEffect(trimmedCaption);
+      }
+    } else {
+      // No change, just set the text normally
+      captionController.text = trimmedCaption;
+    }
+
+    // Always update personality field when caption changes
+    _updatePersonality();
   }
 
-  // Helper method to update personality field
+  // Format hit phrase for caption (RBI capitalized, rest lowercase)
+  String _formatHitPhraseForCaption(String hitPhrase) {
+    // Replace "RBI" with "RBI" (keep capitalized) and make the rest lowercase
+    String formatted = hitPhrase.replaceAllMapped(
+      RegExp(r'RBI\s+(\w+)', caseSensitive: false),
+      (match) => 'RBI ${match.group(1)!.toLowerCase()}',
+    );
+
+    // Replace "Home Run" with "home run" (make lowercase)
+    formatted = formatted.replaceAll('Home Run', 'home run');
+
+    return formatted;
+  }
+
+  // Update personality field with selected players and celebration players
   void _updatePersonality() {
-    final allSelectedCodes = [
-      ...selectedPlayers,
-      ...selectedOpponentPlayers,
-      ...celebrateWith,
-      ...celebrateAgainst,
-    ];
-    final personalityText = allSelectedCodes
-        .map((c) {
-          final replacement = codeReplacements[c];
-          if (replacement == null) return null;
+    // Collect all relevant players
+    List<String> allRelevantPlayers = [];
+
+    // Add base selected players (the ones in the photo)
+    allRelevantPlayers.addAll(selectedPlayers);
+    allRelevantPlayers.addAll(selectedOpponentPlayers);
+
+    // Add celebration-related players (teammates and opponents)
+    if (celebrateWith.isNotEmpty) {
+      allRelevantPlayers.addAll(celebrateWith);
+    }
+
+    if (celebrateAgainst.isNotEmpty) {
+      allRelevantPlayers.addAll(celebrateAgainst);
+    }
+
+    // Convert player codes to names (remove duplicates)
+    Set<String> uniquePlayerNames = allRelevantPlayers
+        .map((code) {
+          final replacement = codeReplacements[code];
+          if (replacement == null) return '';
+          // Get the player name without team info - just the name part
           return replacement.short.split(' #').first;
         })
-        .whereNotNull()
-        .join(';');
-    personalityController.text = personalityText;
+        .where((name) => name.isNotEmpty)
+        .toSet();
+
+    // Rebuild personality field with semicolons
+    personalityController.text = uniquePlayerNames.toList().join(';');
   }
 
-  // Helper method to capitalize strings
+  // Helper to get player text with "of the [Team]" for a code
+  String playerText(String code) {
+    final data = codeReplacements[code];
+    if (data == null) return code;
+    final teamName = code.startsWith('h')
+        ? selectedHomeTeam ?? ''
+        : code.startsWith('v')
+            ? selectedAwayTeam ?? ''
+            : '';
+    return "${data.full} of the $teamName";
+  }
+
+  String _abbr(String prov) {
+    switch (prov.toLowerCase()) {
+      case 'ontario':
+        return 'ON';
+      case 'british columbia':
+        return 'BC';
+      default:
+        return prov.substring(0, 2).toUpperCase();
+    }
+  }
+
   String _capitalize(String s) {
     if (s.isEmpty) return s;
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 
-  // Helper method to get month name
-  String _month(int month) {
-    const months = [
+  // Helper to determine if the game is in the United States
+  bool _isGameInUnitedStates() {
+    final homeTeamState = teamStates[selectedHomeTeam];
+    // If the state is not 'Ontario' (Canada), then it's in the US
+    return homeTeamState != null && homeTeamState != 'Ontario';
+  }
+
+  // Helper to format the dateline for captions
+  String _formatDateline(
+      String city, String stateOrProvince, String monthUpper, int day) {
+    if (_isGameInUnitedStates()) {
+      // US format: CITY, STATE - DATE
+      return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
+    } else {
+      // Canadian format: CITY, PROVINCE_ABBREVIATION - DATE
+      final provAbbr = _abbr(stateOrProvince);
+      return '${city.toUpperCase()}, $provAbbr - $monthUpper $day:';
+    }
+  }
+
+  // Helper to format the location suffix for captions
+  String _formatLocationSuffix(
+      String city, String stateOrProvince, String formattedDate) {
+    if (_isGameInUnitedStates()) {
+      // US format: in City, State (no country needed)
+      // Special case for Washington DC - keep DC capitalized
+      final formattedState =
+          stateOrProvince == 'DC' ? 'DC' : _capitalize(stateOrProvince);
+      return 'in ${_capitalize(city)}, $formattedState';
+    } else {
+      // Canadian format: in City, Province, Canada
+      return 'in ${_capitalize(city)}, ${_capitalize(stateOrProvince)}, Canada';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final teams = [
+      'Arizona Diamondbacks',
+      'Atlanta Braves',
+      'Baltimore Orioles',
+      'Boston Red Sox',
+      'Chicago Cubs',
+      'Chicago White Sox',
+      'Cincinnati Reds',
+      'Cleveland Guardians',
+      'Colorado Rockies',
+      'Detroit Tigers',
+      'Houston Astros',
+      'Kansas City Royals',
+      'Los Angeles Angels',
+      'Los Angeles Dodgers',
+      'Miami Marlins',
+      'Milwaukee Brewers',
+      'Minnesota Twins',
+      'New York Mets',
+      'New York Yankees',
+      'Oakland Athletics',
+      'Philadelphia Phillies',
+      'Pittsburgh Pirates',
+      'San Diego Paders',
+      'San Francisco Giants',
+      'Seattle Mariners',
+      'St. Louis Cardinals',
+      'Tampa Bay Rays',
+      'Texas Rangers',
+      'Toronto Blue Jays',
+      'Washington Nationals',
+    ];
+
+    final innings = [
+      'first',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
+      'sixth',
+      'seventh',
+      'eighth',
+      'ninth',
+      'tenth',
+      'eleventh',
+      'twelfth',
+      'thirteenth',
+      'fourteenth',
+      'fifteenth',
+      'sixteenth',
+      'seventeenth',
+      'eighteenth',
+      'nineteenth',
+      'twentieth',
+      'twenty-first',
+      'twenty-second'
+    ];
+
+    // Sort players by number
+    final homePlayers = codeReplacements.keys
+        .where((k) =>
+            k.startsWith('h') && codeReplacements[k]?.jerseyNumber != null)
+        .toList()
+      ..sort((a, b) {
+        try {
+          final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
+          final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
+          return jerseyA.compareTo(jerseyB);
+        } catch (e) {
+          // If jersey numbers can't be parsed as integers, sort alphabetically
+          final nameA = codeReplacements[a]!.full;
+          final nameB = codeReplacements[b]!.full;
+          return nameA.compareTo(nameB);
+        }
+      });
+    final awayPlayers = codeReplacements.keys
+        .where((k) =>
+            k.startsWith('v') && codeReplacements[k]?.jerseyNumber != null)
+        .toList()
+      ..sort((a, b) {
+        try {
+          final jerseyA = int.parse(codeReplacements[a]!.jerseyNumber!);
+          final jerseyB = int.parse(codeReplacements[b]!.jerseyNumber!);
+          return jerseyA.compareTo(jerseyB);
+        } catch (e) {
+          // If jersey numbers can't be parsed as integers, sort alphabetically
+          final nameA = codeReplacements[a]!.full;
+          final nameB = codeReplacements[b]!.full;
+          return nameA.compareTo(nameB);
+        }
+      });
+
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyT):
+            ToggleHomeAwayIntent(),
+      },
+      child: Actions(
+        actions: {
+          ToggleHomeAwayIntent: CallbackAction<ToggleHomeAwayIntent>(
+            onInvoke: (intent) {
+              setState(() {
+                _showHomeFirst = !_showHomeFirst;
+              });
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF5F5F5),
+            appBar: AdaptiveAppBar(
+              titleSpacing: 16,
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  // Logo (bigger, no title text)
+                  Container(
+                    width: 64,
+                    height: 64,
+                    child: Image.asset(
+                      'assets/images/flo_file_logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback if logo not found
+                        return Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: Colors.blue,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'FF',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // API Connection Indicator
+                  Tooltip(
+                    message: _isConnectedToApi
+                        ? 'Connected to MLB Stats API'
+                        : 'MLB Stats API Disconnected',
+                    child: Icon(
+                      _isConnectedToApi ? Icons.cloud_done : Icons.cloud_off,
+                      color: _isConnectedToApi ? Colors.green : Colors.red,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Away Team Dropdown
+                  SizedBox(
+                    width: 140,
+                    child: _buildTeamDropdown(
+                      label: 'Away Team',
+                      value: selectedAwayTeam,
+                      allItems: teams,
+                      excludeTeam: selectedHomeTeam,
+                      useExpanded: false,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => selectedAwayTeam = v);
+                        if (selectedAwayTeam != null) {
+                          _loadTeam(v, isHomeTeam: false);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Home Team Dropdown
+                  SizedBox(
+                    width: 140,
+                    child: _buildTeamDropdown(
+                      label: 'Home Team',
+                      value: selectedHomeTeam,
+                      allItems: teams,
+                      excludeTeam: selectedAwayTeam,
+                      useExpanded: false,
+                      onChanged: (v) async {
+                        if (v == null) return;
+                        setState(() => selectedHomeTeam = v);
+                        if (selectedHomeTeam != null) {
+                          _loadTeam(v, isHomeTeam: true);
+                        }
+                        // Auto-fill metadata dialog
+                        final city = cityController.text;
+                        final province = provinceController.text;
+                        final stadium = stadiumController.text;
+                        String country = 'United States';
+                        String code = 'USA';
+                        if (v == 'Toronto Blue Jays') {
+                          country = 'Canada';
+                          code = 'CAN';
+                        }
+                        final shouldFill = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            title: const Text(
+                              'Auto-fill Metadata?',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Would you like to auto-fill the following location fields for this team?',
+                                  style: TextStyle(fontSize: 15),
+                                ),
+                                const SizedBox(height: 12),
+                                Text('• City: $city',
+                                    style: const TextStyle(fontSize: 13)),
+                                Text('• Province/State: $province',
+                                    style: const TextStyle(fontSize: 13)),
+                                Text('• Country: $country',
+                                    style: const TextStyle(fontSize: 13)),
+                                Text('• Country Code: $code',
+                                    style: const TextStyle(fontSize: 13)),
+                                Text('• Stadium: $stadium',
+                                    style: const TextStyle(fontSize: 13)),
+                              ],
+                            ),
+                            actionsPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            actions: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  _buildStyledButton('No',
+                                      () => Navigator.pop(context, false)),
+                                  const SizedBox(width: 12),
+                                  _buildStyledButton(
+                                      'Yes', () => Navigator.pop(context, true),
+                                      isBlue: true),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                        if (shouldFill == true) {
+                          setState(() {
+                            countryController.text = country;
+                            countryCodeController.text = code;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Favorites Button
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.star, size: 18),
+                        tooltip: 'Manage Favorite Teams',
+                        onPressed: _showManageFavoritesDialog,
+                      ),
+                      const Text(
+                        'Manage Favorites',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 120),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                          icon: const Icon(Icons.folder_open, size: 18),
+                          onPressed: pickFolder),
+                      const Text(
+                        'Images Folder: ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (_selectedFolderPath != null) ...[
+                        Flexible(
+                          child: Text(
+                            _selectedFolderPath!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.black,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            body: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    // Make the main content area scrollable
+                    child: Column(
+                      children: [
+                        const Divider(),
+                        // Main content area with image and player lists
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                // This SizedBox defines the overall height of the image and caption area.
+                                height:
+                                    578, // Reduced by 2px to better cut off the 4th row of thumbnails
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // LEFT: Image Display
+                                    Expanded(
+                                      flex:
+                                          1, // Changed from 2 to 1 to make image less wide
+                                      child: Column(
+                                        children: [
+                                          // Image Container with EXIF data included
+                                          Expanded(
+                                            child: Container(
+                                              width: double.infinity,
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                    0x09000000), // 3.5% opacity black background
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade400),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  // Image area
+                                                  Expanded(
+                                                    child: imagePaths.isNotEmpty
+                                                        ? ClipRRect(
+                                                            borderRadius:
+                                                                const BorderRadius
+                                                                    .only(
+                                                              topLeft: Radius
+                                                                  .circular(4),
+                                                              topRight: Radius
+                                                                  .circular(4),
+                                                            ),
+                                                            child: _buildPreviewImage(
+                                                                imagePaths[
+                                                                    currentIndex]),
+                                                          )
+                                                        : Container(
+                                                            color: const Color(
+                                                                0x0D000000),
+                                                            child: const Center(
+                                                              child: Column(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .center,
+                                                                children: [
+                                                                  Icon(
+                                                                      Icons
+                                                                          .image,
+                                                                      size: 48,
+                                                                      color: const Color(
+                                                                          0xFF808080)),
+                                                                  SizedBox(
+                                                                      height:
+                                                                          8),
+                                                                  Text(
+                                                                      'No image selected',
+                                                                      style: TextStyle(
+                                                                          color:
+                                                                              const Color(0xFF808080))),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                  ),
+
+                                                  // EXIF Data Display at bottom
+                                                  if (imagePaths.isNotEmpty)
+                                                    Container(
+                                                      width: double.infinity,
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              8.0),
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            Colors.grey.shade50,
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .only(
+                                                          bottomLeft:
+                                                              Radius.circular(
+                                                                  4),
+                                                          bottomRight:
+                                                              Radius.circular(
+                                                                  4),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        [
+                                                          if (_fileName != null)
+                                                            _fileName!,
+                                                          if (_imageWidth !=
+                                                                  null &&
+                                                              _imageHeight !=
+                                                                  null)
+                                                            '${_imageWidth}x$_imageHeight',
+                                                          if (_dateTimeOriginal !=
+                                                              null)
+                                                            _dateTimeOriginal!,
+                                                          if (_cameraModel !=
+                                                              null)
+                                                            _cameraModel!,
+                                                          if (_lensInfo != null)
+                                                            _lensInfo!,
+                                                          if (_shutterSpeed !=
+                                                              null)
+                                                            '1/$_shutterSpeed',
+                                                          if (_aperture != null)
+                                                            _aperture!,
+                                                          if (_iso != null)
+                                                            'ISO $_iso',
+                                                        ].join(' •  '),
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: const TextStyle(
+                                                          fontSize: 10,
+                                                          color: const Color(
+                                                              0xFF808080),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+
+                                    // RIGHT: Thumbnails
+                                    Expanded(
+                                      flex: 1,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Thumbnails grid
+                                          Expanded(
+                                            child: imagePaths.isEmpty
+                                                ? const Center(
+                                                    child: Text(
+                                                      'No images loaded',
+                                                      style: TextStyle(
+                                                        color: Colors.grey,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : GridView.builder(
+                                                    gridDelegate:
+                                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                                      crossAxisCount:
+                                                          6, // Changed to 6 columns for 6 across, 3 down layout
+                                                      childAspectRatio: 1.0,
+                                                      crossAxisSpacing:
+                                                          4, // Increased spacing between thumbnails
+                                                      mainAxisSpacing:
+                                                          4, // Increased spacing between thumbnails
+                                                    ),
+                                                    itemCount:
+                                                        imagePaths.length,
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final imagePath =
+                                                          imagePaths[index];
+                                                      return GestureDetector(
+                                                        onTap: () async {
+                                                          setState(() {
+                                                            currentIndex =
+                                                                index;
+                                                          });
+                                                          // Load metadata from the newly selected image
+                                                          await _loadMetadata();
+                                                        },
+                                                        child: Container(
+                                                          width: 50,
+                                                          height: 50,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors.grey
+                                                                .shade100, // Light grey background
+                                                            border: Border.all(
+                                                              color: index ==
+                                                                      currentIndex
+                                                                  ? Theme.of(
+                                                                          context)
+                                                                      .colorScheme
+                                                                      .primary
+                                                                  : Colors.grey
+                                                                      .shade400,
+                                                              width: index ==
+                                                                      currentIndex
+                                                                  ? 2.5
+                                                                  : 1.5,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4), // Rounded corners
+                                                          ),
+                                                          child: Column(
+                                                            children: [
+                                                              // Thumbnail image (smaller with padding for border effect)
+                                                              Expanded(
+                                                                child:
+                                                                    Container(
+                                                                  margin: const EdgeInsets
+                                                                      .all(
+                                                                      3), // Creates border effect
+                                                                  child:
+                                                                      ClipRRect(
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(2),
+                                                                    child: _buildProportionalThumbnail(
+                                                                        imagePath),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              // Filename display
+                                                              Container(
+                                                                width: double
+                                                                    .infinity,
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        2,
+                                                                    vertical:
+                                                                        1),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade200,
+                                                                  borderRadius:
+                                                                      const BorderRadius
+                                                                          .only(
+                                                                    bottomLeft:
+                                                                        Radius.circular(
+                                                                            4),
+                                                                    bottomRight:
+                                                                        Radius.circular(
+                                                                            4),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  p.basenameWithoutExtension(
+                                                                      imagePath),
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    color: Colors
+                                                                        .black,
+                                                                    fontSize: 8,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                                  textAlign:
+                                                                      TextAlign
+                                                                          .center,
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Caption and Personality boxes under the team pickers
+                              const SizedBox(height: 16),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Caption and Personality fields - taking 49% of screen width
+                                  SizedBox(
+                                    width: MediaQuery.of(context).size.width *
+                                        0.49,
+                                    child: Row(
+                                      children: [
+                                        // Caption Field - taking more space within the 50%
+                                        Expanded(
+                                          flex: 12,
+                                          child: ValueListenableBuilder<
+                                              TextEditingValue>(
+                                            valueListenable: captionController,
+                                            builder: (context, value, child) {
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    right: 8.0),
+                                                child: Material(
+                                                  elevation: 2.0,
+                                                  color: Colors.white,
+                                                  shadowColor: Colors.grey,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  child: TextField(
+                                                    controller:
+                                                        TextEditingController(
+                                                      text: _typewriterController
+                                                              .isAnimating
+                                                          ? _displayedCaption
+                                                          : value.text,
+                                                    ),
+                                                    maxLines: 3,
+                                                    minLines: 3,
+                                                    style: const TextStyle(
+                                                        fontSize: 14),
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Caption',
+                                                      floatingLabelBehavior:
+                                                          FloatingLabelBehavior
+                                                              .always,
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 12),
+                                                      labelStyle:
+                                                          const TextStyle(
+                                                              fontSize: 15,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              letterSpacing:
+                                                                  -0.5),
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                            width: 1.0),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                            width: 1.0),
+                                                      ),
+                                                    ),
+                                                    readOnly:
+                                                        _typewriterController
+                                                            .isAnimating,
+                                                    onChanged: (value) {
+                                                      if (!_typewriterController
+                                                          .isAnimating) {
+                                                        captionController.text =
+                                                            value;
+                                                      }
+                                                    },
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        // Personality Field (right side) - taking less space
+                                        Expanded(
+                                          flex: 5,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                                left: 8.0),
+                                            child: Material(
+                                              elevation: 2,
+                                              shadowColor: Colors.grey.shade400,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: TextField(
+                                                controller:
+                                                    personalityController,
+                                                maxLines: 3,
+                                                minLines: 3,
+                                                style: const TextStyle(
+                                                    fontSize: 14),
+                                                decoration: InputDecoration(
+                                                  labelText: 'Personality',
+                                                  floatingLabelBehavior:
+                                                      FloatingLabelBehavior
+                                                          .always,
+                                                  labelStyle: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 15,
+                                                      letterSpacing: -0.5),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                    borderSide: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                  ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    gapPadding: 0,
+                                                    borderSide: BorderSide(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .primary,
+                                                        width: 2),
+                                                  ),
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 12),
+                                                  filled: true,
+                                                  fillColor: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 16),
+                              // Main horizontal layout: Left side (player picker/verbs) and Right side (metadata only)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
+                                  SizedBox(
+                                    width: 280,
+                                    height: 550,
+                                    child: DefaultTabController(
+                                      length: 3,
+                                      child: Column(
+                                        children: [
+                                          // Tab bar
+                                          Container(
+                                            height: 30,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade200,
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                topLeft: Radius.circular(4),
+                                                topRight: Radius.circular(4),
+                                              ),
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                              ),
+                                            ),
+                                            child: TabBar(
+                                              labelColor: Colors.black,
+                                              unselectedLabelColor: Colors.grey,
+                                              indicatorColor: Colors.blue,
+                                              labelStyle:
+                                                  TextStyle(fontSize: 11),
+                                              unselectedLabelStyle:
+                                                  TextStyle(fontSize: 11),
+                                              indicatorWeight: 2,
+                                              isScrollable: false,
+                                              labelPadding: EdgeInsets.zero,
+                                              tabs: [
+                                                Tab(
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.person_search,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .grey.shade700),
+                                                    SizedBox(width: 4),
+                                                    Text('PLAYERS'),
+                                                  ],
+                                                )),
+                                                Tab(
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.flight,
+                                                        size: 12,
+                                                        color: Colors.red),
+                                                    SizedBox(width: 4),
+                                                    Text(selectedAwayTeam !=
+                                                            null
+                                                        ? _getTeamShortName(
+                                                            selectedAwayTeam!)
+                                                        : 'Away'),
+                                                  ],
+                                                )),
+                                                Tab(
+                                                    child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.home,
+                                                        size: 12,
+                                                        color: Colors.blue),
+                                                    SizedBox(width: 4),
+                                                    Text(selectedHomeTeam !=
+                                                            null
+                                                        ? _getTeamShortName(
+                                                            selectedHomeTeam!)
+                                                        : 'Home'),
+                                                  ],
+                                                )),
+                                              ],
+                                            ),
+                                          ),
+                                          // Tab content
+                                          Expanded(
+                                            child: TabBarView(
+                                              children: [
+                                                // Player Picker Tab
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(16),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      // Search input
+                                                      Material(
+                                                        elevation: 2.0,
+                                                        color:
+                                                            Colors.transparent,
+                                                        shape:
+                                                            RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4),
+                                                        ),
+                                                        child: TextField(
+                                                          controller:
+                                                              _playerPickerSearchController,
+                                                          decoration:
+                                                              InputDecoration(
+                                                            hintText:
+                                                                'Type player name or number...',
+                                                            prefixIcon:
+                                                                const Icon(
+                                                                    Icons
+                                                                        .search,
+                                                                    size: 16),
+                                                            isDense: true,
+                                                            contentPadding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        12,
+                                                                    vertical:
+                                                                        12),
+                                                            filled: true,
+                                                            fillColor:
+                                                                Colors.white,
+                                                            enabledBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                            focusedBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                          ),
+                                                          style: const TextStyle(
+                                                              fontSize:
+                                                                  kInputTextSize),
+                                                          onChanged: (value) {
+                                                            setState(() {
+                                                              _playerPickerSearchText =
+                                                                  value;
+                                                            });
+                                                          },
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      // Selected players chips
+                                                      if (selectedPlayers
+                                                              .isNotEmpty ||
+                                                          selectedOpponentPlayers
+                                                              .isNotEmpty) ...[
+                                                        Wrap(
+                                                          spacing: 4,
+                                                          runSpacing: 4,
+                                                          children: [
+                                                            ...selectedPlayers
+                                                                .map((code) {
+                                                              final replacement =
+                                                                  codeReplacements[
+                                                                          code] ??
+                                                                      Replacement(
+                                                                          '',
+                                                                          '',
+                                                                          '');
+                                                              final playerName =
+                                                                  replacement
+                                                                      .short;
+                                                              return Container(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        3),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .blue
+                                                                      .shade100,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                  border: Border.all(
+                                                                      color: Colors
+                                                                          .blue
+                                                                          .shade300),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Text(
+                                                                      playerName,
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            11,
+                                                                        color: Colors
+                                                                            .blue
+                                                                            .shade800,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedPlayers
+                                                                              .remove(code);
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Container(
+                                                                        width:
+                                                                            12,
+                                                                        height:
+                                                                            12,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .blue
+                                                                              .shade600,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(2),
+                                                                        ),
+                                                                        child:
+                                                                            const Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              8,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              );
+                                                            }).toList(),
+                                                            ...selectedOpponentPlayers
+                                                                .map((code) {
+                                                              final replacement =
+                                                                  codeReplacements[
+                                                                          code] ??
+                                                                      Replacement(
+                                                                          '',
+                                                                          '',
+                                                                          '');
+                                                              final playerName =
+                                                                  replacement
+                                                                      .short;
+                                                              return Container(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        3),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .red
+                                                                      .shade100,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                  border: Border.all(
+                                                                      color: Colors
+                                                                          .red
+                                                                          .shade300),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Text(
+                                                                      playerName,
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            11,
+                                                                        color: Colors
+                                                                            .red
+                                                                            .shade800,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedOpponentPlayers
+                                                                              .remove(code);
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Container(
+                                                                        width:
+                                                                            12,
+                                                                        height:
+                                                                            12,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .red
+                                                                              .shade600,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(2),
+                                                                        ),
+                                                                        child:
+                                                                            const Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              8,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              );
+                                                            }).toList(),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                            height: 8),
+                                                      ],
+                                                      // Results
+                                                      Expanded(
+                                                        child: _playerPickerSearchText
+                                                                .isEmpty
+                                                            ? const Center(
+                                                                child: Text(
+                                                                  'Type a name or number to search for players',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    color: Colors
+                                                                        .grey,
+                                                                    fontStyle:
+                                                                        FontStyle
+                                                                            .italic,
+                                                                  ),
+                                                                ),
+                                                              )
+                                                            : _buildPlayerPickerResults(),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                // Away Team Tab
+                                                _buildPlayerContainer(
+                                                  title:
+                                                      selectedAwayTeam != null
+                                                          ? _getTeamShortName(
+                                                              selectedAwayTeam!)
+                                                          : 'Away Team',
+                                                  codes: awayPlayers,
+                                                  isHomeList: false,
+                                                  toggle: false,
+                                                ),
+                                                // Home Team Tab
+                                                _buildPlayerContainer(
+                                                  title:
+                                                      selectedHomeTeam != null
+                                                          ? _getTeamShortName(
+                                                              selectedHomeTeam!)
+                                                          : 'Home Team',
+                                                  codes: homePlayers,
+                                                  isHomeList: true,
+                                                  toggle: false,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // Verb chips on the right
+                                  Expanded(
+                                    child:
+                                        (selectedPlayers.isNotEmpty ||
+                                                selectedOpponentPlayers
+                                                    .isNotEmpty)
+                                            ? Padding(
+                                                padding: const EdgeInsets.only(
+                                                    top: 0.0,
+                                                    left: 0.0,
+                                                    right: 0.0),
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Container(
+                                                      width: 280,
+                                                      child: Column(
+                                                        children: [
+                                                          // App bar style header
+                                                          Container(
+                                                            width: 280,
+                                                            height: 28,
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              gradient:
+                                                                  LinearGradient(
+                                                                begin: Alignment
+                                                                    .centerLeft,
+                                                                end: Alignment
+                                                                    .centerRight,
+                                                                colors: [
+                                                                  Colors.grey
+                                                                      .shade200,
+                                                                  Colors.white,
+                                                                ],
+                                                              ),
+                                                              borderRadius:
+                                                                  const BorderRadius
+                                                                      .only(
+                                                                topLeft: Radius
+                                                                    .circular(
+                                                                        4),
+                                                                topRight: Radius
+                                                                    .circular(
+                                                                        4),
+                                                              ),
+                                                            ),
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          16.0),
+                                                              child: Row(
+                                                                children: [
+                                                                  if (_selectedVerb ==
+                                                                      'hit') ...[
+                                                                    // Breadcrumb menu
+                                                                    Expanded(
+                                                                      child:
+                                                                          Row(
+                                                                        children: [
+                                                                          GestureDetector(
+                                                                            onTap:
+                                                                                () {
+                                                                              setState(() {
+                                                                                _selectedVerb = null;
+                                                                                _selectedHitType = null;
+                                                                                _selectedHomeRunType = null;
+                                                                                _rbiCount = null;
+                                                                                _selectedRbiInning = null;
+                                                                                _isBatterRunning = null;
+                                                                                _updateCaption();
+                                                                              });
+                                                                            },
+                                                                            child:
+                                                                                Text(
+                                                                              'HIT',
+                                                                              style: TextStyle(
+                                                                                fontSize: 10,
+                                                                                fontWeight: FontWeight.bold,
+                                                                                color: Colors.grey.shade700,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          if (_selectedHitType !=
+                                                                              null) ...[
+                                                                            Padding(
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                                                                              child: Text(
+                                                                                '→',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 8,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            GestureDetector(
+                                                                              onTap: () {
+                                                                                setState(() {
+                                                                                  _selectedHitType = null;
+                                                                                  _selectedHomeRunType = null;
+                                                                                  _rbiCount = null;
+                                                                                  _selectedRbiInning = null;
+                                                                                  _isBatterRunning = null;
+                                                                                  _updateCaption();
+                                                                                });
+                                                                              },
+                                                                              child: Text(
+                                                                                _selectedHitType!.toUpperCase(),
+                                                                                style: TextStyle(
+                                                                                  fontSize: 10,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                          if (_selectedHitType == 'Home Run' &&
+                                                                              _selectedHomeRunType != null) ...[
+                                                                            Padding(
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                                                                              child: Text(
+                                                                                '→',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 8,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            GestureDetector(
+                                                                              onTap: () {
+                                                                                setState(() {
+                                                                                  _selectedHomeRunType = null;
+                                                                                  _updateCaption();
+                                                                                });
+                                                                              },
+                                                                              child: Text(
+                                                                                _selectedHomeRunType == 'solo'
+                                                                                    ? 'SOLO'
+                                                                                    : _selectedHomeRunType == 'two-run'
+                                                                                        ? '2 RUN'
+                                                                                        : _selectedHomeRunType == 'three-run'
+                                                                                            ? '3 RUN'
+                                                                                            : _selectedHomeRunType == 'grand slam'
+                                                                                                ? 'GRAND SLAM'
+                                                                                                : '',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 10,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                          if (_selectedHitType != null &&
+                                                                              _selectedHitType != 'Home Run' &&
+                                                                              _rbiCount != null &&
+                                                                              _rbiCount! > 0) ...[
+                                                                            Padding(
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
+                                                                              child: Text(
+                                                                                '→',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 8,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            GestureDetector(
+                                                                              onTap: () {
+                                                                                setState(() {
+                                                                                  _rbiCount = null;
+                                                                                  _rbiCountByHit.remove(_selectedHitType!);
+                                                                                  _updateCaption();
+                                                                                });
+                                                                              },
+                                                                              child: Text(
+                                                                                _rbiCount == 1
+                                                                                    ? 'RBI SINGLE'
+                                                                                    : _rbiCount == 2
+                                                                                        ? 'TWO RBI SINGLE'
+                                                                                        : _rbiCount == 3
+                                                                                            ? 'THREE RBI SINGLE'
+                                                                                            : '',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 10,
+                                                                                  fontWeight: FontWeight.bold,
+                                                                                  color: Colors.grey.shade700,
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ],
+                                                                      ),
+                                                                    ),
+                                                                  ] else ...[
+                                                                    Text(
+                                                                      'Action Verbs',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.w600,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Verb box content
+                                                          Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .all(5.0),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              border: Border.all(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400),
+                                                              borderRadius:
+                                                                  const BorderRadius
+                                                                      .only(
+                                                                bottomLeft: Radius
+                                                                    .circular(
+                                                                        4),
+                                                                bottomRight:
+                                                                    Radius
+                                                                        .circular(
+                                                                            4),
+                                                              ),
+                                                            ),
+                                                            child:
+                                                                ConstrainedBox(
+                                                              constraints:
+                                                                  const BoxConstraints(
+                                                                minWidth: 280,
+                                                                minHeight: 450,
+                                                              ),
+                                                              child: Column(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .start,
+                                                                children: [
+                                                                  ..._buildAllVerbsList(),
+                                                                  // Add the permanent Back button at the bottom
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .only(
+                                                                        top:
+                                                                            8.0),
+                                                                    child:
+                                                                        ConstrainedBox(
+                                                                      constraints:
+                                                                          BoxConstraints(
+                                                                        maxWidth:
+                                                                            _fixedChipWidth /
+                                                                                2,
+                                                                      ),
+                                                                      child:
+                                                                          Container(
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .lightBlue
+                                                                              .shade100,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(4),
+                                                                        ),
+                                                                        child:
+                                                                            FlashingFilterChip(
+                                                                          label:
+                                                                              SizedBox(
+                                                                            width:
+                                                                                _fixedChipWidth / 2,
+                                                                            child:
+                                                                                Align(
+                                                                              alignment: Alignment.centerLeft,
+                                                                              child: Row(
+                                                                                mainAxisSize: MainAxisSize.min,
+                                                                                children: [
+                                                                                  const Icon(Icons.arrow_back, size: 14, color: Colors.grey),
+                                                                                  const SizedBox(width: 4),
+                                                                                  const Text(
+                                                                                    'Back',
+                                                                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                                                                                    overflow: TextOverflow.ellipsis,
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          selected:
+                                                                              false,
+                                                                          onSelected: (_) =>
+                                                                              _handleBack(),
+                                                                          visualDensity:
+                                                                              VisualDensity.compact,
+                                                                          padding:
+                                                                              EdgeInsets.zero,
+                                                                          key:
+                                                                              UniqueKey(),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                    Expanded(
+                                                      flex: 1,
+                                                      child:
+                                                          _buildHitInningSelector(
+                                                              showWalkOffOption:
+                                                                  true),
+                                                    ),
+                                                    const SizedBox(width: 16),
+                                                  ],
+                                                ),
+                                              )
+                                            : Container(
+                                                padding: const EdgeInsets.only(
+                                                    left: 3, top: 47),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.arrow_back,
+                                                          size: 32,
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                        ),
+                                                        const SizedBox(
+                                                            width: 16),
+                                                        Text(
+                                                          'Start here!',
+                                                          style: TextStyle(
+                                                            fontSize: 18,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color: Colors
+                                                                .grey.shade600,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                  ),
+
+                                  const SizedBox(width: 16),
+
+                                  // RIGHT SIDE: Metadata only - taking 46% of screen width
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: SizedBox(
+                                      width: MediaQuery.of(context).size.width *
+                                          0.49,
+                                      child: Transform.translate(
+                                        offset: const Offset(0, -99),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Metadata section
+                                            SizedBox(
+                                              width: MediaQuery.of(context)
+                                                      .size
+                                                      .width *
+                                                  0.49,
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  // Metadata Title
+                                                  const Text(
+                                                    'Metadata',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.black87,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  // Getty Metadata Fields (at the top)
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Photographer',
+                                                              creatorController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'MEID',
+                                                              jobIdController)),
+                                                      const SizedBox(width: 8),
+                                                      SizedBox(
+                                                          width: 120,
+                                                          child: _buildField(
+                                                              'Description Writers',
+                                                              descriptionWritersController)),
+                                                      const SizedBox(width: 8),
+                                                      _buildJobTitleDropdown(),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Copyright',
+                                                              copyrightController)),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Material(
+                                                          elevation: 2.0,
+                                                          color: Colors
+                                                              .transparent,
+                                                          shape:
+                                                              RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                          ),
+                                                          child: InkWell(
+                                                            onTap: _pickDate,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            child:
+                                                                InputDecorator(
+                                                              decoration:
+                                                                  InputDecoration(
+                                                                labelText:
+                                                                    'Date',
+                                                                floatingLabelBehavior:
+                                                                    FloatingLabelBehavior
+                                                                        .always,
+                                                                isDense: true,
+                                                                contentPadding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            8,
+                                                                        vertical:
+                                                                            12),
+                                                                filled: true,
+                                                                fillColor:
+                                                                    Colors
+                                                                        .white,
+                                                                labelStyle:
+                                                                    const TextStyle(
+                                                                        fontSize:
+                                                                            10),
+                                                                enabledBorder:
+                                                                    OutlineInputBorder(
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                  borderSide: BorderSide(
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade400,
+                                                                      width:
+                                                                          1.0),
+                                                                ),
+                                                                focusedBorder:
+                                                                    OutlineInputBorder(
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                  borderSide: BorderSide(
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade400,
+                                                                      width:
+                                                                          1.0),
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
+                                                                style:
+                                                                    const TextStyle(
+                                                                        fontSize:
+                                                                            11),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Stadium',
+                                                              stadiumController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'City',
+                                                              cityController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'State/Province',
+                                                              provinceController)),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Headline',
+                                                              headlineController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Keywords',
+                                                              keywordsController)),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Credit',
+                                                              creditController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Source',
+                                                              sourceController)),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      _buildUrgencyDropdown(),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Country',
+                                                              countryController)),
+                                                      const SizedBox(width: 8),
+                                                      _buildCountryCodeDropdown(),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Title/Object Name',
+                                                              titleObjectNameController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Category',
+                                                              categoryController)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Supp Cat 1',
+                                                              suppCat1Controller)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Supp Cat 2',
+                                                              suppCat2Controller)),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                          child: _buildField(
+                                                              'Supp Cat 3',
+                                                              suppCat3Controller)),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  _buildField(
+                                                      'Special Instructions',
+                                                      specialInstructionsController),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              // Filmstrip removed - thumbnails now on the right side
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _scrollToSelectedImage() {
+    if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
+      const double maxImageWidth = 40.0; // Made a little smaller
+      const double imagePadding = 8.0; // Updated for more spacing
+      const double separatorWidth = 1.0;
+      const double separatorMargin = 10.0; // Updated for more spacing
+
+      // Calculate the width each item takes up (image + margins + separator)
+      const double itemWidth = maxImageWidth +
+          (imagePadding * 2) +
+          separatorWidth +
+          (separatorMargin * 2);
+
+      final targetOffset = (itemWidth * currentIndex) -
+          (_filmstripController.position.viewportDimension / 2) +
+          (itemWidth / 2);
+
+      _filmstripController.animateTo(
+        targetOffset.clamp(0.0, _filmstripController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Widget _buildFilmstrip() {
+    // 4 rows of 40px thumbnails + 16px vertical spacing (8px top/bottom per thumb)
+    const double thumbSize = 40.0;
+    const double thumbSpacing = 8.0;
+    const int rows = 4;
+    const int columns = 7;
+    // Use a fixed larger height to ensure all rows are visible
+    const double filmstripHeight = 320.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Container(
+        height: filmstripHeight,
+        color: const Color(0x0D000000),
+        padding: const EdgeInsets.all(8.0),
+        child: imagePaths.isEmpty
+            ? Center(
+                child: Text(
+                  'No images loaded. Select a folder to begin.',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              )
+            : GridView.builder(
+                controller: _filmstripController,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: thumbSpacing,
+                  crossAxisSpacing: thumbSpacing,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: imagePaths.length,
+                itemBuilder: (context, index) {
+                  final imagePath = imagePaths[index];
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        currentIndex = index;
+                      });
+                    },
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxWidth: thumbSize,
+                        maxHeight: thumbSize,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: index == currentIndex
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: index == currentIndex ? 3.0 : 0.0,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: _buildProportionalThumbnail(imagePath),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildField(String label, TextEditingController c,
+      {int? maxLines = 1, bool expands = false}) {
+    return Material(
+      elevation: 2.0,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: TextField(
+        controller: c,
+        maxLines: maxLines,
+        expands: expands,
+        cursorHeight: 10.0,
+        decoration: InputDecoration(
+          labelText: label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          filled: true,
+          fillColor: Colors.white,
+          labelStyle: const TextStyle(fontSize: 10),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+        ),
+        style: const TextStyle(fontSize: 11),
+        onChanged: (value) => _updateCaption(),
+      ),
+    );
+  }
+
+  // Helper for building team dropdowns
+  Widget _buildTeamDropdown({
+    required String label,
+    required String? value,
+    required List<String> allItems,
+    required ValueChanged<String?> onChanged,
+    String? excludeTeam, // Team to exclude from this dropdown
+    bool useExpanded = true, // Whether to wrap in Expanded widget
+  }) {
+    // Filter out the excluded team
+    final availableTeams = excludeTeam != null
+        ? allItems.where((team) => team != excludeTeam).toList()
+        : allItems;
+
+    // Sort teams with favorites first, then alphabetically
+    final sortedTeams = List<String>.from(availableTeams);
+    sortedTeams.sort((a, b) {
+      final aIsFavorite = _favoriteTeams.contains(a);
+      final bIsFavorite = _favoriteTeams.contains(b);
+
+      if (aIsFavorite && !bIsFavorite) return -1;
+      if (!aIsFavorite && bIsFavorite) return 1;
+
+      return a.compareTo(b);
+    });
+
+    final dropdown = Material(
+      elevation: 2.0,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: DropdownButtonFormField<String>(
+        isExpanded: true,
+        value: value,
+        iconSize: 16, // Smaller dropdown arrow
+        decoration: InputDecoration(
+          labelText: label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          filled: true,
+          fillColor: Colors.white,
+          labelStyle: const TextStyle(fontSize: 11),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+        ),
+        items: sortedTeams
+            .map((item) => DropdownMenuItem(
+                value: item,
+                child: Container(
+                  height: 32,
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(item,
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.black)),
+                      ),
+                      if (_favoriteTeams.contains(item))
+                        const Icon(Icons.star, size: 14, color: Colors.amber),
+                    ],
+                  ),
+                )))
+            .toList(),
+        onChanged: onChanged,
+        style: const TextStyle(fontSize: 11, color: Colors.black),
+      ),
+    );
+
+    return useExpanded ? Expanded(child: dropdown) : dropdown;
+  }
+
+  String _getTeamShortName(String fullName) {
+    switch (fullName) {
+      case 'Arizona Diamondbacks':
+        return 'ARI';
+      case 'Atlanta Braves':
+        return 'ATL';
+      case 'Baltimore Orioles':
+        return 'BAL';
+      case 'Boston Red Sox':
+        return 'BOS';
+      case 'Chicago Cubs':
+        return 'CHC';
+      case 'Chicago White Sox':
+        return 'CWS';
+      case 'Cincinnati Reds':
+        return 'CIN';
+      case 'Cleveland Guardians':
+        return 'CLE';
+      case 'Colorado Rockies':
+        return 'COL';
+      case 'Detroit Tigers':
+        return 'DET';
+      case 'Florida Marlins':
+        return 'FLA';
+      case 'Houston Astros':
+        return 'HOU';
+      case 'Kansas City Royals':
+        return 'KC';
+      case 'Los Angeles Angels of Anaheim':
+        return 'LAA';
+      case 'Los Angeles Angels':
+        return 'LAA';
+      case 'Los Angeles Dodgers':
+        return 'LAD';
+      case 'Milwaukee Brewers':
+        return 'MIL';
+      case 'Minnesota Twins':
+        return 'MIN';
+      case 'New York Mets':
+        return 'NYM';
+      case 'New York Yankees':
+        return 'NYY';
+      case 'Oakland Athletics':
+        return 'OAK';
+      case 'Philadelphia Phillies':
+        return 'PHI';
+      case 'Pittsburgh Pirates':
+        return 'PIT';
+      case 'San Diego Padres':
+        return 'SD';
+      case 'San Francisco Giants':
+        return 'SF';
+      case 'Seattle Mariners':
+        return 'SEA';
+      case 'St. Louis Cardinals':
+        return 'STL';
+      case 'Tampa Bay Rays':
+        return 'TB';
+      case 'Texas Rangers':
+        return 'TEX';
+      case 'Toronto Blue Jays':
+        return 'TOR';
+      case 'Washington Nationals':
+        return 'WAS';
+      default:
+        return fullName.length > 8 ? fullName.substring(0, 8) : fullName;
+    }
+  }
+
+  Widget _buildPlayerPickerResults() {
+    if (_playerPickerSearchText.isEmpty) {
+      return const Center(
+        child: Text(
+          'Type a name or number to search for players',
+          style: TextStyle(
+              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+
+    // Combine players from both teams
+    List<Map<String, dynamic>> allPlayers = [];
+
+    // Add home team players
+    if (selectedHomeTeam != null) {
+      final homePlayers = codeReplacements.keys
+          .where((k) => k.startsWith('h'))
+          .toList()
+        ..sort();
+      for (String playerCode in homePlayers) {
+        final replacement = codeReplacements[playerCode];
+        if (replacement != null) {
+          allPlayers.add({
+            'code': playerCode,
+            'name': replacement.short,
+            'number': replacement.jerseyNumber ?? '',
+            'team': selectedHomeTeam!,
+            'isHome': true,
+          });
+        }
+      }
+    }
+
+    // Add away team players
+    if (selectedAwayTeam != null) {
+      final awayPlayers = codeReplacements.keys
+          .where((k) => k.startsWith('v'))
+          .toList()
+        ..sort();
+      for (String playerCode in awayPlayers) {
+        final replacement = codeReplacements[playerCode];
+        if (replacement != null) {
+          allPlayers.add({
+            'code': playerCode,
+            'name': replacement.short,
+            'number': replacement.jerseyNumber ?? '',
+            'team': selectedAwayTeam!,
+            'isHome': false,
+          });
+        }
+      }
+    }
+
+    // Filter players based on search text
+    List<Map<String, dynamic>> filteredPlayers = allPlayers.where((player) {
+      String playerName = player['name'].toString().toLowerCase();
+      String playerNumber = player['number'].toString().toLowerCase();
+      String searchText = _playerPickerSearchText.toLowerCase();
+
+      // Check if search text matches h/v + number pattern (e.g., "h5", "v10") or number + h/v pattern (e.g., "5h", "10v")
+      if (searchText.length >= 2) {
+        String? prefix;
+        String? numberPart;
+
+        // Pattern 1: letter + number (e.g., "h23", "v10")
+        if (searchText.startsWith('h') || searchText.startsWith('v')) {
+          prefix = searchText.substring(0, 1);
+          numberPart = searchText.substring(1);
+        }
+        // Pattern 2: number + letter (e.g., "23h", "10v")
+        else if (searchText.endsWith('h') || searchText.endsWith('v')) {
+          prefix = searchText.substring(searchText.length - 1);
+          numberPart = searchText.substring(0, searchText.length - 1);
+        }
+
+        // If we found a valid pattern, filter by team and number
+        if (prefix != null &&
+            numberPart != null &&
+            RegExp(r'^\d+$').hasMatch(numberPart)) {
+          bool isHomeTeam = prefix == 'h';
+          if (player['isHome'] != isHomeTeam) {
+            return false; // Wrong team
+          }
+          // Check if player number matches
+          return playerNumber == numberPart;
+        }
+      }
+
+      // Regular search logic
+      return playerName.contains(searchText) ||
+          playerNumber.contains(searchText);
+    }).toList();
+
+    // Sort results to prioritize exact number matches for single digits
+    if (_playerPickerSearchText.length == 1 &&
+        RegExp(r'^\d$').hasMatch(_playerPickerSearchText)) {
+      filteredPlayers.sort((a, b) {
+        String aNumber = a['number'].toString();
+        String bNumber = b['number'].toString();
+
+        // Check if numbers are exact matches
+        bool aExact = aNumber == _playerPickerSearchText;
+        bool bExact = bNumber == _playerPickerSearchText;
+
+        if (aExact && !bExact) return -1; // a comes first
+        if (!aExact && bExact) return 1; // b comes first
+        return 0; // both same, maintain original order
+      });
+    }
+
+    if (filteredPlayers.isEmpty) {
+      return const Center(
+        child: Text(
+          'No players found',
+          style: TextStyle(
+              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: filteredPlayers.length,
+      itemBuilder: (context, index) {
+        final player = filteredPlayers[index];
+        final isHome = player['isHome'] as bool;
+
+        return _PlayerPickerItem(
+          player: player,
+          isHome: isHome,
+          onTap: () {
+            // Add player to caption
+            if (isHome) {
+              if (!selectedPlayers.contains(player['code'])) {
+                setState(() {
+                  selectedPlayers.add(player['code']);
+                });
+              }
+            } else {
+              if (!selectedOpponentPlayers.contains(player['code'])) {
+                setState(() {
+                  selectedOpponentPlayers.add(player['code']);
+                });
+              }
+            }
+
+            // Update caption
+            _updateCaption();
+          },
+        );
+      },
+    );
+  }
+
+  String _month(int m) {
+    const names = [
       'January',
       'February',
       'March',
@@ -6463,89 +9174,1734 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'November',
       'December'
     ];
-    return months[month - 1];
+    return names[m - 1];
   }
 
-  // Missing methods that are referenced but not defined
-  Future<void> _onVerbSelected(String verb) async {
-    setState(() {
-      _selectedVerb = _selectedVerb == verb ? null : verb;
-      _updateCaption();
-    });
-  }
+  Widget _PlayerPickerItem({
+    required Map<String, dynamic> player,
+    required bool isHome,
+    required VoidCallback onTap,
+  }) {
+    bool isHovered = false;
 
-  void _scrollToSelectedImage() {
-    if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
-      const double filmstripHeight = 140.0;
-      const double imagePadding = 4.0;
-      const imageWidth = filmstripHeight -
-          (imagePadding * 2) +
-          (imagePadding * 2); // image + margin
-      final targetOffset = (imageWidth * currentIndex) -
-          (_filmstripController.position.viewportDimension / 2) +
-          (imageWidth / 2);
-
-      _filmstripController.animateTo(
-        targetOffset.clamp(0.0, _filmstripController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
-  Future<void> _preloadThumbnailsWithDialog(BuildContext context) async {
-    // Simple preloading without dialog for now
-    _preloadThumbnails(currentIndex);
-  }
-
-  // Helper function to list image files
-  static Future<List<String>> _listImageFiles(String dirPath) async {
-    try {
-      final directory = Directory(dirPath);
-      final files = directory
-          .listSync()
-          .whereType<File>()
-          .where((f) {
-            final ext = p.extension(f.path).toLowerCase();
-            return ['.jpg', '.jpeg', '.png', '.tif', '.tiff'].contains(ext);
-          })
-          .map((f) => f.path)
-          .toList();
-      return files;
-    } catch (e) {
-      print('Error listing image files: $e');
-      return [];
-    }
-  }
-
-  // Missing build method
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quick Cap'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            onPressed: pickFolder,
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: isHovered ? Colors.grey.shade300 : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isHome ? Icons.home : Icons.flight,
+                    color: isHome ? Colors.blue : Colors.red,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _getTeamShortName(player['team']),
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      player['name'],
+                      style: TextStyle(
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.upload_file),
-            onPressed: pickCodeFile,
+        );
+      },
+    );
+  }
+
+  // Helper for condensed item rendering in popup columns
+  Widget _buildCondensedItem(
+      String label, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        color: isSelected ? Colors.blue.shade100 : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPlayerSelectionDialog(bool isSelectingHomePlayers) async {
+    String search = '';
+    Set<String> tempSelected;
+    final prefix = isSelectingHomePlayers ? 'h' : 'v';
+    final playersList = codeReplacements.keys
+        .where((k) => k.startsWith(prefix) && _isNumeric(k.substring(1)))
+        .toList()
+      ..sort((a, b) =>
+          int.parse(a.substring(1)).compareTo(int.parse(b.substring(1))));
+
+    // Initialize tempSelected based on which set we're modifying
+    if (isSelectingHomePlayers) {
+      tempSelected = Set.from(selectedPlayers.where((k) => k.startsWith('h')));
+    } else {
+      tempSelected =
+          Set.from(selectedOpponentPlayers.where((k) => k.startsWith('v')));
+    }
+
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext ctx, StateSetter setState) {
+            final filtered = playersList.where((code) {
+              final replacement = codeReplacements[code];
+              if (replacement == null) return false;
+              final player = replacement.short.toLowerCase();
+              return player.contains(search.toLowerCase());
+            }).toList();
+            return AlertDialog(
+              title: Text(
+                  'Select ${isSelectingHomePlayers ? 'Home' : 'Away'} Players'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        height: 30,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search players...',
+                            isDense: true,
+                          ),
+                          style: const TextStyle(fontSize: kInputTextSize),
+                          cursorHeight: 12.0,
+                          onChanged: (value) => setState(() => search = value),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        children: filtered.map((code) {
+                          final replacement =
+                              codeReplacements[code] ?? Replacement('', '', '');
+                          final playerName = replacement.short;
+                          final isSelected = tempSelected.contains(code);
+                          return _buildCondensedItem(
+                            playerName,
+                            isSelected,
+                            () {
+                              setState(() {
+                                if (isSelected) {
+                                  tempSelected.remove(code);
+                                } else {
+                                  tempSelected.add(code);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    setState(() {
+                      if (isSelectingHomePlayers) {
+                        selectedPlayers.clear(); // Clear existing home players
+                        selectedPlayers.addAll(tempSelected);
+                        isHome = true;
+                      } else {
+                        selectedOpponentPlayers
+                            .clear(); // Clear existing away players
+                        selectedOpponentPlayers.addAll(tempSelected);
+                        isHome = false;
+                      }
+                      _showHitTypes = false;
+                    });
+                    _updateCaption();
+                  },
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showInningSelectionDialog() async {
+    final innings = [
+      'first',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
+      'sixth',
+      'seventh',
+      'eighth',
+      'ninth',
+      'tenth',
+      'eleventh',
+      'twelfth',
+      'thirteenth',
+      'fourteenth',
+      'fifteenth',
+      'sixteenth',
+      'seventeenth',
+      'eighteenth',
+      'nineteenth',
+      'twentieth',
+      'twenty-first',
+      'twenty-second'
+    ];
+    final result = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return SimpleDialog(
+          title: const Text('Select Inning'),
+          children: innings.map((i) {
+            return SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, i),
+              child: Text(i),
+            );
+          }).toList(),
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() => selectedInning = result);
+      _updateCaption();
+    }
+  }
+
+  Future<void> _showSimpleVerbPicker(BuildContext context) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final categories = verbCategories.entries.toList();
+        return DefaultTabController(
+          length: categories.length,
+          child: AlertDialog(
+            title: const Text('Select Verb'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: Column(
+                children: [
+                  TabBar(
+                    isScrollable: true,
+                    tabs: categories.map((e) => Tab(text: e.key)).toList(),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: categories.map((e) {
+                        return ListView(
+                          children: e.value.map((verb) {
+                            return ListTile(
+                              title: Text(verb),
+                              onTap: () => Navigator.pop(ctx, verb),
+                            );
+                          }).toList(),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedVerb = result;
+      });
+      if (result == 'Celebrate') {
+        await _showCelebrateDialog();
+      } else {
+        _updateCaption();
+      }
+    }
+  }
+
+  // Helper: Build player container (Home/Away)
+  Widget _buildPlayerContainer({
+    required String title,
+    required List<String> codes,
+    required bool isHomeList,
+    required bool toggle,
+  }) {
+    final searchController =
+        isHomeList ? _homeSearchController : _awaySearchController;
+    final searchText = searchController.text.toLowerCase();
+
+    // Separate lists for different match types to apply priority sorting
+    final List<String> exactNumberMatches = [];
+    final List<String> startsWithNumberMatches = [];
+    final List<String> containsNumberMatches = [];
+    final List<String> nameMatches = [];
+
+    final int? searchNumber = int.tryParse(searchText);
+
+    for (final code in codes) {
+      final replacement = codeReplacements[code];
+      if (replacement == null) continue;
+
+      final playerJerseyNumber = replacement.jerseyNumber;
+      final playerName =
+          replacement.short.toLowerCase(); // e.g., "player name #10"
+
+      // Priority 1: Exact number match (e.g., search "0" matches "h0")
+      if (searchNumber != null && playerJerseyNumber == searchText) {
+        exactNumberMatches.add(code);
+      }
+      // Priority 2: Player number starts with search text (e.g., search "1" matches "h1", "h10", "h11")
+      else if (playerJerseyNumber != null &&
+          playerJerseyNumber.startsWith(searchText)) {
+        startsWithNumberMatches.add(code);
+      }
+      // Priority 3: Player number contains search text (e.g., search "0" matches "h10", "h20")
+      else if (playerJerseyNumber != null &&
+          playerJerseyNumber.contains(searchText)) {
+        containsNumberMatches.add(code);
+      }
+      // Priority 4: Player name contains search text
+      // Use 'if' not 'else if' to allow name matches even if number matches
+      // This ensures names are always considered for search
+      if (playerName.contains(searchText)) {
+        nameMatches.add(code);
+      }
+    }
+
+    // Combine and sort the lists, removing duplicates while preserving order
+    final List<String> finalFilteredCodes = [];
+    finalFilteredCodes.addAll(exactNumberMatches);
+    finalFilteredCodes.addAll(startsWithNumberMatches);
+    finalFilteredCodes.addAll(containsNumberMatches);
+    finalFilteredCodes.addAll(nameMatches);
+
+    final filteredCodes =
+        LinkedHashSet<String>.from(finalFilteredCodes).toList();
+
+    return Container(
+      height: 500,
+      padding:
+          const EdgeInsets.all(8.0), // Add some padding inside the container
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Team name and search bar in a row
+          Row(
+            children: [
+              // Team name
+              RichText(
+                text: TextSpan(
+                  // Default style for the team name
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize:
+                          12, // Reduced from 14 to 12 to make team name smaller
+                      color: Colors.black,
+                      fontFamily: 'RobotoCondensed'),
+                  children: <TextSpan>[
+                    TextSpan(text: title),
+                  ],
+                ),
+              ),
+              const SizedBox(
+                  width: 8), // Space between team name and search bar
+              // Search bar
+              _buildSearchWithDropdown(
+                  searchController, searchText, isHomeList, filteredCodes),
+            ],
+          ),
+          // Switch Team button below the row
+          if (toggle)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset:
+                    const Offset(-8, 0), // Move left to align with team name
+                child: TextButton.icon(
+                  icon: const Icon(Icons.refresh, size: 10), // Smaller icon
+                  label: const Text('Switch Team',
+                      style: TextStyle(
+                        fontSize: 10, // Smaller text
+                        fontWeight: FontWeight.normal, // Remove bold
+                      )),
+                  // Disable the button if players are selected from the current list.
+                  onPressed: (isHomeList && selectedPlayers.isNotEmpty) ||
+                          (!isHomeList && selectedOpponentPlayers.isNotEmpty)
+                      ? null
+                      : () {
+                          _homeSearchController.clear();
+                          _awaySearchController.clear();
+                          setState(() {
+                            _showHomeFirst = !_showHomeFirst;
+                            // When switching, clear all selections to avoid confusion.
+                            selectedPlayers.clear();
+                            selectedOpponentPlayers.clear();
+                            _selectedVerb = null;
+                            selectedInning = null;
+                            celebrateWith.clear();
+                            celebrateAgainst.clear();
+                            captionController.clear();
+                            personalityController.clear();
+                            // Update isHome based on the new team view
+                            isHome = _showHomeFirst;
+                          });
+                        },
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        Colors.black, // Match other non-primary buttons
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2), // Smaller padding
+                    minimumSize:
+                        const Size(0, 0), // Remove minimum size constraints
+                    tapTargetSize:
+                        MaterialTapTargetSize.shrinkWrap, // Shrink tap target
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4), // Slight rounding
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          SizedBox(
+              height: (searchText.isNotEmpty &&
+                      RegExp(r'^\d+$').hasMatch(searchText) &&
+                      filteredCodes.isNotEmpty)
+                  ? 220
+                  : 8), // Extra space when dropdown is visible
+          // Selected players chips
+          if ((isHomeList && selectedPlayers.isNotEmpty) ||
+              (!isHomeList && selectedOpponentPlayers.isNotEmpty))
+            Container(
+              width: 200,
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children:
+                    (isHomeList ? selectedPlayers : selectedOpponentPlayers)
+                        .map((code) {
+                  final replacement =
+                      codeReplacements[code] ?? Replacement('', '', '');
+                  final playerName = replacement.short;
+                  return SizedBox(
+                    width:
+                        96, // Fixed width to fit 2 chips in 200px container (96*2 + 8 spacing = 200)
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              playerName,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (isHomeList) {
+                                  selectedPlayers.remove(code);
+                                } else {
+                                  selectedOpponentPlayers.remove(code);
+                                }
+                                // Update personality field when player is deselected
+                                final allSelectedCodes = [
+                                  ...selectedPlayers,
+                                  ...selectedOpponentPlayers
+                                ];
+                                final personalityText = allSelectedCodes
+                                    .map((c) {
+                                      final replacement = codeReplacements[c];
+                                      if (replacement == null) return null;
+                                      return replacement.short
+                                          .split(' #')
+                                          .first;
+                                    })
+                                    .whereNotNull()
+                                    .join(';');
+                                personalityController.text = personalityText;
+                                _updateCaption();
+                              });
+                            },
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade600,
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                size: 7,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          Flexible(
+            child: (filteredCodes.isEmpty && searchText.isNotEmpty)
+                ? const Align(
+                    alignment: Alignment.topLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 20.0, left: 15.0),
+                      child: Text(
+                        'No results',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  )
+                : (searchText.isNotEmpty &&
+                        RegExp(r'^\d+$').hasMatch(searchText))
+                    ? const SizedBox
+                        .shrink() // Hide main list when dropdown is showing
+                    : ListView(
+                        children: [
+                          ...filteredCodes.map((code) {
+                            final replacement = codeReplacements[code];
+                            if (replacement == null) {
+                              return const SizedBox.shrink();
+                            }
+                            final jerseyNumber = replacement.jerseyNumber;
+                            // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
+                            String nameOnly = replacement.short;
+                            if (jerseyNumber != null &&
+                                nameOnly.startsWith('$jerseyNumber ')) {
+                              nameOnly =
+                                  nameOnly.substring(jerseyNumber.length + 1);
+                            }
+                            // Remove trailing number if present
+                            nameOnly = nameOnly.split(' #').first;
+
+                            final isSelected = isHomeList
+                                ? selectedPlayers.contains(code)
+                                : selectedOpponentPlayers.contains(code);
+                            final safeNumber = (jerseyNumber ?? '0').toString();
+                            final safeName = (nameOnly ?? '').trim();
+                            final displayText = '#$safeNumber $safeName';
+                            return InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isHomeList) {
+                                    if (isSelected) {
+                                      // If already selected, deselect
+                                      selectedPlayers.remove(code);
+                                    } else {
+                                      // Check if a solo verb is selected and we already have a player
+                                      final soloOnlyVerbs = [
+                                        'hit',
+                                        'Fielding',
+                                        'pitches',
+                                        'At Bat',
+                                        'Base Running'
+                                      ];
+
+                                      if (_selectedVerb != null &&
+                                          soloOnlyVerbs
+                                              .contains(_selectedVerb) &&
+                                          selectedPlayers.isNotEmpty) {
+                                        // For solo verbs, replace the existing player instead of adding
+                                        selectedPlayers.clear();
+                                        selectedPlayers.add(code);
+                                        // Force caption update for player replacement
+                                      } else {
+                                        selectedPlayers.add(code);
+                                      }
+                                      isHome = true;
+                                    }
+                                  } else {
+                                    if (isSelected) {
+                                      selectedOpponentPlayers.remove(code);
+                                    } else {
+                                      // Check if a solo verb is selected and we already have an opponent player
+                                      final soloOnlyVerbs = [
+                                        'hit',
+                                        'Fielding',
+                                        'pitches',
+                                        'At Bat',
+                                        'Base Running'
+                                      ];
+
+                                      if (_selectedVerb != null &&
+                                          soloOnlyVerbs
+                                              .contains(_selectedVerb) &&
+                                          selectedOpponentPlayers.isNotEmpty) {
+                                        // For solo verbs, replace the existing player instead of adding
+                                        selectedOpponentPlayers.clear();
+                                        selectedOpponentPlayers.add(code);
+                                        // Force caption update for player replacement
+                                      } else {
+                                        selectedOpponentPlayers.add(code);
+                                      }
+                                      isHome = false;
+                                    }
+                                  }
+
+                                  // When a player is selected or deselected, update the
+                                  // personality box to reflect the current selections.
+                                  final allSelectedCodes = [
+                                    ...selectedPlayers,
+                                    ...selectedOpponentPlayers
+                                  ];
+                                  final personalityText = allSelectedCodes
+                                      .map((c) {
+                                        final replacement = codeReplacements[c];
+                                        if (replacement == null) return null;
+                                        // Get full name (FirstName LastName) from short name by removing number
+                                        return replacement.short
+                                            .split(' #')
+                                            .first;
+                                      })
+                                      .whereNotNull()
+                                      .join(';');
+                                  personalityController.text = personalityText;
+
+                                  _updateCaption();
+                                });
+                              },
+                              child: Container(
+                                color: isSelected
+                                    ? Colors.grey.shade400
+                                    : Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 2, horizontal: 8),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      displayText,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
           ),
         ],
       ),
-      body: Column(
+    );
+  }
+
+  // Helper: Build list box for verbs and innings
+  Widget _buildListBox({
+    required String title,
+    required List<String> items,
+    required Function(String)? onTap,
+    String? selectedItem,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 16.0),
+      width: 350,
+      height: 500,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color.fromARGB(255, 216, 216, 216)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Placeholder for the main content
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
           Expanded(
-            child: Center(
-              child: Text(
-                  'Caption Builder - Image ${currentIndex + 1} of ${imagePaths.length}'),
+            child: ListView(
+              children: items.map((item) {
+                final isSelected = selectedItem == item;
+                return InkWell(
+                  onTap: (onTap != null)
+                      ? () async {
+                          if (title == 'Verbs') {
+                            setState(() => _selectedVerb = item);
+                            if (item == 'Celebrate') {
+                              await _showCelebrateDialog();
+                            } else {
+                              _updateCaption();
+                            }
+                          } else if (title == 'Innings') {
+                            setState(() => selectedInning = item);
+                            _updateCaption();
+                          } else {
+                            onTap(item);
+                          }
+                        }
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 1.0, horizontal: 8.0),
+                    color:
+                        isSelected ? Colors.blue.shade50 : Colors.transparent,
+                    child: Text(
+                      item,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // Helper for verb tap logic
+  Future<void> _onVerbSelected(String verb) async {
+    // Only remap dynamic hit verbs; preserve existing mappings for competition verbs
+    if (verb.startsWith('hits')) {
+      codeReplacements[verb] = Replacement('$verb against the', verb, '');
+    }
+
+    final isTogglingOff = _selectedVerb == verb;
+
+    setState(() {
+      _selectedVerb = isTogglingOff ? null : verb;
+      // Reset inning state when the verb selection changes, except for 'pitches'
+      if (verb != 'pitches') {
+        _selectedRbiInning = null;
+      }
+
+      // Only reset hit-related state if we're changing away from 'hit' verb
+      if (_selectedVerb != 'hit' || isTogglingOff) {
+        _showHitTypes = false;
+        _selectedHitType = null;
+        _selectedHomeRunType = null;
+        _rbiCount = null;
+        _isBatterRunning = null;
+      }
+
+      // Reset fielding-related state
+      _showFieldingOptions = false;
+      _selectedFieldingAction = null;
+      _showDivingCatch = false;
+      _isDivingCatch = false;
+    });
+
+    if (!isTogglingOff && verb == 'Celebrate') {
+      await _showCelebrateDialog();
+    }
+    _updateCaption(); // ensure caption updates for all verbs
+  }
+
+  // Helper to check if a string is a valid integer number
+  bool _isNumeric(String s) {
+    return int.tryParse(s) != null;
+  }
+
+  // Helper for building country code dropdown
+  Widget _buildCountryCodeDropdown() {
+    final validCodes = countryCodes.map((c) => c['code']).toSet();
+    String currentValue = countryCodeController.text.trim();
+    if (!validCodes.contains(currentValue)) {
+      currentValue = 'CAN';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (countryCodeController.text != currentValue) {
+          countryCodeController.text = currentValue;
+        }
+      });
+    }
+    return Expanded(
+      child: Material(
+        elevation: 2.0,
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          value: currentValue,
+          decoration: InputDecoration(
+            labelText: 'Country Code',
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            labelStyle: const TextStyle(fontSize: 10),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+          ),
+          items: countryCodes
+              .map((country) => DropdownMenuItem(
+                  value: country['code'],
+                  child: Text('${country['code']} - ${country['name']}',
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.black))))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                countryCodeController.text = value;
+                // Also update the country field with the corresponding country name
+                final selectedCountry = countryCodes.firstWhere(
+                  (country) => country['code'] == value,
+                  orElse: () => {'code': value, 'name': ''},
+                );
+                countryController.text = selectedCountry['name'] ?? '';
+                _updateCaption();
+              });
+            }
+          },
+          style: const TextStyle(fontSize: 11, color: Colors.black),
+        ),
+      ),
+    );
+  }
+
+  // Helper for building urgency dropdown
+  Widget _buildUrgencyDropdown() {
+    String currentValue = urgencyController.text.trim();
+    final validCodes = urgencyLevels.map((u) => u['code']).toSet();
+    if (!validCodes.contains(currentValue)) {
+      final numericValue = int.tryParse(currentValue);
+      if (numericValue != null) {
+        final matchingUrgency = urgencyLevels.firstWhere(
+          (urgency) => urgency['code'] == numericValue.toString(),
+          orElse: () => urgencyLevels.firstWhere(
+            (urgency) => urgency['code'] == '5',
+            orElse: () => urgencyLevels.first,
+          ),
+        );
+        currentValue = matchingUrgency['code']!;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (urgencyController.text != currentValue) {
+            urgencyController.text = currentValue;
+          }
+        });
+      } else {
+        currentValue = '5';
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (urgencyController.text != currentValue) {
+            urgencyController.text = currentValue;
+          }
+        });
+      }
+    }
+    return Expanded(
+      child: Material(
+        elevation: 2.0,
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          value: currentValue,
+          decoration: InputDecoration(
+            labelText: 'Urgency',
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            labelStyle: const TextStyle(fontSize: 10),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+          ),
+          items: urgencyLevels
+              .map((urgency) => DropdownMenuItem(
+                  value: urgency['code'],
+                  child: Text(urgency['name']!,
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.black))))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                urgencyController.text = value;
+                _updateCaption();
+              });
+            }
+          },
+          style: const TextStyle(fontSize: 11, color: Colors.black),
+        ),
+      ),
+    );
+  }
+
+  // Helper for building job title dropdown
+  Widget _buildJobTitleDropdown() {
+    final List<String> jobTitles = ['Contributor', 'Stringer', 'Staff'];
+    String currentValue = creatorJobTitleController.text.trim();
+    if (!jobTitles.contains(currentValue)) {
+      currentValue = 'Contributor';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (creatorJobTitleController.text != currentValue) {
+          creatorJobTitleController.text = currentValue;
+        }
+      });
+    }
+    return SizedBox(
+      width: 120,
+      child: Material(
+        elevation: 2.0,
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: DropdownButtonFormField<String>(
+          isExpanded: true,
+          value: currentValue,
+          decoration: InputDecoration(
+            labelText: 'Job Title',
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            filled: true,
+            fillColor: Colors.white,
+            labelStyle: const TextStyle(fontSize: 10),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+            ),
+          ),
+          items: jobTitles
+              .map((title) => DropdownMenuItem(
+                  value: title,
+                  child: Text(title,
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.black))))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() {
+                creatorJobTitleController.text = value;
+                String year = DateTime.now().year.toString();
+                if (_dateTimeOriginal != null &&
+                    _dateTimeOriginal!.length >= 4) {
+                  year = _dateTimeOriginal!.substring(0, 4);
+                }
+                if (value == 'Contributor') {
+                  copyrightController.text = '$year ${creatorController.text}';
+                } else {
+                  copyrightController.text = '$year Getty Images';
+                }
+                _updateCaption();
+              });
+            }
+          },
+          style: const TextStyle(fontSize: 11, color: Colors.black),
+        ),
+      ),
+    );
+  }
+
+  // Special field for Object Name that displays generated value
+  Widget _buildObjectNameField() {
+    return Material(
+      elevation: 2.0,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: TextField(
+        controller: titleObjectNameController,
+        readOnly: true,
+        cursorHeight: 10.0,
+        decoration: InputDecoration(
+          labelText: 'Title/Object Name',
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          filled: true,
+          fillColor: Colors.grey.shade50,
+          labelStyle: const TextStyle(fontSize: 10),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
+          ),
+        ),
+        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+      ),
+    );
+  }
+
+  // Roster parsing functionality
+  void _showRosterParser() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Paste Home Team Roster'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 500,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'First, select the home team and paste the home team roster.\n\n'
+                  'The parser will look for patterns like:\n'
+                  '• "John Smith #23" (first last #number)\n'
+                  '• "23 John Smith" (number first last)\n'
+                  '• "Smith, John 23" (last, first number)\n'
+                  '• "John Smith" (first last, no number)\n\n'
+                  'Works for any sport: baseball, basketball, football, hockey, etc.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                // Home Team Selection Dropdown
+                Row(
+                  children: [
+                    const Text('Home Team: ',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: selectedHomeTeam,
+                        hint: const Text('Select home team'),
+                        isExpanded: true,
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            selectedHomeTeam = newValue;
+                          });
+                        },
+                        items: teamStates.keys
+                            .map<DropdownMenuItem<String>>((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Roster Text Field
+                Expanded(
+                  child: TextField(
+                    maxLines: null,
+                    expands: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Paste home team roster text here...',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      _pastedRosterText = value;
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (selectedHomeTeam == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please select a home team first'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.of(context).pop();
+                _parseRosterText(_pastedRosterText, isHomeTeam: true);
+              },
+              child: const Text('Paste Home Roster'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _parseRosterText(String text, {required bool isHomeTeam}) {
+    final lines = text.split('\n');
+
+    final List<Map<String, String>> parsedPlayers = [];
+    final Set<String> foundPlayers = {};
+
+    final skipKeywords = [
+      'roster',
+      'staff',
+      'active',
+      'depth',
+      'chart',
+      'non-roster',
+      'coaches',
+      'transactions',
+      'pitchers',
+      'catchers',
+      'infielders',
+      'outfielders',
+      'b/t',
+      'ht',
+      'wt',
+      'dob',
+      'designated',
+      'hitters',
+      'relievers',
+      'starters',
+      'bench',
+      'reserve'
+    ];
+
+    for (String line in lines) {
+      line = line.trim();
+      if (line.isEmpty) continue;
+
+      if (line.length < 3 || RegExp(r'^\d+$').hasMatch(line)) continue;
+
+      bool shouldSkip = false;
+      for (String keyword in skipKeywords) {
+        if (line.toLowerCase().contains(keyword)) {
+          shouldSkip = true;
+          break;
+        }
+      }
+      if (shouldSkip) continue;
+
+      if (line.contains('\t')) {
+        final parts = line.split('\t');
+
+        if (parts.length >= 3) {
+          final namePart = parts[0].trim();
+          final stancePart = parts[1].trim();
+          final heightPart = parts[2].trim();
+
+          final nameNumberMatch =
+              RegExp(r'^(.+?)\s+(\d+)$').firstMatch(namePart);
+          if (nameNumberMatch != null) {
+            final fullName = nameNumberMatch.group(1)?.trim();
+            final playerNumber = nameNumberMatch.group(2);
+
+            final nameMatch =
+                RegExp(r'^(.+?)\s+(.+)$').firstMatch(fullName ?? '');
+            if (nameMatch != null) {
+              final firstName = nameMatch.group(1)?.trim();
+              final lastName = nameMatch.group(2)?.trim();
+
+              if (firstName != null &&
+                  lastName != null &&
+                  firstName.length > 1 &&
+                  lastName.length > 1) {
+                if (!skipKeywords.any((keyword) =>
+                    (firstName.toLowerCase()).contains(keyword) ||
+                    (lastName.toLowerCase()).contains(keyword))) {
+                  final playerKey =
+                      '${firstName.toLowerCase()}_${lastName.toLowerCase()}';
+
+                  if (!foundPlayers.contains(playerKey)) {
+                    final player = {
+                      'firstName': firstName,
+                      'lastName': lastName,
+                      'number': playerNumber ?? '',
+                    };
+                    parsedPlayers.add(player);
+                    foundPlayers.add(playerKey);
+                  }
+                }
+              }
+            }
+          }
+        }
+        continue;
+      }
+
+      String? firstName;
+      String? lastName;
+      String? playerNumber;
+
+      if (!RegExp(r'\d').hasMatch(line)) {
+        continue;
+      }
+
+      RegExp pattern1 = RegExp(r'^(.+?)\s+(.+?)\s*(?:#)?(\d+)$');
+      Match? match1 = pattern1.firstMatch(line);
+      if (match1 != null) {
+        firstName = match1.group(1)?.trim();
+        lastName = match1.group(2)?.trim();
+        playerNumber = match1.group(3);
+      }
+
+      if (firstName == null) {
+        RegExp pattern2 = RegExp(r'^(\d+)\s+(.+?)\s+(.+)$');
+        Match? match2 = pattern2.firstMatch(line);
+        if (match2 != null) {
+          playerNumber = match2.group(1);
+          firstName = match2.group(2)?.trim();
+          lastName = match2.group(3)?.trim();
+        }
+      }
+
+      if (firstName == null) {
+        RegExp pattern3 = RegExp(r'^(.+?),\s*(.+?)\s*(?:#)?(\d+)$');
+        Match? match3 = pattern3.firstMatch(line);
+        if (match3 != null) {
+          lastName = match3.group(1)?.trim() ?? '';
+          firstName = match3.group(2)?.trim() ?? '';
+          playerNumber = match3.group(3);
+        }
+      }
+
+      if (firstName != null && lastName != null) {
+        if (firstName.length > 1 && lastName.length > 1) {
+          if (!skipKeywords.any((keyword) =>
+              (firstName?.toLowerCase() ?? '').contains(keyword) ||
+              (lastName?.toLowerCase() ?? '').contains(keyword))) {
+            final player = {
+              'firstName': firstName,
+              'lastName': lastName,
+              'number': playerNumber ?? '',
+            };
+            parsedPlayers.add(player);
+          }
+        }
+      }
+    }
+
+    if (parsedPlayers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'No players found in the pasted text. Please check the format.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    _showParsedPlayersDialog(parsedPlayers, isHomeTeam: isHomeTeam);
+  }
+
+  void _showParsedPlayersDialog(List<Map<String, String>> players,
+      {required bool isHomeTeam}) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Found ${players.length} Players'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Found ${players.length} players for the ${isHomeTeam ? 'home' : 'visiting'} team.',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Review the parsed players:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 300,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: players.map((player) {
+                        final firstName = player['firstName'] ?? '';
+                        final lastName = player['lastName'] ?? '';
+                        final number = player['number'] ?? '0';
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 50,
+                                child: Text(
+                                  '#$number',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text('$firstName $lastName'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await Future.delayed(Duration.zero);
+
+                Future.microtask(() {
+                  _addParsedPlayersToCodeReplacements(players,
+                      isHomeTeam: isHomeTeam);
+                });
+              },
+              child: const Text('Add Players'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addParsedPlayersToCodeReplacements(List<Map<String, String>> players,
+      {required bool isHomeTeam}) {
+    print(
+        '_addParsedPlayersToCodeReplacements called with ${players.length} players');
+
+    final prefix = isHomeTeam ? 'h' : 'v';
+    final Map<String, Replacement> newReplacements = {};
+
+    for (int i = 0; i < players.length; i++) {
+      final player = players[i];
+      final firstName = player['firstName'] ?? '';
+      final lastName = player['lastName'] ?? '';
+      final jerseyNumber =
+          (player['number'] ?? '0').isNotEmpty ? player['number']! : '0';
+
+      final fullName = '$firstName $lastName';
+      final displayName = '$fullName #$jerseyNumber';
+      final code = '$prefix$i';
+
+      newReplacements[code] = Replacement(
+        displayName,
+        displayName,
+        firstName,
+        jerseyNumber,
+      );
+    }
+
+    if (!mounted) return;
+
+    try {
+      print('About to call setState');
+      setState(() {
+        print('Inside setState - removing existing players');
+        codeReplacements.removeWhere((key, _) => key.startsWith(prefix));
+
+        print('Inside setState - adding ${newReplacements.length} new players');
+        codeReplacements.addAll(newReplacements);
+
+        if (isHomeTeam) {
+          selectedPlayers.clear();
+        } else {
+          selectedOpponentPlayers.clear();
+        }
+        print('setState completed');
+      });
+
+      print('setState finished, getting team name');
+      final teamName = isHomeTeam ? selectedHomeTeam : selectedAwayTeam;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Added ${players.length} players to ${teamName ?? (isHomeTeam ? 'home' : 'visiting')} team'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error in _addParsedPlayersToCodeReplacements: $e');
+    }
+  }
+
+  Widget _buildHomeRunTypeSelector() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 5.0),
+      child: MenuAnchor(
+        builder:
+            (BuildContext context, MenuController controller, Widget? child) {
+          return GestureDetector(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            child: SizedBox(
+              width: _dropdownWidth,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedHomeRunType == null
+                            ? 'HR Type'
+                            : _selectedHomeRunType == 'solo'
+                                ? 'Solo HR'
+                                : _selectedHomeRunType == 'two-run'
+                                    ? '2 Run HR'
+                                    : _selectedHomeRunType == 'three-run'
+                                        ? '3 Run HR'
+                                        : 'Grand Slam',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+        menuChildren: [
+          if (_selectedHomeRunType != null) ...[
+            MenuItemButton(
+              onPressed: () {
+                setState(() {
+                  _selectedHomeRunType = null;
+                  _updateCaption();
+                });
+              },
+              style: MenuItemButton.styleFrom(
+                minimumSize: const Size(0, 24),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              ),
+              child: const Text('Clear Selection',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.redAccent)),
+            ),
+            const Divider(height: 1),
+          ],
+          MenuItemButton(
+            onPressed: () {
+              setState(() {
+                _selectedHomeRunType = 'solo';
+                _updateCaption();
+              });
+            },
+            style: MenuItemButton.styleFrom(
+              minimumSize: const Size(0, 24),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            ),
+            child: const Text('Solo HR', style: TextStyle(fontSize: 12)),
+          ),
+          MenuItemButton(
+            onPressed: () {
+              setState(() {
+                _selectedHomeRunType = 'two-run';
+                _updateCaption();
+              });
+            },
+            style: MenuItemButton.styleFrom(
+              minimumSize: const Size(0, 24),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            ),
+            child: const Text('2 Run HR', style: TextStyle(fontSize: 12)),
+          ),
+          MenuItemButton(
+            onPressed: () {
+              setState(() {
+                _selectedHomeRunType = 'three-run';
+                _updateCaption();
+              });
+            },
+            style: MenuItemButton.styleFrom(
+              minimumSize: const Size(0, 24),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            ),
+            child: const Text('3 Run HR', style: TextStyle(fontSize: 12)),
+          ),
+          MenuItemButton(
+            onPressed: () {
+              setState(() {
+                _selectedHomeRunType = 'grand slam';
+                _updateCaption();
+              });
+            },
+            style: MenuItemButton.styleFrom(
+              minimumSize: const Size(0, 24),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            ),
+            child: const Text('Grand Slam', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // New helper for horizontal RBI selection chips
+  Widget _buildHorizontalRbiSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 16.0, bottom: 2.0),
+          child: Text(
+            'Runs Scored:',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(width: 16),
+            Padding(
+              padding: const EdgeInsets.only(left: 0.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // RBI options 1-3
+                    ...List.generate(3, (i) => i + 1).map((rbi) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4.0),
+                        child: FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.chevron_right,
+                                      size: 14, color: Colors.grey),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          selected: _rbiCount == rbi,
+                          onSelected: (isSelected) {
+                            setState(() {
+                              if (isSelected) {
+                                _rbiCount = rbi;
+                                _rbiCountByHit[_selectedHitType!] = rbi;
+                              } else {
+                                _rbiCount = null;
+                                _rbiCountByHit.remove(_selectedHitType!);
+                              }
+                              _updateCaption();
+                            });
+                          },
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _preloadThumbnailsWithDialog(BuildContext context) async {
+    if (imagePaths.isEmpty) return;
+    int loaded = 0;
+    final total = imagePaths.length;
+    final ValueNotifier<int> progress = ValueNotifier<int>(0);
+
+    // Show dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          title: const Text('Loading Thumbnails'),
+          content: SizedBox(
+            width: 300,
+            height: 120,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: progress,
+                  builder: (context, value, child) {
+                    return Column(
+                      children: [
+                        LinearProgressIndicator(value: value / total),
+                        const SizedBox(height: 16),
+                        Text('Loading $value / $total thumbnails...'),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // Preload images with improved quality
+    for (final imagePath in imagePaths) {
+      try {
+        await precacheImage(
+          FileImage(File(imagePath)),
+          context,
+          size: Size(kThumbnailSize.toDouble(), kThumbnailSize.toDouble()),
+        );
+      } catch (e) {
+        print('Error preloading image $imagePath: $e');
+        // Continue with next image even if this one fails
+      }
+      loaded++;
+      progress.value = loaded;
+    }
+
+    // Dismiss dialog
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+}
+
+// Helper function to list image files in background thread
+List<String> _listImageFiles(String path) {
+  try {
+    return Directory(path)
+        .listSync()
+        .whereType<File>()
+        .where((f) {
+          try {
+            final ext = p.extension(f.path).toLowerCase();
+            return ['.jpg', '.jpeg', '.png', '.tif', '.tiff'].contains(ext);
+          } catch (e) {
+            print('Error checking file extension for ${f.path}: $e');
+            return false;
+          }
+        })
+        .map((f) => f.path)
+        .toList();
+  } catch (e) {
+    print('Error listing image files in $path: $e');
+    return [];
   }
 }
