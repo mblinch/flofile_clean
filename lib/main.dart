@@ -5254,6 +5254,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
 
+    // Reset caption builder state when selecting a new image
+    _resetCaption();
+
     // Preload adjacent images for instant navigation
     _preloadCurrentAndAdjacentImages();
 
@@ -6014,3 +6017,535 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ),
     );
   }
+
+  // --- REVISED _updateCaption METHOD ---
+  void _updateCaption() {
+    final city = cityController.text;
+    final prov = provinceController.text;
+    final monLC = _month(selectedDate.month);
+    final day = selectedDate.day;
+    final year = selectedDate.year;
+
+    String mainCaptionPart = '';
+    if (_selectedHitType != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      // 1. Determine the detailed hit phrase.
+      String hitPhrase = '';
+
+      if (_selectedHitType == 'Home Run') {
+        String? hrType = _selectedHomeRunType;
+        if (hrType == null) {
+          switch (_rbiCount) {
+            case 0:
+              hrType = 'solo';
+              break;
+            case 1:
+              hrType = 'two-run';
+              break;
+            case 2:
+              hrType = 'three-run';
+              break;
+            case 3:
+              hrType = 'grand slam';
+              break;
+          }
+        }
+        switch (hrType) {
+          case 'solo':
+            hitPhrase = 'solo home run';
+            break;
+          case 'two-run':
+            hitPhrase = 'two-run home run';
+            break;
+          case 'three-run':
+            hitPhrase = 'three-run home run';
+            break;
+          case 'grand slam':
+            // Special phrasing for walk-off grand slam
+            hitPhrase =
+                (_walkOff == true) ? 'grand slam' : 'grand slam home run';
+            break;
+          default:
+            hitPhrase = 'home run';
+        }
+      } else {
+        // Single, Double, Triple
+        if (_walkOff == true) {
+          // Use "two-run double" style phrasing for walk-offs
+          String rbiPart = '';
+          if (_rbiCount != null && _rbiCount! > 0) {
+            if (_rbiCount == 1) {
+              rbiPart = 'RBI';
+            } else {
+              final rbiWords = {2: 'two', 3: 'three'};
+              rbiPart = rbiWords.containsKey(_rbiCount)
+                  ? '${rbiWords[_rbiCount]}-run'
+                  : '$_rbiCount-run';
+            }
+          }
+          hitPhrase = '$rbiPart ${_selectedHitType!.toLowerCase()}'.trim();
+        } else {
+          // Use "two RBI double" style phrasing for standard hits
+          if (_rbiCount == null || _rbiCount == 0) {
+            hitPhrase = _selectedHitType!.toLowerCase();
+          } else {
+            final rbiWords = ['one', 'two', 'three'];
+            final rbiString = _rbiCount == 1
+                ? 'RBI'
+                : _rbiCount! <= 3
+                    ? '${rbiWords[_rbiCount! - 1]} RBI'
+                    : '$_rbiCount RBI';
+            hitPhrase = '$rbiString ${_selectedHitType!.toLowerCase()}';
+          }
+        }
+      }
+
+      // 2. Construct the sentence based on flags
+      if (_walkOff == true && _isBatterRunning == true) {
+        if (_selectedHitType == 'Home Run') {
+          mainCaptionPart =
+              "$playersString rounds the bases after hitting a walk-off $hitPhrase to defeat the $opponentTeamName";
+        } else {
+          mainCaptionPart =
+              "$playersString runs after hitting a walk-off $hitPhrase to defeat the $opponentTeamName";
+        }
+      } else if (_walkOff == true) {
+        mainCaptionPart =
+            "$playersString hits a walk-off $hitPhrase to defeat the $opponentTeamName";
+      } else if (_isBatterRunning == true) {
+        if (_selectedHitType == 'Home Run') {
+          mainCaptionPart =
+              "$playersString rounds the bases after hitting a $hitPhrase against the $opponentTeamName";
+        } else {
+          mainCaptionPart =
+              "$playersString runs after hitting a $hitPhrase against the $opponentTeamName";
+        }
+      } else {
+        mainCaptionPart =
+            "$playersString hits a $hitPhrase against the $opponentTeamName";
+      }
+
+      // 3. Add inning
+      if (_selectedRbiInning != null) {
+        // Map 1–18 to written words
+        const inningWords = [
+          'first',
+          'second',
+          'third',
+          'fourth',
+          'fifth',
+          'sixth',
+          'seventh',
+          'eighth',
+          'ninth',
+          'tenth',
+          'eleventh',
+          'twelfth',
+          'thirteenth',
+          'fourteenth',
+          'fifteenth',
+          'sixteenth',
+          'seventeenth',
+          'eighteenth'
+        ];
+        String word = (_selectedRbiInning! >= 1 && _selectedRbiInning! <= 18)
+            ? inningWords[_selectedRbiInning! - 1]
+            : '${_selectedRbiInning}th';
+        mainCaptionPart += ' in the $word inning';
+      }
+    } else if (_selectedVerb == 'Fielding' && _selectedFieldingAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+      String actionPhrase = _selectedFieldingAction!;
+      if (_selectedFieldingAction == 'makes a catch' &&
+          _isDivingCatch == true) {
+        actionPhrase = 'makes a diving catch';
+      } else if (_selectedFieldingAction == 'fields a ground ball' &&
+          _isDivingForGroundBall == true) {
+        actionPhrase = 'dives for a ground ball';
+      }
+      mainCaptionPart =
+          "$playersString $actionPhrase against the $opponentTeamName";
+      // Add inning to Fielding caption
+      if (_selectedRbiInning != null) {
+        const inningWords = [
+          'first',
+          'second',
+          'third',
+          'fourth',
+          'fifth',
+          'sixth',
+          'seventh',
+          'eighth',
+          'ninth',
+          'tenth',
+          'eleventh',
+          'twelfth',
+          'thirteenth',
+          'fourteenth',
+          'fifteenth',
+          'sixteenth',
+          'seventeenth',
+          'eighteenth'
+        ];
+        final idx = _selectedRbiInning! - 1;
+        final word = (idx >= 0 && idx < inningWords.length)
+            ? inningWords[idx]
+            : '${_selectedRbiInning}th';
+        mainCaptionPart += ' in the $word inning';
+      }
+    } else if (_selectedVerb == 'Portrait') {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      if (_isLooksOn) {
+        mainCaptionPart = "$playersString looks on";
+      } else {
+        mainCaptionPart = "$playersString";
+      }
+
+      // Add inning if picked
+      if (_selectedRbiInning != null) {
+        const inningWords = [
+          'first',
+          'second',
+          'third',
+          'fourth',
+          'fifth',
+          'sixth',
+          'seventh',
+          'eighth',
+          'ninth',
+          'tenth',
+          'eleventh',
+          'twelfth',
+          'thirteenth',
+          'fourteenth',
+          'fifteenth',
+          'sixteenth',
+          'seventeenth',
+          'eighteenth'
+        ];
+        final idx = _selectedRbiInning! - 1;
+        final word = (idx >= 0 && idx < inningWords.length)
+            ? inningWords[idx]
+            : '${_selectedRbiInning}th';
+        mainCaptionPart += ' in the $word inning';
+      }
+    } else if (_selectedVerb == 'Prior to Game' &&
+        _selectedPriorAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      if (activePlayers.isEmpty) return;
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+      mainCaptionPart = "$playersString ${_selectedPriorAction!.toLowerCase()}";
+    } else if (_selectedVerb == 'Post Game' &&
+        _selectedPostGameAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      if (activePlayers.isEmpty) return;
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+      mainCaptionPart =
+          "$playersString ${_selectedPostGameAction!.toLowerCase()}";
+    } else if (_selectedVerb == 'At Bat' && _selectedAtBatAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      if (activePlayers.isEmpty) return;
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+      mainCaptionPart =
+          "$playersString ${_selectedAtBatAction!.toLowerCase()} against the $opponentTeamName";
+
+      // Add inning if picked
+      if (_selectedRbiInning != null) {
+        const inningWords = [
+          'first',
+          'second',
+          'third',
+          'fourth',
+          'fifth',
+          'sixth',
+          'seventh',
+          'eighth',
+          'ninth',
+          'tenth',
+          'eleventh',
+          'twelfth',
+          'thirteenth',
+          'fourteenth',
+          'fifteenth',
+          'sixteenth',
+          'seventeenth',
+          'eighteenth'
+        ];
+        final idx = _selectedRbiInning! - 1;
+        final word = (idx >= 0 && idx < inningWords.length)
+            ? inningWords[idx]
+            : '${_selectedRbiInning}th';
+        mainCaptionPart += ' in the $word inning';
+      }
+    } else if (_selectedVerb == 'Base Running' &&
+        _selectedBaseRunningAction != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      if (activePlayers.isEmpty) return;
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      if (_selectedBaseRunningAction == 'steals' &&
+          _selectedStealBase != null) {
+        String againstText = '';
+        if (_showStealAgainstPlayer && selectedOpponentPlayers.isNotEmpty) {
+          final opponentPlayersString =
+              _combinePlayersWithoutTeam(selectedOpponentPlayers.toList());
+          againstText = " against $opponentPlayersString";
+        } else {
+          againstText = " against the $opponentTeamName";
+        }
+        mainCaptionPart =
+            "$playersString steals $_selectedStealBase$againstText";
+      } else {
+        mainCaptionPart =
+            "$playersString ${_selectedBaseRunningAction!.toLowerCase()} against the $opponentTeamName";
+      }
+    } else if (_selectedVerb == 'Celebrate') {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      if (activePlayers.isEmpty) return;
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      if (_isSoloCelebration) {
+        mainCaptionPart = "$playersString celebrates alone";
+      } else if (celebrateWith.isNotEmpty) {
+        final teammatesString = _combinePlayersWithoutTeam(celebrateWith);
+        mainCaptionPart = "$playersString celebrates with $teammatesString";
+      } else if (celebrateAgainst.isNotEmpty) {
+        final opponentsString = _combinePlayersWithoutTeam(celebrateAgainst);
+        mainCaptionPart = "$playersString celebrates against $opponentsString";
+      } else if (_customCelebrationVerb.isNotEmpty) {
+        mainCaptionPart = "$playersString $_customCelebrationVerb";
+      } else {
+        mainCaptionPart = "$playersString celebrates";
+      }
+    } else if (_selectedVerb != null) {
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final opponentTeamName =
+          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      final verbReplacement = codeReplacements[_selectedVerb!];
+
+      if (verbReplacement == null) return; // Should not happen
+
+      // Since all remaining verbs are solo actions, the logic is simplified.
+      if (activePlayers.isNotEmpty) {
+        final playersString =
+            _combinePlayersWithSingleTeam(activePlayers.toList());
+        mainCaptionPart =
+            "$playersString ${verbReplacement.full} $opponentTeamName";
+      }
+
+      // Add inning if picked
+      if (mainCaptionPart.isNotEmpty && _selectedRbiInning != null) {
+        const inningWords = [
+          'first',
+          'second',
+          'third',
+          'fourth',
+          'fifth',
+          'sixth',
+          'seventh',
+          'eighth',
+          'ninth',
+          'tenth',
+          'eleventh',
+          'twelfth',
+          'thirteenth',
+          'fourteenth',
+          'fifteenth',
+          'sixteenth',
+          'seventeenth',
+          'eighteenth'
+        ];
+        final idx = _selectedRbiInning! - 1;
+        final word = (idx >= 0 && idx < inningWords.length)
+            ? inningWords[idx]
+            : '${_selectedRbiInning}th';
+        mainCaptionPart += ' in the $word inning';
+      }
+    } else if (selectedPlayers.isNotEmpty ||
+        selectedOpponentPlayers.isNotEmpty) {
+      // This is the new logic: if players are selected but no verb/hit, create a basic caption.
+      final activePlayers =
+          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      final inactivePlayers =
+          _showHomeFirst ? selectedOpponentPlayers : selectedPlayers;
+
+      if (activePlayers.isNotEmpty) {
+        mainCaptionPart = _combinePlayersWithSingleTeam(activePlayers.toList());
+      } else if (inactivePlayers.isNotEmpty) {
+        mainCaptionPart =
+            _combinePlayersWithSingleTeam(inactivePlayers.toList());
+      }
+    }
+
+    // Write final caption
+    final formattedDate = '$monLC $day, $year';
+    final caption =
+        "TORONTO, ON - ${monLC.toUpperCase()} $day: $mainCaptionPart in their MLB game at ${stadiumController.text} on $formattedDate in ${_capitalize(city)}, ${_capitalize(prov)}, Canada. (Photo by ${creatorController.text}/Getty Images)";
+    captionController.text = caption.trim();
+  }
+
+  // Helper method to update personality field
+  void _updatePersonality() {
+    final allSelectedCodes = [
+      ...selectedPlayers,
+      ...selectedOpponentPlayers,
+      ...celebrateWith,
+      ...celebrateAgainst,
+    ];
+    final personalityText = allSelectedCodes
+        .map((c) {
+          final replacement = codeReplacements[c];
+          if (replacement == null) return null;
+          return replacement.short.split(' #').first;
+        })
+        .whereNotNull()
+        .join(';');
+    personalityController.text = personalityText;
+  }
+
+  // Helper method to capitalize strings
+  String _capitalize(String s) {
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1).toLowerCase();
+  }
+
+  // Helper method to get month name
+  String _month(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return months[month - 1];
+  }
+
+  // Missing methods that are referenced but not defined
+  Future<void> _onVerbSelected(String verb) async {
+    setState(() {
+      _selectedVerb = _selectedVerb == verb ? null : verb;
+      _updateCaption();
+    });
+  }
+
+  void _scrollToSelectedImage() {
+    if (imagePaths.isNotEmpty && _filmstripController.hasClients) {
+      const double filmstripHeight = 140.0;
+      const double imagePadding = 4.0;
+      const imageWidth = filmstripHeight -
+          (imagePadding * 2) +
+          (imagePadding * 2); // image + margin
+      final targetOffset = (imageWidth * currentIndex) -
+          (_filmstripController.position.viewportDimension / 2) +
+          (imageWidth / 2);
+
+      _filmstripController.animateTo(
+        targetOffset.clamp(0.0, _filmstripController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Future<void> _preloadThumbnailsWithDialog(BuildContext context) async {
+    // Simple preloading without dialog for now
+    _preloadThumbnails(currentIndex);
+  }
+
+  // Helper function to list image files
+  static Future<List<String>> _listImageFiles(String dirPath) async {
+    try {
+      final directory = Directory(dirPath);
+      final files = directory
+          .listSync()
+          .whereType<File>()
+          .where((f) {
+            final ext = p.extension(f.path).toLowerCase();
+            return ['.jpg', '.jpeg', '.png', '.tif', '.tiff'].contains(ext);
+          })
+          .map((f) => f.path)
+          .toList();
+      return files;
+    } catch (e) {
+      print('Error listing image files: $e');
+      return [];
+    }
+  }
+
+  // Missing build method
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Quick Cap'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            onPressed: pickFolder,
+          ),
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            onPressed: pickCodeFile,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Placeholder for the main content
+          Expanded(
+            child: Center(
+              child: Text(
+                  'Caption Builder - Image ${currentIndex + 1} of ${imagePaths.length}'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
