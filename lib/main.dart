@@ -463,19 +463,119 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  // Show context menu for thumbnails
-  void _showThumbnailContextMenu(BuildContext context, int index) {
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero),
-            ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
+  // Show context menu for thumbnails at specific position
+  void _showThumbnailContextMenuAtPosition(
+      BuildContext context, int index, Offset position) async {
+    // Select the thumbnail first when right-clicking
+    if (index != currentIndex) {
+      setState(() {
+        currentIndex = index;
+      });
+      await _loadMetadata();
+    }
+
+    // Use the provided mouse position for accurate context menu placement
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    // Convert global position to relative position for the context menu
+    final RelativeRect relativePosition = RelativeRect.fromLTRB(
+      position.dx, // Left position from mouse
+      position.dy, // Top position from mouse
+      overlay.size.width - position.dx, // Right position
+      overlay.size.height - position.dy, // Bottom position
     );
+
+    showMenu<String>(
+      context: context,
+      position: relativePosition,
+      items: [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(Icons.content_copy, size: 16),
+              const SizedBox(width: 8),
+              const Text('Copy Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'paste',
+          enabled: _copiedMetadata != null,
+          child: Row(
+            children: [
+              const Icon(Icons.content_paste, size: 16),
+              const SizedBox(width: 8),
+              const Text('Paste Metadata'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == 'copy') {
+        // Select thumbnail first, then copy metadata
+        if (index != currentIndex) {
+          setState(() {
+            currentIndex = index;
+          });
+          await _loadMetadata();
+        }
+        await _copyMetadataFromIndex(index);
+      } else if (value == 'paste') {
+        // Select thumbnail first, then paste metadata
+        if (index != currentIndex) {
+          setState(() {
+            currentIndex = index;
+          });
+          await _loadMetadata();
+        }
+        await _pasteMetadataToCurrentImage();
+      }
+    });
+  }
+
+  // Show context menu for thumbnails (legacy method)
+  void _showThumbnailContextMenu(BuildContext context, int index) {
+    // Use a simpler positioning approach that doesn't rely on render objects
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    // Get the current mouse position for accurate context menu placement
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    RelativeRect position;
+
+    if (button != null) {
+      // Try to position at the mouse location
+      try {
+        position = RelativeRect.fromRect(
+          Rect.fromPoints(
+            button.localToGlobal(Offset.zero, ancestor: overlay),
+            button.localToGlobal(button.size.bottomRight(Offset.zero),
+                ancestor: overlay),
+          ),
+          Offset.zero & overlay.size,
+        );
+      } catch (e) {
+        // Fallback to a position near where the thumbnail likely is
+        position = RelativeRect.fromLTRB(
+          overlay.size.width * 0.6, // 60% from left (thumbnail area)
+          overlay.size.height * 0.3, // 30% from top
+          overlay.size.width * 0.1, // 10% from right
+          overlay.size.height * 0.3, // 30% from bottom
+        );
+      }
+    } else {
+      // Fallback to thumbnail area position
+      position = RelativeRect.fromLTRB(
+        overlay.size.width * 0.6, // 60% from left (thumbnail area)
+        overlay.size.height * 0.3, // 30% from top
+        overlay.size.width * 0.1, // 10% from right
+        overlay.size.height * 0.3, // 30% from bottom
+      );
+    }
 
     showMenu<String>(
       context: context,
@@ -526,19 +626,96 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     });
   }
 
-  // Show context menu for picture preview
-  void _showPicturePreviewContextMenu(BuildContext context) {
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero),
-            ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
+  // Show context menu for picture preview at specific position
+  void _showPicturePreviewContextMenuAtPosition(
+      BuildContext context, Offset position) {
+    // Use the provided mouse position for accurate context menu placement
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    // Convert global position to relative position for the context menu
+    final RelativeRect relativePosition = RelativeRect.fromLTRB(
+      position.dx, // Left position from mouse
+      position.dy, // Top position from mouse
+      overlay.size.width - position.dx, // Right position
+      overlay.size.height - position.dy, // Bottom position
     );
+
+    showMenu<String>(
+      context: context,
+      position: relativePosition,
+      items: [
+        PopupMenuItem<String>(
+          value: 'copy',
+          child: Row(
+            children: [
+              const Icon(Icons.content_copy, size: 16),
+              const SizedBox(width: 8),
+              const Text('Copy Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'paste',
+          enabled: _copiedMetadata != null,
+          child: Row(
+            children: [
+              const Icon(Icons.content_paste, size: 16),
+              const SizedBox(width: 8),
+              const Text('Paste Metadata'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == 'copy') {
+        await _copyMetadataFromIndex(currentIndex);
+      } else if (value == 'paste') {
+        await _pasteMetadataToCurrentImage();
+      }
+    });
+  }
+
+  // Show context menu for picture preview (legacy method)
+  void _showPicturePreviewContextMenu(BuildContext context) {
+    // Use a simpler positioning approach that doesn't rely on render objects
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    // For picture preview, try to get the position from the widget's render object
+    RelativeRect position;
+    try {
+      final renderObject = context.findRenderObject();
+      if (renderObject is RenderBox) {
+        position = RelativeRect.fromRect(
+          Rect.fromPoints(
+            renderObject.localToGlobal(Offset.zero, ancestor: overlay),
+            renderObject.localToGlobal(
+                renderObject.size.bottomRight(Offset.zero),
+                ancestor: overlay),
+          ),
+          Offset.zero & overlay.size,
+        );
+      } else {
+        // Fallback to center position if not a RenderBox
+        position = RelativeRect.fromLTRB(
+          overlay.size.width * 0.4,
+          overlay.size.height * 0.4,
+          overlay.size.width * 0.4,
+          overlay.size.height * 0.4,
+        );
+      }
+    } catch (e) {
+      // Fallback to center position if positioning fails
+      position = RelativeRect.fromLTRB(
+        overlay.size.width * 0.4,
+        overlay.size.height * 0.4,
+        overlay.size.width * 0.4,
+        overlay.size.height * 0.4,
+      );
+    }
 
     showMenu<String>(
       context: context,
@@ -7489,9 +7666,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   Expanded(
                                                     child: imagePaths.isNotEmpty
                                                         ? GestureDetector(
-                                                            onSecondaryTap: () {
-                                                              _showPicturePreviewContextMenu(
-                                                                  context);
+                                                            onSecondaryTapDown:
+                                                                (TapDownDetails
+                                                                    details) {
+                                                              _showPicturePreviewContextMenuAtPosition(
+                                                                  context,
+                                                                  details
+                                                                      .globalPosition);
                                                             },
                                                             child: ClipRRect(
                                                               borderRadius:
@@ -7640,9 +7821,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           imagePaths[index];
                                                       return MouseRegion(
                                                         child: GestureDetector(
-                                                          onSecondaryTap: () {
-                                                            _showThumbnailContextMenu(
-                                                                context, index);
+                                                          onSecondaryTapDown:
+                                                              (TapDownDetails
+                                                                  details) {
+                                                            _showThumbnailContextMenuAtPosition(
+                                                                context,
+                                                                index,
+                                                                details
+                                                                    .globalPosition);
                                                           },
                                                           onTap: () async {
                                                             // Check for modifier keys - use Option to avoid conflicts with normal selection
