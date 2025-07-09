@@ -7368,14 +7368,73 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     .circular(
                                                                         4), // Rounded corners
                                                           ),
-                                                          child: ClipRRect(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        4), // Match container corners
-                                                            child:
-                                                                _buildProportionalThumbnail(
-                                                                    imagePath),
+                                                          child: Column(
+                                                            children: [
+                                                              // Thumbnail image (smaller with padding for border effect)
+                                                              Expanded(
+                                                                child:
+                                                                    Container(
+                                                                  margin: const EdgeInsets
+                                                                      .all(
+                                                                      3), // Creates border effect
+                                                                  child:
+                                                                      ClipRRect(
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(2),
+                                                                    child: _buildProportionalThumbnail(
+                                                                        imagePath),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              // Filename display
+                                                              Container(
+                                                                width: double
+                                                                    .infinity,
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        2,
+                                                                    vertical:
+                                                                        1),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade200,
+                                                                  borderRadius:
+                                                                      const BorderRadius
+                                                                          .only(
+                                                                    bottomLeft:
+                                                                        Radius.circular(
+                                                                            4),
+                                                                    bottomRight:
+                                                                        Radius.circular(
+                                                                            4),
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  p.basenameWithoutExtension(
+                                                                      imagePath),
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    color: Colors
+                                                                        .black,
+                                                                    fontSize: 8,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                                  textAlign:
+                                                                      TextAlign
+                                                                          .center,
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
                                                           ),
                                                         ),
                                                       );
