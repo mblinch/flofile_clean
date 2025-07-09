@@ -877,6 +877,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Clear personality field
       personalityController.clear();
 
+      // Clear search bars
+      _homeSearchController.clear();
+      _awaySearchController.clear();
+      _playerPickerSearchController.clear();
+
+      // Clear search text variables
+      _playerPickerSearchText = '';
+
+      // Clear custom action controllers
+      _customPriorActionController.clear();
+      _customPostGameActionController.clear();
+      _customCelebrationController.clear();
+
       // Update personality field
       _updatePersonality();
     });
@@ -8271,11 +8284,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             // Regular click: Select thumbnail and load metadata
                                                             if (index !=
                                                                 currentIndex) {
-                                                              setState(() {
-                                                                currentIndex =
-                                                                    index;
-                                                              });
-                                                              await _loadMetadata();
+                                                              await _selectImage(
+                                                                  index);
                                                             }
                                                           },
                                                           child: Container(
