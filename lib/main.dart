@@ -326,6 +326,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Future<void> _copyMetadataFromIndex(int index) async {
     if (index < 0 || index >= imagePaths.length) return;
 
+    // Select the thumbnail first, then copy metadata
+    if (index != currentIndex) {
+      setState(() {
+        currentIndex = index;
+      });
+      await _loadMetadata();
+    }
+
     final imagePath = imagePaths[index];
 
     // Extract metadata via exiftool in JSON format
@@ -394,7 +402,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Selected and copied metadata from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
+                  'Saved current caption and copied metadata from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
         );
       }
     }
@@ -7869,14 +7877,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 await _pasteMetadataToCurrentImage();
                                                                 return;
                                                               } else {
-                                                                // Option+click: Select thumbnail first, then copy metadata
-                                                                if (index !=
-                                                                    currentIndex) {
-                                                                  setState(() {
-                                                                    currentIndex =
-                                                                        index;
-                                                                  });
-                                                                  await _loadMetadata();
+                                                                // Option+click: Save current caption first, then copy metadata from clicked image
+                                                                if (imagePaths
+                                                                        .isNotEmpty &&
+                                                                    currentIndex <
+                                                                        imagePaths
+                                                                            .length) {
+                                                                  await _saveCaptionToFile(
+                                                                      imagePaths[
+                                                                          currentIndex]);
                                                                 }
                                                                 await _copyMetadataFromIndex(
                                                                     index);
