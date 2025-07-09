@@ -7165,7 +7165,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               SizedBox(
                                 // This SizedBox defines the overall height of the image and caption area.
                                 height:
-                                    580, // Reduced from 650 to hide the 4th row of thumbnails
+                                    578, // Reduced by 2px to better cut off the 4th row of thumbnails
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -7175,7 +7175,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           1, // Changed from 2 to 1 to make image less wide
                                       child: Column(
                                         children: [
-                                          // Image Container
+                                          // Image Container with EXIF data included
                                           Expanded(
                                             child: Container(
                                               width: double.infinity,
@@ -7188,69 +7188,112 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
-                                              child: imagePaths.isNotEmpty
-                                                  ? ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      child: _buildPreviewImage(
-                                                          imagePaths[
-                                                              currentIndex]),
-                                                    )
-                                                  : Container(
-                                                      color: const Color(
-                                                          0x0D000000),
-                                                      child: const Center(
-                                                        child: Column(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            Icon(Icons.image,
-                                                                size: 48,
-                                                                color: const Color(
-                                                                    0xFF808080)),
-                                                            SizedBox(height: 8),
-                                                            Text(
-                                                                'No image selected',
-                                                                style: TextStyle(
-                                                                    color: const Color(
-                                                                        0xFF808080))),
-                                                          ],
+                                              child: Column(
+                                                children: [
+                                                  // Image area
+                                                  Expanded(
+                                                    child: imagePaths.isNotEmpty
+                                                        ? ClipRRect(
+                                                            borderRadius:
+                                                                const BorderRadius
+                                                                    .only(
+                                                              topLeft: Radius
+                                                                  .circular(4),
+                                                              topRight: Radius
+                                                                  .circular(4),
+                                                            ),
+                                                            child: _buildPreviewImage(
+                                                                imagePaths[
+                                                                    currentIndex]),
+                                                          )
+                                                        : Container(
+                                                            color: const Color(
+                                                                0x0D000000),
+                                                            child: const Center(
+                                                              child: Column(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .center,
+                                                                children: [
+                                                                  Icon(
+                                                                      Icons
+                                                                          .image,
+                                                                      size: 48,
+                                                                      color: const Color(
+                                                                          0xFF808080)),
+                                                                  SizedBox(
+                                                                      height:
+                                                                          8),
+                                                                  Text(
+                                                                      'No image selected',
+                                                                      style: TextStyle(
+                                                                          color:
+                                                                              const Color(0xFF808080))),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                  ),
+
+                                                  // EXIF Data Display at bottom
+                                                  if (imagePaths.isNotEmpty)
+                                                    Container(
+                                                      width: double.infinity,
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              8.0),
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            Colors.grey.shade50,
+                                                        borderRadius:
+                                                            const BorderRadius
+                                                                .only(
+                                                          bottomLeft:
+                                                              Radius.circular(
+                                                                  4),
+                                                          bottomRight:
+                                                              Radius.circular(
+                                                                  4),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        [
+                                                          if (_fileName != null)
+                                                            _fileName!,
+                                                          if (_imageWidth !=
+                                                                  null &&
+                                                              _imageHeight !=
+                                                                  null)
+                                                            '${_imageWidth}x$_imageHeight',
+                                                          if (_dateTimeOriginal !=
+                                                              null)
+                                                            _dateTimeOriginal!,
+                                                          if (_cameraModel !=
+                                                              null)
+                                                            _cameraModel!,
+                                                          if (_lensInfo != null)
+                                                            _lensInfo!,
+                                                          if (_shutterSpeed !=
+                                                              null)
+                                                            '1/$_shutterSpeed',
+                                                          if (_aperture != null)
+                                                            _aperture!,
+                                                          if (_iso != null)
+                                                            'ISO $_iso',
+                                                        ].join(' •  '),
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: const TextStyle(
+                                                          fontSize: 10,
+                                                          color: const Color(
+                                                              0xFF808080),
                                                         ),
                                                       ),
                                                     ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-
-                                          // EXIF Data Display
-                                          if (imagePaths.isNotEmpty) ...[
-                                            Text(
-                                              [
-                                                if (_fileName != null)
-                                                  _fileName!,
-                                                if (_imageWidth != null &&
-                                                    _imageHeight != null)
-                                                  '${_imageWidth}x$_imageHeight',
-                                                if (_dateTimeOriginal != null)
-                                                  _dateTimeOriginal!,
-                                                if (_cameraModel != null)
-                                                  _cameraModel!,
-                                                if (_lensInfo != null)
-                                                  _lensInfo!,
-                                                if (_shutterSpeed != null)
-                                                  '1/$_shutterSpeed',
-                                                if (_aperture != null)
-                                                  _aperture!,
-                                                if (_iso != null) 'ISO $_iso',
-                                              ].join(' •  '),
-                                              style: const TextStyle(
-                                                fontSize: 10,
-                                                color: const Color(0xFF808080),
+                                                ],
                                               ),
                                             ),
-                                          ],
+                                          ),
                                         ],
                                       ),
                                     ),
