@@ -808,7 +808,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
-  void _resetCaption() {
+  void _resetCaption({bool showSnackBar = true}) {
     setState(() {
       // Clear caption text
       captionController.clear();
@@ -857,9 +857,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Update personality field
       _updatePersonality();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Caption and selections reset!')),
-    );
+    if (showSnackBar) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Caption and selections reset!')),
+      );
+    }
   }
 
   void _onFtpPressed() {
@@ -5652,6 +5654,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       setState(() => currentIndex = nextIndex);
       _scrollToSelectedImage();
 
+      // Reset caption builder state
+      _resetCaption(showSnackBar: false);
+
       // Preload adjacent images for instant navigation
       _preloadCurrentAndAdjacentImages();
 
@@ -5670,6 +5675,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       await _saveCaptionToFile(imagePaths[currentIndex]);
       setState(() => currentIndex = prevIndex);
       _scrollToSelectedImage();
+
+      // Reset caption builder state
+      _resetCaption(showSnackBar: false);
 
       // Preload adjacent images for instant navigation
       _preloadCurrentAndAdjacentImages();
@@ -5694,6 +5702,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     setState(() => currentIndex = index);
     _scrollToSelectedImage();
+
+    // Reset caption builder state
+    _resetCaption(showSnackBar: false);
 
     // Preload adjacent images for instant navigation
     _preloadCurrentAndAdjacentImages();
