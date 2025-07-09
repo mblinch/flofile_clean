@@ -7165,7 +7165,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               SizedBox(
                                 // This SizedBox defines the overall height of the image and caption area.
                                 height:
-                                    500, // Reduced from 600 to make image a bit smaller
+                                    580, // Reduced from 650 to hide the 4th row of thumbnails
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -7279,7 +7279,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     gridDelegate:
                                                         const SliverGridDelegateWithFixedCrossAxisCount(
                                                       crossAxisCount:
-                                                          8, // Made a little smaller (more columns)
+                                                          6, // Changed to 6 columns for 6 across, 3 down layout
                                                       childAspectRatio: 1.0,
                                                       crossAxisSpacing:
                                                           1, // More spacing between thumbnails
@@ -7381,8 +7381,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ? _displayedCaption
                                                           : value.text,
                                                     ),
-                                                    maxLines: 4,
-                                                    minLines: 4,
+                                                    maxLines: 3,
+                                                    minLines: 3,
                                                     style: const TextStyle(
                                                         fontSize: 14),
                                                     decoration: InputDecoration(
@@ -7455,8 +7455,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: TextField(
                                                 controller:
                                                     personalityController,
-                                                maxLines: 4,
-                                                minLines: 4,
+                                                maxLines: 3,
+                                                minLines: 3,
                                                 style: const TextStyle(
                                                     fontSize: 14),
                                                 decoration: InputDecoration(
@@ -8328,7 +8328,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       width: MediaQuery.of(context).size.width *
                                           0.49,
                                       child: Transform.translate(
-                                        offset: const Offset(0, -120),
+                                        offset: const Offset(0, -40),
                                         child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
@@ -8609,14 +8609,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildFilmstrip() {
-    const double filmstripHeight = 40.0; // Made a little smaller
+    // 4 rows of 40px thumbnails + 16px vertical spacing (8px top/bottom per thumb)
+    const double thumbSize = 40.0;
+    const double thumbSpacing = 8.0;
+    const int rows = 4;
+    const int columns = 7;
+    // Use a fixed larger height to ensure all rows are visible
+    const double filmstripHeight = 320.0;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
       child: Container(
         height: filmstripHeight,
         color: const Color(0x0D000000),
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: const EdgeInsets.all(8.0),
         child: imagePaths.isEmpty
             ? Center(
                 child: Text(
@@ -8625,63 +8631,45 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               )
-            : Scrollbar(
+            : GridView.builder(
                 controller: _filmstripController,
-                thumbVisibility: true,
-                trackVisibility: true,
-                thickness: 8.0,
-                radius: const Radius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: ListView.separated(
-                    controller: _filmstripController,
-                    scrollDirection: Axis.horizontal,
-                    key: const PageStorageKey('filmstrip'),
-                    itemCount: imagePaths.length,
-                    separatorBuilder: (context, index) => Container(
-                      width: 1,
-                      height: double.infinity,
-                      color: Colors.grey.shade400,
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 10.0), // More spacing between sections
-                    ),
-                    itemBuilder: (context, index) {
-                      final imagePath = imagePaths[index];
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            currentIndex = index;
-                          });
-                        },
-                        child: Container(
-                          constraints: const BoxConstraints(
-                            maxWidth: 40, // Made a little smaller
-                            maxHeight: 40, // Made a little smaller
-                          ),
-                          margin: const EdgeInsets.symmetric(
-                              horizontal:
-                                  8.0), // More spacing between thumbnails
-                          decoration: BoxDecoration(
-                            color: Colors.white, // Clean white container
-                            borderRadius:
-                                BorderRadius.circular(4), // Rounded corners
-                            border: Border.all(
-                              color: index == currentIndex
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.transparent,
-                              width: index == currentIndex ? 3.0 : 0.0,
-                            ),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                                4), // Match container corners
-                            child: _buildProportionalThumbnail(imagePath),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: thumbSpacing,
+                  crossAxisSpacing: thumbSpacing,
+                  childAspectRatio: 1.0,
                 ),
+                itemCount: imagePaths.length,
+                itemBuilder: (context, index) {
+                  final imagePath = imagePaths[index];
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        currentIndex = index;
+                      });
+                    },
+                    child: Container(
+                      constraints: BoxConstraints(
+                        maxWidth: thumbSize,
+                        maxHeight: thumbSize,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: index == currentIndex
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.transparent,
+                          width: index == currentIndex ? 3.0 : 0.0,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: _buildProportionalThumbnail(imagePath),
+                      ),
+                    ),
+                  );
+                },
               ),
       ),
     );
