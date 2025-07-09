@@ -163,6 +163,8 @@ class Replacement {
 /// Intent to toggle Home/Away player list via keyboard
 class ToggleHomeAwayIntent extends Intent {}
 
+class PasteLastCaptionIntent extends Intent {}
+
 class CaptionBuilder extends StatefulWidget {
   const CaptionBuilder({super.key});
 
@@ -1515,6 +1517,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   final TextEditingController _customCelebrationController =
       TextEditingController();
   String _customPriorAction = ''; // Custom prior to game action input
+  String _lastCaption =
+      ''; // Store the last saved caption for Cmd+L functionality
   final TextEditingController _customPriorActionController =
       TextEditingController();
 
@@ -2515,6 +2519,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         'Signs autographs',
                         'Takes the field',
                         'Stretches',
+                        'Anthem',
                       ]
                           .map((label) => Padding(
                                 padding: const EdgeInsets.only(bottom: 8.0),
@@ -5751,6 +5756,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Future<void> _saveCaptionToFile(String path) async {
     final caption = captionController.text;
+
+    // Store the caption as the last caption for Cmd+L functionality
+    if (caption.isNotEmpty) {
+      _lastCaption = caption;
+    }
     final personality = personalityController.text;
     final jobId = jobIdController.text;
     final descriptionWriter = descriptionWritersController.text;
@@ -6761,9 +6771,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final photoBy = creatorController.text;
 
       // Use custom action if available, otherwise use selected action
-      final action = _customPriorAction.isNotEmpty
-          ? _customPriorAction.toLowerCase()
-          : _selectedPriorAction!.toLowerCase();
+      String action;
+      if (_customPriorAction.isNotEmpty) {
+        action = _customPriorAction.toLowerCase();
+      } else {
+        // Handle special cases for selected actions
+        if (_selectedPriorAction == 'Anthem') {
+          action = 'looks on during the national anthem';
+        } else {
+          action = _selectedPriorAction!.toLowerCase();
+        }
+      }
 
       // Handle opponent players if selected
       String opponentPart = '';
@@ -7799,6 +7817,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyT):
             ToggleHomeAwayIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyL):
+            PasteLastCaptionIntent(),
       },
       child: Actions(
         actions: {
@@ -7807,6 +7827,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               setState(() {
                 _showHomeFirst = !_showHomeFirst;
               });
+              return null;
+            },
+          ),
+          PasteLastCaptionIntent: CallbackAction<PasteLastCaptionIntent>(
+            onInvoke: (intent) {
+              if (_lastCaption.isNotEmpty) {
+                setState(() {
+                  captionController.text = _lastCaption;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Last caption pasted!')),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No last caption available')),
+                );
+              }
               return null;
             },
           ),
