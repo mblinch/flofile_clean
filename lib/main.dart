@@ -459,7 +459,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
           content: Text(
-              'Metadata pasted to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
+              'Selected and pasted metadata to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
     );
   }
 
@@ -7547,7 +7547,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       .contains(
                                                                           LogicalKeyboardKey
                                                                               .shiftRight)) {
-                                                                // Option+Shift+click: Paste metadata to currently selected thumbnail
+                                                                // Option+Shift+click: Select thumbnail first, then paste metadata
+                                                                if (index !=
+                                                                    currentIndex) {
+                                                                  setState(() {
+                                                                    currentIndex =
+                                                                        index;
+                                                                  });
+                                                                  await _loadMetadata();
+                                                                }
                                                                 await _pasteMetadataToCurrentImage();
                                                                 return;
                                                               } else {
