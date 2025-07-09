@@ -300,6 +300,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _displayedCaption = '';
   String _targetCaption = '';
   String _previousCaption = '';
+  bool _isManuallyTyping = false; // Track when user is manually typing
 
   // Personality field typewriter effect
   late AnimationController _personalityTypewriterController;
@@ -326,12 +327,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Future<void> _copyMetadataFromIndex(int index) async {
     if (index < 0 || index >= imagePaths.length) return;
 
+    // Store the current date to preserve it during copy operation
+    final originalDate = selectedDate;
+
     // Select the thumbnail first, then copy metadata
     if (index != currentIndex) {
       setState(() {
         currentIndex = index;
       });
       await _loadMetadata();
+
+      // Restore the original date to prevent date from being copied
+      setState(() {
+        selectedDate = originalDate;
+      });
     }
 
     final imagePath = imagePaths[index];
@@ -526,6 +535,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ],
     ).then((value) async {
       if (value == 'copy') {
+        // Save current metadata first, then copy from selected image
+        if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
+          await _saveCaptionToFile(imagePaths[currentIndex]);
+        }
         // Select thumbnail first, then copy metadata
         if (index != currentIndex) {
           setState(() {
@@ -616,6 +629,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ],
     ).then((value) async {
       if (value == 'copy') {
+        // Save current metadata first, then copy from selected image
+        if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
+          await _saveCaptionToFile(imagePaths[currentIndex]);
+        }
         // Select thumbnail first, then copy metadata
         if (index != currentIndex) {
           setState(() {
@@ -845,8 +862,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Reset Prior to Game state
       _selectedPriorAction = null;
 
-      // Reset At Bat state
+      // Reset At Bat state (legacy - now using Batting)
       _selectedAtBatAction = null;
+
+      // Reset Batting state
+      _selectedBattingAction = null;
 
       // Reset Portrait state
       _isLooksOn = false;
@@ -908,6 +928,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           _selectedStealBase = null;
           _showStealAgainstPlayer = false;
         }
+      } else if (_selectedVerb == 'At Bat' && _selectedAtBatAction != null) {
+        // If at bat action is selected, go back to at bat menu
+        _selectedAtBatAction = null;
+      } else if (_selectedVerb == 'Batting' && _selectedBattingAction != null) {
+        // If batting action is selected, go back to batting menu
+        _selectedBattingAction = null;
       } else if (_selectedVerb == 'Celebrate' &&
           (_isSoloCelebration ||
               celebrateWith.isNotEmpty ||
@@ -935,6 +961,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _isSoloCelebration = false;
         celebrateWith.clear();
         celebrateAgainst.clear();
+        _selectedAtBatAction = null;
+        _selectedBattingAction = null;
       }
       _updateCaption();
     });
@@ -1515,8 +1543,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Patch: Prior to Game selected action state
   String? _selectedPriorAction;
 
-  // At Bat selected action state
+  // At Bat selected action state (legacy - now using Batting)
   String? _selectedAtBatAction;
+
+  // Batting selected action state
+  String? _selectedBattingAction;
 
   // Patch: Fielding row and chip keys and indent
   double _fieldingIndent = 0.0;
@@ -1854,16 +1885,31 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'Fielding',
       'pitches',
       'At Bat',
+      'Batting',
       'Base Running'
     ];
 
     for (final verb in allVerbs) {
+      print('DEBUG: Processing verb: "$verb"');
+      print('DEBUG: multiplePlayersSelected: $multiplePlayersSelected');
+      print(
+          'DEBUG: soloOnlyVerbs.contains(verb): ${soloOnlyVerbs.contains(verb)}');
+
       // Skip solo-only verbs if multiple players are selected
       if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        print('DEBUG: Skipping verb "$verb" because multiple players selected');
+        print('DEBUG: selectedPlayers: $selectedPlayers');
+        print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
         continue;
       }
       // Only display the verb if no verb is selected, or if this is the selected verb
+      print('DEBUG: Checking if verb "$verb" should be displayed');
+      print('DEBUG: _selectedVerb: $_selectedVerb');
+      print('DEBUG: _selectedVerb == null: ${_selectedVerb == null}');
+      print('DEBUG: _selectedVerb == verb: ${_selectedVerb == verb}');
+
       if (_selectedVerb == null || _selectedVerb == verb) {
+        print('DEBUG: Adding verb "$verb" to widgets');
         if (verb == 'hit') {
           widgets.add(
             Padding(
@@ -2197,9 +2243,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      'RBI Single',
-                                      'Two RBI Single',
-                                      'Three RBI Single',
+                                      'RBI ${_selectedHitType}',
+                                      'Two RBI ${_selectedHitType}',
+                                      'Three RBI ${_selectedHitType}',
                                     ].asMap().entries.map((entry) {
                                       final index = entry.key;
                                       final label = entry.value;
@@ -3269,6 +3315,129 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           );
+        } else if (verb == 'Batting') {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      key: UniqueKey(),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.chevron_right,
+                                      size: 14, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Batting',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          selected: _selectedVerb == 'Batting',
+                          onSelected: (isSelected) => setState(() {
+                            _selectedVerb = isSelected ? 'Batting' : null;
+                            _selectedBattingAction = null;
+                            _selectedRbiInning = null;
+                            _updateCaption();
+                          }),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        if (_selectedVerb == 'Batting') ...[
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          buildInlineInningSelector(
+                            selectedInning: _selectedRbiInning,
+                            onInningSelected: (val) {
+                              setState(() {
+                                _selectedRbiInning = val;
+                                _walkOff = false;
+                                _updateCaption();
+                              });
+                            },
+                          ),
+
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line between inning and batting action selection
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 16.0),
+                          ...['At Bat', 'Swings', 'Runs to First Base']
+                              .map((label) {
+                            print('DEBUG: Rendering Batting action: $label');
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FlashingFilterChip(
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected: _selectedBattingAction == label,
+                                onSelected: (isSelected) {
+                                  print(
+                                      'DEBUG: Batting action selected: $label, isSelected: $isSelected');
+                                  setState(() {
+                                    _selectedBattingAction =
+                                        isSelected ? label : null;
+                                    print(
+                                        'DEBUG: _selectedBattingAction set to: $_selectedBattingAction');
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                key: UniqueKey(),
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         } else if (verb == 'At Bat') {
           widgets.add(
             Padding(
@@ -3347,38 +3516,42 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                           ),
                           const SizedBox(width: 16.0),
-                          ...(_selectedAtBatAction == null
-                                  ? ['swings', 'runs to first base']
-                                  : [_selectedAtBatAction!])
-                              .map((label) => Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: FlashingFilterChip(
-                                      label: SizedBox(
-                                        width: _fixedChipWidth,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            label,
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      selected: _selectedAtBatAction == label,
-                                      onSelected: (isSelected) {
-                                        setState(() {
-                                          _selectedAtBatAction =
-                                              isSelected ? label : null;
-                                          _updateCaption();
-                                        });
-                                      },
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      key: UniqueKey(),
+                          ...['swings', 'runs to first base'].map((label) {
+                            print('DEBUG: Rendering At Bat sub-action: $label');
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FlashingFilterChip(
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  )),
+                                  ),
+                                ),
+                                selected: _selectedAtBatAction == label,
+                                onSelected: (isSelected) {
+                                  print(
+                                      'DEBUG: At Bat action selected: $label, isSelected: $isSelected');
+                                  setState(() {
+                                    _selectedAtBatAction =
+                                        isSelected ? label : null;
+                                    print(
+                                        'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction');
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                key: UniqueKey(),
+                              ),
+                            );
+                          }),
                         ],
                       ],
                     ),
@@ -3943,6 +4116,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     'Fielding',
     'Base Running',
     'At Bat',
+    'Batting',
     'Portrait',
     'Prior to Game',
     'Post Game',
@@ -4547,8 +4721,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'home run': 'hits a home run against the',
       'pitches': 'delivers a pitch against the',
       'makes a catch': 'makes a catch against the',
+      'Batting':
+          'takes an at bat in his batting stance against the', // New batting menu
       'At Bat':
-          'takes an at bat in his batting stance against the', // New entry for the UI button text
+          'takes an at bat in his batting stance against the', // Batting sub-option
+      'Swings': 'swings against the', // Batting sub-option
+      'Runs to First Base':
+          'runs to first base against the', // Batting sub-option
       'celebrates defeating': 'celebrates defeating the',
       'Celebrate': 'celebrates', // New single celebrate verb
       'Base Running': 'runs the bases against the',
@@ -4556,9 +4735,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'slides': 'slides against the',
       'runs the bases': 'runs the bases against the',
       'rounds the bases': 'rounds the bases against the',
-      'swings': 'swings against the', // At Bat sub-option
-      'runs to first base':
-          'runs to first base against the', // At Bat sub-option
       // Ensure all soloVerbs and competitionVerbs have entries in codeReplacements if they are to be used like this
       // For instance, 'turns a double play over' isn't in verbMap, so its 'full' form would be itself unless added.
     };
@@ -5086,6 +5262,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'Fielding',
                                   'pitches',
                                   'At Bat',
+                                  'Batting',
                                   'Base Running'
                                 ];
                                 if (_selectedVerb != null &&
@@ -5106,6 +5283,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'Fielding',
                                   'pitches',
                                   'At Bat',
+                                  'Batting',
                                   'Base Running'
                                 ];
                                 if (_selectedVerb != null &&
@@ -5415,6 +5593,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     // 3. Update the UI with the loaded data.
     setState(() {
+      // Reset manual typing flag when loading new metadata
+      _isManuallyTyping = false;
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
 
@@ -6235,18 +6415,28 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   String _combinePlayersWithSingleTeam(List<String> codes) {
+    print('DEBUG: _combinePlayersWithSingleTeam called with: $codes');
     if (codes.isEmpty) return '';
     final shorts = codes
         .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
         .toList();
+    print('DEBUG: shorts: $shorts');
     // Determine the team from the first player's code to infer if it's home or away
     final isHomeTeamPlayer = codes.first.startsWith('h');
+    print('DEBUG: isHomeTeamPlayer: $isHomeTeamPlayer');
 
     // Add null checks before using the null check operator
-    if (isHomeTeamPlayer && selectedHomeTeam == null) return shorts.join(', ');
-    if (!isHomeTeamPlayer && selectedAwayTeam == null) return shorts.join(', ');
+    if (isHomeTeamPlayer && selectedHomeTeam == null) {
+      print('DEBUG: Home team is null, returning shorts.join');
+      return shorts.join(', ');
+    }
+    if (!isHomeTeamPlayer && selectedAwayTeam == null) {
+      print('DEBUG: Away team is null, returning shorts.join');
+      return shorts.join(', ');
+    }
 
     final prefixTeam = isHomeTeamPlayer ? selectedHomeTeam! : selectedAwayTeam!;
+    print('DEBUG: prefixTeam: $prefixTeam');
 
     if (shorts.length == 1) {
       return '${shorts.first} of the $prefixTeam';
@@ -6802,15 +6992,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     String mainCaptionPart = '';
     if (_selectedVerb == 'hit' && _selectedHitType != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      print('DEBUG: Entering hit verb section');
+      print('DEBUG: selectedPlayers: $selectedPlayers');
+      print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
+
+      // Determine which team the selected players belong to
+      Set<String> activePlayers;
+      String? opponentTeamName;
+
+      if (selectedPlayers.isNotEmpty) {
+        // Home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print('DEBUG: Home team players selected for hit: $activePlayers');
+        print('DEBUG: Opponent team for hit: $opponentTeamName');
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        // Away team players are selected
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print('DEBUG: Away team players selected for hit: $activePlayers');
+        print('DEBUG: Opponent team for hit: $opponentTeamName');
+      } else {
+        print('DEBUG: No players selected for hit');
+        return;
+      }
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      if (opponentTeamName == null) {
+        print('DEBUG: Opponent team is null for hit');
+        return;
+      }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
@@ -6818,6 +7029,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // 1. Determine the detailed hit phrase.
       String hitPhrase = '';
+
+      print('DEBUG: _selectedHitType: $_selectedHitType');
+      print('DEBUG: _rbiCount: $_rbiCount');
+      print('DEBUG: _walkOff: $_walkOff');
 
       if (_selectedHitType == 'Home Run') {
         String? hrType = _selectedHomeRunType;
@@ -6871,11 +7086,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   : '$_rbiCount-run';
             }
           }
-          hitPhrase = '$rbiPart $_selectedHitType'.trim();
+          hitPhrase = '$rbiPart ${_selectedHitType!.toLowerCase()}'.trim();
         } else {
           // Use "two RBI double" style phrasing for standard hits
           if (_rbiCount == null || _rbiCount == 0) {
-            hitPhrase = _selectedHitType!;
+            hitPhrase = _selectedHitType!.toLowerCase();
+            print('DEBUG: No RBI, hitPhrase = $hitPhrase');
           } else {
             final rbiWords = ['one', 'two', 'three'];
             final rbiString = _rbiCount == 1
@@ -6883,7 +7099,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 : _rbiCount! <= 3
                     ? '${rbiWords[_rbiCount! - 1]} RBI'
                     : '$_rbiCount RBI';
-            hitPhrase = '$rbiString $_selectedHitType';
+            hitPhrase = '$rbiString ${_selectedHitType!.toLowerCase()}';
+            print('DEBUG: With RBI, hitPhrase = $hitPhrase');
           }
         }
       }
@@ -6909,6 +7126,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       } else {
         coreActionPart = "$playersString hits a $hitPhrase";
+        print('DEBUG: coreActionPart = $coreActionPart');
       }
 
       if (celebrateWith.isNotEmpty) {
@@ -6955,15 +7173,34 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb == 'Fielding' && _selectedFieldingAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      print('DEBUG: Entering Fielding verb section');
+
+      // Determine which team the selected players belong to
+      Set<String> activePlayers;
+      String? opponentTeamName;
+
+      if (selectedPlayers.isNotEmpty) {
+        // Home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print('DEBUG: Home team players selected for Fielding: $activePlayers');
+        print('DEBUG: Opponent team for Fielding: $opponentTeamName');
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        // Away team players are selected
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print('DEBUG: Away team players selected for Fielding: $activePlayers');
+        print('DEBUG: Opponent team for Fielding: $opponentTeamName');
+      } else {
+        print('DEBUG: No players selected for Fielding');
+        return;
+      }
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      if (opponentTeamName == null) {
+        print('DEBUG: Opponent team is null for Fielding');
+        return;
+      }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
@@ -6984,15 +7221,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
     } else if (_selectedVerb == 'Base Running' &&
         _selectedBaseRunningAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      print('DEBUG: Entering Base Running verb section');
+
+      // Determine which team the selected players belong to
+      Set<String> activePlayers;
+      String? opponentTeamName;
+
+      if (selectedPlayers.isNotEmpty) {
+        // Home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print(
+            'DEBUG: Home team players selected for Base Running: $activePlayers');
+        print('DEBUG: Opponent team for Base Running: $opponentTeamName');
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        // Away team players are selected
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print(
+            'DEBUG: Away team players selected for Base Running: $activePlayers');
+        print('DEBUG: Opponent team for Base Running: $opponentTeamName');
+      } else {
+        print('DEBUG: No players selected for Base Running');
+        return;
+      }
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
-
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      if (opponentTeamName == null) {
+        print('DEBUG: Opponent team is null for Base Running');
+        return;
+      }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
@@ -7055,16 +7313,78 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (_selectedRbiInning != null) {
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
-    } else if (_selectedVerb == 'At Bat' && _selectedAtBatAction != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+    } else if (_selectedVerb == 'Batting' && _selectedBattingAction != null) {
+      print('DEBUG: Entering Batting section');
+      print('DEBUG: _selectedVerb: $_selectedVerb');
+      print('DEBUG: _selectedBattingAction: $_selectedBattingAction');
+      // Determine which team the selected player belongs to
+      bool isHome;
+      if (selectedPlayers.isNotEmpty) {
+        isHome = true;
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        isHome = false;
+      } else {
+        // Fallback: use the current team view if no players are selected
+        isHome = _showHomeFirst;
+      }
+
+      final activePlayers = isHome ? selectedPlayers : selectedOpponentPlayers;
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
+      if (isHome && selectedAwayTeam == null) return;
+      if (!isHome && selectedHomeTeam == null) return;
 
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
+      final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
+
+      if (activePlayers.isEmpty) return; // Should not happen if UI is correct
+      final playersString =
+          _combinePlayersWithSingleTeam(activePlayers.toList());
+
+      final actionReplacement = codeReplacements[_selectedBattingAction!];
+      if (actionReplacement == null) return; // Should not happen
+
+      print('DEBUG Batting:');
+      print('  isHome: $isHome');
+      print('  activePlayers: $activePlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+      print('  opponentTeamName: $opponentTeamName');
+      print('  playersString: $playersString');
+      print('  _selectedBattingAction: $_selectedBattingAction');
+      print('  actionReplacement.full: ${actionReplacement.full}');
+
+      mainCaptionPart =
+          "$playersString ${actionReplacement.full} $opponentTeamName";
+
+      print('  mainCaptionPart: $mainCaptionPart');
+
+      // Add inning if picked
+      if (_selectedRbiInning != null) {
+        mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
+      }
+    } else if (_selectedVerb == 'At Bat' && _selectedAtBatAction != null) {
+      print('DEBUG: Entering At Bat section');
+      print('DEBUG: _selectedVerb: $_selectedVerb');
+      print('DEBUG: _selectedAtBatAction: $_selectedAtBatAction');
+      // Determine which team the selected player belongs to
+      bool isHome;
+      if (selectedPlayers.isNotEmpty) {
+        isHome = true;
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        isHome = false;
+      } else {
+        // Fallback: use the current team view if no players are selected
+        isHome = _showHomeFirst;
+      }
+
+      final activePlayers = isHome ? selectedPlayers : selectedOpponentPlayers;
+
+      // Add null checks for teams
+      if (isHome && selectedAwayTeam == null) return;
+      if (!isHome && selectedHomeTeam == null) return;
+
+      final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
       final playersString =
@@ -7073,14 +7393,28 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final actionReplacement = codeReplacements[_selectedAtBatAction!];
       if (actionReplacement == null) return; // Should not happen
 
+      print('DEBUG At Bat:');
+      print('  isHome: $isHome');
+      print('  activePlayers: $activePlayers');
+      print('  _showHomeFirst: $_showHomeFirst');
+      print('  selectedHomeTeam: $selectedHomeTeam');
+      print('  selectedAwayTeam: $selectedAwayTeam');
+      print('  opponentTeamName: $opponentTeamName');
+      print('  playersString: $playersString');
+      print('  _selectedAtBatAction: $_selectedAtBatAction');
+      print('  actionReplacement.full: ${actionReplacement.full}');
+
       mainCaptionPart =
           "$playersString ${actionReplacement.full} $opponentTeamName";
+
+      print('  mainCaptionPart: $mainCaptionPart');
 
       // Add inning if picked
       if (_selectedRbiInning != null) {
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb == 'Celebrate') {
+      print('DEBUG: Entering Celebrate section');
       final activePlayers = isHome ? selectedPlayers : selectedOpponentPlayers;
 
       // Add null checks for teams
@@ -7131,27 +7465,60 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
       }
     } else if (_selectedVerb != null) {
-      final activePlayers =
-          _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+      print('DEBUG: Entering generic verb section');
+      print('DEBUG: _selectedVerb: $_selectedVerb');
+      print('DEBUG: _selectedBattingAction: $_selectedBattingAction');
+      print('DEBUG: selectedPlayers: $selectedPlayers');
+      print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
+      print('DEBUG: selectedHomeTeam: $selectedHomeTeam');
+      print('DEBUG: selectedAwayTeam: $selectedAwayTeam');
+
+      // Determine which team the selected players belong to
+      Set<String> activePlayers;
+      String? opponentTeamName;
+
+      if (selectedPlayers.isNotEmpty) {
+        // Home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print('DEBUG: Home team players selected: $activePlayers');
+        print('DEBUG: Opponent team: $opponentTeamName');
+      } else if (selectedOpponentPlayers.isNotEmpty) {
+        // Away team players are selected
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print('DEBUG: Away team players selected: $activePlayers');
+        print('DEBUG: Opponent team: $opponentTeamName');
+      } else {
+        print('DEBUG: No players selected');
+        return;
+      }
 
       // Add null checks for teams
-      if (_showHomeFirst && selectedAwayTeam == null) return;
-      if (!_showHomeFirst && selectedHomeTeam == null) return;
+      if (opponentTeamName == null) {
+        print('DEBUG: Opponent team is null');
+        return;
+      }
 
-      final opponentTeamName =
-          _showHomeFirst ? selectedAwayTeam! : selectedHomeTeam!;
-      final opponentPlayers =
-          _showHomeFirst ? selectedOpponentPlayers : selectedPlayers;
       final verbReplacement = codeReplacements[_selectedVerb!];
 
       if (verbReplacement == null) return; // Should not happen
 
       // Since all remaining verbs are solo actions, the logic is simplified.
       if (activePlayers.isNotEmpty) {
+        print(
+            'DEBUG: About to call _combinePlayersWithSingleTeam with: ${activePlayers.toList()}');
         final playersString =
             _combinePlayersWithSingleTeam(activePlayers.toList());
+        print('DEBUG: _combinePlayersWithSingleTeam returned: $playersString');
         mainCaptionPart =
             "$playersString ${verbReplacement.full} $opponentTeamName";
+        print('DEBUG: Generated caption part: $mainCaptionPart');
+        print('DEBUG: playersString: $playersString');
+        print('DEBUG: verbReplacement.full: ${verbReplacement.full}');
+        print('DEBUG: opponentTeamName: $opponentTeamName');
+      } else {
+        print('DEBUG: No active players found');
       }
 
       // Add inning if picked
@@ -7192,13 +7559,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _prevCustomCelebrationVerb = _customCelebrationVerb;
 
     if (trimmedCaption != previousCaption && trimmedCaption.isNotEmpty) {
-      if (_customCelebrationVerb.isNotEmpty || wasCustomVerb) {
-        // Stop any running typewriter effect
+      if (_customCelebrationVerb.isNotEmpty ||
+          wasCustomVerb ||
+          _isManuallyTyping) {
+        // Stop any running typewriter effect and set text immediately
         _typewriterController.stop();
-        // Set text immediately without animation for custom verbs
         captionController.text = trimmedCaption;
       } else {
-        // Start typewriter effect for new captions
+        // Start typewriter effect for new captions (only when not manually typing)
         _startTypewriterEffect(trimmedCaption);
       }
     } else {
@@ -8049,12 +8417,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       BorderRadius.circular(4),
                                                   child: TextField(
                                                     controller:
-                                                        TextEditingController(
-                                                      text: _typewriterController
-                                                              .isAnimating
-                                                          ? _displayedCaption
-                                                          : value.text,
-                                                    ),
+                                                        captionController,
                                                     maxLines: 3,
                                                     minLines: 3,
                                                     style: const TextStyle(
@@ -8099,15 +8462,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             width: 1.0),
                                                       ),
                                                     ),
-                                                    readOnly:
-                                                        _typewriterController
-                                                            .isAnimating,
-                                                    onChanged: (value) {
-                                                      if (!_typewriterController
+                                                    onTap: () {
+                                                      // Stop typewriter effect when user starts typing
+                                                      if (_typewriterController
                                                           .isAnimating) {
-                                                        captionController.text =
-                                                            value;
+                                                        _typewriterController
+                                                            .stop();
                                                       }
+                                                      _isManuallyTyping = true;
+                                                    },
+                                                    onChanged: (value) {
+                                                      // Mark as manually typing when user changes text
+                                                      _isManuallyTyping = true;
                                                     },
                                                   ),
                                                 ),
@@ -10327,6 +10693,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         'Fielding',
                                         'pitches',
                                         'At Bat',
+                                        'Batting',
                                         'Base Running'
                                       ];
 
@@ -10353,6 +10720,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         'Fielding',
                                         'pitches',
                                         'At Bat',
+                                        'Batting',
                                         'Base Running'
                                       ];
 
@@ -10494,8 +10862,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     setState(() {
       _selectedVerb = isTogglingOff ? null : verb;
-      // Reset inning state when the verb selection changes, except for 'pitches'
-      if (verb != 'pitches') {
+      // Reset inning state when the verb selection changes, except for 'pitches', 'At Bat', and 'Batting'
+      if (verb != 'pitches' && verb != 'At Bat' && verb != 'Batting') {
         _selectedRbiInning = null;
       }
 
@@ -10513,6 +10881,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _selectedFieldingAction = null;
       _showDivingCatch = false;
       _isDivingCatch = false;
+
+      // Reset batting-related state when changing verbs
+      if (verb != 'At Bat' && verb != 'Batting') {
+        _selectedAtBatAction = null;
+        _selectedBattingAction = null;
+      }
     });
 
     if (!isTogglingOff && verb == 'Celebrate') {
