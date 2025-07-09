@@ -9079,371 +9079,396 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   const SizedBox(width: 16),
                                   // Verb chips on the right
                                   Expanded(
-                                    child:
-                                        (selectedPlayers.isNotEmpty ||
-                                                selectedOpponentPlayers
-                                                    .isNotEmpty)
-                                            ? Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 0.0,
-                                                    left: 0.0,
-                                                    right: 0.0),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Container(
-                                                      width: 280,
-                                                      child: Column(
-                                                        children: [
-                                                          // App bar style header
-                                                          Container(
-                                                            width: 280,
-                                                            height: 28,
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              gradient:
-                                                                  LinearGradient(
-                                                                begin: Alignment
-                                                                    .centerLeft,
-                                                                end: Alignment
-                                                                    .centerRight,
-                                                                colors: [
-                                                                  Colors.grey
-                                                                      .shade200,
-                                                                  Colors.white,
-                                                                ],
-                                                              ),
-                                                              borderRadius:
-                                                                  const BorderRadius
-                                                                      .only(
-                                                                topLeft: Radius
-                                                                    .circular(
-                                                                        4),
-                                                                topRight: Radius
-                                                                    .circular(
-                                                                        4),
-                                                              ),
-                                                            ),
-                                                            child: Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          16.0),
-                                                              child: Row(
-                                                                children: [
-                                                                  if (_selectedVerb ==
-                                                                      'hit') ...[
-                                                                    // Breadcrumb menu
-                                                                    Expanded(
-                                                                      child:
-                                                                          Row(
-                                                                        children: [
-                                                                          GestureDetector(
-                                                                            onTap:
-                                                                                () {
-                                                                              setState(() {
-                                                                                _selectedVerb = null;
-                                                                                _selectedHitType = null;
-                                                                                _selectedHomeRunType = null;
-                                                                                _rbiCount = null;
-                                                                                _selectedRbiInning = null;
-                                                                                _isBatterRunning = null;
-                                                                                _updateCaption();
-                                                                              });
-                                                                            },
-                                                                            child:
-                                                                                Text(
-                                                                              'HIT',
-                                                                              style: TextStyle(
-                                                                                fontSize: 10,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: Colors.grey.shade700,
-                                                                              ),
-                                                                            ),
-                                                                          ),
-                                                                          if (_selectedHitType !=
-                                                                              null) ...[
-                                                                            Padding(
-                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
-                                                                              child: Text(
-                                                                                '→',
-                                                                                style: TextStyle(
-                                                                                  fontSize: 8,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            GestureDetector(
-                                                                              onTap: () {
-                                                                                setState(() {
-                                                                                  _selectedHitType = null;
-                                                                                  _selectedHomeRunType = null;
-                                                                                  _rbiCount = null;
-                                                                                  _selectedRbiInning = null;
-                                                                                  _isBatterRunning = null;
-                                                                                  _updateCaption();
-                                                                                });
-                                                                              },
-                                                                              child: Text(
-                                                                                _selectedHitType!.toUpperCase(),
-                                                                                style: TextStyle(
-                                                                                  fontSize: 10,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                          if (_selectedHitType == 'Home Run' &&
-                                                                              _selectedHomeRunType != null) ...[
-                                                                            Padding(
-                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
-                                                                              child: Text(
-                                                                                '→',
-                                                                                style: TextStyle(
-                                                                                  fontSize: 8,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            GestureDetector(
-                                                                              onTap: () {
-                                                                                setState(() {
-                                                                                  _selectedHomeRunType = null;
-                                                                                  _updateCaption();
-                                                                                });
-                                                                              },
-                                                                              child: Text(
-                                                                                _selectedHomeRunType == 'solo'
-                                                                                    ? 'SOLO'
-                                                                                    : _selectedHomeRunType == 'two-run'
-                                                                                        ? '2 RUN'
-                                                                                        : _selectedHomeRunType == 'three-run'
-                                                                                            ? '3 RUN'
-                                                                                            : _selectedHomeRunType == 'grand slam'
-                                                                                                ? 'GRAND SLAM'
-                                                                                                : '',
-                                                                                style: TextStyle(
-                                                                                  fontSize: 10,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                          if (_selectedHitType != null &&
-                                                                              _selectedHitType != 'Home Run' &&
-                                                                              _rbiCount != null &&
-                                                                              _rbiCount! > 0) ...[
-                                                                            Padding(
-                                                                              padding: const EdgeInsets.symmetric(horizontal: 3.0),
-                                                                              child: Text(
-                                                                                '→',
-                                                                                style: TextStyle(
-                                                                                  fontSize: 8,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            GestureDetector(
-                                                                              onTap: () {
-                                                                                setState(() {
-                                                                                  _rbiCount = null;
-                                                                                  _rbiCountByHit.remove(_selectedHitType!);
-                                                                                  _updateCaption();
-                                                                                });
-                                                                              },
-                                                                              child: Text(
-                                                                                _rbiCount == 1
-                                                                                    ? 'RBI SINGLE'
-                                                                                    : _rbiCount == 2
-                                                                                        ? 'TWO RBI SINGLE'
-                                                                                        : _rbiCount == 3
-                                                                                            ? 'THREE RBI SINGLE'
-                                                                                            : '',
-                                                                                style: TextStyle(
-                                                                                  fontSize: 10,
-                                                                                  fontWeight: FontWeight.bold,
-                                                                                  color: Colors.grey.shade700,
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ],
-                                                                      ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(
+                                          top: 0.0, left: 0.0, right: 0.0),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: 280,
+                                            child: Column(
+                                              children: [
+                                                // App bar style header
+                                                Container(
+                                                  width: 280,
+                                                  height: 28,
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      begin:
+                                                          Alignment.centerLeft,
+                                                      end:
+                                                          Alignment.centerRight,
+                                                      colors: [
+                                                        Colors.grey.shade200,
+                                                        Colors.white,
+                                                      ],
+                                                    ),
+                                                    borderRadius:
+                                                        const BorderRadius.only(
+                                                      topLeft:
+                                                          Radius.circular(4),
+                                                      topRight:
+                                                          Radius.circular(4),
+                                                    ),
+                                                  ),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 16.0),
+                                                    child: Row(
+                                                      children: [
+                                                        if (_selectedVerb ==
+                                                            'hit') ...[
+                                                          // Breadcrumb menu
+                                                          Expanded(
+                                                            child: Row(
+                                                              children: [
+                                                                GestureDetector(
+                                                                  onTap: () {
+                                                                    setState(
+                                                                        () {
+                                                                      _selectedVerb =
+                                                                          null;
+                                                                      _selectedHitType =
+                                                                          null;
+                                                                      _selectedHomeRunType =
+                                                                          null;
+                                                                      _rbiCount =
+                                                                          null;
+                                                                      _selectedRbiInning =
+                                                                          null;
+                                                                      _isBatterRunning =
+                                                                          null;
+                                                                      _updateCaption();
+                                                                    });
+                                                                  },
+                                                                  child: Text(
+                                                                    'HIT',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      fontSize:
+                                                                          10,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold,
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade700,
                                                                     ),
-                                                                  ] else ...[
-                                                                    Text(
-                                                                      'Action Verbs',
+                                                                  ),
+                                                                ),
+                                                                if (_selectedHitType !=
+                                                                    null) ...[
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            3.0),
+                                                                    child: Text(
+                                                                      '→',
                                                                       style:
                                                                           TextStyle(
+                                                                        fontSize:
+                                                                            8,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
                                                                         color: Colors
                                                                             .grey
                                                                             .shade700,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  GestureDetector(
+                                                                    onTap: () {
+                                                                      setState(
+                                                                          () {
+                                                                        _selectedHitType =
+                                                                            null;
+                                                                        _selectedHomeRunType =
+                                                                            null;
+                                                                        _rbiCount =
+                                                                            null;
+                                                                        _selectedRbiInning =
+                                                                            null;
+                                                                        _isBatterRunning =
+                                                                            null;
+                                                                        _updateCaption();
+                                                                      });
+                                                                    },
+                                                                    child: Text(
+                                                                      _selectedHitType!
+                                                                          .toUpperCase(),
+                                                                      style:
+                                                                          TextStyle(
                                                                         fontSize:
                                                                             10,
                                                                         fontWeight:
-                                                                            FontWeight.w600,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          // Verb box content
-                                                          Container(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .all(5.0),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              border: Border.all(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade400),
-                                                              borderRadius:
-                                                                  const BorderRadius
-                                                                      .only(
-                                                                bottomLeft: Radius
-                                                                    .circular(
-                                                                        4),
-                                                                bottomRight:
-                                                                    Radius
-                                                                        .circular(
-                                                                            4),
-                                                              ),
-                                                            ),
-                                                            child:
-                                                                ConstrainedBox(
-                                                              constraints:
-                                                                  const BoxConstraints(
-                                                                minWidth: 280,
-                                                                minHeight: 450,
-                                                              ),
-                                                              child: Column(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .start,
-                                                                children: [
-                                                                  ..._buildAllVerbsList(),
-                                                                  // Add the permanent Back button at the bottom
-                                                                  Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .only(
-                                                                        top:
-                                                                            8.0),
-                                                                    child:
-                                                                        ConstrainedBox(
-                                                                      constraints:
-                                                                          BoxConstraints(
-                                                                        maxWidth:
-                                                                            _fixedChipWidth /
-                                                                                2,
-                                                                      ),
-                                                                      child:
-                                                                          Container(
-                                                                        decoration:
-                                                                            BoxDecoration(
-                                                                          color: Colors
-                                                                              .lightBlue
-                                                                              .shade100,
-                                                                          borderRadius:
-                                                                              BorderRadius.circular(4),
-                                                                        ),
-                                                                        child:
-                                                                            FlashingFilterChip(
-                                                                          label:
-                                                                              SizedBox(
-                                                                            width:
-                                                                                _fixedChipWidth / 2,
-                                                                            child:
-                                                                                Align(
-                                                                              alignment: Alignment.centerLeft,
-                                                                              child: Row(
-                                                                                mainAxisSize: MainAxisSize.min,
-                                                                                children: [
-                                                                                  const Icon(Icons.arrow_back, size: 14, color: Colors.grey),
-                                                                                  const SizedBox(width: 4),
-                                                                                  const Text(
-                                                                                    'Back',
-                                                                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-                                                                                    overflow: TextOverflow.ellipsis,
-                                                                                  ),
-                                                                                ],
-                                                                              ),
-                                                                            ),
-                                                                          ),
-                                                                          selected:
-                                                                              false,
-                                                                          onSelected: (_) =>
-                                                                              _handleBack(),
-                                                                          visualDensity:
-                                                                              VisualDensity.compact,
-                                                                          padding:
-                                                                              EdgeInsets.zero,
-                                                                          key:
-                                                                              UniqueKey(),
-                                                                        ),
+                                                                            FontWeight.bold,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
                                                                       ),
                                                                     ),
                                                                   ),
                                                                 ],
-                                                              ),
+                                                                if (_selectedHitType ==
+                                                                        'Home Run' &&
+                                                                    _selectedHomeRunType !=
+                                                                        null) ...[
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            3.0),
+                                                                    child: Text(
+                                                                      '→',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            8,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  GestureDetector(
+                                                                    onTap: () {
+                                                                      setState(
+                                                                          () {
+                                                                        _selectedHomeRunType =
+                                                                            null;
+                                                                        _updateCaption();
+                                                                      });
+                                                                    },
+                                                                    child: Text(
+                                                                      _selectedHomeRunType ==
+                                                                              'solo'
+                                                                          ? 'SOLO'
+                                                                          : _selectedHomeRunType == 'two-run'
+                                                                              ? '2 RUN'
+                                                                              : _selectedHomeRunType == 'three-run'
+                                                                                  ? '3 RUN'
+                                                                                  : _selectedHomeRunType == 'grand slam'
+                                                                                      ? 'GRAND SLAM'
+                                                                                      : '',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                                if (_selectedHitType != null &&
+                                                                    _selectedHitType !=
+                                                                        'Home Run' &&
+                                                                    _rbiCount !=
+                                                                        null &&
+                                                                    _rbiCount! >
+                                                                        0) ...[
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            3.0),
+                                                                    child: Text(
+                                                                      '→',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            8,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  GestureDetector(
+                                                                    onTap: () {
+                                                                      setState(
+                                                                          () {
+                                                                        _rbiCount =
+                                                                            null;
+                                                                        _rbiCountByHit
+                                                                            .remove(_selectedHitType!);
+                                                                        _updateCaption();
+                                                                      });
+                                                                    },
+                                                                    child: Text(
+                                                                      _rbiCount ==
+                                                                              1
+                                                                          ? 'RBI SINGLE'
+                                                                          : _rbiCount == 2
+                                                                              ? 'TWO RBI SINGLE'
+                                                                              : _rbiCount == 3
+                                                                                  ? 'THREE RBI SINGLE'
+                                                                                  : '',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ] else ...[
+                                                          Text(
+                                                            'Action Verbs',
+                                                            style: TextStyle(
+                                                              color: Colors.grey
+                                                                  .shade700,
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
                                                             ),
                                                           ),
                                                         ],
-                                                      ),
+                                                      ],
                                                     ),
-                                                    const SizedBox(width: 16),
-                                                    Expanded(
-                                                      flex: 1,
-                                                      child:
-                                                          _buildHitInningSelector(
-                                                              showWalkOffOption:
-                                                                  true),
-                                                    ),
-                                                    const SizedBox(width: 16),
-                                                  ],
+                                                  ),
                                                 ),
-                                              )
-                                            : Container(
-                                                padding: const EdgeInsets.only(
-                                                    left: 3, top: 47),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
+                                                // Verb box content
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(5.0),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                    borderRadius:
+                                                        const BorderRadius.only(
+                                                      bottomLeft:
+                                                          Radius.circular(4),
+                                                      bottomRight:
+                                                          Radius.circular(4),
+                                                    ),
+                                                  ),
+                                                  child: ConstrainedBox(
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                      minWidth: 280,
+                                                      minHeight: 450,
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
                                                       children: [
-                                                        Icon(
-                                                          Icons.arrow_back,
-                                                          size: 32,
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                        ),
-                                                        const SizedBox(
-                                                            width: 16),
-                                                        Text(
-                                                          'Start here!',
-                                                          style: TextStyle(
-                                                            fontSize: 18,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            color: Colors
-                                                                .grey.shade600,
+                                                        ..._buildAllVerbsList(),
+                                                        // Add the permanent Back button at the bottom
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                                  top: 8.0),
+                                                          child: ConstrainedBox(
+                                                            constraints:
+                                                                BoxConstraints(
+                                                              maxWidth:
+                                                                  _fixedChipWidth /
+                                                                      2,
+                                                            ),
+                                                            child: Container(
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: Colors
+                                                                    .lightBlue
+                                                                    .shade100,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            4),
+                                                              ),
+                                                              child:
+                                                                  FlashingFilterChip(
+                                                                label: SizedBox(
+                                                                  width:
+                                                                      _fixedChipWidth /
+                                                                          2,
+                                                                  child: Align(
+                                                                    alignment:
+                                                                        Alignment
+                                                                            .centerLeft,
+                                                                    child: Row(
+                                                                      mainAxisSize:
+                                                                          MainAxisSize
+                                                                              .min,
+                                                                      children: [
+                                                                        const Icon(
+                                                                            Icons
+                                                                                .arrow_back,
+                                                                            size:
+                                                                                14,
+                                                                            color:
+                                                                                Colors.grey),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                4),
+                                                                        const Text(
+                                                                          'Back',
+                                                                          style: TextStyle(
+                                                                              fontSize: 12,
+                                                                              fontWeight: FontWeight.normal),
+                                                                          overflow:
+                                                                              TextOverflow.ellipsis,
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                selected: false,
+                                                                onSelected: (_) =>
+                                                                    _handleBack(),
+                                                                visualDensity:
+                                                                    VisualDensity
+                                                                        .compact,
+                                                                padding:
+                                                                    EdgeInsets
+                                                                        .zero,
+                                                                key:
+                                                                    UniqueKey(),
+                                                              ),
+                                                            ),
                                                           ),
                                                         ),
                                                       ],
                                                     ),
-                                                  ],
+                                                  ),
                                                 ),
-                                              ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            flex: 1,
+                                            child: _buildHitInningSelector(
+                                                showWalkOffOption: true),
+                                          ),
+                                          const SizedBox(width: 16),
+                                        ],
+                                      ),
+                                    ),
                                   ),
 
                                   const SizedBox(width: 16),
