@@ -11592,7 +11592,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }) {
     final searchController =
         isHomeList ? _homeSearchController : _awaySearchController;
-    final searchText = searchController.text.toLowerCase();
+    final teamSearchText = searchController.text.toLowerCase();
+    final mainSearchText = _playerPickerSearchText.toLowerCase();
+
+    // Use main search text if available, otherwise use team search text
+    final searchText =
+        mainSearchText.isNotEmpty ? mainSearchText : teamSearchText;
 
     // Separate lists for different match types to apply priority sorting
     final List<String> exactNumberMatches = [];
@@ -11728,8 +11733,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           const SizedBox(height: 8),
           SizedBox(
-              height: (searchText.isNotEmpty &&
-                      RegExp(r'^\d+$').hasMatch(searchText) &&
+              height: (teamSearchText.isNotEmpty &&
+                      RegExp(r'^\d+$').hasMatch(teamSearchText) &&
                       filteredCodes.isNotEmpty)
                   ? 220
                   : 8), // Extra space when dropdown is visible
