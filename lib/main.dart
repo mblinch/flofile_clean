@@ -11645,7 +11645,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required bool isHomeList,
     required bool toggle,
   }) {
-    final searchText = _playerPickerSearchText.toLowerCase();
+    final searchController =
+        isHomeList ? _homeSearchController : _awaySearchController;
+    final searchText = searchController.text.toLowerCase();
 
     // Separate lists for different match types to apply priority sorting
     final List<String> exactNumberMatches = [];
@@ -11742,6 +11744,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           (!isHomeList && selectedOpponentPlayers.isNotEmpty)
                       ? null
                       : () {
+                          _homeSearchController.clear();
+                          _awaySearchController.clear();
                           setState(() {
                             _showHomeFirst = !_showHomeFirst;
                             // When switching, clear all selections to avoid confusion.
@@ -11792,11 +11796,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 Expanded(
                   child: TextField(
-                    controller: _playerPickerSearchController,
+                    controller: searchController,
                     onChanged: (value) {
-                      setState(() {
-                        _playerPickerSearchText = value;
-                      });
+                      setState(() {}); // Rebuild to filter list
                     },
                     style: const TextStyle(
                       fontSize: 12,
@@ -11818,13 +11820,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                   ),
                 ),
-                if (_playerPickerSearchText.isNotEmpty)
+                if (searchText.isNotEmpty)
                   GestureDetector(
                     onTap: () {
-                      _playerPickerSearchController.clear();
-                      setState(() {
-                        _playerPickerSearchText = '';
-                      });
+                      searchController.clear();
+                      setState(() {}); // Rebuild
                     },
                     child: const Padding(
                       padding: EdgeInsets.only(right: 8.0),
