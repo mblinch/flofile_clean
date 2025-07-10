@@ -10228,28 +10228,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     ],
                                                   ),
                                                 ),
-                                                // Away Team Tab
-                                                _buildPlayerContainer(
-                                                  title:
-                                                      selectedAwayTeam != null
-                                                          ? _getTeamShortName(
-                                                              selectedAwayTeam!)
-                                                          : 'Away Team',
-                                                  codes: awayPlayers,
-                                                  isHomeList: false,
-                                                  toggle: false,
-                                                ),
-                                                // Home Team Tab
-                                                _buildPlayerContainer(
-                                                  title:
-                                                      selectedHomeTeam != null
-                                                          ? _getTeamShortName(
-                                                              selectedHomeTeam!)
-                                                          : 'Home Team',
-                                                  codes: homePlayers,
-                                                  isHomeList: true,
-                                                  toggle: false,
-                                                ),
                                               ],
                                             ),
                                           ),
