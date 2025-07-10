@@ -9797,7 +9797,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     width: 480,
                                     height: 550,
                                     child: DefaultTabController(
-                                      length: 3,
+                                      length: 1,
                                       child: Column(
                                         children: [
                                           // Tab bar
@@ -9839,38 +9839,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             .grey.shade700),
                                                     SizedBox(width: 4),
                                                     Text('PLAYERS'),
-                                                  ],
-                                                )),
-                                                Tab(
-                                                    child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(Icons.flight,
-                                                        size: 12,
-                                                        color: Colors.red),
-                                                    SizedBox(width: 4),
-                                                    Text(selectedAwayTeam !=
-                                                            null
-                                                        ? _getTeamShortName(
-                                                            selectedAwayTeam!)
-                                                        : 'Away'),
-                                                  ],
-                                                )),
-                                                Tab(
-                                                    child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(Icons.home,
-                                                        size: 12,
-                                                        color: Colors.blue),
-                                                    SizedBox(width: 4),
-                                                    Text(selectedHomeTeam !=
-                                                            null
-                                                        ? _getTeamShortName(
-                                                            selectedHomeTeam!)
-                                                        : 'Home'),
                                                   ],
                                                 )),
                                               ],
