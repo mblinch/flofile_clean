@@ -2209,42 +2209,50 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ),
                                           ),
                                         ),
-                                        // Show teammates/opponents options when Celebrates is checked
+                                        // Show players in frame option when Celebrates is checked
                                         if (_isSoloCelebration) ...[
                                           const SizedBox(width: 8),
-                                          const Text(
-                                            'In frame:',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.black,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
                                           MouseRegion(
                                             cursor: SystemMouseCursors.click,
                                             child: GestureDetector(
                                               onTap: () =>
-                                                  _showCelebrateDialog(),
-                                              child: Text(
-                                                'Teammates',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.blue.shade700,
+                                                  _showPlayersInFrameDialog(),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: (celebrateWith
+                                                              .isNotEmpty ||
+                                                          celebrateAgainst
+                                                              .isNotEmpty)
+                                                      ? Colors.blue.shade50
+                                                      : Colors.grey.shade100,
+                                                  border: Border.all(
+                                                    color: (celebrateWith
+                                                                .isNotEmpty ||
+                                                            celebrateAgainst
+                                                                .isNotEmpty)
+                                                        ? Colors.blue.shade300
+                                                        : Colors.grey.shade300,
+                                                    width: 1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
                                                 ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                              onTap: () =>
-                                                  _showCelebrateAgainstDialog(),
-                                              child: Text(
-                                                'Opponents',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.red.shade700,
+                                                child: Text(
+                                                  'Players in frame',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: (celebrateWith
+                                                                .isNotEmpty ||
+                                                            celebrateAgainst
+                                                                .isNotEmpty)
+                                                        ? Colors.blue.shade700
+                                                        : Colors.grey.shade600,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -6768,6 +6776,345 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         });
   }
 
+  Future<void> _showPlayersInFrameDialog() async {
+    // Get both team rosters
+    final homeRoster =
+        codeReplacements.keys.where((k) => k.startsWith('h')).toList()..sort();
+    final awayRoster =
+        codeReplacements.keys.where((k) => k.startsWith('v')).toList()..sort();
+
+    Set<String> tempTeammates = celebrateWith.toSet();
+    Set<String> tempOpponents = celebrateAgainst.toSet();
+    String search = '';
+
+    await showDialog(
+        context: context,
+        builder: (BuildContext ctx) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 80.0),
+              child: StatefulBuilder(
+                builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                  // Filter both rosters based on search
+                  final filteredHome = homeRoster.where((code) {
+                    final replacement = codeReplacements[code];
+                    if (replacement == null) return false;
+                    final player = replacement.short.toLowerCase();
+                    return player.contains(search.toLowerCase());
+                  }).toList();
+
+                  final filteredAway = awayRoster.where((code) {
+                    final replacement = codeReplacements[code];
+                    if (replacement == null) return false;
+                    final player = replacement.short.toLowerCase();
+                    return player.contains(search.toLowerCase());
+                  }).toList();
+
+                  return AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    title: const Text('Select Players in Frame'),
+                    content: SizedBox(
+                      width: 500,
+                      height: MediaQuery.of(ctx).size.height * 0.6,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Search Field
+                          TextField(
+                            decoration: const InputDecoration(
+                              hintText: 'Search players...',
+                              prefixIcon: Icon(Icons.search),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                            cursorHeight: 12.0,
+                            onChanged: (value) =>
+                                setSheetState(() => search = value),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Selected chips display - always visible
+                          Container(
+                            width: double.infinity,
+                            height: 80,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: SingleChildScrollView(
+                              child: Wrap(
+                                spacing: 2.0,
+                                runSpacing: 2.0,
+                                children: [
+                                  ...tempTeammates.map((code) {
+                                    final replacement = codeReplacements[code]!;
+                                    return Transform.scale(
+                                      scale: 0.7,
+                                      child: InputChip(
+                                        label: Text(replacement.short,
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        backgroundColor: Colors.blue.shade50,
+                                        side: BorderSide(
+                                            color: Colors.blue.shade300),
+                                        onDeleted: () => setSheetState(
+                                            () => tempTeammates.remove(code)),
+                                        deleteIcon: Icon(Icons.close,
+                                            size: 10,
+                                            color: Colors.blue.shade600),
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        padding: const EdgeInsets.all(0),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    );
+                                  }),
+                                  ...tempOpponents.map((code) {
+                                    final replacement = codeReplacements[code]!;
+                                    return Transform.scale(
+                                      scale: 0.7,
+                                      child: InputChip(
+                                        label: Text(replacement.short,
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        backgroundColor: Colors.red.shade50,
+                                        side: BorderSide(
+                                            color: Colors.red.shade300),
+                                        onDeleted: () => setSheetState(
+                                            () => tempOpponents.remove(code)),
+                                        deleteIcon: Icon(Icons.close,
+                                            size: 10,
+                                            color: Colors.red.shade600),
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        padding: const EdgeInsets.all(0),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Team lists
+                          Expanded(
+                            child: Row(
+                              children: [
+                                // Home team
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 4, horizontal: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          selectedHomeTeam ?? 'Home Team',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Expanded(
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: filteredHome.length,
+                                          itemBuilder: (ctx, idx) {
+                                            final code = filteredHome[idx];
+                                            final replacement =
+                                                codeReplacements[code]!;
+                                            final isSelected =
+                                                tempTeammates.contains(code);
+                                            return MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setSheetState(() {
+                                                    if (isSelected) {
+                                                      tempTeammates
+                                                          .remove(code);
+                                                    } else {
+                                                      tempTeammates.add(code);
+                                                    }
+                                                  });
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 4),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                            replacement.short,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        11)),
+                                                      ),
+                                                      if (isSelected)
+                                                        Icon(Icons.check,
+                                                            size: 12,
+                                                            color: Colors
+                                                                .blue.shade600),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                // Away team
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 4, horizontal: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          selectedAwayTeam ?? 'Away Team',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade700,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Expanded(
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: filteredAway.length,
+                                          itemBuilder: (ctx, idx) {
+                                            final code = filteredAway[idx];
+                                            final replacement =
+                                                codeReplacements[code]!;
+                                            final isSelected =
+                                                tempOpponents.contains(code);
+                                            return MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setSheetState(() {
+                                                    if (isSelected) {
+                                                      tempOpponents
+                                                          .remove(code);
+                                                    } else {
+                                                      tempOpponents.add(code);
+                                                    }
+                                                  });
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 4),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                            replacement.short,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        11)),
+                                                      ),
+                                                      if (isSelected)
+                                                        Icon(Icons.check,
+                                                            size: 12,
+                                                            color: Colors
+                                                                .red.shade600),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          // Clear all selections
+                          setSheetState(() {
+                            tempTeammates.clear();
+                            tempOpponents.clear();
+                          });
+                          setState(() {
+                            celebrateWith.clear();
+                            celebrateAgainst.clear();
+                            _isSoloCelebration = false;
+                            _updateCaption();
+                            _updatePersonality();
+                          });
+                        },
+                        child: const Text('Clear'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          celebrateWith = tempTeammates.toList();
+                          celebrateAgainst = tempOpponents.toList();
+                          _updateCaption();
+                          _updatePersonality();
+                          Navigator.of(ctx).pop();
+                        },
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        });
+  }
+
   String _combinePlayersWithSingleTeam(List<String> codes) {
     print('DEBUG: _combinePlayersWithSingleTeam called with: $codes');
     if (codes.isEmpty) return '';
@@ -9279,8 +9626,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   child: TextField(
                                                     controller:
                                                         captionController,
-                                                    maxLines: 3,
-                                                    minLines: 3,
+                                                    maxLines: 4,
+                                                    minLines: 4,
                                                     style: const TextStyle(
                                                         fontSize: 14),
                                                     decoration: InputDecoration(
@@ -9361,8 +9708,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   child: TextField(
                                                     controller:
                                                         personalityController,
-                                                    maxLines: 3,
-                                                    minLines: 3,
+                                                    maxLines: 4,
+                                                    minLines: 4,
                                                     style: const TextStyle(
                                                         fontSize: 14),
                                                     decoration: InputDecoration(
