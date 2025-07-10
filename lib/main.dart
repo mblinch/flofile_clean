@@ -9876,159 +9876,61 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               BorderRadius
                                                                   .circular(4),
                                                         ),
-                                                        child: Autocomplete<
-                                                            String>(
-                                                          fieldViewBuilder: (context,
-                                                              textEditingController,
-                                                              focusNode,
-                                                              onFieldSubmitted) {
-                                                            return TextField(
-                                                              controller:
-                                                                  textEditingController,
-                                                              focusNode:
-                                                                  focusNode,
-                                                              decoration:
-                                                                  InputDecoration(
-                                                                hintText:
-                                                                    'Type player name or number...',
-                                                                prefixIcon:
-                                                                    const Icon(
-                                                                        Icons
-                                                                            .search,
-                                                                        size:
-                                                                            16),
-                                                                isDense: true,
-                                                                contentPadding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            12,
-                                                                        vertical:
-                                                                            12),
-                                                                filled: true,
-                                                                fillColor:
-                                                                    Colors
-                                                                        .white,
-                                                                enabledBorder:
-                                                                    OutlineInputBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4),
-                                                                  borderSide: BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade400,
-                                                                      width:
-                                                                          1.0),
-                                                                ),
-                                                                focusedBorder:
-                                                                    OutlineInputBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4),
-                                                                  borderSide: BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade400,
-                                                                      width:
-                                                                          1.0),
-                                                                ),
-                                                              ),
-                                                              style: const TextStyle(
-                                                                  fontSize:
-                                                                      kInputTextSize),
-                                                              onChanged:
-                                                                  (value) {
-                                                                setState(() {
-                                                                  _playerPickerSearchText =
-                                                                      value;
-                                                                });
-                                                              },
-                                                            );
-                                                          },
-                                                          optionsBuilder:
-                                                              (TextEditingValue
-                                                                  textEditingValue) {
-                                                            if (textEditingValue
-                                                                .text.isEmpty) {
-                                                              return const Iterable<
-                                                                  String>.empty();
-                                                            }
-
-                                                            final searchText =
-                                                                textEditingValue
-                                                                    .text
-                                                                    .toLowerCase();
-                                                            final suggestions =
-                                                                <String>[];
-
-                                                            // Get all player codes from both teams
-                                                            final allCodes = [
-                                                              ...awayPlayers,
-                                                              ...homePlayers
-                                                            ];
-
-                                                            for (final code
-                                                                in allCodes) {
-                                                              final replacement =
-                                                                  codeReplacements[
-                                                                      code];
-                                                              if (replacement ==
-                                                                  null)
-                                                                continue;
-
-                                                              final jerseyNumber =
-                                                                  replacement
-                                                                      .jerseyNumber;
-                                                              final playerName =
-                                                                  replacement
-                                                                      .short
-                                                                      .toLowerCase();
-
-                                                              // Check if search text matches number or name
-                                                              bool matches =
-                                                                  false;
-                                                              if (jerseyNumber !=
-                                                                      null &&
-                                                                  jerseyNumber
-                                                                      .contains(
-                                                                          searchText)) {
-                                                                matches = true;
-                                                              } else if (playerName
-                                                                  .contains(
-                                                                      searchText)) {
-                                                                matches = true;
-                                                              }
-
-                                                              if (matches) {
-                                                                // Format suggestion as "#Number Name"
-                                                                final displayName =
-                                                                    jerseyNumber !=
-                                                                            null
-                                                                        ? '#$jerseyNumber ${replacement.short.split(' #').first}'
-                                                                        : replacement
-                                                                            .short;
-                                                                suggestions.add(
-                                                                    displayName);
-                                                              }
-                                                            }
-
-                                                            // Limit suggestions and sort
-                                                            return suggestions
-                                                                .take(10)
-                                                                .toList()
-                                                              ..sort();
-                                                          },
-                                                          onSelected: (String
-                                                              selection) {
+                                                        child: TextField(
+                                                          controller:
+                                                              _playerPickerSearchController,
+                                                          decoration:
+                                                              InputDecoration(
+                                                            hintText:
+                                                                _getSearchHint(),
+                                                            prefixIcon:
+                                                                const Icon(
+                                                                    Icons
+                                                                        .search,
+                                                                    size: 16),
+                                                            isDense: true,
+                                                            contentPadding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        12,
+                                                                    vertical:
+                                                                        12),
+                                                            filled: true,
+                                                            fillColor:
+                                                                Colors.white,
+                                                            enabledBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                            focusedBorder:
+                                                                OutlineInputBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              borderSide: BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0),
+                                                            ),
+                                                          ),
+                                                          style: const TextStyle(
+                                                              fontSize:
+                                                                  kInputTextSize),
+                                                          onChanged: (value) {
                                                             setState(() {
                                                               _playerPickerSearchText =
-                                                                  selection;
-                                                              _playerPickerSearchController
-                                                                      .text =
-                                                                  selection;
+                                                                  value;
                                                             });
                                                           },
                                                         ),
@@ -11679,6 +11581,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _updateCaption();
       }
     }
+  }
+
+  // Helper: Get search hint with suggestions
+  String _getSearchHint() {
+    if (_playerPickerSearchText.isEmpty) {
+      return 'Type player name or number...';
+    }
+
+    final searchText = _playerPickerSearchText.toLowerCase();
+    final suggestions = <String>[];
+
+    // Get all player codes from both teams
+    final homePlayers =
+        codeReplacements.keys.where((k) => k.startsWith('h')).toList();
+    final awayPlayers =
+        codeReplacements.keys.where((k) => k.startsWith('v')).toList();
+    final allCodes = [...awayPlayers, ...homePlayers];
+
+    for (final code in allCodes) {
+      final replacement = codeReplacements[code];
+      if (replacement == null) continue;
+
+      final jerseyNumber = replacement.jerseyNumber;
+      final playerName = replacement.short.toLowerCase();
+
+      // Check if search text matches number or name
+      bool matches = false;
+      if (jerseyNumber != null && jerseyNumber.contains(searchText)) {
+        matches = true;
+      } else if (playerName.contains(searchText)) {
+        matches = true;
+      }
+
+      if (matches) {
+        // Format suggestion as "#Number Name"
+        final displayName = jerseyNumber != null
+            ? '#$jerseyNumber ${replacement.short.split(' #').first}'
+            : replacement.short;
+        suggestions.add(displayName);
+      }
+    }
+
+    // Return first suggestion as hint, or default text
+    if (suggestions.isNotEmpty) {
+      return suggestions.first;
+    }
+
+    return 'Type player name or number...';
   }
 
   // Helper: Build player container (Home/Away)
