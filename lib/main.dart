@@ -9882,7 +9882,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           decoration:
                                                               InputDecoration(
                                                             hintText:
-                                                                _getSearchHint(),
+                                                                'Type player name or number...',
                                                             prefixIcon:
                                                                 const Icon(
                                                                     Icons
