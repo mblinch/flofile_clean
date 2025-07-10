@@ -187,6 +187,7 @@ class FlashingFilterChip extends StatefulWidget {
   final EdgeInsetsGeometry? labelPadding;
   final MaterialTapTargetSize? materialTapTargetSize;
   final bool showCheckmark;
+  final bool disableColorChange;
 
   const FlashingFilterChip({
     Key? key,
@@ -198,6 +199,7 @@ class FlashingFilterChip extends StatefulWidget {
     this.labelPadding,
     this.materialTapTargetSize,
     this.showCheckmark = true,
+    this.disableColorChange = false,
   }) : super(key: key);
 
   @override
@@ -264,8 +266,11 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
           child: Container(
             height: 24,
             decoration: BoxDecoration(
-              color:
-                  widget.selected ? Colors.grey.shade500 : Colors.grey.shade200,
+              color: widget.disableColorChange
+                  ? Colors.grey.shade200
+                  : (widget.selected
+                      ? Colors.grey.shade500
+                      : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(4),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -275,7 +280,9 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
                   fontSize: 10,
                   fontWeight:
                       widget.selected ? FontWeight.w600 : FontWeight.normal,
-                  color: widget.selected ? Colors.white : Colors.black,
+                  color: widget.disableColorChange
+                      ? Colors.black
+                      : (widget.selected ? Colors.white : Colors.black),
                 ),
                 child: widget.label,
               ),
@@ -1890,9 +1897,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _getInningTextWithWalkOff(int inning) {
     final inningWord = _getInningWord(inning);
     if (inning >= 9) {
-      return ' in the $inningWord inning for the walk off win';
+      return ' during the $inningWord inning for the walk off win';
     } else {
-      return ' in the $inningWord inning';
+      return ' during the $inningWord inning';
     }
   }
 
@@ -2005,12 +2012,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                         ] else ...[
                           // Show hit type options when hit is selected (but no hit type selected yet)
-                          if (_selectedHitType == null) ...[
+                          if (_selectedHitType == null ||
+                              (_selectedHitType == 'Single' &&
+                                  _rbiCount != null)) ...[
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Hit type options
+                                // Hit type options - show only Single if it's selected with RBI
                                 ...['Single', 'Double', 'Triple', 'Home Run']
+                                    .where((label) =>
+                                        _selectedHitType == null ||
+                                        label == _selectedHitType)
                                     .map((label) => Padding(
                                           padding: const EdgeInsets.only(
                                               bottom: 8.0),
@@ -2037,23 +2049,120 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                     ),
+                                                    // Add RBI options for Single only
+                                                    if (label == 'Single') ...[
+                                                      const SizedBox(width: 8),
+                                                      const Icon(
+                                                          Icons.arrow_forward,
+                                                          size: 10,
+                                                          color: Colors.grey),
+                                                      const SizedBox(width: 4),
+                                                      ...List.generate(
+                                                              3, (i) => i + 1)
+                                                          .map((rbiCount) {
+                                                        return Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                                  right: 4.0),
+                                                          child: MouseRegion(
+                                                            cursor:
+                                                                SystemMouseCursors
+                                                                    .click,
+                                                            child:
+                                                                GestureDetector(
+                                                              onTap: () {
+                                                                setState(() {
+                                                                  _selectedHitType =
+                                                                      'Single';
+                                                                  _rbiCount =
+                                                                      rbiCount;
+                                                                  _rbiCountByHit[
+                                                                          'Single'] =
+                                                                      rbiCount;
+                                                                  _updateCaption();
+                                                                });
+                                                              },
+                                                              behavior:
+                                                                  HitTestBehavior
+                                                                      .opaque,
+                                                              child: Padding(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        2),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Container(
+                                                                      width: 4,
+                                                                      height: 4,
+                                                                      decoration: _rbiCount ==
+                                                                              rbiCount
+                                                                          ? const BoxDecoration(
+                                                                              color: Colors.black,
+                                                                              shape: BoxShape.circle,
+                                                                            )
+                                                                          : null,
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            2),
+                                                                    Text(
+                                                                      '$rbiCount RBI',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight: _rbiCount ==
+                                                                                rbiCount
+                                                                            ? FontWeight.w600
+                                                                            : FontWeight.normal,
+                                                                        color: Colors
+                                                                            .black,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                    ],
                                                   ],
                                                 ),
                                               ),
                                             ),
                                             selected: _selectedHitType == label,
+                                            disableColorChange:
+                                                label == 'Single',
                                             onSelected: (isSelected) {
                                               setState(() {
                                                 if (isSelected) {
                                                   _selectedHitType = label;
                                                   if (label != 'Home Run') {
-                                                    // Pre-select "No RBI" for non-HR hits
-                                                    _rbiCount = 0;
-                                                    _rbiCountByHit[label] = 0;
+                                                    // For Single, don't override RBI if already selected
+                                                    if (label == 'Single' &&
+                                                        _rbiCount != null) {
+                                                      // Keep existing RBI selection
+                                                    } else {
+                                                      // Pre-select "No RBI" for non-HR hits
+                                                      _rbiCount = 0;
+                                                      _rbiCountByHit[label] = 0;
+                                                    }
                                                   } else {
                                                     // For home runs, RBI is determined by HR type, so clear general count
                                                     _rbiCount = null;
                                                   }
+                                                } else {
+                                                  // Deselecting - clear the hit type and RBI
+                                                  _selectedHitType = null;
+                                                  _rbiCount = null;
                                                 }
                                                 _updateCaption();
                                               });
@@ -2065,6 +2174,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ),
                                         ))
                                     .toList(),
+                                // Add celebration checkbox when Single + RBI is selected
+                                if (_selectedHitType == 'Single' &&
+                                    _rbiCount != null) ...[
+                                  const SizedBox(height: 8),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Checkbox(
+                                          value: _isSoloCelebration,
+                                          onChanged: (bool? value) {
+                                            setState(() {
+                                              _isSoloCelebration =
+                                                  value ?? false;
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        const Text(
+                                          'Celebrates',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.normal,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ] else ...[
