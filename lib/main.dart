@@ -11608,21 +11608,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final playerName =
           replacement.short.toLowerCase(); // e.g., "player name #10"
 
-      // Priority 1: Exact number match (e.g., search "0" matches "h0")
-      if (searchNumber != null && playerJerseyNumber == searchText) {
+      // Priority 1: Exact number match (e.g., search "10" matches jersey "10")
+      if (searchNumber != null &&
+          playerJerseyNumber != null &&
+          playerJerseyNumber == searchText) {
         exactNumberMatches.add(code);
       }
-      // Priority 2: Player number starts with search text (e.g., search "1" matches "h1", "h10", "h11")
+      // Priority 2: Player number starts with search text (e.g., search "1" matches "10", "11", "12")
       else if (playerJerseyNumber != null &&
           playerJerseyNumber.startsWith(searchText)) {
         startsWithNumberMatches.add(code);
       }
-      // Priority 3: Player number contains search text (e.g., search "0" matches "h10", "h20")
+      // Priority 3: Player number contains search text (e.g., search "0" matches "10", "20", "30")
       else if (playerJerseyNumber != null &&
           playerJerseyNumber.contains(searchText)) {
         containsNumberMatches.add(code);
       }
-      // Priority 4: Player name contains search text
+      // Priority 4: Search text is a number and matches any part of player name that contains numbers
+      else if (searchNumber != null && playerName.contains(searchText)) {
+        containsNumberMatches.add(code);
+      }
+      // Priority 5: Player name contains search text
       // Use 'if' not 'else if' to allow name matches even if number matches
       // This ensures names are always considered for search
       if (playerName.contains(searchText)) {
