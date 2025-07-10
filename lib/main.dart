@@ -9908,8 +9908,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             4),
                                                                 borderSide: BorderSide(
                                                                     color: Colors
-                                                                        .grey
-                                                                        .shade400,
+                                                                        .blue
+                                                                        .shade300,
                                                                     width: 1.0),
                                                               ),
                                                               focusedBorder:
@@ -9920,9 +9920,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             4),
                                                                 borderSide: BorderSide(
                                                                     color: Colors
-                                                                        .grey
-                                                                        .shade400,
-                                                                    width: 1.0),
+                                                                        .blue
+                                                                        .shade500,
+                                                                    width: 2.0),
                                                               ),
                                                             ),
                                                             style: const TextStyle(
