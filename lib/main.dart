@@ -10478,110 +10478,114 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   ),
                                                 ),
                                                 // Verb box content
-                                                Container(
-                                                  padding:
-                                                      const EdgeInsets.all(5.0),
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(
-                                                        color: Colors
-                                                            .grey.shade400),
-                                                    borderRadius:
-                                                        const BorderRadius.only(
-                                                      bottomLeft:
-                                                          Radius.circular(4),
-                                                      bottomRight:
-                                                          Radius.circular(4),
+                                                Transform.translate(
+                                                  offset: const Offset(300, 0),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            5.0),
+                                                    decoration: BoxDecoration(
+                                                      border: Border.all(
+                                                          color: Colors
+                                                              .grey.shade400),
+                                                      borderRadius:
+                                                          const BorderRadius
+                                                              .only(
+                                                        bottomLeft:
+                                                            Radius.circular(4),
+                                                        bottomRight:
+                                                            Radius.circular(4),
+                                                      ),
                                                     ),
-                                                  ),
-                                                  child: ConstrainedBox(
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                      minWidth: 280,
-                                                      minHeight: 509,
-                                                    ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        ..._buildAllVerbsList(),
-                                                        // Add the permanent Back button at the bottom
-                                                        Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  top: 8.0),
-                                                          child: ConstrainedBox(
-                                                            constraints:
-                                                                BoxConstraints(
-                                                              maxWidth:
-                                                                  _fixedChipWidth /
-                                                                      2,
-                                                            ),
-                                                            child: Container(
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: Colors
-                                                                    .lightBlue
-                                                                    .shade100,
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            4),
+                                                    child: ConstrainedBox(
+                                                      constraints:
+                                                          const BoxConstraints(
+                                                        minWidth: 280,
+                                                        minHeight: 509,
+                                                      ),
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          ..._buildAllVerbsList(),
+                                                          // Add the permanent Back button at the bottom
+                                                          Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .only(
+                                                                    top: 8.0),
+                                                            child:
+                                                                ConstrainedBox(
+                                                              constraints:
+                                                                  BoxConstraints(
+                                                                maxWidth:
+                                                                    _fixedChipWidth /
+                                                                        2,
                                                               ),
-                                                              child:
-                                                                  FlashingFilterChip(
-                                                                label: SizedBox(
-                                                                  width:
-                                                                      _fixedChipWidth /
-                                                                          2,
-                                                                  child: Align(
-                                                                    alignment:
-                                                                        Alignment
-                                                                            .centerLeft,
-                                                                    child: Row(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .min,
-                                                                      children: [
-                                                                        const Icon(
-                                                                            Icons
-                                                                                .arrow_back,
-                                                                            size:
-                                                                                14,
-                                                                            color:
-                                                                                Colors.grey),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                4),
-                                                                        const Text(
-                                                                          'Back',
-                                                                          style: TextStyle(
-                                                                              fontSize: 12,
-                                                                              fontWeight: FontWeight.normal),
-                                                                          overflow:
-                                                                              TextOverflow.ellipsis,
-                                                                        ),
-                                                                      ],
+                                                              child: Container(
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .lightBlue
+                                                                      .shade100,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                ),
+                                                                child:
+                                                                    FlashingFilterChip(
+                                                                  label:
+                                                                      SizedBox(
+                                                                    width:
+                                                                        _fixedChipWidth /
+                                                                            2,
+                                                                    child:
+                                                                        Align(
+                                                                      alignment:
+                                                                          Alignment
+                                                                              .centerLeft,
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        children: [
+                                                                          const Icon(
+                                                                              Icons.arrow_back,
+                                                                              size: 14,
+                                                                              color: Colors.grey),
+                                                                          const SizedBox(
+                                                                              width: 4),
+                                                                          const Text(
+                                                                            'Back',
+                                                                            style:
+                                                                                TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                                                                            overflow:
+                                                                                TextOverflow.ellipsis,
+                                                                          ),
+                                                                        ],
+                                                                      ),
                                                                     ),
                                                                   ),
+                                                                  selected:
+                                                                      false,
+                                                                  onSelected: (_) =>
+                                                                      _handleBack(),
+                                                                  visualDensity:
+                                                                      VisualDensity
+                                                                          .compact,
+                                                                  padding:
+                                                                      EdgeInsets
+                                                                          .zero,
+                                                                  key:
+                                                                      UniqueKey(),
                                                                 ),
-                                                                selected: false,
-                                                                onSelected: (_) =>
-                                                                    _handleBack(),
-                                                                visualDensity:
-                                                                    VisualDensity
-                                                                        .compact,
-                                                                padding:
-                                                                    EdgeInsets
-                                                                        .zero,
-                                                                key:
-                                                                    UniqueKey(),
                                                               ),
                                                             ),
                                                           ),
-                                                        ),
-                                                      ],
+                                                        ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -10591,8 +10595,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           const SizedBox(width: 8),
                                           Expanded(
                                             flex: 1,
-                                            child: _buildHitInningSelector(
-                                                showWalkOffOption: true),
+                                            child: Transform.translate(
+                                              offset: const Offset(300, 0),
+                                              child: _buildHitInningSelector(
+                                                  showWalkOffOption: true),
+                                            ),
                                           ),
                                           const SizedBox(width: 8),
                                         ],
