@@ -8224,7 +8224,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: Scaffold(
             backgroundColor: const Color(0xFFF5F5F5),
             appBar: AdaptiveAppBar(
-              titleSpacing: 16,
+              toolbarHeight: 70,
+              titleSpacing: 8,
               title: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
@@ -8271,155 +8272,214 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Away Team Dropdown
-                  SizedBox(
-                    width: 140,
-                    child: _buildTeamDropdown(
-                      label: 'Away Team',
-                      value: selectedAwayTeam,
-                      allItems: teams,
-                      excludeTeam: selectedHomeTeam,
-                      useExpanded: false,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => selectedAwayTeam = v);
-                        if (selectedAwayTeam != null) {
-                          _loadTeam(v, isHomeTeam: false);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Home Team Dropdown
-                  SizedBox(
-                    width: 140,
-                    child: _buildTeamDropdown(
-                      label: 'Home Team',
-                      value: selectedHomeTeam,
-                      allItems: teams,
-                      excludeTeam: selectedAwayTeam,
-                      useExpanded: false,
-                      onChanged: (v) async {
-                        if (v == null) return;
-                        setState(() => selectedHomeTeam = v);
-                        if (selectedHomeTeam != null) {
-                          _loadTeam(v, isHomeTeam: true);
-                        }
-                        // Auto-fill metadata dialog
-                        final city = cityController.text;
-                        final province = provinceController.text;
-                        final stadium = stadiumController.text;
-                        String country = 'United States';
-                        String code = 'USA';
-                        if (v == 'Toronto Blue Jays') {
-                          country = 'Canada';
-                          code = 'CAN';
-                        }
-                        final shouldFill = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                  // Team Selection Row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Away Team Dropdown
+                      Column(
+                        children: [
+                          const SizedBox(height: 20), // Reduced from 32 to 20
+                          SizedBox(
+                            width: 180,
+                            child: _buildTeamDropdown(
+                              label: 'Away Team',
+                              value: selectedAwayTeam,
+                              allItems: teams,
+                              excludeTeam: selectedHomeTeam,
+                              useExpanded: false,
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => selectedAwayTeam = v);
+                                if (selectedAwayTeam != null) {
+                                  _loadTeam(v, isHomeTeam: false);
+                                }
+                              },
                             ),
-                            title: const Text(
-                              'Auto-fill Metadata?',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      // Home Team Dropdown with Manage Favorites underneath
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 20), // Reduced from 32 to 20
+                          SizedBox(
+                            width: 180,
+                            child: _buildTeamDropdown(
+                              label: 'Home Team',
+                              value: selectedHomeTeam,
+                              allItems: teams,
+                              excludeTeam: selectedAwayTeam,
+                              useExpanded: false,
+                              onChanged: (v) async {
+                                if (v == null) return;
+                                setState(() => selectedHomeTeam = v);
+                                if (selectedHomeTeam != null) {
+                                  _loadTeam(v, isHomeTeam: true);
+                                }
+                                // Auto-fill metadata dialog
+                                final city = cityController.text;
+                                final province = provinceController.text;
+                                final stadium = stadiumController.text;
+                                String country = 'United States';
+                                String code = 'USA';
+                                if (v == 'Toronto Blue Jays') {
+                                  country = 'Canada';
+                                  code = 'CAN';
+                                }
+                                final shouldFill = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    title: const Text(
+                                      'Auto-fill Metadata?',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Would you like to auto-fill the following location fields for this team?',
+                                          style: TextStyle(fontSize: 15),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text('• City: $city',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        Text('• Province/State: $province',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        Text('• Country: $country',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        Text('• Country Code: $code',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        Text('• Stadium: $stadium',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                      ],
+                                    ),
+                                    actionsPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    actions: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          _buildStyledButton(
+                                              'No',
+                                              () => Navigator.pop(
+                                                  context, false)),
+                                          const SizedBox(width: 12),
+                                          _buildStyledButton(
+                                              'Yes',
+                                              () =>
+                                                  Navigator.pop(context, true),
+                                              isBlue: true),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (shouldFill == true) {
+                                  setState(() {
+                                    countryController.text = country;
+                                    countryCodeController.text = code;
+                                  });
+                                }
+                              },
                             ),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Would you like to auto-fill the following location fields for this team?',
-                                  style: TextStyle(fontSize: 15),
+                          ),
+                          const SizedBox(
+                              height: 4), // Reduced to 4px for closer spacing
+                          // Manage Favorites Button
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: _showManageFavoritesDialog,
+                                  child: const Icon(Icons.star,
+                                      size: 14, color: Colors.amber),
                                 ),
-                                const SizedBox(height: 12),
-                                Text('• City: $city',
-                                    style: const TextStyle(fontSize: 13)),
-                                Text('• Province/State: $province',
-                                    style: const TextStyle(fontSize: 13)),
-                                Text('• Country: $country',
-                                    style: const TextStyle(fontSize: 13)),
-                                Text('• Country Code: $code',
-                                    style: const TextStyle(fontSize: 13)),
-                                Text('• Stadium: $stadium',
-                                    style: const TextStyle(fontSize: 13)),
-                              ],
-                            ),
-                            actionsPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            actions: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  _buildStyledButton('No',
-                                      () => Navigator.pop(context, false)),
-                                  const SizedBox(width: 12),
-                                  _buildStyledButton(
-                                      'Yes', () => Navigator.pop(context, true),
-                                      isBlue: true),
-                                ],
+                              ),
+                              const SizedBox(width: 4),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: _showManageFavoritesDialog,
+                                  child: const Text(
+                                    'Manage Favorites',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                        );
-                        if (shouldFill == true) {
-                          setState(() {
-                            countryController.text = country;
-                            countryCodeController.text = code;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Favorites Button
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.star, size: 18),
-                        tooltip: 'Manage Favorite Teams',
-                        onPressed: _showManageFavoritesDialog,
+                        ],
                       ),
-                      const Text(
-                        'Manage Favorites',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      const SizedBox(width: 120),
                     ],
                   ),
-                  const SizedBox(width: 120),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                          icon: const Icon(Icons.folder_open, size: 18),
-                          onPressed: pickFolder),
-                      const Text(
-                        'Images Folder: ',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+
+                  const SizedBox(height: 15),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: pickFolder,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
-                      ),
-                      if (_selectedFolderPath != null) ...[
-                        Flexible(
-                          child: Text(
-                            _selectedFolderPath!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.black,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.folder_open,
+                                size: 22, color: Colors.amber),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Pick Images Folder: ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[700],
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                            if (_selectedFolderPath != null) ...[
+                              Flexible(
+                                child: Text(
+                                  _selectedFolderPath!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                    color: Colors.black,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
-                      ],
-                    ],
+                      ),
+                    ),
                   ),
                 ],
               ),
