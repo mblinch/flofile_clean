@@ -5961,39 +5961,147 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     ]);
   }
 
-  // Build preview image widget with precacheImage optimization
+  // Build preview image widget with precacheImage optimization and click-to-zoom
   Widget _buildPreviewImage(String imagePath) {
     // Preload the current image for instant display
     precacheImage(FileImage(File(imagePath)), context);
 
-    return ExtendedImage.file(
-      File(imagePath),
-      fit: BoxFit.contain,
-      alignment: Alignment.center,
-      width: double.infinity,
-      height: double.infinity,
-      loadStateChanged: (ExtendedImageState state) {
-        switch (state.extendedImageLoadState) {
-          case LoadState.loading:
-            return Container(
-              color: Colors.grey.shade200,
-              child: const Center(
-                child: CircularProgressIndicator(),
+    return Stack(
+      children: [
+        ExtendedImage.file(
+          File(imagePath),
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          width: double.infinity,
+          height: double.infinity,
+          loadStateChanged: (ExtendedImageState state) {
+            switch (state.extendedImageLoadState) {
+              case LoadState.loading:
+                return Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              case LoadState.completed:
+                return null; // Use default completed state
+              case LoadState.failed:
+                return Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child: Icon(Icons.error, color: Colors.red, size: 48),
+                  ),
+                );
+            }
+          },
+          // Photo Mechanic style: Load smaller previews faster
+          mode: ExtendedImageMode.none, // No zoom/pan for speed
+        ),
+        // Magnifying glass button for high-res zoom
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Material(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => _showHighResZoom(context, imagePath),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.zoom_in,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
-            );
-          case LoadState.completed:
-            return null; // Use default completed state
-          case LoadState.failed:
-            return Container(
-              color: Colors.grey.shade200,
-              child: const Center(
-                child: Icon(Icons.error, color: Colors.red, size: 48),
-              ),
-            );
-        }
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Show high-resolution zoom for focus checking
+  void _showHighResZoom(BuildContext context, String imagePath) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (BuildContext context) {
+        return GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.all(20),
+            child: Stack(
+              children: [
+                // High-res image with zoom/pan capabilities and press-to-zoom
+                Center(
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.9,
+                      maxHeight: MediaQuery.of(context).size.height * 0.9,
+                    ),
+                    child: _PressToZoomImage(imagePath: imagePath),
+                  ),
+                ),
+                // Close button
+                Positioned(
+                  top: 40,
+                  right: 40,
+                  child: Material(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // Instructions
+                Positioned(
+                  bottom: 40,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Pinch to zoom • Drag to pan • Press and hold for higher resolution • Click anywhere to close',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
       },
-      // Photo Mechanic style: Load smaller previews faster
-      mode: ExtendedImageMode.none, // No zoom/pan for speed
     );
   }
 
@@ -6936,21 +7044,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Sixth row: Sort
-            Row(
-              children: [
-                _buildCompactButton(
-                  _isSortedByDate
-                      ? 'Sorted by Date'
-                      : _isSortedByFilename
-                          ? 'Sorted by Name'
-                          : 'Sort by Time/Date',
-                  _isSortedByDate ? _sortImagesByFilename : _sortImagesByDate,
-                  isBlue: _isSortedByDate || _isSortedByFilename,
                 ),
               ],
             ),
@@ -12291,6 +12384,80 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
+  }
+}
+
+// Widget for press-and-hold to show higher resolution image
+class _PressToZoomImage extends StatefulWidget {
+  final String imagePath;
+
+  const _PressToZoomImage({required this.imagePath});
+
+  @override
+  State<_PressToZoomImage> createState() => _PressToZoomImageState();
+}
+
+class _PressToZoomImageState extends State<_PressToZoomImage> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) {
+        setState(() {
+          _isPressed = true;
+        });
+      },
+      onTapUp: (_) {
+        setState(() {
+          _isPressed = false;
+        });
+      },
+      onTapCancel: () {
+        setState(() {
+          _isPressed = false;
+        });
+      },
+      child: ExtendedImage.file(
+        File(widget.imagePath),
+        fit: BoxFit.contain,
+        mode: ExtendedImageMode.gesture,
+        initGestureConfigHandler: (state) {
+          return GestureConfig(
+            minScale: 0.5,
+            maxScale: _isPressed ? 8.0 : 5.0, // Higher zoom when pressed
+            animationMinScale: 0.5,
+            animationMaxScale: _isPressed ? 8.0 : 5.0,
+            speed: 1.0,
+            inertialSpeed: 100.0,
+            initialScale: 1.0,
+            cacheGesture: false,
+          );
+        },
+        loadStateChanged: (ExtendedImageState state) {
+          switch (state.extendedImageLoadState) {
+            case LoadState.loading:
+              return Container(
+                color: Colors.black,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                  ),
+                ),
+              );
+            case LoadState.completed:
+              return null;
+            case LoadState.failed:
+              return Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Icon(Icons.error, color: Colors.white, size: 48),
+                ),
+              );
+          }
+        },
+      ),
+    );
   }
 }
 
