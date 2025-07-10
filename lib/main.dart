@@ -6830,15 +6830,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     // Format multiple players: "against Player1, player2 and player3 of the opponent"
     final firstPlayer = shorts.first;
-    final remainingPlayers = shorts.skip(1).toList();
-    final lastPlayer = remainingPlayers.removeLast();
+
+    if (shorts.length == 2) {
+      // Two players: "against Player1 and player2 of the team"
+      return 'against $firstPlayer and ${shorts[1]} of the $opponentTeam';
+    }
+
+    // Three or more players: "against Player1, player2 and player3 of the team"
+    final middlePlayers = shorts.skip(1).take(shorts.length - 2).toList();
+    final lastPlayer = shorts.last;
 
     String result = 'against $firstPlayer';
-    if (remainingPlayers.isNotEmpty) {
-      result +=
-          ', ${remainingPlayers.map((name) => name.toLowerCase()).join(', ')}';
+    if (middlePlayers.isNotEmpty) {
+      result += ', ${middlePlayers.join(', ')}';
     }
-    result += ' and ${lastPlayer.toLowerCase()} of the $opponentTeam';
+    result += ' and ${lastPlayer} of the $opponentTeam';
 
     return result;
   }
@@ -7772,18 +7778,31 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         final celebrationPart =
             "celebrates a $formattedHitPhrase with $teammatesStr";
 
-        if (_walkOff == true) {
-          mainCaptionPart =
-              "$playersString $celebrationPart to defeat the $opponentTeamName";
+        if (celebrateAgainst.isNotEmpty) {
+          // Both teammates and opponents selected
+          final opponentStr =
+              _combineOpponentPlayersForCelebration(celebrateAgainst);
+          if (_walkOff == true) {
+            mainCaptionPart =
+                "$playersString $celebrationPart $opponentStr to defeat the $opponentTeamName";
+          } else {
+            mainCaptionPart = "$playersString $celebrationPart $opponentStr";
+          }
         } else {
-          mainCaptionPart =
-              "$playersString $celebrationPart against the $opponentTeamName";
+          // Only teammates selected
+          if (_walkOff == true) {
+            mainCaptionPart =
+                "$playersString $celebrationPart to defeat the $opponentTeamName";
+          } else {
+            mainCaptionPart =
+                "$playersString $celebrationPart against the $opponentTeamName";
+          }
         }
       } else if (celebrateAgainst.isNotEmpty) {
         final opponentStr =
             _combineOpponentPlayersForCelebration(celebrateAgainst);
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart = "celebrates $opponentStr";
+        final celebrationPart = "celebrates a $formattedHitPhrase $opponentStr";
 
         if (_walkOff == true) {
           mainCaptionPart =
