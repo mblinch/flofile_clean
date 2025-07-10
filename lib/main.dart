@@ -2049,8 +2049,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                     ),
-                                                    // Add RBI options for Single only
-                                                    if (label == 'Single') ...[
+                                                    // Add RBI options for Single only when it's selected
+                                                    if (label == 'Single' &&
+                                                        _selectedHitType ==
+                                                            'Single') ...[
                                                       const SizedBox(width: 8),
                                                       const Icon(
                                                           Icons.arrow_forward,
@@ -2182,24 +2184,72 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     padding: const EdgeInsets.only(bottom: 8.0),
                                     child: Row(
                                       children: [
-                                        Checkbox(
-                                          value: _isSoloCelebration,
-                                          onChanged: (bool? value) {
-                                            setState(() {
-                                              _isSoloCelebration =
-                                                  value ?? false;
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                        const Text(
-                                          'Celebrates',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.normal,
+                                        Transform.scale(
+                                          scale: 0.6,
+                                          child: Checkbox(
+                                            value: _isSoloCelebration,
+                                            onChanged: (bool? value) {
+                                              setState(() {
+                                                _isSoloCelebration =
+                                                    value ?? false;
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
                                         ),
+                                        Transform.translate(
+                                          offset: const Offset(-4, 0),
+                                          child: const Text(
+                                            'Celebrates',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                        // Show teammates/opponents options when Celebrates is checked
+                                        if (_isSoloCelebration) ...[
+                                          const SizedBox(width: 8),
+                                          const Text(
+                                            'In frame:',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _showCelebrateDialog(),
+                                              child: Text(
+                                                'Teammates',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.blue.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _showCelebrateAgainstDialog(),
+                                              child: Text(
+                                                'Opponents',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.red.shade700,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -6762,6 +6812,37 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return '${shorts.join(', ')}, and $last';
   }
 
+  // Helper function for celebration against opponents - formats as "against Player, player and player of the opponent"
+  String _combineOpponentPlayersForCelebration(List<String> codes) {
+    if (codes.isEmpty) return '';
+    final shorts = codes
+        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .toList();
+
+    // Determine the team from the first player's code
+    final isHomeTeamPlayer = codes.first.startsWith('h');
+    final opponentTeam =
+        isHomeTeamPlayer ? selectedHomeTeam! : selectedAwayTeam!;
+
+    if (shorts.length == 1) {
+      return 'against ${shorts.first} of the $opponentTeam';
+    }
+
+    // Format multiple players: "against Player1, player2 and player3 of the opponent"
+    final firstPlayer = shorts.first;
+    final remainingPlayers = shorts.skip(1).toList();
+    final lastPlayer = remainingPlayers.removeLast();
+
+    String result = 'against $firstPlayer';
+    if (remainingPlayers.isNotEmpty) {
+      result +=
+          ', ${remainingPlayers.map((name) => name.toLowerCase()).join(', ')}';
+    }
+    result += ' and ${lastPlayer.toLowerCase()} of the $opponentTeam';
+
+    return result;
+  }
+
   // Helper for competition verbs: combine home and opponent players - this is for specific phrasing
   String _combineCompetitionPlayers(
       List<String> homeCodes, List<String> oppCodes) {
@@ -7699,9 +7780,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               "$playersString $celebrationPart against the $opponentTeamName";
         }
       } else if (celebrateAgainst.isNotEmpty) {
-        final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+        final opponentStr =
+            _combineOpponentPlayersForCelebration(celebrateAgainst);
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart = "celebrates against the $opponentStr";
+        final celebrationPart = "celebrates $opponentStr";
 
         if (_walkOff == true) {
           mainCaptionPart =
@@ -7988,8 +8070,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         print('DEBUG: Using custom celebration verb: $_customCelebrationVerb');
         mainCaptionPart = "$playersString celebrates $_customCelebrationVerb";
         if (celebrateAgainst.isNotEmpty) {
-          final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
-          mainCaptionPart += " against $opponentStr";
+          final opponentStr =
+              _combineOpponentPlayersForCelebration(celebrateAgainst);
+          mainCaptionPart += " $opponentStr";
         } else if (celebrateWith.isNotEmpty) {
           final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
           mainCaptionPart += " with $teammatesStr";
@@ -8003,8 +8086,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else if (_selectedCelebrationType == 'against' &&
           celebrateAgainst.isNotEmpty) {
         // Celebrates against = celebrates against specific players
-        final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
-        mainCaptionPart = "$playersString celebrates against $opponentStr";
+        final opponentStr =
+            _combineOpponentPlayersForCelebration(celebrateAgainst);
+        mainCaptionPart = "$playersString celebrates $opponentStr";
       } else if (_selectedCelebrationType == 'with' &&
           celebrateWith.isNotEmpty) {
         final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
