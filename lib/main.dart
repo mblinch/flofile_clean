@@ -11710,20 +11710,83 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name
-          RichText(
-            text: TextSpan(
-              // Default style for the team name
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize:
-                      12, // Reduced from 14 to 12 to make team name smaller
-                  color: Colors.black,
-                  fontFamily: 'RobotoCondensed'),
-              children: <TextSpan>[
-                TextSpan(text: title),
-              ],
-            ),
+          // Team name and search bar in same row
+          Row(
+            children: [
+              // Team name
+              RichText(
+                text: TextSpan(
+                  // Default style for the team name
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize:
+                          12, // Reduced from 14 to 12 to make team name smaller
+                      color: Colors.black,
+                      fontFamily: 'RobotoCondensed'),
+                  children: <TextSpan>[
+                    TextSpan(text: title),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Smaller search bar beside team name
+              Container(
+                width: 120,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(left: 6.0),
+                      child: Icon(Icons.search, size: 12, color: Colors.grey),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: (value) {
+                          setState(() {}); // Rebuild to filter list
+                        },
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.black,
+                          height: 1.0,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4.0,
+                            vertical: 0.0,
+                          ),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    if (searchText.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          searchController.clear();
+                          setState(() {}); // Rebuild
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.only(right: 6.0),
+                          child:
+                              Icon(Icons.clear, size: 12, color: Colors.grey),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
           // Switch Team button below the row
           if (toggle)
@@ -11778,68 +11841,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 8),
-          // Search bar
-          Container(
-            width: 250,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Icon(Icons.search, size: 16, color: Colors.grey),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: (value) {
-                      setState(() {}); // Rebuild to filter list
-                    },
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black,
-                      height: 1.0,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: 'Search...',
-                      hintStyle: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8.0,
-                        vertical: 0.0,
-                      ),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                if (searchText.isNotEmpty)
-                  GestureDetector(
-                    onTap: () {
-                      searchController.clear();
-                      setState(() {}); // Rebuild
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 8.0),
-                      child: Icon(Icons.clear, size: 16, color: Colors.grey),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
           // Selected players chips
           if ((isHomeList && selectedPlayers.isNotEmpty) ||
               (!isHomeList && selectedOpponentPlayers.isNotEmpty))
             Container(
-              width: 250,
+              width: 200,
               margin: const EdgeInsets.only(bottom: 8),
               child: Wrap(
                 spacing: 4,
@@ -11852,7 +11858,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   final playerName = replacement.short;
                   return SizedBox(
                     width:
-                        121, // Fixed width to fit 2 chips in 250px container (121*2 + 8 spacing = 250)
+                        96, // Fixed width to fit 2 chips in 200px container (96*2 + 8 spacing = 200)
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
