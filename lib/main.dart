@@ -10236,88 +10236,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Column(
                                               children: [
                                                 // App bar style header
-                                                Container(
-                                                  width: 280,
-                                                  height: 28,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.shade200,
-                                                    borderRadius:
-                                                        const BorderRadius.only(
-                                                      topLeft:
-                                                          Radius.circular(4),
-                                                      topRight:
-                                                          Radius.circular(4),
+                                                Transform.translate(
+                                                  offset: const Offset(300, 0),
+                                                  child: Container(
+                                                    width: 280,
+                                                    height: 28,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.grey.shade200,
+                                                      borderRadius:
+                                                          const BorderRadius
+                                                              .only(
+                                                        topLeft:
+                                                            Radius.circular(4),
+                                                        topRight:
+                                                            Radius.circular(4),
+                                                      ),
                                                     ),
-                                                  ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 16.0),
-                                                    child: Row(
-                                                      children: [
-                                                        if (_selectedVerb ==
-                                                            'hit') ...[
-                                                          // Breadcrumb menu
-                                                          Expanded(
-                                                            child: Row(
-                                                              children: [
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(
-                                                                        () {
-                                                                      _selectedVerb =
-                                                                          null;
-                                                                      _selectedHitType =
-                                                                          null;
-                                                                      _selectedHomeRunType =
-                                                                          null;
-                                                                      _rbiCount =
-                                                                          null;
-                                                                      _selectedRbiInning =
-                                                                          null;
-                                                                      _isBatterRunning =
-                                                                          null;
-                                                                      _updateCaption();
-                                                                    });
-                                                                  },
-                                                                  child: Text(
-                                                                    'HIT',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                      color: Colors
-                                                                          .black,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                if (_selectedHitType !=
-                                                                    null) ...[
-                                                                  Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            3.0),
-                                                                    child: Text(
-                                                                      '→',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            8,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .black,
-                                                                      ),
-                                                                    ),
-                                                                  ),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 16.0),
+                                                      child: Row(
+                                                        children: [
+                                                          if (_selectedVerb ==
+                                                              'hit') ...[
+                                                            // Breadcrumb menu
+                                                            Expanded(
+                                                              child: Row(
+                                                                children: [
                                                                   GestureDetector(
                                                                     onTap: () {
                                                                       setState(
                                                                           () {
+                                                                        _selectedVerb =
+                                                                            null;
                                                                         _selectedHitType =
                                                                             null;
                                                                         _selectedHomeRunType =
@@ -10332,8 +10285,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       });
                                                                     },
                                                                     child: Text(
-                                                                      _selectedHitType!
-                                                                          .toUpperCase(),
+                                                                      'HIT',
                                                                       style:
                                                                           TextStyle(
                                                                         fontSize:
@@ -10345,135 +10297,196 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       ),
                                                                     ),
                                                                   ),
-                                                                ],
-                                                                if (_selectedHitType ==
-                                                                        'Home Run' &&
-                                                                    _selectedHomeRunType !=
-                                                                        null) ...[
-                                                                  Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            3.0),
-                                                                    child: Text(
-                                                                      '→',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            8,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .black,
+                                                                  if (_selectedHitType !=
+                                                                      null) ...[
+                                                                    Padding(
+                                                                      padding: const EdgeInsets
+                                                                          .symmetric(
+                                                                          horizontal:
+                                                                              3.0),
+                                                                      child:
+                                                                          Text(
+                                                                        '→',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              8,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
                                                                       ),
                                                                     ),
-                                                                  ),
-                                                                  GestureDetector(
-                                                                    onTap: () {
-                                                                      setState(
+                                                                    GestureDetector(
+                                                                      onTap:
                                                                           () {
-                                                                        _selectedHomeRunType =
-                                                                            null;
-                                                                        _updateCaption();
-                                                                      });
-                                                                    },
-                                                                    child: Text(
-                                                                      _selectedHomeRunType ==
-                                                                              'solo'
-                                                                          ? 'SOLO'
-                                                                          : _selectedHomeRunType == 'two-run'
-                                                                              ? '2 RUN'
-                                                                              : _selectedHomeRunType == 'three-run'
-                                                                                  ? '3 RUN'
-                                                                                  : _selectedHomeRunType == 'grand slam'
-                                                                                      ? 'GRAND SLAM'
-                                                                                      : '',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .black,
+                                                                        setState(
+                                                                            () {
+                                                                          _selectedHitType =
+                                                                              null;
+                                                                          _selectedHomeRunType =
+                                                                              null;
+                                                                          _rbiCount =
+                                                                              null;
+                                                                          _selectedRbiInning =
+                                                                              null;
+                                                                          _isBatterRunning =
+                                                                              null;
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Text(
+                                                                        _selectedHitType!
+                                                                            .toUpperCase(),
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
                                                                       ),
                                                                     ),
-                                                                  ),
-                                                                ],
-                                                                if (_selectedHitType != null &&
-                                                                    _selectedHitType !=
-                                                                        'Home Run' &&
-                                                                    _rbiCount !=
-                                                                        null &&
-                                                                    _rbiCount! >
-                                                                        0) ...[
-                                                                  Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            3.0),
-                                                                    child: Text(
-                                                                      '→',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            8,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .black,
+                                                                  ],
+                                                                  if (_selectedHitType ==
+                                                                          'Home Run' &&
+                                                                      _selectedHomeRunType !=
+                                                                          null) ...[
+                                                                    Padding(
+                                                                      padding: const EdgeInsets
+                                                                          .symmetric(
+                                                                          horizontal:
+                                                                              3.0),
+                                                                      child:
+                                                                          Text(
+                                                                        '→',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              8,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
                                                                       ),
                                                                     ),
-                                                                  ),
-                                                                  GestureDetector(
-                                                                    onTap: () {
-                                                                      setState(
+                                                                    GestureDetector(
+                                                                      onTap:
                                                                           () {
-                                                                        _rbiCount =
-                                                                            null;
-                                                                        _rbiCountByHit
-                                                                            .remove(_selectedHitType!);
-                                                                        _updateCaption();
-                                                                      });
-                                                                    },
-                                                                    child: Text(
-                                                                      _rbiCount ==
-                                                                              1
-                                                                          ? 'RBI SINGLE'
-                                                                          : _rbiCount == 2
-                                                                              ? 'TWO RBI SINGLE'
-                                                                              : _rbiCount == 3
-                                                                                  ? 'THREE RBI SINGLE'
-                                                                                  : '',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .black,
+                                                                        setState(
+                                                                            () {
+                                                                          _selectedHomeRunType =
+                                                                              null;
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Text(
+                                                                        _selectedHomeRunType ==
+                                                                                'solo'
+                                                                            ? 'SOLO'
+                                                                            : _selectedHomeRunType == 'two-run'
+                                                                                ? '2 RUN'
+                                                                                : _selectedHomeRunType == 'three-run'
+                                                                                    ? '3 RUN'
+                                                                                    : _selectedHomeRunType == 'grand slam'
+                                                                                        ? 'GRAND SLAM'
+                                                                                        : '',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
                                                                       ),
                                                                     ),
-                                                                  ),
+                                                                  ],
+                                                                  if (_selectedHitType != null &&
+                                                                      _selectedHitType !=
+                                                                          'Home Run' &&
+                                                                      _rbiCount !=
+                                                                          null &&
+                                                                      _rbiCount! >
+                                                                          0) ...[
+                                                                    Padding(
+                                                                      padding: const EdgeInsets
+                                                                          .symmetric(
+                                                                          horizontal:
+                                                                              3.0),
+                                                                      child:
+                                                                          Text(
+                                                                        '→',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              8,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          _rbiCount =
+                                                                              null;
+                                                                          _rbiCountByHit
+                                                                              .remove(_selectedHitType!);
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child:
+                                                                          Text(
+                                                                        _rbiCount ==
+                                                                                1
+                                                                            ? 'RBI SINGLE'
+                                                                            : _rbiCount == 2
+                                                                                ? 'TWO RBI SINGLE'
+                                                                                : _rbiCount == 3
+                                                                                    ? 'THREE RBI SINGLE'
+                                                                                    : '',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
                                                                 ],
-                                                              ],
+                                                              ),
                                                             ),
-                                                          ),
-                                                        ] else ...[
-                                                          Text(
-                                                            'Action',
-                                                            style: TextStyle(
-                                                              color:
-                                                                  Colors.black,
-                                                              fontSize: 11,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w600,
+                                                          ] else ...[
+                                                            Text(
+                                                              'Action',
+                                                              style: TextStyle(
+                                                                color: Colors
+                                                                    .black,
+                                                                fontSize: 11,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
                                                             ),
-                                                          ),
+                                                          ],
                                                         ],
-                                                      ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
