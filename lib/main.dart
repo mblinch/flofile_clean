@@ -9960,97 +9960,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         0.49,
                                     child: Row(
                                       children: [
-                                        // Caption Field - taking more space within the 50%
-                                        Expanded(
-                                          flex: 12,
-                                          child: ValueListenableBuilder<
-                                              TextEditingValue>(
-                                            valueListenable: captionController,
-                                            builder: (context, value, child) {
-                                              return Padding(
-                                                padding: const EdgeInsets.only(
-                                                  right: 8.0,
-                                                ),
-                                                child: Material(
-                                                  elevation: 2.0,
-                                                  color: Colors.white,
-                                                  shadowColor: Colors.grey,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  child: TextField(
-                                                    controller:
-                                                        captionController,
-                                                    maxLines: 4,
-                                                    minLines: 4,
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                    ),
-                                                    decoration: InputDecoration(
-                                                      labelText: 'Caption',
-                                                      floatingLabelBehavior:
-                                                          FloatingLabelBehavior
-                                                              .always,
-                                                      isDense: true,
-                                                      contentPadding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 12,
-                                                      ),
-                                                      labelStyle:
-                                                          const TextStyle(
-                                                        fontSize: 15,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        letterSpacing: -0.5,
-                                                      ),
-                                                      enabledBorder:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(
-                                                          4,
-                                                        ),
-                                                        borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                          width: 1.0,
-                                                        ),
-                                                      ),
-                                                      focusedBorder:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(
-                                                          4,
-                                                        ),
-                                                        borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                          width: 1.0,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    onTap: () {
-                                                      // Stop typewriter effect when user starts typing
-                                                      if (_typewriterController
-                                                          .isAnimating) {
-                                                        _typewriterController
-                                                            .stop();
-                                                      }
-                                                      _isManuallyTyping = true;
-                                                    },
-                                                    onChanged: (value) {
-                                                      // Mark as manually typing when user changes text
-                                                      _isManuallyTyping = true;
-                                                    },
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        // Personality Field (right side) - taking less space
+                                        // Personality Field (left side) - taking less space
                                         Expanded(
                                           flex: 5,
                                           child: Column(
@@ -10059,7 +9969,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             children: [
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                  left: 8.0,
+                                                  right: 8.0,
                                                 ),
                                                 child: Material(
                                                   elevation: 2,
@@ -10139,7 +10049,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               // Navigation Buttons directly under Personality field
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                  left: 8.0,
+                                                  right: 8.0,
                                                   top: 8.0,
                                                 ),
                                                 child: Row(
@@ -10151,6 +10061,96 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 ),
                                               ),
                                             ],
+                                          ),
+                                        ),
+                                        // Caption Field (right side) - taking more space
+                                        Expanded(
+                                          flex: 12,
+                                          child: ValueListenableBuilder<
+                                              TextEditingValue>(
+                                            valueListenable: captionController,
+                                            builder: (context, value, child) {
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                  left: 8.0,
+                                                ),
+                                                child: Material(
+                                                  elevation: 2.0,
+                                                  color: Colors.white,
+                                                  shadowColor: Colors.grey,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  child: TextField(
+                                                    controller:
+                                                        captionController,
+                                                    maxLines: 4,
+                                                    minLines: 4,
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                    ),
+                                                    decoration: InputDecoration(
+                                                      labelText: 'Caption',
+                                                      floatingLabelBehavior:
+                                                          FloatingLabelBehavior
+                                                              .always,
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 12,
+                                                      ),
+                                                      labelStyle:
+                                                          const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        letterSpacing: -0.5,
+                                                      ),
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(
+                                                          4,
+                                                        ),
+                                                        borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0,
+                                                        ),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(
+                                                          4,
+                                                        ),
+                                                        borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    onTap: () {
+                                                      // Stop typewriter effect when user starts typing
+                                                      if (_typewriterController
+                                                          .isAnimating) {
+                                                        _typewriterController
+                                                            .stop();
+                                                      }
+                                                      _isManuallyTyping = true;
+                                                    },
+                                                    onChanged: (value) {
+                                                      // Mark as manually typing when user changes text
+                                                      _isManuallyTyping = true;
+                                                    },
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
                                         ),
                                       ],
