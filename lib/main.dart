@@ -9794,7 +9794,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 children: [
                                   // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
                                   SizedBox(
-                                    width: 280,
+                                    width: 480,
                                     height: 550,
                                     child: DefaultTabController(
                                       length: 3,
