@@ -1926,23 +1926,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     ];
 
     for (final verb in allVerbs) {
-      print('DEBUG: Processing verb: "$verb"');
-      print('DEBUG: multiplePlayersSelected: $multiplePlayersSelected');
-      print(
-          'DEBUG: soloOnlyVerbs.contains(verb): ${soloOnlyVerbs.contains(verb)}');
-
       // Skip solo-only verbs if multiple players are selected
       if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
-        print('DEBUG: Skipping verb "$verb" because multiple players selected');
-        print('DEBUG: selectedPlayers: $selectedPlayers');
-        print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
         continue;
       }
-      // Always display all verbs, but highlight the selected one
-      print('DEBUG: Checking if verb "$verb" should be displayed');
-      print('DEBUG: _selectedVerb: $_selectedVerb');
-      print('DEBUG: _selectedVerb == null: ${_selectedVerb == null}');
-      print('DEBUG: _selectedVerb == verb: ${_selectedVerb == verb}');
 
       // Show all verbs when none selected, or show only the selected verb and its sub-options
       // For one-click verbs, always show them in their original position
@@ -1960,7 +1947,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           (_selectedVerb != null && isSelectedVerbOneClick);
 
       if (shouldShowVerb) {
-        print('DEBUG: Adding verb "$verb" to widgets');
         if (verb == 'hit') {
           widgets.add(
             Padding(
@@ -5462,7 +5448,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               borderRadius: BorderRadius.circular(4),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -5554,7 +5540,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   if (replacement == null) return null;
                                   return replacement.short.split(' #').first;
                                 })
-                                .whereNotNull()
+                                .nonNulls
                                 .join(';');
                             personalityController.text = personalityText;
 
@@ -6208,7 +6194,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           top: 8,
           right: 8,
           child: Material(
-            color: Colors.black.withOpacity(0.7),
+            color: Colors.black.withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(20),
             child: InkWell(
               borderRadius: BorderRadius.circular(20),
@@ -6260,7 +6246,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   top: 40,
                   right: 40,
                   child: Material(
-                    color: Colors.black.withOpacity(0.7),
+                    color: Colors.black.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
@@ -6290,7 +6276,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
@@ -10152,46 +10138,51 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         const SizedBox(
                                                             height: 8),
                                                       ],
-                                                      // Results - Both teams side by side
+                                                      // Results - Search results or team containers
                                                       Expanded(
-                                                        child: Row(
-                                                          children: [
-                                                            // Away Team Column
-                                                            Expanded(
-                                                              child:
-                                                                  _buildPlayerContainer(
-                                                                title: selectedAwayTeam !=
-                                                                        null
-                                                                    ? _getTeamShortName(
-                                                                        selectedAwayTeam!)
-                                                                    : 'Away Team',
-                                                                codes:
-                                                                    awayPlayers,
-                                                                isHomeList:
-                                                                    false,
-                                                                toggle: false,
+                                                        child: _playerPickerSearchText
+                                                                .isNotEmpty
+                                                            ? _buildPlayerPickerResults()
+                                                            : Row(
+                                                                children: [
+                                                                  // Away Team Column
+                                                                  Expanded(
+                                                                    child:
+                                                                        _buildPlayerContainer(
+                                                                      title: selectedAwayTeam !=
+                                                                              null
+                                                                          ? _getTeamShortName(
+                                                                              selectedAwayTeam!)
+                                                                          : 'Away Team',
+                                                                      codes:
+                                                                          awayPlayers,
+                                                                      isHomeList:
+                                                                          false,
+                                                                      toggle:
+                                                                          false,
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                      width: 8),
+                                                                  // Home Team Column
+                                                                  Expanded(
+                                                                    child:
+                                                                        _buildPlayerContainer(
+                                                                      title: selectedHomeTeam !=
+                                                                              null
+                                                                          ? _getTeamShortName(
+                                                                              selectedHomeTeam!)
+                                                                          : 'Home Team',
+                                                                      codes:
+                                                                          homePlayers,
+                                                                      isHomeList:
+                                                                          true,
+                                                                      toggle:
+                                                                          false,
+                                                                    ),
+                                                                  ),
+                                                                ],
                                                               ),
-                                                            ),
-                                                            const SizedBox(
-                                                                width: 8),
-                                                            // Home Team Column
-                                                            Expanded(
-                                                              child:
-                                                                  _buildPlayerContainer(
-                                                                title: selectedHomeTeam !=
-                                                                        null
-                                                                    ? _getTeamShortName(
-                                                                        selectedHomeTeam!)
-                                                                    : 'Home Team',
-                                                                codes:
-                                                                    homePlayers,
-                                                                isHomeList:
-                                                                    true,
-                                                                toggle: false,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
                                                       ),
                                                     ],
                                                   ),
@@ -11783,12 +11774,72 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 8),
-          const SizedBox(height: 8), // Fixed height since no dropdown
+          // Search bar
+          Container(
+            width: 250,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0),
+                  child: Icon(Icons.search, size: 16, color: Colors.grey),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _playerPickerSearchController,
+                    onChanged: (value) {
+                      setState(() {
+                        _playerPickerSearchText = value;
+                      });
+                    },
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black,
+                      height: 1.0,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Search...',
+                      hintStyle: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8.0,
+                        vertical: 0.0,
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (_playerPickerSearchText.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      _playerPickerSearchController.clear();
+                      setState(() {
+                        _playerPickerSearchText = '';
+                      });
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8.0),
+                      child: Icon(Icons.clear, size: 16, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           // Selected players chips
           if ((isHomeList && selectedPlayers.isNotEmpty) ||
               (!isHomeList && selectedOpponentPlayers.isNotEmpty))
             Container(
-              width: 200,
+              width: 250,
               margin: const EdgeInsets.only(bottom: 8),
               child: Wrap(
                 spacing: 4,
@@ -11801,7 +11852,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   final playerName = replacement.short;
                   return SizedBox(
                     width:
-                        96, // Fixed width to fit 2 chips in 200px container (96*2 + 8 spacing = 200)
+                        121, // Fixed width to fit 2 chips in 250px container (121*2 + 8 spacing = 250)
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
@@ -11846,7 +11897,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           .split(' #')
                                           .first;
                                     })
-                                    .whereNotNull()
+                                    .nonNulls
                                     .join(';');
                                 personalityController.text = personalityText;
                                 _updateCaption();
