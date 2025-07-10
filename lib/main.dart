@@ -5397,7 +5397,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 200,
+          width: 120,
           height: 32,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -5454,7 +5454,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Dropdown below search field
         if (showDropdown)
           Container(
-            width: 200,
+            width: 120,
             constraints: const BoxConstraints(maxHeight: 200, minHeight: 40),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -5564,7 +5564,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           });
                         },
                         child: Container(
-                          width: 200,
+                          width: 120,
                           height: 40,
                           decoration: BoxDecoration(
                             color: isSelected
