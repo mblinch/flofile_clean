@@ -11825,135 +11825,127 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                     ),
                   )
-                : (searchText.isNotEmpty &&
-                        RegExp(r'^\d+$').hasMatch(searchText))
-                    ? const SizedBox
-                        .shrink() // Hide main list when dropdown is showing
-                    : ListView(
-                        children: [
-                          ...filteredCodes.map((code) {
-                            final replacement = codeReplacements[code];
-                            if (replacement == null) {
-                              return const SizedBox.shrink();
-                            }
-                            final jerseyNumber = replacement.jerseyNumber;
-                            // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
-                            String nameOnly = replacement.short;
-                            if (jerseyNumber != null &&
-                                nameOnly.startsWith('$jerseyNumber ')) {
-                              nameOnly =
-                                  nameOnly.substring(jerseyNumber.length + 1);
-                            }
-                            // Remove trailing number if present
-                            nameOnly = nameOnly.split(' #').first;
+                : ListView(
+                    children: [
+                      ...filteredCodes.map((code) {
+                        final replacement = codeReplacements[code];
+                        if (replacement == null) {
+                          return const SizedBox.shrink();
+                        }
+                        final jerseyNumber = replacement.jerseyNumber;
+                        // The 'short' name is '$jerseyNumber $fullName'. We need to extract the name part.
+                        String nameOnly = replacement.short;
+                        if (jerseyNumber != null &&
+                            nameOnly.startsWith('$jerseyNumber ')) {
+                          nameOnly =
+                              nameOnly.substring(jerseyNumber.length + 1);
+                        }
+                        // Remove trailing number if present
+                        nameOnly = nameOnly.split(' #').first;
 
-                            final isSelected = isHomeList
-                                ? selectedPlayers.contains(code)
-                                : selectedOpponentPlayers.contains(code);
-                            final safeNumber = (jerseyNumber ?? '0').toString();
-                            final safeName = (nameOnly ?? '').trim();
-                            final displayText = '#$safeNumber $safeName';
-                            return InkWell(
-                              onTap: () {
-                                setState(() {
-                                  if (isHomeList) {
-                                    if (isSelected) {
-                                      // If already selected, deselect
-                                      selectedPlayers.remove(code);
-                                    } else {
-                                      // Check if a solo verb is selected and we already have a player
-                                      final soloOnlyVerbs = [
-                                        'hit',
-                                        'Fielding',
-                                        'pitches',
-                                        'At Bat',
-                                        'Batting',
-                                        'Base Running'
-                                      ];
-
-                                      if (_selectedVerb != null &&
-                                          soloOnlyVerbs
-                                              .contains(_selectedVerb) &&
-                                          selectedPlayers.isNotEmpty) {
-                                        // For solo verbs, replace the existing player instead of adding
-                                        selectedPlayers.clear();
-                                        selectedPlayers.add(code);
-                                        // Force caption update for player replacement
-                                      } else {
-                                        selectedPlayers.add(code);
-                                      }
-                                      isHome = true;
-                                    }
-                                  } else {
-                                    if (isSelected) {
-                                      selectedOpponentPlayers.remove(code);
-                                    } else {
-                                      // Check if a solo verb is selected and we already have an opponent player
-                                      final soloOnlyVerbs = [
-                                        'hit',
-                                        'Fielding',
-                                        'pitches',
-                                        'At Bat',
-                                        'Batting',
-                                        'Base Running'
-                                      ];
-
-                                      if (_selectedVerb != null &&
-                                          soloOnlyVerbs
-                                              .contains(_selectedVerb) &&
-                                          selectedOpponentPlayers.isNotEmpty) {
-                                        // For solo verbs, replace the existing player instead of adding
-                                        selectedOpponentPlayers.clear();
-                                        selectedOpponentPlayers.add(code);
-                                        // Force caption update for player replacement
-                                      } else {
-                                        selectedOpponentPlayers.add(code);
-                                      }
-                                      isHome = false;
-                                    }
-                                  }
-
-                                  // When a player is selected or deselected, update the
-                                  // personality box to reflect the current selections.
-                                  final allSelectedCodes = [
-                                    ...selectedPlayers,
-                                    ...selectedOpponentPlayers
+                        final isSelected = isHomeList
+                            ? selectedPlayers.contains(code)
+                            : selectedOpponentPlayers.contains(code);
+                        final safeNumber = (jerseyNumber ?? '0').toString();
+                        final safeName = (nameOnly ?? '').trim();
+                        final displayText = '#$safeNumber $safeName';
+                        return InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (isHomeList) {
+                                if (isSelected) {
+                                  // If already selected, deselect
+                                  selectedPlayers.remove(code);
+                                } else {
+                                  // Check if a solo verb is selected and we already have a player
+                                  final soloOnlyVerbs = [
+                                    'hit',
+                                    'Fielding',
+                                    'pitches',
+                                    'At Bat',
+                                    'Batting',
+                                    'Base Running'
                                   ];
-                                  final personalityText = allSelectedCodes
-                                      .map((c) {
-                                        final replacement = codeReplacements[c];
-                                        if (replacement == null) return null;
-                                        // Get full name (FirstName LastName) from short name by removing number
-                                        return replacement.short
-                                            .split(' #')
-                                            .first;
-                                      })
-                                      .whereNotNull()
-                                      .join(';');
-                                  personalityController.text = personalityText;
 
-                                  _updateCaption();
-                                });
-                              },
-                              child: Container(
-                                color: isSelected
-                                    ? Colors.grey.shade400
-                                    : Colors.transparent,
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 2, horizontal: 8),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      displayText,
-                                      style: const TextStyle(fontSize: 10),
-                                    ),
-                                  ],
+                                  if (_selectedVerb != null &&
+                                      soloOnlyVerbs.contains(_selectedVerb) &&
+                                      selectedPlayers.isNotEmpty) {
+                                    // For solo verbs, replace the existing player instead of adding
+                                    selectedPlayers.clear();
+                                    selectedPlayers.add(code);
+                                    // Force caption update for player replacement
+                                  } else {
+                                    selectedPlayers.add(code);
+                                  }
+                                  isHome = true;
+                                }
+                              } else {
+                                if (isSelected) {
+                                  selectedOpponentPlayers.remove(code);
+                                } else {
+                                  // Check if a solo verb is selected and we already have an opponent player
+                                  final soloOnlyVerbs = [
+                                    'hit',
+                                    'Fielding',
+                                    'pitches',
+                                    'At Bat',
+                                    'Batting',
+                                    'Base Running'
+                                  ];
+
+                                  if (_selectedVerb != null &&
+                                      soloOnlyVerbs.contains(_selectedVerb) &&
+                                      selectedOpponentPlayers.isNotEmpty) {
+                                    // For solo verbs, replace the existing player instead of adding
+                                    selectedOpponentPlayers.clear();
+                                    selectedOpponentPlayers.add(code);
+                                    // Force caption update for player replacement
+                                  } else {
+                                    selectedOpponentPlayers.add(code);
+                                  }
+                                  isHome = false;
+                                }
+                              }
+
+                              // When a player is selected or deselected, update the
+                              // personality box to reflect the current selections.
+                              final allSelectedCodes = [
+                                ...selectedPlayers,
+                                ...selectedOpponentPlayers
+                              ];
+                              final personalityText = allSelectedCodes
+                                  .map((c) {
+                                    final replacement = codeReplacements[c];
+                                    if (replacement == null) return null;
+                                    // Get full name (FirstName LastName) from short name by removing number
+                                    return replacement.short.split(' #').first;
+                                  })
+                                  .whereNotNull()
+                                  .join(';');
+                              personalityController.text = personalityText;
+
+                              _updateCaption();
+                            });
+                          },
+                          child: Container(
+                            color: isSelected
+                                ? Colors.grey.shade400
+                                : Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 2, horizontal: 8),
+                            child: Row(
+                              children: [
+                                Text(
+                                  displayText,
+                                  style: const TextStyle(fontSize: 10),
                                 ),
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                      ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
           ),
         ],
       ),
