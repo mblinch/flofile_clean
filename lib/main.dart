@@ -1931,13 +1931,28 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
         continue;
       }
-      // Only display the verb if no verb is selected, or if this is the selected verb
+      // Always display all verbs, but highlight the selected one
       print('DEBUG: Checking if verb "$verb" should be displayed');
       print('DEBUG: _selectedVerb: $_selectedVerb');
       print('DEBUG: _selectedVerb == null: ${_selectedVerb == null}');
       print('DEBUG: _selectedVerb == verb: ${_selectedVerb == verb}');
 
-      if (_selectedVerb == null || _selectedVerb == verb) {
+      // Show all verbs when none selected, or show only the selected verb and its sub-options
+      // For one-click verbs, always show them in their original position
+      bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
+          _selectedVerb == 'at bat' ||
+          _selectedVerb == 'celebrate' ||
+          _selectedVerb == 'fielding';
+
+      // Show verb if:
+      // 1. No verb is selected (show all)
+      // 2. This is the selected verb (show the selected one)
+      // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
+      bool shouldShowVerb = _selectedVerb == null ||
+          _selectedVerb == verb ||
+          (_selectedVerb != null && isSelectedVerbOneClick);
+
+      if (shouldShowVerb) {
         print('DEBUG: Adding verb "$verb" to widgets');
         if (verb == 'hit') {
           widgets.add(
