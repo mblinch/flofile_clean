@@ -54,7 +54,13 @@ const Map<String, String> teamStates = {
   'San Francisco Giants': 'California',
 };
 
-const double kInputTextSize = 14.0;
+// MLB Team to City mapping (overrides API locationName when needed)
+const Map<String, String> teamCities = {
+  'New York Yankees': 'New York',
+  'New York Mets': 'New York',
+};
+
+const double kInputTextSize = 12.0;
 const int kThumbnailSize =
     240; // Size for thumbnails (increased for better quality on modern displays)
 
@@ -2900,19 +2906,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                             selected: _selectedVerb == 'Fielding',
-                            onSelected: (_showHomeFirst
-                                    ? selectedPlayers.isNotEmpty
-                                    : selectedOpponentPlayers.isNotEmpty)
-                                ? (isSelected) => setState(() {
-                                      _selectedVerb =
-                                          isSelected ? 'Fielding' : null;
-                                      _selectedFieldingAction = null;
-                                      _isDivingCatch = false;
-                                      _isDivingForGroundBall = false;
-                                      _selectedRbiInning = null;
-                                      _updateCaption();
-                                    })
-                                : null,
+                            onSelected: (isSelected) => setState(() {
+                              print('DEBUG: Fielding button clicked');
+                              print('DEBUG: _showHomeFirst: \\$_showHomeFirst');
+                              print(
+                                  'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}');
+                              print(
+                                  'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}');
+                              print(
+                                  'DEBUG: _selectedVerb before: \\$_selectedVerb');
+                              _selectedVerb = isSelected ? 'Fielding' : null;
+                              print(
+                                  'DEBUG: _selectedVerb after: \\$_selectedVerb');
+                              _selectedFieldingAction = null;
+                              _isDivingCatch = false;
+                              _isDivingForGroundBall = false;
+                              _selectedRbiInning = null;
+                              _updateCaption();
+                            }),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                           ),
@@ -5366,7 +5377,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Text(
                                 displayText,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 10,
                                   fontWeight: isSelected
                                       ? FontWeight.bold
                                       : FontWeight.normal,
@@ -5481,7 +5492,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Extract and set location info if it's the home team
       if (isHomeTeam) {
         // Use the reliable hardcoded map for State/Province and direct API fields for others.
-        final String currentCity = teamInfo['locationName'] as String? ?? '';
+        final String apiCity = teamInfo['locationName'] as String? ?? '';
+        // Use teamCities mapping if available, otherwise use API city
+        final String currentCity = teamCities[teamName] ?? apiCity;
         final venueInfo = teamInfo['venue'] as Map<String, dynamic>?;
         final String currentStadium = venueInfo?['name'] as String? ?? '';
         final String currentProvince = teamStates[teamName] ?? '';
@@ -6066,7 +6079,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               prefixIcon: Icon(Icons.search),
                               isDense: true,
                             ),
-                            style: const TextStyle(fontSize: kInputTextSize),
+                            style: const TextStyle(fontSize: 12),
                             cursorHeight: 12.0,
                             onChanged: (value) =>
                                 setSheetState(() => search = value),
@@ -8427,9 +8440,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   if (imagePaths.isNotEmpty)
                                                     Container(
                                                       width: double.infinity,
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              8.0),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 8.0,
+                                                          vertical: 7.5),
                                                       decoration: BoxDecoration(
                                                         color:
                                                             Colors.grey.shade50,
@@ -8572,174 +8586,166 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               ),
                                                             ),
                                                           )
-                                                        : GridView.builder(
-                                                            gridDelegate:
-                                                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                                              crossAxisCount:
-                                                                  6, // Changed to 6 columns for 6 across, 3 down layout
-                                                              childAspectRatio:
-                                                                  1.0,
-                                                              crossAxisSpacing:
-                                                                  4, // Increased spacing between thumbnails
-                                                              mainAxisSpacing:
-                                                                  4, // Increased spacing between thumbnails
-                                                            ),
-                                                            itemCount:
-                                                                imagePaths
-                                                                    .length,
-                                                            itemBuilder:
-                                                                (context,
-                                                                    index) {
-                                                              final imagePath =
-                                                                  imagePaths[
-                                                                      index];
-                                                              return MouseRegion(
-                                                                child:
-                                                                    GestureDetector(
-                                                                  onSecondaryTapDown:
-                                                                      (TapDownDetails
-                                                                          details) {
-                                                                    _showThumbnailContextMenuAtPosition(
-                                                                        context,
-                                                                        index,
-                                                                        details
-                                                                            .globalPosition);
-                                                                  },
-                                                                  onTap:
-                                                                      () async {
-                                                                    // Check for modifier keys - use Option to avoid conflicts with normal selection
-                                                                    if (HardwareKeyboard
-                                                                            .instance
-                                                                            .logicalKeysPressed
-                                                                            .contains(LogicalKeyboardKey
-                                                                                .altLeft) ||
-                                                                        HardwareKeyboard
-                                                                            .instance
-                                                                            .logicalKeysPressed
-                                                                            .contains(LogicalKeyboardKey.altRight)) {
-                                                                      // Check if Shift is also pressed (Option+Shift+click for paste)
-                                                                      if (HardwareKeyboard
-                                                                              .instance
-                                                                              .logicalKeysPressed
-                                                                              .contains(LogicalKeyboardKey
-                                                                                  .shiftLeft) ||
-                                                                          HardwareKeyboard
-                                                                              .instance
-                                                                              .logicalKeysPressed
-                                                                              .contains(LogicalKeyboardKey.shiftRight)) {
-                                                                        // Option+Shift+click: Select thumbnail first, then paste metadata
+                                                        : LayoutBuilder(
+                                                            builder: (context,
+                                                                constraints) {
+                                                              int columns = 5;
+                                                              int rows = 3;
+                                                              double spacing =
+                                                                  2.0;
+                                                              double
+                                                                  totalSpacingWidth =
+                                                                  (columns -
+                                                                          1) *
+                                                                      spacing;
+                                                              double
+                                                                  totalSpacingHeight =
+                                                                  (rows - 1) *
+                                                                      spacing;
+                                                              double
+                                                                  thumbWidth =
+                                                                  (constraints.maxWidth -
+                                                                          totalSpacingWidth) /
+                                                                      columns;
+                                                              double
+                                                                  thumbHeight =
+                                                                  (constraints.maxHeight -
+                                                                          totalSpacingHeight) /
+                                                                      rows;
+
+                                                              return GridView
+                                                                  .builder(
+                                                                gridDelegate:
+                                                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                                                  crossAxisCount:
+                                                                      columns,
+                                                                  crossAxisSpacing:
+                                                                      spacing,
+                                                                  mainAxisSpacing:
+                                                                      spacing,
+                                                                  childAspectRatio:
+                                                                      thumbWidth /
+                                                                          thumbHeight,
+                                                                ),
+                                                                itemCount:
+                                                                    imagePaths
+                                                                        .length,
+                                                                itemBuilder:
+                                                                    (context,
+                                                                        index) {
+                                                                  final imagePath =
+                                                                      imagePaths[
+                                                                          index];
+                                                                  return MouseRegion(
+                                                                    child:
+                                                                        GestureDetector(
+                                                                      onSecondaryTapDown:
+                                                                          (TapDownDetails
+                                                                              details) {
+                                                                        _showThumbnailContextMenuAtPosition(
+                                                                            context,
+                                                                            index,
+                                                                            details.globalPosition);
+                                                                      },
+                                                                      onTap:
+                                                                          () async {
+                                                                        // Check for modifier keys - use Option to avoid conflicts with normal selection
+                                                                        if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altLeft) ||
+                                                                            HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altRight)) {
+                                                                          // Check if Shift is also pressed (Option+Shift+click for paste)
+                                                                          if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                                                                              HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
+                                                                            // Option+Shift+click: Select thumbnail first, then paste metadata
+                                                                            if (index !=
+                                                                                currentIndex) {
+                                                                              setState(() {
+                                                                                currentIndex = index;
+                                                                              });
+                                                                              await _loadMetadata();
+                                                                            }
+                                                                            await _pasteMetadataToCurrentImage();
+                                                                            return;
+                                                                          } else {
+                                                                            // Option+click: Save current caption first, then copy metadata from clicked image
+                                                                            if (imagePaths.isNotEmpty &&
+                                                                                currentIndex < imagePaths.length) {
+                                                                              await _saveCaptionToFile(imagePaths[currentIndex]);
+                                                                            }
+                                                                            await _copyMetadataFromIndex(index);
+                                                                            return;
+                                                                          }
+                                                                        }
+
+                                                                        // Regular click: Select thumbnail and load metadata
                                                                         if (index !=
                                                                             currentIndex) {
-                                                                          setState(
-                                                                              () {
-                                                                            currentIndex =
-                                                                                index;
-                                                                          });
-                                                                          await _loadMetadata();
+                                                                          await _selectImage(
+                                                                              index);
                                                                         }
-                                                                        await _pasteMetadataToCurrentImage();
-                                                                        return;
-                                                                      } else {
-                                                                        // Option+click: Save current caption first, then copy metadata from clicked image
-                                                                        if (imagePaths.isNotEmpty &&
-                                                                            currentIndex <
-                                                                                imagePaths.length) {
-                                                                          await _saveCaptionToFile(
-                                                                              imagePaths[currentIndex]);
-                                                                        }
-                                                                        await _copyMetadataFromIndex(
-                                                                            index);
-                                                                        return;
-                                                                      }
-                                                                    }
-
-                                                                    // Regular click: Select thumbnail and load metadata
-                                                                    if (index !=
-                                                                        currentIndex) {
-                                                                      await _selectImage(
-                                                                          index);
-                                                                    }
-                                                                  },
-                                                                  child:
-                                                                      Container(
-                                                                    width: 50,
-                                                                    height: 50,
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade100, // Light grey background
-                                                                      border:
-                                                                          Border
-                                                                              .all(
-                                                                        color: index ==
-                                                                                currentIndex
-                                                                            ? Theme.of(context).colorScheme.primary
-                                                                            : Colors.grey.shade400,
-                                                                        width: index ==
-                                                                                currentIndex
-                                                                            ? 2.5
-                                                                            : 1.5,
+                                                                      },
+                                                                      child:
+                                                                          Container(
+                                                                        width:
+                                                                            thumbWidth,
+                                                                        height:
+                                                                            thumbHeight,
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade100,
+                                                                          border:
+                                                                              Border.all(
+                                                                            color: index == currentIndex
+                                                                                ? Theme.of(context).colorScheme.primary
+                                                                                : Colors.grey.shade400,
+                                                                            width: index == currentIndex
+                                                                                ? 2.5
+                                                                                : 1.5,
+                                                                          ),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(4),
+                                                                        ),
+                                                                        child:
+                                                                            Column(
+                                                                          children: [
+                                                                            Expanded(
+                                                                              child: Container(
+                                                                                margin: const EdgeInsets.all(3),
+                                                                                child: ClipRRect(
+                                                                                  borderRadius: BorderRadius.circular(2),
+                                                                                  child: _buildProportionalThumbnail(imagePath),
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            Container(
+                                                                              width: double.infinity,
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.grey.shade200,
+                                                                                borderRadius: const BorderRadius.only(
+                                                                                  bottomLeft: Radius.circular(4),
+                                                                                  bottomRight: Radius.circular(4),
+                                                                                ),
+                                                                              ),
+                                                                              child: Text(
+                                                                                p.basenameWithoutExtension(imagePath),
+                                                                                style: const TextStyle(
+                                                                                  color: Colors.black,
+                                                                                  fontSize: 8,
+                                                                                  fontWeight: FontWeight.w500,
+                                                                                ),
+                                                                                textAlign: TextAlign.center,
+                                                                                maxLines: 1,
+                                                                                overflow: TextOverflow.ellipsis,
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
                                                                       ),
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              4), // Rounded corners
                                                                     ),
-                                                                    child:
-                                                                        Column(
-                                                                      children: [
-                                                                        // Thumbnail image (smaller with padding for border effect)
-                                                                        Expanded(
-                                                                          child:
-                                                                              Container(
-                                                                            margin:
-                                                                                const EdgeInsets.all(3), // Creates border effect
-                                                                            child:
-                                                                                ClipRRect(
-                                                                              borderRadius: BorderRadius.circular(2),
-                                                                              child: _buildProportionalThumbnail(imagePath),
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                        // Filename display
-                                                                        Container(
-                                                                          width:
-                                                                              double.infinity,
-                                                                          padding: const EdgeInsets
-                                                                              .symmetric(
-                                                                              horizontal: 2,
-                                                                              vertical: 1),
-                                                                          decoration:
-                                                                              BoxDecoration(
-                                                                            color:
-                                                                                Colors.grey.shade200,
-                                                                            borderRadius:
-                                                                                const BorderRadius.only(
-                                                                              bottomLeft: Radius.circular(4),
-                                                                              bottomRight: Radius.circular(4),
-                                                                            ),
-                                                                          ),
-                                                                          child:
-                                                                              Text(
-                                                                            p.basenameWithoutExtension(imagePath),
-                                                                            style:
-                                                                                const TextStyle(
-                                                                              color: Colors.black,
-                                                                              fontSize: 8,
-                                                                              fontWeight: FontWeight.w500,
-                                                                            ),
-                                                                            textAlign:
-                                                                                TextAlign.center,
-                                                                            maxLines:
-                                                                                1,
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ),
+                                                                  );
+                                                                },
                                                               );
                                                             },
                                                           ),
@@ -11233,7 +11239,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   children: [
                                     Text(
                                       displayText,
-                                      style: const TextStyle(fontSize: 12),
+                                      style: const TextStyle(fontSize: 10),
                                     ),
                                   ],
                                 ),
