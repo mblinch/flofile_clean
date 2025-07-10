@@ -9876,63 +9876,79 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               BorderRadius
                                                                   .circular(4),
                                                         ),
-                                                        child: TextField(
-                                                          controller:
-                                                              _playerPickerSearchController,
+                                                        child: Container(
+                                                          height: 40,
                                                           decoration:
-                                                              InputDecoration(
-                                                            hintText:
-                                                                'Type player name or number...',
-                                                            prefixIcon:
-                                                                const Icon(
-                                                                    Icons
-                                                                        .search,
-                                                                    size: 16),
-                                                            isDense: true,
-                                                            contentPadding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        12,
-                                                                    vertical:
-                                                                        12),
-                                                            filled: true,
-                                                            fillColor:
-                                                                Colors.white,
-                                                            enabledBorder:
-                                                                OutlineInputBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          4),
-                                                              borderSide: BorderSide(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade400,
-                                                                  width: 1.0),
-                                                            ),
-                                                            focusedBorder:
-                                                                OutlineInputBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          4),
-                                                              borderSide: BorderSide(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade400,
-                                                                  width: 1.0),
-                                                            ),
+                                                              BoxDecoration(
+                                                            color: Colors
+                                                                .red.shade100,
+                                                            border: Border.all(
+                                                                color:
+                                                                    Colors.red,
+                                                                width: 2),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
                                                           ),
-                                                          style: const TextStyle(
-                                                              fontSize:
-                                                                  kInputTextSize),
-                                                          onChanged: (value) {
-                                                            setState(() {
-                                                              _playerPickerSearchText =
-                                                                  value;
-                                                            });
-                                                          },
+                                                          child: TextField(
+                                                            controller:
+                                                                _playerPickerSearchController,
+                                                            decoration:
+                                                                InputDecoration(
+                                                              hintText:
+                                                                  'Type player name or number...',
+                                                              prefixIcon:
+                                                                  const Icon(
+                                                                      Icons
+                                                                          .search,
+                                                                      size: 16),
+                                                              isDense: true,
+                                                              contentPadding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                      vertical:
+                                                                          12),
+                                                              filled: true,
+                                                              fillColor:
+                                                                  Colors.white,
+                                                              enabledBorder:
+                                                                  OutlineInputBorder(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            4),
+                                                                borderSide: BorderSide(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1.0),
+                                                              ),
+                                                              focusedBorder:
+                                                                  OutlineInputBorder(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            4),
+                                                                borderSide: BorderSide(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1.0),
+                                                              ),
+                                                            ),
+                                                            style: const TextStyle(
+                                                                fontSize:
+                                                                    kInputTextSize),
+                                                            onChanged: (value) {
+                                                              setState(() {
+                                                                _playerPickerSearchText =
+                                                                    value;
+                                                              });
+                                                            },
+                                                          ),
                                                         ),
                                                       ),
                                                       const SizedBox(height: 8),
