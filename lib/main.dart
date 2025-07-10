@@ -64,10 +64,7 @@ const double kInputTextSize = 12.0;
 const int kThumbnailSize =
     240; // Size for thumbnails (increased for better quality on modern displays)
 
-const kInputTitleStyle = TextStyle(
-  fontSize: 24,
-  fontWeight: FontWeight.bold,
-);
+const kInputTitleStyle = TextStyle(fontSize: 24, fontWeight: FontWeight.bold);
 
 void main() {
   try {
@@ -91,6 +88,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Quick Cap',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF2E3A59), // Cool Gray
@@ -103,11 +101,14 @@ class MyApp extends StatelessWidget {
               bodyLarge: const TextStyle(fontSize: kInputTextSize),
               bodyMedium: const TextStyle(fontSize: 8),
               bodySmall: const TextStyle(fontSize: 8),
-              titleMedium:
-                  const TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+              titleMedium: const TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
               headlineSmall: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold), // Smaller for section titles
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ), // Smaller for section titles
               labelMedium: const TextStyle(fontSize: 8),
             ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -115,8 +116,10 @@ class MyApp extends StatelessWidget {
             backgroundColor: const Color(0xFF2E3A59), // Cool Gray
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            textStyle:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
@@ -124,12 +127,17 @@ class MyApp extends StatelessWidget {
             foregroundColor: const Color(0xFF00A8E8), // Sky Blue Accent
           ),
         ),
-        // inputDecorationTheme: const InputDecorationTheme(
-        //   border: OutlineInputBorder(),
-        //   hintStyle: TextStyle(fontSize: kInputTextSize),
-        //   labelStyle: TextStyle(fontSize: kInputTextSize),
-        //   contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        // ),
+        inputDecorationTheme: const InputDecorationTheme(
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          hintStyle: TextStyle(fontSize: kInputTextSize),
+          labelStyle: TextStyle(fontSize: kInputTextSize),
+          contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        ),
       ),
       home: const CaptionBuilder(),
       builder: (context, child) {
@@ -227,21 +235,25 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
       // Just got selected
       final chipTheme = ChipTheme.of(context);
       const flashColor = Color(0x0D000000); // 5% opacity black for flash
-      const selectedColor =
-          Color(0x0D000000); // 5% opacity black for selected state
+      const selectedColor = Color(
+        0x0D000000,
+      ); // 5% opacity black for selected state
       final unselectedColor =
           chipTheme.backgroundColor ?? const Color(0x0D000000);
 
       _animation = TweenSequence<Color?>([
         TweenSequenceItem(
-            tween: ColorTween(begin: unselectedColor, end: flashColor),
-            weight: 30),
+          tween: ColorTween(begin: unselectedColor, end: flashColor),
+          weight: 30,
+        ),
         TweenSequenceItem(
-            tween: ColorTween(begin: flashColor, end: unselectedColor),
-            weight: 30),
+          tween: ColorTween(begin: flashColor, end: unselectedColor),
+          weight: 30,
+        ),
         TweenSequenceItem(
-            tween: ColorTween(begin: unselectedColor, end: selectedColor),
-            weight: 40),
+          tween: ColorTween(begin: unselectedColor, end: selectedColor),
+          weight: 40,
+        ),
       ]).animate(_controller);
 
       _controller.forward(from: 0.0);
@@ -362,35 +374,32 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final imagePath = imagePaths[index];
 
     // Extract metadata via exiftool in JSON format
-    final proc = await Process.run(
-      'exiftool',
-      [
-        '-j', // JSON output
-        '-Caption-Abstract',
-        '-ImageDescription',
-        '-XMP-getty:Personality',
-        '-TransmissionReference',
-        '-DescriptionWriter',
-        '-Headline',
-        '-Keywords',
-        '-Creator',
-        '-CreatorJobTitle',
-        '-Credit',
-        '-Copyright',
-        '-Source',
-        '-ObjectName',
-        '-Category',
-        '-SupplementalCategories',
-        '-XMP-photoshop:Instructions',
-        '-Sub-location',
-        '-City',
-        '-Province-State',
-        '-Urgency',
-        '-Country',
-        '-CountryCode',
-        imagePath
-      ],
-    );
+    final proc = await Process.run('exiftool', [
+      '-j', // JSON output
+      '-Caption-Abstract',
+      '-ImageDescription',
+      '-XMP-getty:Personality',
+      '-TransmissionReference',
+      '-DescriptionWriter',
+      '-Headline',
+      '-Keywords',
+      '-Creator',
+      '-CreatorJobTitle',
+      '-Credit',
+      '-Copyright',
+      '-Source',
+      '-ObjectName',
+      '-Category',
+      '-SupplementalCategories',
+      '-XMP-photoshop:Instructions',
+      '-Sub-location',
+      '-City',
+      '-Province-State',
+      '-Urgency',
+      '-Country',
+      '-CountryCode',
+      imagePath,
+    ]);
 
     if (proc.exitCode == 0) {
       final List data = jsonDecode(proc.stdout as String);
@@ -426,8 +435,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Saved current caption and copied metadata from ${p.basenameWithoutExtension(imagePath)} (Option+click)')),
+            content: Text(
+              'Saved current caption and copied metadata from ${p.basenameWithoutExtension(imagePath)} (Option+click)',
+            ),
+          ),
         );
       }
     }
@@ -494,14 +505,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text(
-              'Selected, pasted, and saved metadata to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)')),
+        content: Text(
+          'Selected, pasted, and saved metadata to ${p.basenameWithoutExtension(imagePath)} (Option+Shift+click)',
+        ),
+      ),
     );
   }
 
   // Show context menu for thumbnails at specific position
   void _showThumbnailContextMenuAtPosition(
-      BuildContext context, int index, Offset position) async {
+    BuildContext context,
+    int index,
+    Offset position,
+  ) async {
     // Select the thumbnail first when right-clicking
     if (index != currentIndex) {
       setState(() {
@@ -593,8 +609,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         position = RelativeRect.fromRect(
           Rect.fromPoints(
             button.localToGlobal(Offset.zero, ancestor: overlay),
-            button.localToGlobal(button.size.bottomRight(Offset.zero),
-                ancestor: overlay),
+            button.localToGlobal(
+              button.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            ),
           ),
           Offset.zero & overlay.size,
         );
@@ -672,7 +690,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Show context menu for picture preview at specific position
   void _showPicturePreviewContextMenuAtPosition(
-      BuildContext context, Offset position) {
+    BuildContext context,
+    Offset position,
+  ) {
     // Use the provided mouse position for accurate context menu placement
     final RenderBox? overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
@@ -737,8 +757,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           Rect.fromPoints(
             renderObject.localToGlobal(Offset.zero, ancestor: overlay),
             renderObject.localToGlobal(
-                renderObject.size.bottomRight(Offset.zero),
-                ancestor: overlay),
+              renderObject.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            ),
           ),
           Offset.zero & overlay.size,
         );
@@ -809,7 +830,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     Clipboard.setData(ClipboardData(text: clipboardText));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content: Text('Caption and personality copied to clipboard!')),
+        content: Text('Caption and personality copied to clipboard!'),
+      ),
     );
   }
 
@@ -839,7 +861,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Caption and personality pasted from clipboard!')),
+          content: Text('Caption and personality pasted from clipboard!'),
+        ),
       );
     }
   }
@@ -1041,8 +1064,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Images sorted by filename (${imagePaths.length} images)'),
+          content: Text(
+            'Images sorted by filename (${imagePaths.length} images)',
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -1068,8 +1092,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       List<Map<String, dynamic>> imageData = [];
 
       for (int i = 0; i < imagePaths.length; i++) {
-        final result = await Process.run(
-            'exiftool', ['-j', '-DateTimeOriginal', imagePaths[i]]);
+        final result = await Process.run('exiftool', [
+          '-j',
+          '-DateTimeOriginal',
+          imagePaths[i],
+        ]);
 
         if (result.exitCode == 0) {
           final data = jsonDecode(result.stdout.toString())[0];
@@ -1078,7 +1105,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           if (dateTime != null) {
             try {
               final parsedTime = DateTime.parse(
-                  dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'),
+              );
               imageData.add({
                 'index': i,
                 'path': imagePaths[i],
@@ -1112,10 +1140,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Sort by date/time (oldest first)
       print(
-          'Before sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+        'Before sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}',
+      );
       imageData.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
       print(
-          'After sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+        'After sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}',
+      );
 
       // Update image paths and current index
       final originalIndex = currentIndex;
@@ -1129,7 +1159,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _isSortedByDate = true;
         _isSortedByFilename = false;
         print(
-            'setState: imagePaths updated, currentIndex = $currentIndex, first 3: ${imagePaths.take(3).map((p) => p.split('/').last).toList()}');
+          'setState: imagePaths updated, currentIndex = $currentIndex, first 3: ${imagePaths.take(3).map((p) => p.split('/').last).toList()}',
+        );
       });
 
       // Reload metadata and detect burst for the current image
@@ -1139,15 +1170,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Images sorted by date (oldest first) (${imagePaths.length} images)'),
+            'Images sorted by date (oldest first) (${imagePaths.length} images)',
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
       print('Error sorting images: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sorting images: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error sorting images: $e')));
     }
   }
 
@@ -1177,8 +1209,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     try {
       // Get metadata for current image
       final currentPath = imagePaths[currentIndex];
-      final currentResult = await Process.run(
-          'exiftool', ['-j', '-LensID', '-DateTimeOriginal', currentPath]);
+      final currentResult = await Process.run('exiftool', [
+        '-j',
+        '-LensID',
+        '-DateTimeOriginal',
+        currentPath,
+      ]);
 
       if (currentResult.exitCode != 0) {
         setState(() {
@@ -1202,14 +1238,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Parse current image time
       final currentTime = DateTime.parse(
-          currentDateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+        currentDateTime.replaceFirst(':', '-').replaceFirst(':', '-'),
+      );
 
       List<int> burstIndices = [currentIndex];
 
       // Check images before current
       for (int i = currentIndex - 1; i >= 0; i--) {
-        final result = await Process.run(
-            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        final result = await Process.run('exiftool', [
+          '-j',
+          '-LensID',
+          '-DateTimeOriginal',
+          imagePaths[i],
+        ]);
         if (result.exitCode == 0) {
           final data = jsonDecode(result.stdout.toString())[0];
           final lens = data['LensID']?.toString();
@@ -1217,7 +1258,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
           if (lens == currentLens && dateTime != null) {
             final time = DateTime.parse(
-                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+              dateTime.replaceFirst(':', '-').replaceFirst(':', '-'),
+            );
             final difference = currentTime.difference(time).abs();
 
             // If same lens and within 1 second, it's part of the burst
@@ -1236,8 +1278,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Check images after current
       for (int i = currentIndex + 1; i < imagePaths.length; i++) {
-        final result = await Process.run(
-            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        final result = await Process.run('exiftool', [
+          '-j',
+          '-LensID',
+          '-DateTimeOriginal',
+          imagePaths[i],
+        ]);
         if (result.exitCode == 0) {
           final data = jsonDecode(result.stdout.toString())[0];
           final lens = data['LensID']?.toString();
@@ -1245,7 +1291,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
           if (lens == currentLens && dateTime != null) {
             final time = DateTime.parse(
-                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+              dateTime.replaceFirst(':', '-').replaceFirst(':', '-'),
+            );
             final difference = currentTime.difference(time).abs();
 
             // If same lens and within 1 second, it's part of the burst
@@ -1304,11 +1351,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.burst_mode,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                const Icon(Icons.burst_mode, color: Colors.white, size: 16),
                 const SizedBox(width: 4),
                 Text(
                   'BURST (${_burstIndices.length})',
@@ -1334,11 +1377,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.sort,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                const Icon(Icons.sort, color: Colors.white, size: 16),
                 const SizedBox(width: 4),
                 Text(
                   _isSortedByDate ? 'SORTED BY DATE' : 'SORTED BY NAME',
@@ -1395,8 +1434,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  Widget _buildStyledButton(String text, VoidCallback? onPressed,
-      {bool isBlue = false}) {
+  Widget _buildStyledButton(
+    String text,
+    VoidCallback? onPressed, {
+    bool isBlue = false,
+  }) {
     final backgroundColor = isBlue ? const Color(0xFF0052CC) : Colors.white;
     final textColor = isBlue ? Colors.white : Colors.black;
     final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
@@ -1432,8 +1474,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  Widget _buildCompactButton(String text, VoidCallback? onPressed,
-      {bool isBlue = false}) {
+  Widget _buildCompactButton(
+    String text,
+    VoidCallback? onPressed, {
+    bool isBlue = false,
+  }) {
     final backgroundColor = isBlue ? const Color(0xFF0052CC) : Colors.white;
     final textColor = isBlue ? Colors.white : Colors.black;
     final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
@@ -1493,11 +1538,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.cloud_upload,
-                  size: 14,
-                  color: textColor,
-                ),
+                Icon(Icons.cloud_upload, size: 14, color: textColor),
                 const SizedBox(width: 4),
                 Text(
                   'FTP',
@@ -1569,9 +1610,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return const SizedBox(
       height:
           32.0, // A common touch target height, aligns well with compact chips.
-      child: Center(
-        child: Text('→', style: TextStyle(fontSize: 12)),
-      ),
+      child: Center(child: Text('→', style: TextStyle(fontSize: 12))),
     );
   }
 
@@ -1763,10 +1802,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           ),
         // Trailing widget beside the inning box
         if (trailing != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0),
-            child: trailing,
-          ),
+          Padding(padding: const EdgeInsets.only(left: 8.0), child: trailing),
       ],
     );
   }
@@ -1885,7 +1921,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'twenty-seventh',
       'twenty-eighth',
       'twenty-ninth',
-      'thirtieth'
+      'thirtieth',
     ];
     final idx = inning - 1;
     if (idx >= 0 && idx < inningWords.length) {
@@ -1922,7 +1958,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'pitches',
       'At Bat',
       'Batting',
-      'Base Running'
+      'Base Running',
     ];
 
     for (final verb in allVerbs) {
@@ -1969,14 +2005,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
                                     Text(
                                       'Hit',
                                       style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
@@ -2006,161 +2046,172 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               children: [
                                 // Hit type options - show only Single if it's selected with RBI
                                 ...['Single', 'Double', 'Triple', 'Home Run']
-                                    .where((label) =>
-                                        _selectedHitType == null ||
-                                        label == _selectedHitType)
-                                    .map((label) => Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 8.0),
-                                          child: FlashingFilterChip(
-                                            label: SizedBox(
-                                              width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                        Icons.chevron_right,
-                                                        size: 14,
-                                                        color: Colors.grey),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      label,
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight: FontWeight
-                                                              .normal),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
+                                    .where(
+                                      (label) =>
+                                          _selectedHitType == null ||
+                                          label == _selectedHitType,
+                                    )
+                                    .map(
+                                      (label) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 8.0,
+                                        ),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
                                                     ),
-                                                    // Add RBI options for Single only when it's selected
-                                                    if (label == 'Single' &&
-                                                        _selectedHitType ==
-                                                            'Single') ...[
-                                                      const SizedBox(width: 8),
-                                                      const Icon(
-                                                          Icons.arrow_forward,
-                                                          size: 10,
-                                                          color: Colors.grey),
-                                                      const SizedBox(width: 4),
-                                                      ...List.generate(
-                                                              3, (i) => i + 1)
-                                                          .map((rbiCount) {
-                                                        return Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  right: 4.0),
-                                                          child: MouseRegion(
-                                                            cursor:
-                                                                SystemMouseCursors
-                                                                    .click,
-                                                            child:
-                                                                GestureDetector(
-                                                              onTap: () {
-                                                                setState(() {
-                                                                  _selectedHitType =
-                                                                      'Single';
-                                                                  _rbiCount =
-                                                                      rbiCount;
-                                                                  _rbiCountByHit[
-                                                                          'Single'] =
-                                                                      rbiCount;
-                                                                  _updateCaption();
-                                                                });
-                                                              },
-                                                              behavior:
-                                                                  HitTestBehavior
-                                                                      .opaque,
-                                                              child: Padding(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical:
-                                                                        2),
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    Container(
-                                                                      width: 4,
-                                                                      height: 4,
-                                                                      decoration: _rbiCount ==
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                  // Add RBI options for Single only when it's selected
+                                                  if (label == 'Single' &&
+                                                      _selectedHitType ==
+                                                          'Single') ...[
+                                                    const SizedBox(width: 8),
+                                                    const Icon(
+                                                      Icons.arrow_forward,
+                                                      size: 10,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    ...List.generate(
+                                                      3,
+                                                      (i) => i + 1,
+                                                    ).map((rbiCount) {
+                                                      return Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          right: 4.0,
+                                                        ),
+                                                        child: MouseRegion(
+                                                          cursor:
+                                                              SystemMouseCursors
+                                                                  .click,
+                                                          child:
+                                                              GestureDetector(
+                                                            onTap: () {
+                                                              setState(() {
+                                                                _selectedHitType =
+                                                                    'Single';
+                                                                _rbiCount =
+                                                                    rbiCount;
+                                                                _rbiCountByHit[
+                                                                        'Single'] =
+                                                                    rbiCount;
+                                                                _updateCaption();
+                                                              });
+                                                            },
+                                                            behavior:
+                                                                HitTestBehavior
+                                                                    .opaque,
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 2,
+                                                              ),
+                                                              child: Row(
+                                                                mainAxisSize:
+                                                                    MainAxisSize
+                                                                        .min,
+                                                                children: [
+                                                                  Container(
+                                                                    width: 4,
+                                                                    height: 4,
+                                                                    decoration: _rbiCount ==
+                                                                            rbiCount
+                                                                        ? const BoxDecoration(
+                                                                            color:
+                                                                                Colors.black,
+                                                                            shape:
+                                                                                BoxShape.circle,
+                                                                          )
+                                                                        : null,
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 2,
+                                                                  ),
+                                                                  Text(
+                                                                    '$rbiCount RBI',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      fontSize:
+                                                                          10,
+                                                                      fontWeight: _rbiCount ==
                                                                               rbiCount
-                                                                          ? const BoxDecoration(
-                                                                              color: Colors.black,
-                                                                              shape: BoxShape.circle,
-                                                                            )
-                                                                          : null,
+                                                                          ? FontWeight
+                                                                              .w600
+                                                                          : FontWeight
+                                                                              .normal,
+                                                                      color: Colors
+                                                                          .black,
                                                                     ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            2),
-                                                                    Text(
-                                                                      '$rbiCount RBI',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight: _rbiCount ==
-                                                                                rbiCount
-                                                                            ? FontWeight.w600
-                                                                            : FontWeight.normal,
-                                                                        color: Colors
-                                                                            .black,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
+                                                                  ),
+                                                                ],
                                                               ),
                                                             ),
                                                           ),
-                                                        );
-                                                      }).toList(),
-                                                    ],
+                                                        ),
+                                                      );
+                                                    }).toList(),
                                                   ],
-                                                ),
+                                                ],
                                               ),
                                             ),
-                                            selected: _selectedHitType == label,
-                                            disableColorChange:
-                                                label == 'Single',
-                                            onSelected: (isSelected) {
-                                              setState(() {
-                                                if (isSelected) {
-                                                  _selectedHitType = label;
-                                                  if (label != 'Home Run') {
-                                                    // For Single, don't override RBI if already selected
-                                                    if (label == 'Single' &&
-                                                        _rbiCount != null) {
-                                                      // Keep existing RBI selection
-                                                    } else {
-                                                      // Pre-select "No RBI" for non-HR hits
-                                                      _rbiCount = 0;
-                                                      _rbiCountByHit[label] = 0;
-                                                    }
+                                          ),
+                                          selected: _selectedHitType == label,
+                                          disableColorChange: label == 'Single',
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                _selectedHitType = label;
+                                                if (label != 'Home Run') {
+                                                  // For Single, don't override RBI if already selected
+                                                  if (label == 'Single' &&
+                                                      _rbiCount != null) {
+                                                    // Keep existing RBI selection
                                                   } else {
-                                                    // For home runs, RBI is determined by HR type, so clear general count
-                                                    _rbiCount = null;
+                                                    // Pre-select "No RBI" for non-HR hits
+                                                    _rbiCount = 0;
+                                                    _rbiCountByHit[label] = 0;
                                                   }
                                                 } else {
-                                                  // Deselecting - clear the hit type and RBI
-                                                  _selectedHitType = null;
+                                                  // For home runs, RBI is determined by HR type, so clear general count
                                                   _rbiCount = null;
                                                 }
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                            key: UniqueKey(),
-                                          ),
-                                        ))
+                                              } else {
+                                                // Deselecting - clear the hit type and RBI
+                                                _selectedHitType = null;
+                                                _rbiCount = null;
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                                 // Add celebration checkbox when Single + RBI is selected
                                 if (_selectedHitType == 'Single' &&
@@ -2206,8 +2257,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: (celebrateWith
                                                               .isNotEmpty ||
@@ -2266,89 +2318,89 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       '3 Run',
                                       'Grand Slam'
                                     ]
-                                        .map((hrType) => Padding(
-                                              padding: const EdgeInsets.only(
-                                                  bottom: 8.0),
-                                              child: FlashingFilterChip(
-                                                label: SizedBox(
-                                                  width: _fixedChipWidth,
-                                                  child: Align(
-                                                    alignment:
-                                                        Alignment.centerLeft,
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                            Icons.chevron_right,
-                                                            size: 14,
-                                                            color: Colors.grey),
-                                                        const SizedBox(
-                                                            width: 4),
-                                                        Text(hrType,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        12)),
-                                                      ],
-                                                    ),
+                                        .map(
+                                          (hrType) => Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 8.0,
+                                            ),
+                                            child: FlashingFilterChip(
+                                              label: SizedBox(
+                                                width: _fixedChipWidth,
+                                                child: Align(
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.chevron_right,
+                                                        size: 14,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        hrType,
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
-                                                selected:
-                                                    (_selectedHomeRunType ==
-                                                                'solo' &&
-                                                            hrType == 'Solo') ||
-                                                        (_selectedHomeRunType ==
-                                                                'two-run' &&
-                                                            hrType ==
-                                                                '2 Run') ||
-                                                        (_selectedHomeRunType ==
-                                                                'three-run' &&
-                                                            hrType ==
-                                                                '3 Run') ||
-                                                        (_selectedHomeRunType ==
-                                                                'grand slam' &&
-                                                            hrType ==
-                                                                'Grand Slam'),
-                                                onSelected: (isSelected) {
-                                                  setState(() {
-                                                    if (isSelected) {
-                                                      switch (hrType) {
-                                                        case 'Solo':
-                                                          _selectedHomeRunType =
-                                                              'solo';
-                                                          break;
-                                                        case '2 Run':
-                                                          _selectedHomeRunType =
-                                                              'two-run';
-                                                          break;
-                                                        case '3 Run':
-                                                          _selectedHomeRunType =
-                                                              'three-run';
-                                                          break;
-                                                        case 'Grand Slam':
-                                                          _selectedHomeRunType =
-                                                              'grand slam';
-                                                          break;
-                                                      }
-                                                    } else {
-                                                      _selectedHomeRunType =
-                                                          null;
-                                                    }
-                                                    _updateCaption();
-                                                  });
-                                                },
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                labelPadding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8),
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
                                               ),
-                                            ))
+                                              selected: (_selectedHomeRunType ==
+                                                          'solo' &&
+                                                      hrType == 'Solo') ||
+                                                  (_selectedHomeRunType ==
+                                                          'two-run' &&
+                                                      hrType == '2 Run') ||
+                                                  (_selectedHomeRunType ==
+                                                          'three-run' &&
+                                                      hrType == '3 Run') ||
+                                                  (_selectedHomeRunType ==
+                                                          'grand slam' &&
+                                                      hrType == 'Grand Slam'),
+                                              onSelected: (isSelected) {
+                                                setState(() {
+                                                  if (isSelected) {
+                                                    switch (hrType) {
+                                                      case 'Solo':
+                                                        _selectedHomeRunType =
+                                                            'solo';
+                                                        break;
+                                                      case '2 Run':
+                                                        _selectedHomeRunType =
+                                                            'two-run';
+                                                        break;
+                                                      case '3 Run':
+                                                        _selectedHomeRunType =
+                                                            'three-run';
+                                                        break;
+                                                      case 'Grand Slam':
+                                                        _selectedHomeRunType =
+                                                            'grand slam';
+                                                        break;
+                                                    }
+                                                  } else {
+                                                    _selectedHomeRunType = null;
+                                                  }
+                                                  _updateCaption();
+                                                });
+                                              },
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              labelPadding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                              ),
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                          ),
+                                        )
                                         .toList(),
                                   ),
                                   // Celebration options when home run type is selected
@@ -2356,7 +2408,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 8),
                                     const Padding(
                                       padding: EdgeInsets.only(
-                                          left: 16.0, bottom: 2.0),
+                                        left: 16.0,
+                                        bottom: 2.0,
+                                      ),
                                       child: Text(
                                         'Optional:',
                                         style: TextStyle(
@@ -2379,16 +2433,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
                                                   const SizedBox(width: 4),
                                                   const Text(
                                                     'Celebrates Alone',
                                                     style: TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
@@ -2411,8 +2467,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           padding: EdgeInsets.zero,
                                         ),
                                         Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 8.0),
+                                          padding: const EdgeInsets.only(
+                                            top: 8.0,
+                                          ),
                                           child: FlashingFilterChip(
                                             label: SizedBox(
                                               width: _fixedChipWidth,
@@ -2423,16 +2480,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       MainAxisSize.min,
                                                   children: [
                                                     const Icon(
-                                                        Icons.chevron_right,
-                                                        size: 14,
-                                                        color: Colors.grey),
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey,
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     Text(
                                                       'Celebrates With (${celebrateWith.length})',
                                                       style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight: FontWeight
-                                                              .normal),
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal,
+                                                      ),
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                     ),
@@ -2478,8 +2537,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       final label = entry.value;
                                       final rbi = index + 1;
                                       return Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 8.0,
+                                        ),
                                         child: FlashingFilterChip(
                                           label: SizedBox(
                                             width: _fixedChipWidth,
@@ -2489,16 +2549,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
                                                   const SizedBox(width: 4),
                                                   Text(
                                                     label,
                                                     style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
@@ -2515,8 +2577,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     _selectedHitType!] = rbi;
                                               } else {
                                                 _rbiCount = null;
-                                                _rbiCountByHit
-                                                    .remove(_selectedHitType!);
+                                                _rbiCountByHit.remove(
+                                                  _selectedHitType!,
+                                                );
                                               }
                                               _updateCaption();
                                             });
@@ -2532,7 +2595,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 8),
                                     const Padding(
                                       padding: EdgeInsets.only(
-                                          left: 16.0, bottom: 2.0),
+                                        left: 16.0,
+                                        bottom: 2.0,
+                                      ),
                                       child: Text(
                                         'Optional:',
                                         style: TextStyle(
@@ -2555,16 +2620,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
                                                   const SizedBox(width: 4),
                                                   const Text(
                                                     'Celebrates Alone',
                                                     style: TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
@@ -2587,8 +2654,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           padding: EdgeInsets.zero,
                                         ),
                                         Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 8.0),
+                                          padding: const EdgeInsets.only(
+                                            top: 8.0,
+                                          ),
                                           child: FlashingFilterChip(
                                             label: SizedBox(
                                               width: _fixedChipWidth,
@@ -2599,16 +2667,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       MainAxisSize.min,
                                                   children: [
                                                     const Icon(
-                                                        Icons.chevron_right,
-                                                        size: 14,
-                                                        color: Colors.grey),
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey,
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     Text(
                                                       'Celebrates With (${celebrateWith.length})',
                                                       style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight: FontWeight
-                                                              .normal),
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal,
+                                                      ),
                                                       overflow:
                                                           TextOverflow.ellipsis,
                                                     ),
@@ -2674,20 +2744,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('Prior to Game',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      'Prior to Game',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
-                            labelPadding:
-                                const EdgeInsets.symmetric(horizontal: 6),
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                            ),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             selected: _selectedVerb == 'Prior to Game',
@@ -2731,35 +2807,37 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         'Stretches',
                         'Anthem',
                       ]
-                          .map((label) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: FlashingFilterChip(
-                                  label: SizedBox(
-                                    width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                          .map(
+                            (label) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: FlashingFilterChip(
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  selected: _selectedPriorAction == label,
-                                  onSelected: (isSelected) {
-                                    setState(() {
-                                      _selectedPriorAction =
-                                          isSelected ? label : null;
-                                      _customPriorAction = '';
-                                      _customPriorActionController.clear();
-                                      _updateCaption();
-                                    });
-                                  },
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  key: UniqueKey(),
                                 ),
-                              ))
+                                selected: _selectedPriorAction == label,
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    _selectedPriorAction =
+                                        isSelected ? label : null;
+                                    _customPriorAction = '';
+                                    _customPriorActionController.clear();
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                key: UniqueKey(),
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                     // Custom prior to game action input
@@ -2796,7 +2874,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                           onChanged: (value) {
                             print(
-                                'DEBUG: Custom prior to game action changed to: $value');
+                              'DEBUG: Custom prior to game action changed to: $value',
+                            );
                             _customPriorAction = value;
                             if (value.isNotEmpty) {
                               _selectedPriorAction = null;
@@ -2833,20 +2912,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('Post Game',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      'Post Game',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
-                            labelPadding:
-                                const EdgeInsets.symmetric(horizontal: 6),
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                            ),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             selected: _selectedVerb == 'Post Game',
@@ -2877,43 +2962,45 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       runSpacing: 4.0,
                       children: [
                         'Celebrates alone',
-                        'Celebrates with teammates',
+                        'Celebrates with teammates'
                       ]
-                          .map((label) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: FlashingFilterChip(
-                                  label: SizedBox(
-                                    width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                          .map(
+                            (label) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: FlashingFilterChip(
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  selected: _selectedPostGameAction == label,
-                                  onSelected: (isSelected) async {
-                                    if (isSelected &&
-                                        label == 'Celebrates with teammates') {
-                                      // Show teammate selection dialog
-                                      await _showPostGameTeammatesDialog();
-                                    } else {
-                                      setState(() {
-                                        _selectedPostGameAction =
-                                            isSelected ? label : null;
-                                        _customPostGameAction = '';
-                                        _customPostGameActionController.clear();
-                                        _updateCaption();
-                                      });
-                                    }
-                                  },
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  key: UniqueKey(),
                                 ),
-                              ))
+                                selected: _selectedPostGameAction == label,
+                                onSelected: (isSelected) async {
+                                  if (isSelected &&
+                                      label == 'Celebrates with teammates') {
+                                    // Show teammate selection dialog
+                                    await _showPostGameTeammatesDialog();
+                                  } else {
+                                    setState(() {
+                                      _selectedPostGameAction =
+                                          isSelected ? label : null;
+                                      _customPostGameAction = '';
+                                      _customPostGameActionController.clear();
+                                      _updateCaption();
+                                    });
+                                  }
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                key: UniqueKey(),
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                     // Custom post game action input
@@ -2950,7 +3037,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                           onChanged: (value) {
                             print(
-                                'DEBUG: Custom post game action changed to: $value');
+                              'DEBUG: Custom post game action changed to: $value',
+                            );
                             _customPostGameAction = value;
                             if (value.isNotEmpty) {
                               _selectedPostGameAction = null;
@@ -2987,20 +3075,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.chevron_right,
-                                      size: 14, color: Colors.grey),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
                                   SizedBox(width: 4),
-                                  Text('Portrait',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    'Portrait',
+                                    style: TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ],
                               ),
                             ),
                           ),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
-                          labelPadding:
-                              const EdgeInsets.symmetric(horizontal: 6),
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                          ),
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
                           selected: _selectedVerb == 'Portrait',
@@ -3038,9 +3132,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             label: SizedBox(
                               width: _fixedChipWidth,
                               child: const Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text('Looks on',
-                                      style: TextStyle(fontSize: 12))),
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Looks on',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ),
                             ),
                             selected: _isLooksOn,
                             onSelected: (isSelected) {
@@ -3051,8 +3148,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             },
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
-                            labelPadding:
-                                const EdgeInsets.symmetric(horizontal: 8),
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                            ),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -3087,12 +3185,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('Fielding',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      'Fielding',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -3102,14 +3205,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               print('DEBUG: Fielding button clicked');
                               print('DEBUG: _showHomeFirst: \\$_showHomeFirst');
                               print(
-                                  'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}');
+                                'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}',
+                              );
                               print(
-                                  'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}');
+                                'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}',
+                              );
                               print(
-                                  'DEBUG: _selectedVerb before: \\$_selectedVerb');
+                                'DEBUG: _selectedVerb before: \\$_selectedVerb',
+                              );
                               _selectedVerb = isSelected ? 'Fielding' : null;
                               print(
-                                  'DEBUG: _selectedVerb after: \\$_selectedVerb');
+                                'DEBUG: _selectedVerb after: \\$_selectedVerb',
+                              );
                               _selectedFieldingAction = null;
                               _isDivingCatch = false;
                               _isDivingForGroundBall = false;
@@ -3129,58 +3236,64 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 'Ground Ball',
                                 'Throws',
                                 'Fielding Position',
-                                'Takes the Field'
+                                'Takes the Field',
                               ]
-                                  .map((label) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
+                                  .map(
+                                    (label) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8.0,
+                                      ),
+                                      child: FlashingFilterChip(
+                                        label: SizedBox(
+                                          width: _fixedChipWidth,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.chevron_right,
+                                                  size: 14,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  label,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.normal,
                                                   ),
-                                                ],
-                                              ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          selected: _selectedFieldingAction ==
-                                              _getFieldingActionKey(label),
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              if (isSelected) {
-                                                _selectedFieldingAction =
-                                                    _getFieldingActionKey(
-                                                        label);
-                                              } else {
-                                                _selectedFieldingAction = null;
-                                                _isDivingCatch = false;
-                                                _isDivingForGroundBall = false;
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          key: UniqueKey(),
                                         ),
-                                      ))
+                                        selected: _selectedFieldingAction ==
+                                            _getFieldingActionKey(label),
+                                        onSelected: (isSelected) {
+                                          setState(() {
+                                            if (isSelected) {
+                                              _selectedFieldingAction =
+                                                  _getFieldingActionKey(
+                                                label,
+                                              );
+                                            } else {
+                                              _selectedFieldingAction = null;
+                                              _isDivingCatch = false;
+                                              _isDivingForGroundBall = false;
+                                            }
+                                            _updateCaption();
+                                          });
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        key: UniqueKey(),
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                             ),
                           ] else ...[
@@ -3199,16 +3312,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.chevron_right,
-                                                size: 14, color: Colors.grey),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 14,
+                                              color: Colors.grey,
+                                            ),
                                             const SizedBox(width: 4),
                                             Text(
                                               _getFieldingActionLabel(
-                                                  _selectedFieldingAction!),
+                                                _selectedFieldingAction!,
+                                              ),
                                               style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight:
-                                                      FontWeight.normal),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
+                                              ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                           ],
@@ -3235,7 +3352,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         'fields a ground ball') ...[
                                   const Padding(
                                     padding: EdgeInsets.only(
-                                        left: 16.0, bottom: 2.0),
+                                      left: 16.0,
+                                      bottom: 2.0,
+                                    ),
                                     child: Text(
                                       'Optional:',
                                       style: TextStyle(
@@ -3287,12 +3406,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('Base Running',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      'Base Running',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -3320,59 +3444,62 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               children: [
                                 // Base options
                                 ...['Second Base', 'Third Base', 'Home Plate']
-                                    .map((base) => Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 8.0),
-                                          child: FlashingFilterChip(
-                                            label: SizedBox(
-                                              width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                        Icons.chevron_right,
-                                                        size: 14,
-                                                        color: Colors.grey),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      base,
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          fontWeight: FontWeight
-                                                              .normal),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
+                                    .map(
+                                      (base) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 8.0,
+                                        ),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    base,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
                                                     ),
-                                                  ],
-                                                ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                            selected: _selectedStealBase ==
-                                                _getStealBaseKey(base),
-                                            onSelected: (isSelected) {
-                                              setState(() {
-                                                if (isSelected) {
-                                                  _selectedBaseRunningAction =
-                                                      'steals';
-                                                  _selectedStealBase =
-                                                      _getStealBaseKey(base);
-                                                } else {
-                                                  _selectedBaseRunningAction =
-                                                      null;
-                                                  _selectedStealBase = null;
-                                                }
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                            key: UniqueKey(),
                                           ),
-                                        ))
+                                          selected: _selectedStealBase ==
+                                              _getStealBaseKey(base),
+                                          onSelected: (isSelected) {
+                                            setState(() {
+                                              if (isSelected) {
+                                                _selectedBaseRunningAction =
+                                                    'steals';
+                                                _selectedStealBase =
+                                                    _getStealBaseKey(base);
+                                              } else {
+                                                _selectedBaseRunningAction =
+                                                    null;
+                                                _selectedStealBase = null;
+                                              }
+                                              _updateCaption();
+                                            });
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                               ],
                             ),
@@ -3384,65 +3511,68 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 'Steals',
                                 'Slides',
                                 'Runs the Bases',
-                                'Rounds the Bases'
+                                'Rounds the Bases',
                               ]
-                                  .map((label) => Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
+                                  .map(
+                                    (label) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8.0,
+                                      ),
+                                      child: FlashingFilterChip(
+                                        label: SizedBox(
+                                          width: _fixedChipWidth,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.chevron_right,
+                                                  size: 14,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  label,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.normal,
                                                   ),
-                                                ],
-                                              ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          selected:
-                                              _selectedBaseRunningAction ==
-                                                  _getBaseRunningActionKey(
-                                                      label),
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              if (isSelected) {
-                                                if (label == 'Steals') {
-                                                  _stealsClicked = true;
-                                                  _selectedBaseRunningAction =
-                                                      null;
-                                                } else {
-                                                  _selectedBaseRunningAction =
-                                                      _getBaseRunningActionKey(
-                                                          label);
-                                                }
-                                              } else {
+                                        ),
+                                        selected: _selectedBaseRunningAction ==
+                                            _getBaseRunningActionKey(label),
+                                        onSelected: (isSelected) {
+                                          setState(() {
+                                            if (isSelected) {
+                                              if (label == 'Steals') {
+                                                _stealsClicked = true;
                                                 _selectedBaseRunningAction =
                                                     null;
+                                              } else {
+                                                _selectedBaseRunningAction =
+                                                    _getBaseRunningActionKey(
+                                                  label,
+                                                );
                                               }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          key: UniqueKey(),
-                                        ),
-                                      ))
+                                            } else {
+                                              _selectedBaseRunningAction = null;
+                                            }
+                                            _updateCaption();
+                                          });
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        key: UniqueKey(),
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                             ),
                           ] else ...[
@@ -3461,16 +3591,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.chevron_right,
-                                                size: 14, color: Colors.grey),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 14,
+                                              color: Colors.grey,
+                                            ),
                                             const SizedBox(width: 4),
                                             Text(
                                               _getBaseRunningActionLabel(
-                                                  _selectedBaseRunningAction!),
+                                                _selectedBaseRunningAction!,
+                                              ),
                                               style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight:
-                                                      FontWeight.normal),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
+                                              ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                           ],
@@ -3496,7 +3630,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     _selectedStealBase != null) ...[
                                   const Padding(
                                     padding: EdgeInsets.only(
-                                        left: 16.0, bottom: 2.0),
+                                      left: 16.0,
+                                      bottom: 2.0,
+                                    ),
                                     child: Text(
                                       'Against:',
                                       style: TextStyle(
@@ -3518,8 +3654,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 ? 'Against Player'
                                                 : 'Against Team',
                                             style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.normal,
+                                            ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
@@ -3569,14 +3706,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.chevron_right,
-                                      size: 14, color: Colors.grey),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
                                   SizedBox(width: 4),
                                   Text(
                                     'Batting',
                                     style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.normal,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
@@ -3626,8 +3767,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                           ),
                           const SizedBox(width: 16.0),
-                          ...['At Bat', 'Swings', 'Runs to First Base']
-                              .map((label) {
+                          ...['At Bat', 'Swings', 'Runs to First Base'].map((
+                            label,
+                          ) {
                             print('DEBUG: Rendering Batting action: $label');
                             return Padding(
                               padding: const EdgeInsets.only(right: 8.0),
@@ -3639,8 +3781,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     child: Text(
                                       label,
                                       style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -3648,12 +3791,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 selected: _selectedBattingAction == label,
                                 onSelected: (isSelected) {
                                   print(
-                                      'DEBUG: Batting action selected: $label, isSelected: $isSelected');
+                                    'DEBUG: Batting action selected: $label, isSelected: $isSelected',
+                                  );
                                   setState(() {
                                     _selectedBattingAction =
                                         isSelected ? label : null;
                                     print(
-                                        'DEBUG: _selectedBattingAction set to: $_selectedBattingAction');
+                                      'DEBUG: _selectedBattingAction set to: $_selectedBattingAction',
+                                    );
                                     _updateCaption();
                                   });
                                 },
@@ -3692,14 +3837,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.chevron_right,
-                                      size: 14, color: Colors.grey),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
                                   SizedBox(width: 4),
                                   Text(
                                     'At Bat',
                                     style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.normal,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
@@ -3761,8 +3910,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     child: Text(
                                       label,
                                       style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -3770,12 +3920,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 selected: _selectedAtBatAction == label,
                                 onSelected: (isSelected) {
                                   print(
-                                      'DEBUG: At Bat action selected: $label, isSelected: $isSelected');
+                                    'DEBUG: At Bat action selected: $label, isSelected: $isSelected',
+                                  );
                                   setState(() {
                                     _selectedAtBatAction =
                                         isSelected ? label : null;
                                     print(
-                                        'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction');
+                                      'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction',
+                                    );
                                     _updateCaption();
                                   });
                                 },
@@ -3816,12 +3968,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.chevron_right,
-                                        size: 14, color: Colors.grey),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('Celebrate',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      'Celebrate',
+                                      style: TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ],
                                 ),
                               ),
@@ -3845,76 +4002,82 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ...[
                                 'Celebrates Alone',
                                 'Celebrates With Teammates',
-                                'Celebrates Against'
+                                'Celebrates Against',
                               ]
-                                  .map((label) => Padding(
-                                        padding: const EdgeInsets.only(
-                                            right: 12.0, bottom: 8.0),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: 200.0,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
+                                  .map(
+                                    (label) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: 12.0,
+                                        bottom: 8.0,
+                                      ),
+                                      child: FlashingFilterChip(
+                                        label: SizedBox(
+                                          width: 200.0,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.chevron_right,
+                                                  size: 14,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  label,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.normal,
                                                   ),
-                                                ],
-                                              ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          selected:
-                                              _getCelebrationSelectionState(
-                                                  label),
-                                          onSelected: (isSelected) async {
-                                            print(
-                                                'DEBUG: Clicked on celebration option: $label, isSelected: $isSelected');
-                                            setState(() {
-                                              if (isSelected) {
-                                                _setCelebrationState(label);
-                                              } else {
-                                                _clearCelebrationState();
-                                              }
-                                            });
-                                            // Set isHome based on which team the currently selected player belongs to
-                                            if (selectedPlayers.isNotEmpty) {
-                                              isHome = true;
-                                            } else if (selectedOpponentPlayers
-                                                .isNotEmpty) {
-                                              isHome = false;
-                                            } else {
-                                              // Fallback: use the current team view if no players are selected
-                                              isHome = _showHomeFirst;
-                                            }
-                                            if (isSelected &&
-                                                (label == 'Celebrates With' ||
-                                                    label ==
-                                                        'Celebrates With Teammates' ||
-                                                    label ==
-                                                        'Celebrates Against')) {
-                                              await _showCelebrationDialog(
-                                                  label);
-                                            }
-                                            _updateCaption();
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          key: UniqueKey(),
                                         ),
-                                      ))
+                                        selected: _getCelebrationSelectionState(
+                                          label,
+                                        ),
+                                        onSelected: (isSelected) async {
+                                          print(
+                                            'DEBUG: Clicked on celebration option: $label, isSelected: $isSelected',
+                                          );
+                                          setState(() {
+                                            if (isSelected) {
+                                              _setCelebrationState(label);
+                                            } else {
+                                              _clearCelebrationState();
+                                            }
+                                          });
+                                          // Set isHome based on which team the currently selected player belongs to
+                                          if (selectedPlayers.isNotEmpty) {
+                                            isHome = true;
+                                          } else if (selectedOpponentPlayers
+                                              .isNotEmpty) {
+                                            isHome = false;
+                                          } else {
+                                            // Fallback: use the current team view if no players are selected
+                                            isHome = _showHomeFirst;
+                                          }
+                                          if (isSelected &&
+                                              (label == 'Celebrates With' ||
+                                                  label ==
+                                                      'Celebrates With Teammates' ||
+                                                  label ==
+                                                      'Celebrates Against')) {
+                                            await _showCelebrationDialog(label);
+                                          }
+                                          _updateCaption();
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        key: UniqueKey(),
+                                      ),
+                                    ),
+                                  )
                                   .toList(),
                               // Custom verb input
                               Padding(
@@ -3939,7 +4102,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     style: const TextStyle(fontSize: 12),
                                     onChanged: (value) {
                                       print(
-                                          'DEBUG: Custom celebration verb changed to: $value');
+                                        'DEBUG: Custom celebration verb changed to: $value',
+                                      );
                                       _customCelebrationVerb = value;
                                       _updateCaption();
                                     },
@@ -3975,12 +4139,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.chevron_right,
-                                  size: 14, color: Colors.grey),
+                              const Icon(
+                                Icons.chevron_right,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               const SizedBox(width: 4),
-                              Text(_capitalize(verb),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                _capitalize(verb),
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ],
                           ),
                         ),
@@ -3988,7 +4157,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       labelPadding: const EdgeInsets.symmetric(
-                          horizontal: 6), // Consistent padding
+                        horizontal: 6,
+                      ), // Consistent padding
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       selected: _selectedVerb == verb,
                       onSelected: (isSelected) => _onVerbSelected(verb),
@@ -4047,11 +4217,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.chevron_right,
-                          size: 14, color: Colors.grey),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 14,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(width: 4),
-                      Text(hrDisplayLabels[type]!,
-                          style: const TextStyle(fontSize: 12)),
+                      Text(
+                        hrDisplayLabels[type]!,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -4080,11 +4255,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.chevron_right,
-                        size: 14, color: Colors.grey),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(width: 4),
-                    Text(hrDisplayLabels[_selectedHomeRunType!]!,
-                        style: const TextStyle(fontSize: 12)),
+                    Text(
+                      hrDisplayLabels[_selectedHomeRunType!]!,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -4120,8 +4300,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: Center(
             child: Text(
               label,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.normal,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -4152,8 +4334,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       label: SizedBox(
         width: _fixedChipWidth,
         child: const Center(
-            child: Text('Diving catch',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal))),
+          child: Text(
+            'Diving catch',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+          ),
+        ),
       ),
       selected: _isDivingCatch == true,
       onSelected: (isSelected) {
@@ -4175,8 +4360,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       label: SizedBox(
         width: _fixedChipWidth,
         child: const Center(
-            child: Text('Diving',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal))),
+          child: Text(
+            'Diving',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+          ),
+        ),
       ),
       selected: _isDivingForGroundBall == true,
       onSelected: (isSelected) {
@@ -4355,13 +4543,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     'Post Game',
   ];
 
-  final List<String> celebrationVerbs = const [
-    'Celebrate',
-  ];
+  final List<String> celebrationVerbs = const ['Celebrate'];
 
-  Map<String, List<String>> get verbCategories => {
-        'Actions': soloVerbs,
-      };
+  Map<String, List<String>> get verbCategories => {'Actions': soloVerbs};
 
   // ── Info section ─────────────────────────────
   DateTime selectedDate = DateTime.now();
@@ -4401,10 +4585,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             });
           },
           items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
+            return DropdownMenuItem<String>(value: value, child: Text(value));
           }).toList(),
         ),
         DropdownButton<String>(
@@ -4418,10 +4599,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             });
           },
           items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
+            return DropdownMenuItem<String>(value: value, child: Text(value));
           }).toList(),
         ),
         // The API Test button is always visible directly under the team dropdowns:
@@ -4441,8 +4619,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final descriptionWriter = descriptionWritersController.text.isNotEmpty
         ? descriptionWritersController.text
         : 'MB';
-    final picNumber =
-        _ftpPictureNumber.toString().padLeft(3, '0'); // 001, 002, etc.
+    final picNumber = _ftpPictureNumber.toString().padLeft(
+          3,
+          '0',
+        ); // 001, 002, etc.
     final visitingTeam = selectedAwayTeam ?? 'VisitingTeam';
     final homeTeam = selectedHomeTeam ?? 'HomeTeam';
 
@@ -4550,7 +4730,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Favorite teams functionality
   Set<String> _favoriteTeams = {
-    'Toronto Blue Jays'
+    'Toronto Blue Jays',
   }; // Default favorite for testing
 
   void _toggleFavoriteTeam(String teamName) {
@@ -4621,7 +4801,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Column(
                   children: [
                     const Text(
-                        'Click the stars to add/remove teams from favorites:'),
+                      'Click the stars to add/remove teams from favorites:',
+                    ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: ListView.builder(
@@ -4794,7 +4975,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
   }
 
-// Example function to parse Exiftool XML and extract fields including Personality
+  // Example function to parse Exiftool XML and extract fields including Personality
   void parseExiftoolXml(XmlDocument xml) {
     // ...other field parsing, e.g.:
     // final cityNode = xml.findAllElements('City').firstOrNull;
@@ -4838,56 +5019,51 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       vsync: this,
     );
     _typewriterController = AnimationController(
-      duration:
-          const Duration(milliseconds: 2000), // 2 seconds for full caption
+      duration: const Duration(
+        milliseconds: 2000,
+      ), // 2 seconds for full caption
       vsync: this,
     );
     _personalityTypewriterController = AnimationController(
-      duration:
-          const Duration(milliseconds: 2000), // 2 seconds for full personality
+      duration: const Duration(
+        milliseconds: 2000,
+      ), // 2 seconds for full personality
       vsync: this,
     );
 
     // Initialize animations
-    _captionGlowAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _captionGlowController,
-      curve: Curves.easeInOut,
-    ));
+    _captionGlowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _captionGlowController, curve: Curves.easeInOut),
+    );
 
     _captionScaleAnimation = Tween<double>(
       begin: 1.0,
       end: 1.01, // Much more subtle scale
-    ).animate(CurvedAnimation(
-      parent: _captionScaleController,
-      curve: Curves.easeOut, // Simpler curve
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _captionScaleController,
+        curve: Curves.easeOut, // Simpler curve
+      ),
+    );
 
-    _captionShakeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _captionShakeController,
-      curve: Curves.easeInOut, // Simpler curve
-    ));
+    _captionShakeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _captionShakeController,
+        curve: Curves.easeInOut, // Simpler curve
+      ),
+    );
 
-    _typewriterAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _typewriterController,
-      curve: Curves.easeInOut,
-    ));
+    _typewriterAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _typewriterController, curve: Curves.easeInOut),
+    );
 
-    _personalityTypewriterAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _personalityTypewriterController,
-      curve: Curves.easeInOut,
-    ));
+    _personalityTypewriterAnimation =
+        Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _personalityTypewriterController,
+        curve: Curves.easeInOut,
+      ),
+    );
 
     // Listen to typewriter animation to update displayed text
     _typewriterController.addListener(() {
@@ -4917,9 +5093,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Build the displayed text
         final displayWords = <String>[];
         displayWords.addAll(newWords.take(commonWords)); // Add common words
-        displayWords.addAll(newWords
-            .skip(commonWords)
-            .take(animatedNewWords)); // Add animated new words
+        displayWords.addAll(
+          newWords.skip(commonWords).take(animatedNewWords),
+        ); // Add animated new words
 
         setState(() {
           _displayedCaption = displayWords.join(' ');
@@ -4977,11 +5153,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     // Ensure all solo verbs map to a full phrase including "against the"
     for (String verb in soloVerbs) {
       if (!codeReplacements.containsKey(verb)) {
-        codeReplacements[verb] = Replacement(
-          '$verb against the',
-          verb,
-          '',
-        );
+        codeReplacements[verb] = Replacement('$verb against the', verb, '');
       }
     }
     // Removed: _personShownController.addListener(_updateCaption);
@@ -5074,8 +5246,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     }
 
     // Much faster animation: 50ms per word, minimum 150ms, maximum 400ms
-    final duration =
-        Duration(milliseconds: max(150, min(400, newWordsCount * 50)));
+    final duration = Duration(
+      milliseconds: max(150, min(400, newWordsCount * 50)),
+    );
 
     _typewriterController.duration = duration;
     _typewriterController.reset();
@@ -5158,7 +5331,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   Text(
                     'Sorting ${files.length} images by date...',
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w500),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -5228,8 +5403,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ),
       padding: const EdgeInsets.all(8), // Padding around image
       child: ClipRRect(
-        borderRadius:
-            BorderRadius.circular(2.5), // Slightly smaller for inner image
+        borderRadius: BorderRadius.circular(
+          2.5,
+        ), // Slightly smaller for inner image
         child: Image.file(
           File(imagePath),
           fit: BoxFit.cover, // Fill the box, crop as needed, no letterboxing
@@ -5306,7 +5482,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             padding: const EdgeInsets.all(8), // Padding around image
             child: ClipRRect(
               borderRadius: BorderRadius.circular(
-                  2.5), // Slightly smaller for inner image
+                2.5,
+              ), // Slightly smaller for inner image
               child: Image.file(
                 File(imagePath),
                 fit: BoxFit.contain, // Maintain proportions within container
@@ -5318,8 +5495,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   return Container(
                     color: Colors.grey.shade200,
                     child: const Center(
-                      child:
-                          Icon(Icons.broken_image, color: Colors.red, size: 16),
+                      child: Icon(
+                        Icons.broken_image,
+                        color: Colors.red,
+                        size: 16,
+                      ),
                     ),
                   );
                 },
@@ -5357,7 +5537,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               },
               onError: (dynamic exception, StackTrace? stackTrace) {
                 print(
-                    'Error loading image dimensions for $imagePath: $exception');
+                  'Error loading image dimensions for $imagePath: $exception',
+                );
                 // Return a default size if image can't be loaded
                 completer.complete(const Size(1.0, 1.0));
               },
@@ -5373,8 +5554,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   // Build search field with dropdown for number input
-  Widget _buildSearchWithDropdown(TextEditingController searchController,
-      String searchText, bool isHomeList, List<String> filteredCodes) {
+  Widget _buildSearchWithDropdown(
+    TextEditingController searchController,
+    String searchText,
+    bool isHomeList,
+    List<String> filteredCodes,
+  ) {
     final bool showDropdown = searchText.isNotEmpty &&
         RegExp(r'^\d+$').hasMatch(searchText) &&
         filteredCodes.isNotEmpty;
@@ -5410,10 +5595,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   ),
                   decoration: const InputDecoration(
                     hintText: 'Search...',
-                    hintStyle: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
+                    hintStyle: TextStyle(fontSize: 12, color: Colors.grey),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8.0,
@@ -5496,7 +5678,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'pitches',
                                   'At Bat',
                                   'Batting',
-                                  'Base Running'
+                                  'Base Running',
                                 ];
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
@@ -5517,7 +5699,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'pitches',
                                   'At Bat',
                                   'Batting',
-                                  'Base Running'
+                                  'Base Running',
                                 ];
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
@@ -5532,7 +5714,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // Update personality field
                             final allSelectedCodes = [
                               ...selectedPlayers,
-                              ...selectedOpponentPlayers
+                              ...selectedOpponentPlayers,
                             ];
                             final personalityText = allSelectedCodes
                                 .map((c) {
@@ -5558,12 +5740,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 : Colors.white,
                             border: Border(
                               bottom: BorderSide(
-                                  color: Colors.grey.shade300, width: 1),
+                                color: Colors.grey.shade300,
+                                width: 1,
+                              ),
                             ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
@@ -5614,7 +5800,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (dateTime != null) {
           try {
             date = DateTime.parse(
-                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+              dateTime.replaceFirst(':', '-').replaceFirst(':', '-'),
+            );
           } catch (_) {}
         }
         imageData.add({'path': path, 'dateTime': date});
@@ -5658,17 +5845,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     await _loadTeamFromMlbApi(teamName, isHomeTeam: isHomeTeam);
   }
 
-  Future<void> _loadTeamFromMlbApi(String teamName,
-      {required bool isHomeTeam}) async {
+  Future<void> _loadTeamFromMlbApi(
+    String teamName, {
+    required bool isHomeTeam,
+  }) async {
     // --- MLB Stats API implementation ---
     final prefix = isHomeTeam ? 'h' : 'v';
     try {
       // 1. Fetch all teams for MLB (sportId=1)
-      final lookupUrl = Uri.https(
-        'statsapi.mlb.com',
-        '/api/v1/teams',
-        {'sportId': '1'},
-      );
+      final lookupUrl = Uri.https('statsapi.mlb.com', '/api/v1/teams', {
+        'sportId': '1',
+      });
       final lookupResp = await http.get(lookupUrl);
       if (lookupResp.statusCode != 200) {
         throw Exception('Team lookup failed: ${lookupResp.statusCode}');
@@ -5744,8 +5931,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content:
-                Text('Successfully loaded roster for $teamName (MLB API)')),
+          content: Text('Successfully loaded roster for $teamName (MLB API)'),
+        ),
       );
     } catch (e) {
       print('Error loading MLB roster for $teamName: $e');
@@ -5762,47 +5949,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (imagePaths.isEmpty) return;
 
     // Extract metadata via exiftool in JSON format for efficiency.
-    final proc = await Process.run(
-      'exiftool',
-      [
-        '-j', // JSON output
-        '-Caption-Abstract',
-        '-ImageDescription',
-        '-XMP-getty:Personality',
-        '-TransmissionReference',
-        '-DescriptionWriter',
-        '-Headline',
-        '-Keywords',
-        '-Creator',
-        '-CreatorJobTitle',
-        '-Credit',
-        '-Copyright',
-        '-Source',
-        '-ObjectName',
-        '-Category',
-        '-SupplementalCategories',
-        '-XMP-photoshop:Instructions',
-        '-Sub-location',
-        '-City',
-        '-Province-State',
-        '-Urgency',
-        '-Country',
-        '-CountryCode',
-        '-model',
-        '-make',
-        '-ImageWidth',
-        '-ImageHeight',
-        '-ShutterSpeed',
-        '-DateTimeOriginal',
-        '-FNumber',
-        '-ISO',
-        '-LensID',
-        '-WhiteBalance',
-        '-ColorTemperature',
-        '-Tint',
-        imagePaths[currentIndex]
-      ],
-    );
+    final proc = await Process.run('exiftool', [
+      '-j', // JSON output
+      '-Caption-Abstract',
+      '-ImageDescription',
+      '-XMP-getty:Personality',
+      '-TransmissionReference',
+      '-DescriptionWriter',
+      '-Headline',
+      '-Keywords',
+      '-Creator',
+      '-CreatorJobTitle',
+      '-Credit',
+      '-Copyright',
+      '-Source',
+      '-ObjectName',
+      '-Category',
+      '-SupplementalCategories',
+      '-XMP-photoshop:Instructions',
+      '-Sub-location',
+      '-City',
+      '-Province-State',
+      '-Urgency',
+      '-Country',
+      '-CountryCode',
+      '-model',
+      '-make',
+      '-ImageWidth',
+      '-ImageHeight',
+      '-ShutterSpeed',
+      '-DateTimeOriginal',
+      '-FNumber',
+      '-ISO',
+      '-LensID',
+      '-WhiteBalance',
+      '-ColorTemperature',
+      '-Tint',
+      imagePaths[currentIndex],
+    ]);
 
     if (proc.exitCode != 0) {
       // Handle exiftool error if necessary
@@ -5920,7 +6104,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (imageDateString != null) {
         try {
           final dt = DateTime.parse(
-              imageDateString.replaceFirst(':', '-').replaceFirst(':', '-'));
+            imageDateString.replaceFirst(':', '-').replaceFirst(':', '-'),
+          );
           selectedDate = dt;
         } catch (e) {
           // Keep current date if parsing fails
@@ -5938,7 +6123,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (rawDate != null) {
         try {
           final dt = DateTime.parse(
-              rawDate.replaceFirst(':', '-').replaceFirst(':', '-'));
+            rawDate.replaceFirst(':', '-').replaceFirst(':', '-'),
+          );
           final datePart = '${_month(dt.month)} ${dt.day}, ${dt.year}';
           final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
           final minute = dt.minute.toString().padLeft(2, '0');
@@ -5998,37 +6184,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final country = countryController.text;
     final countryCode = countryCodeController.text;
 
-    await Process.run(
-      'exiftool',
-      [
-        '-overwrite_original',
-        '-IPTC:Caption-Abstract=$caption',
-        '-XMP-dc:description=$caption',
-        '-XMP-getty:Personality=$personality', // Write "Person Shown" to XMP-getty:Personality
-        '-EXIF:ImageDescription=$caption',
-        if (jobId.isNotEmpty) '-TransmissionReference=$jobId',
-        if (descriptionWriter.isNotEmpty)
-          '-DescriptionWriter=$descriptionWriter',
-        if (headline.isNotEmpty) '-Headline=$headline',
-        if (keywords.isNotEmpty) '-Keywords=$keywords',
-        if (creator.isNotEmpty) '-Creator=$creator',
-        if (creatorJobTitle.isNotEmpty) '-CreatorJobTitle=$creatorJobTitle',
-        if (credit.isNotEmpty) '-Credit=$credit',
-        if (copyright.isNotEmpty) '-Copyright=$copyright',
-        if (source.isNotEmpty) '-Source=$source',
-        if (titleObjectName.isNotEmpty) '-ObjectName=$titleObjectName',
-        if (category.isNotEmpty) '-Category=$category',
-        if (suppCat1.isNotEmpty) '-SupplementalCategories=$suppCat1',
-        if (suppCat2.isNotEmpty) '-SupplementalCategories=$suppCat2',
-        if (suppCat3.isNotEmpty) '-SupplementalCategories=$suppCat3',
-        if (specialInstructions.isNotEmpty)
-          '-XMP-photoshop:Instructions=$specialInstructions',
-        if (urgency.isNotEmpty) '-Urgency=$urgency',
-        if (country.isNotEmpty) '-Country=$country',
-        if (countryCode.isNotEmpty) '-CountryCode=$countryCode',
-        path,
-      ],
-    );
+    await Process.run('exiftool', [
+      '-overwrite_original',
+      '-IPTC:Caption-Abstract=$caption',
+      '-XMP-dc:description=$caption',
+      '-XMP-getty:Personality=$personality', // Write "Person Shown" to XMP-getty:Personality
+      '-EXIF:ImageDescription=$caption',
+      if (jobId.isNotEmpty) '-TransmissionReference=$jobId',
+      if (descriptionWriter.isNotEmpty) '-DescriptionWriter=$descriptionWriter',
+      if (headline.isNotEmpty) '-Headline=$headline',
+      if (keywords.isNotEmpty) '-Keywords=$keywords',
+      if (creator.isNotEmpty) '-Creator=$creator',
+      if (creatorJobTitle.isNotEmpty) '-CreatorJobTitle=$creatorJobTitle',
+      if (credit.isNotEmpty) '-Credit=$credit',
+      if (copyright.isNotEmpty) '-Copyright=$copyright',
+      if (source.isNotEmpty) '-Source=$source',
+      if (titleObjectName.isNotEmpty) '-ObjectName=$titleObjectName',
+      if (category.isNotEmpty) '-Category=$category',
+      if (suppCat1.isNotEmpty) '-SupplementalCategories=$suppCat1',
+      if (suppCat2.isNotEmpty) '-SupplementalCategories=$suppCat2',
+      if (suppCat3.isNotEmpty) '-SupplementalCategories=$suppCat3',
+      if (specialInstructions.isNotEmpty)
+        '-XMP-photoshop:Instructions=$specialInstructions',
+      if (urgency.isNotEmpty) '-Urgency=$urgency',
+      if (country.isNotEmpty) '-Country=$country',
+      if (countryCode.isNotEmpty) '-CountryCode=$countryCode',
+      path,
+    ]);
   }
 
   void _showZoomedImage(BuildContext context, String imagePath) {
@@ -6040,8 +6222,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 320, vertical: 240),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 320,
+            vertical: 240,
+          ),
           child: GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             child: ExtendedImage.file(
@@ -6086,10 +6270,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _preloadCurrentAndAdjacentImages();
 
       // Load metadata and detect burst in parallel
-      await Future.wait([
-        _loadMetadata(),
-        _detectBurst(currentIndex),
-      ]);
+      await Future.wait([_loadMetadata(), _detectBurst(currentIndex)]);
     } else {
       // Show feedback when at the last image
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6115,10 +6296,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _preloadCurrentAndAdjacentImages();
 
       // Load metadata and detect burst in parallel
-      await Future.wait([
-        _loadMetadata(),
-        _detectBurst(currentIndex),
-      ]);
+      await Future.wait([_loadMetadata(), _detectBurst(currentIndex)]);
     } else {
       // Show feedback when at the first image
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6147,10 +6325,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _preloadCurrentAndAdjacentImages();
 
     // Load metadata and detect burst in parallel
-    await Future.wait([
-      _loadMetadata(),
-      _detectBurst(currentIndex),
-    ]);
+    await Future.wait([_loadMetadata(), _detectBurst(currentIndex)]);
   }
 
   // Build preview image widget with precacheImage optimization and click-to-zoom
@@ -6171,9 +6346,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               case LoadState.loading:
                 return Container(
                   color: Colors.grey.shade200,
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: const Center(child: CircularProgressIndicator()),
                 );
               case LoadState.completed:
                 return null; // Use default completed state
@@ -6205,11 +6378,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Icon(
-                  Icons.zoom_in,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
               ),
             ),
           ),
@@ -6274,17 +6443,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
                         'Pinch to zoom • Drag to pan • Press and hold for higher resolution • Click anywhere to close',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ),
                   ),
@@ -6348,132 +6516,142 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     String search = '';
 
     await showDialog(
-        context: context,
-        builder: (BuildContext ctx) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 80.0),
-              child: StatefulBuilder(
-                builder: (BuildContext innerCtx, StateSetter setSheetState) {
-                  final filtered = roster.where((code) {
-                    final replacement = codeReplacements[code];
-                    if (replacement == null) return false;
-                    final player = replacement.short.toLowerCase();
-                    return player.contains(search.toLowerCase());
-                  }).toList();
+      context: context,
+      builder: (BuildContext ctx) {
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 80.0),
+            child: StatefulBuilder(
+              builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                final filtered = roster.where((code) {
+                  final replacement = codeReplacements[code];
+                  if (replacement == null) return false;
+                  final player = replacement.short.toLowerCase();
+                  return player.contains(search.toLowerCase());
+                }).toList();
 
-                  return AlertDialog(
-                    title: Text(
-                        'Select ${celebratingTeamIsHome ? selectedHomeTeam : selectedAwayTeam} Teammates'),
-                    content: SizedBox(
-                      width: 300,
-                      height: MediaQuery.of(ctx).size.height * 0.4,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 1. Search Field
-                          TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Search...',
-                              prefixIcon: Icon(Icons.search),
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: 12),
-                            cursorHeight: 12.0,
-                            onChanged: (value) =>
-                                setSheetState(() => search = value),
+                return AlertDialog(
+                  title: Text(
+                    'Select ${celebratingTeamIsHome ? selectedHomeTeam : selectedAwayTeam} Teammates',
+                  ),
+                  content: SizedBox(
+                    width: 300,
+                    height: MediaQuery.of(ctx).size.height * 0.4,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Search Field
+                        TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search...',
+                            prefixIcon: Icon(Icons.search),
+                            isDense: true,
                           ),
-                          const SizedBox(height: 8),
-                          // 2. Selected Chips Row
-                          if (temp.isNotEmpty)
-                            Wrap(
-                              spacing: 4.0,
-                              runSpacing: 4.0,
-                              children: temp.map((code) {
-                                final replacement = codeReplacements[code]!;
-                                return InputChip(
-                                  label: Text(replacement.short,
-                                      style: const TextStyle(
-                                          fontSize: kInputTextSize)),
-                                  onDeleted: () =>
-                                      setSheetState(() => temp.remove(code)),
-                                  elevation: 2,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                    side: BorderSide(
-                                        color: Colors.grey.shade400,
-                                        width: 1.0),
+                          style: const TextStyle(fontSize: 12),
+                          cursorHeight: 12.0,
+                          onChanged: (value) =>
+                              setSheetState(() => search = value),
+                        ),
+                        const SizedBox(height: 8),
+                        // 2. Selected Chips Row
+                        if (temp.isNotEmpty)
+                          Wrap(
+                            spacing: 4.0,
+                            runSpacing: 4.0,
+                            children: temp.map((code) {
+                              final replacement = codeReplacements[code]!;
+                              return InputChip(
+                                label: Text(
+                                  replacement.short,
+                                  style: const TextStyle(
+                                    fontSize: kInputTextSize,
                                   ),
-                                );
-                              }).toList(),
-                            ),
-                          if (temp.isNotEmpty) const SizedBox(height: 8),
-                          // 3. Player List
-                          Expanded(
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: filtered.length,
-                              itemBuilder: (ctx, idx) {
-                                final code = filtered[idx];
-                                final replacement = codeReplacements[code]!;
-                                final isSelected = temp.contains(code);
-                                return ListTile(
-                                  title: Text(replacement.short),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check, size: 16)
-                                      : null,
-                                  onTap: () {
-                                    setSheetState(() {
-                                      if (isSelected) {
-                                        temp.remove(code);
-                                      } else {
-                                        temp.add(code);
-                                      }
-                                    });
-                                  },
-                                  dense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 0, vertical: 0),
-                                );
-                              },
-                            ),
+                                ),
+                                onDeleted: () =>
+                                    setSheetState(() => temp.remove(code)),
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                  side: BorderSide(
+                                    color: Colors.grey.shade400,
+                                    width: 1.0,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        ],
-                      ),
+                        if (temp.isNotEmpty) const SizedBox(height: 8),
+                        // 3. Player List
+                        Expanded(
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: filtered.length,
+                            itemBuilder: (ctx, idx) {
+                              final code = filtered[idx];
+                              final replacement = codeReplacements[code]!;
+                              final isSelected = temp.contains(code);
+                              return ListTile(
+                                title: Text(replacement.short),
+                                trailing: isSelected
+                                    ? const Icon(Icons.check, size: 16)
+                                    : null,
+                                onTap: () {
+                                  setSheetState(() {
+                                    if (isSelected) {
+                                      temp.remove(code);
+                                    } else {
+                                      temp.add(code);
+                                    }
+                                  });
+                                },
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 0,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                          onPressed: () {
-                            setSheetState(() => temp.clear());
-                            setState(() {
-                              celebrateWith.clear();
-                              celebrateAgainst.clear();
-                              _isSoloCelebration = false;
-                              _updateCaption();
-                              _updatePersonality();
-                            });
-                          },
-                          child: const Text('Clear')),
-                      TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () {
-                          celebrateWith = temp.toList();
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        setSheetState(() => temp.clear());
+                        setState(() {
+                          celebrateWith.clear();
+                          celebrateAgainst.clear();
+                          _isSoloCelebration = false;
                           _updateCaption();
                           _updatePersonality();
-                          Navigator.of(ctx).pop();
-                        },
-                        child: const Text('Done'),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        celebrateWith = temp.toList();
+                        _updateCaption();
+                        _updatePersonality();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Done'),
+                    ),
+                  ],
+                );
+              },
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _showCelebrateDialog() async {
@@ -6488,144 +6666,155 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     String search = '';
 
     await showDialog(
-        context: context,
-        builder: (BuildContext ctx) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 80.0),
-              child: StatefulBuilder(
-                builder: (BuildContext innerCtx, StateSetter setSheetState) {
-                  final filtered = roster.where((code) {
-                    final replacement = codeReplacements[code];
-                    if (replacement == null) return false;
-                    final player = replacement.short.toLowerCase();
-                    return player.contains(search.toLowerCase());
-                  }).toList();
+      context: context,
+      builder: (BuildContext ctx) {
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 80.0),
+            child: StatefulBuilder(
+              builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                final filtered = roster.where((code) {
+                  final replacement = codeReplacements[code];
+                  if (replacement == null) return false;
+                  final player = replacement.short.toLowerCase();
+                  return player.contains(search.toLowerCase());
+                }).toList();
 
-                  return AlertDialog(
-                    title: const Text('Select Teammates'),
-                    content: SizedBox(
-                      width: 300,
-                      height: MediaQuery.of(ctx).size.height * 0.4,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 1. Search Field (unchanged)
-                          TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Search...',
-                              prefixIcon: Icon(Icons.search),
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: kInputTextSize),
-                            cursorHeight: 12.0,
-                            onChanged: (value) =>
-                                setSheetState(() => search = value),
+                return AlertDialog(
+                  title: const Text('Select Teammates'),
+                  content: SizedBox(
+                    width: 300,
+                    height: MediaQuery.of(ctx).size.height * 0.4,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Search Field (unchanged)
+                        TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search...',
+                            prefixIcon: Icon(Icons.search),
+                            isDense: true,
                           ),
-                          const SizedBox(height: 8),
-                          // 2. Selected Chips Row (moved here)
-                          if (temp.isNotEmpty)
-                            Wrap(
-                              spacing: 4.0,
-                              runSpacing: 4.0,
-                              children: temp.map((code) {
-                                final replacement = codeReplacements[code]!;
-                                return InputChip(
-                                  label: Text(replacement.short,
-                                      style: const TextStyle(
-                                          fontSize: kInputTextSize)),
-                                  onDeleted: () =>
-                                      setSheetState(() => temp.remove(code)),
-                                  elevation: 2, // Add shadow
-                                  shape: RoundedRectangleBorder(
-                                    // Add thin dark grey border
-                                    borderRadius: BorderRadius.circular(4),
-                                    side: BorderSide(
-                                        color: Colors.grey.shade400,
-                                        width: 1.0),
+                          style: const TextStyle(fontSize: kInputTextSize),
+                          cursorHeight: 12.0,
+                          onChanged: (value) =>
+                              setSheetState(() => search = value),
+                        ),
+                        const SizedBox(height: 8),
+                        // 2. Selected Chips Row (moved here)
+                        if (temp.isNotEmpty)
+                          Wrap(
+                            spacing: 4.0,
+                            runSpacing: 4.0,
+                            children: temp.map((code) {
+                              final replacement = codeReplacements[code]!;
+                              return InputChip(
+                                label: Text(
+                                  replacement.short,
+                                  style: const TextStyle(
+                                    fontSize: kInputTextSize,
                                   ),
-                                );
-                              }).toList(),
-                            ),
-                          if (temp.isNotEmpty) const SizedBox(height: 8),
-                          // 3. Thumbnail List
-                          Expanded(
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: filtered.length,
-                              itemBuilder: (ctx, idx) {
-                                final code = filtered[idx];
-                                final replacement = codeReplacements[code]!;
-                                final isSelected = temp.contains(code);
-                                return ListTile(
-                                  title: Text(replacement.short),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check, size: 16)
-                                      : null,
-                                  onTap: () {
-                                    setSheetState(() {
-                                      if (isSelected) {
-                                        temp.remove(code);
-                                      } else {
-                                        temp.add(code);
-                                      }
-                                    });
-                                  },
-                                  dense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 0, vertical: 0),
-                                );
-                              },
-                            ),
+                                ),
+                                onDeleted: () =>
+                                    setSheetState(() => temp.remove(code)),
+                                elevation: 2, // Add shadow
+                                shape: RoundedRectangleBorder(
+                                  // Add thin dark grey border
+                                  borderRadius: BorderRadius.circular(4),
+                                  side: BorderSide(
+                                    color: Colors.grey.shade400,
+                                    width: 1.0,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        ],
-                      ),
+                        if (temp.isNotEmpty) const SizedBox(height: 8),
+                        // 3. Thumbnail List
+                        Expanded(
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: filtered.length,
+                            itemBuilder: (ctx, idx) {
+                              final code = filtered[idx];
+                              final replacement = codeReplacements[code]!;
+                              final isSelected = temp.contains(code);
+                              return ListTile(
+                                title: Text(replacement.short),
+                                trailing: isSelected
+                                    ? const Icon(Icons.check, size: 16)
+                                    : null,
+                                onTap: () {
+                                  setSheetState(() {
+                                    if (isSelected) {
+                                      temp.remove(code);
+                                    } else {
+                                      temp.add(code);
+                                    }
+                                  });
+                                },
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 0,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                          onPressed: () {
-                            // Clear the temporary selection for the dialog UI
-                            setSheetState(() => temp.clear());
-                            // Clear the main selection and update the main UI to uncheck the chip
-                            setState(() {
-                              celebrateWith.clear();
-                              celebrateAgainst.clear();
-                              _isSoloCelebration = false;
-                              _updateCaption();
-                              // Clear personality field - rebuild without celebration players
-                              _updatePersonality();
-                            });
-                          },
-                          child: const Text('Clear')),
-                      TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () {
-                          celebrateWith = temp.toList();
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        // Clear the temporary selection for the dialog UI
+                        setSheetState(() => temp.clear());
+                        // Clear the main selection and update the main UI to uncheck the chip
+                        setState(() {
+                          celebrateWith.clear();
+                          celebrateAgainst.clear();
+                          _isSoloCelebration = false;
                           _updateCaption();
+                          // Clear personality field - rebuild without celebration players
                           _updatePersonality();
-                          Navigator.of(ctx).pop();
-                        },
-                        child: const Text('Done'),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        celebrateWith = temp.toList();
+                        _updateCaption();
+                        _updatePersonality();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Done'),
+                    ),
+                  ],
+                );
+              },
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _showCelebrateAgainstDialog() async {
     // Determine which roster to show - the OPPOSING team
     final roster = (isHome
-            ? codeReplacements.keys.where((k) => k.startsWith(
-                'v')) // Show away players if celebrating player is home
-            : codeReplacements.keys.where((k) => k.startsWith(
-                'h'))) // Show home players if celebrating player is away
+            ? codeReplacements.keys.where(
+                (k) => k.startsWith('v'),
+              ) // Show away players if celebrating player is home
+            : codeReplacements.keys.where(
+                (k) => k.startsWith('h'),
+              )) // Show home players if celebrating player is away
         .toList()
       ..sort();
 
@@ -6633,133 +6822,142 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     String search = '';
 
     await showDialog(
-        context: context,
-        builder: (BuildContext ctx) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 80.0),
-              child: StatefulBuilder(
-                builder: (BuildContext innerCtx, StateSetter setSheetState) {
-                  final filtered = roster.where((code) {
-                    final replacement = codeReplacements[code];
-                    if (replacement == null) return false;
-                    final player = replacement.short.toLowerCase();
-                    return player.contains(search.toLowerCase());
-                  }).toList();
+      context: context,
+      builder: (BuildContext ctx) {
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 80.0),
+            child: StatefulBuilder(
+              builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                final filtered = roster.where((code) {
+                  final replacement = codeReplacements[code];
+                  if (replacement == null) return false;
+                  final player = replacement.short.toLowerCase();
+                  return player.contains(search.toLowerCase());
+                }).toList();
 
-                  return AlertDialog(
-                    title: const Text('Select Opposing Players'),
-                    content: SizedBox(
-                      width: 300,
-                      height: MediaQuery.of(ctx).size.height * 0.4,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 1. Search Field (unchanged)
-                          TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Search...',
-                              prefixIcon: Icon(Icons.search),
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: kInputTextSize),
-                            cursorHeight: 12.0,
-                            onChanged: (value) =>
-                                setSheetState(() => search = value),
+                return AlertDialog(
+                  title: const Text('Select Opposing Players'),
+                  content: SizedBox(
+                    width: 300,
+                    height: MediaQuery.of(ctx).size.height * 0.4,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Search Field (unchanged)
+                        TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search...',
+                            prefixIcon: Icon(Icons.search),
+                            isDense: true,
                           ),
-                          const SizedBox(height: 8),
-                          // 2. Selected Chips Row (moved here)
-                          if (temp.isNotEmpty)
-                            Wrap(
-                              spacing: 4.0,
-                              runSpacing: 4.0,
-                              children: temp.map((code) {
-                                final replacement = codeReplacements[code]!;
-                                return InputChip(
-                                  label: Text(replacement.short,
-                                      style: const TextStyle(
-                                          fontSize: kInputTextSize)),
-                                  onDeleted: () =>
-                                      setSheetState(() => temp.remove(code)),
-                                  elevation: 2, // Add shadow
-                                  shape: RoundedRectangleBorder(
-                                    // Add thin dark grey border
-                                    borderRadius: BorderRadius.circular(4),
-                                    side: BorderSide(
-                                        color: Colors.grey.shade400,
-                                        width: 1.0),
+                          style: const TextStyle(fontSize: kInputTextSize),
+                          cursorHeight: 12.0,
+                          onChanged: (value) =>
+                              setSheetState(() => search = value),
+                        ),
+                        const SizedBox(height: 8),
+                        // 2. Selected Chips Row (moved here)
+                        if (temp.isNotEmpty)
+                          Wrap(
+                            spacing: 4.0,
+                            runSpacing: 4.0,
+                            children: temp.map((code) {
+                              final replacement = codeReplacements[code]!;
+                              return InputChip(
+                                label: Text(
+                                  replacement.short,
+                                  style: const TextStyle(
+                                    fontSize: kInputTextSize,
                                   ),
-                                );
-                              }).toList(),
-                            ),
-                          if (temp.isNotEmpty) const SizedBox(height: 8),
-                          // 3. Thumbnail List
-                          Expanded(
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: filtered.length,
-                              itemBuilder: (ctx, idx) {
-                                final code = filtered[idx];
-                                final replacement = codeReplacements[code]!;
-                                final isSelected = temp.contains(code);
-                                return ListTile(
-                                  title: Text(replacement.short),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check, size: 16)
-                                      : null,
-                                  onTap: () {
-                                    setSheetState(() {
-                                      if (isSelected) {
-                                        temp.remove(code);
-                                      } else {
-                                        temp.add(code);
-                                      }
-                                    });
-                                  },
-                                  dense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 0, vertical: 0),
-                                );
-                              },
-                            ),
+                                ),
+                                onDeleted: () =>
+                                    setSheetState(() => temp.remove(code)),
+                                elevation: 2, // Add shadow
+                                shape: RoundedRectangleBorder(
+                                  // Add thin dark grey border
+                                  borderRadius: BorderRadius.circular(4),
+                                  side: BorderSide(
+                                    color: Colors.grey.shade400,
+                                    width: 1.0,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           ),
-                        ],
-                      ),
+                        if (temp.isNotEmpty) const SizedBox(height: 8),
+                        // 3. Thumbnail List
+                        Expanded(
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: filtered.length,
+                            itemBuilder: (ctx, idx) {
+                              final code = filtered[idx];
+                              final replacement = codeReplacements[code]!;
+                              final isSelected = temp.contains(code);
+                              return ListTile(
+                                title: Text(replacement.short),
+                                trailing: isSelected
+                                    ? const Icon(Icons.check, size: 16)
+                                    : null,
+                                onTap: () {
+                                  setSheetState(() {
+                                    if (isSelected) {
+                                      temp.remove(code);
+                                    } else {
+                                      temp.add(code);
+                                    }
+                                  });
+                                },
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 0,
+                                  vertical: 0,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                          onPressed: () {
-                            // Clear the temporary selection for the dialog UI
-                            setSheetState(() => temp.clear());
-                            // Clear the main selection and update the main UI to uncheck the chip
-                            setState(() {
-                              celebrateAgainst.clear();
-                              _updateCaption();
-                              // Clear personality field - rebuild without celebration players
-                              _updatePersonality();
-                            });
-                          },
-                          child: const Text('Clear')),
-                      TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () {
-                          celebrateAgainst = temp.toList();
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        // Clear the temporary selection for the dialog UI
+                        setSheetState(() => temp.clear());
+                        // Clear the main selection and update the main UI to uncheck the chip
+                        setState(() {
+                          celebrateAgainst.clear();
                           _updateCaption();
+                          // Clear personality field - rebuild without celebration players
                           _updatePersonality();
-                          Navigator.of(ctx).pop();
-                        },
-                        child: const Text('Done'),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        celebrateAgainst = temp.toList();
+                        _updateCaption();
+                        _updatePersonality();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Done'),
+                    ),
+                  ],
+                );
+              },
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _showPlayersInFrameDialog() async {
@@ -6774,331 +6972,346 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     String search = '';
 
     await showDialog(
-        context: context,
-        builder: (BuildContext ctx) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 80.0),
-              child: StatefulBuilder(
-                builder: (BuildContext innerCtx, StateSetter setSheetState) {
-                  // Filter both rosters based on search
-                  final filteredHome = homeRoster.where((code) {
-                    final replacement = codeReplacements[code];
-                    if (replacement == null) return false;
-                    final player = replacement.short.toLowerCase();
-                    return player.contains(search.toLowerCase());
-                  }).toList();
+      context: context,
+      builder: (BuildContext ctx) {
+        return Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 80.0),
+            child: StatefulBuilder(
+              builder: (BuildContext innerCtx, StateSetter setSheetState) {
+                // Filter both rosters based on search
+                final filteredHome = homeRoster.where((code) {
+                  final replacement = codeReplacements[code];
+                  if (replacement == null) return false;
+                  final player = replacement.short.toLowerCase();
+                  return player.contains(search.toLowerCase());
+                }).toList();
 
-                  final filteredAway = awayRoster.where((code) {
-                    final replacement = codeReplacements[code];
-                    if (replacement == null) return false;
-                    final player = replacement.short.toLowerCase();
-                    return player.contains(search.toLowerCase());
-                  }).toList();
+                final filteredAway = awayRoster.where((code) {
+                  final replacement = codeReplacements[code];
+                  if (replacement == null) return false;
+                  final player = replacement.short.toLowerCase();
+                  return player.contains(search.toLowerCase());
+                }).toList();
 
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    title: const Text('Select Players in Frame'),
-                    content: SizedBox(
-                      width: 500,
-                      height: MediaQuery.of(ctx).size.height * 0.6,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Search Field
-                          TextField(
-                            decoration: const InputDecoration(
-                              hintText: 'Search players...',
-                              prefixIcon: Icon(Icons.search),
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: 12),
-                            cursorHeight: 12.0,
-                            onChanged: (value) =>
-                                setSheetState(() => search = value),
+                return AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  title: const Text('Select Players in Frame'),
+                  content: SizedBox(
+                    width: 500,
+                    height: MediaQuery.of(ctx).size.height * 0.6,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Search Field
+                        TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search players...',
+                            prefixIcon: Icon(Icons.search),
+                            isDense: true,
                           ),
-                          const SizedBox(height: 8),
+                          style: const TextStyle(fontSize: 12),
+                          cursorHeight: 12.0,
+                          onChanged: (value) =>
+                              setSheetState(() => search = value),
+                        ),
+                        const SizedBox(height: 8),
 
-                          // Selected chips display - always visible
-                          Container(
-                            width: double.infinity,
-                            height: 80,
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: SingleChildScrollView(
-                              child: Wrap(
-                                spacing: 2.0,
-                                runSpacing: 2.0,
-                                children: [
-                                  ...tempTeammates.map((code) {
-                                    final replacement = codeReplacements[code]!;
-                                    return Transform.scale(
-                                      scale: 0.7,
-                                      child: InputChip(
-                                        label: Text(replacement.short,
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        backgroundColor: Colors.blue.shade50,
-                                        side: BorderSide(
-                                            color: Colors.blue.shade300),
-                                        onDeleted: () => setSheetState(
-                                            () => tempTeammates.remove(code)),
-                                        deleteIcon: Icon(Icons.close,
-                                            size: 10,
-                                            color: Colors.blue.shade600),
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        padding: const EdgeInsets.all(0),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    );
-                                  }),
-                                  ...tempOpponents.map((code) {
-                                    final replacement = codeReplacements[code]!;
-                                    return Transform.scale(
-                                      scale: 0.7,
-                                      child: InputChip(
-                                        label: Text(replacement.short,
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        backgroundColor: Colors.red.shade50,
-                                        side: BorderSide(
-                                            color: Colors.red.shade300),
-                                        onDeleted: () => setSheetState(
-                                            () => tempOpponents.remove(code)),
-                                        deleteIcon: Icon(Icons.close,
-                                            size: 10,
-                                            color: Colors.red.shade600),
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        padding: const EdgeInsets.all(0),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ),
+                        // Selected chips display - always visible
+                        Container(
+                          width: double.infinity,
+                          height: 80,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade300),
                           ),
-                          const SizedBox(height: 8),
-
-                          // Team lists
-                          Expanded(
-                            child: Row(
+                          child: SingleChildScrollView(
+                            child: Wrap(
+                              spacing: 2.0,
+                              runSpacing: 2.0,
                               children: [
-                                // Home team
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 4, horizontal: 6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          selectedHomeTeam ?? 'Home Team',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade700,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
+                                ...tempTeammates.map((code) {
+                                  final replacement = codeReplacements[code]!;
+                                  return Transform.scale(
+                                    scale: 0.7,
+                                    child: InputChip(
+                                      label: Text(
+                                        replacement.short,
+                                        style: const TextStyle(fontSize: 13),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Expanded(
-                                        child: ListView.builder(
-                                          padding: EdgeInsets.zero,
-                                          itemCount: filteredHome.length,
-                                          itemBuilder: (ctx, idx) {
-                                            final code = filteredHome[idx];
-                                            final replacement =
-                                                codeReplacements[code]!;
-                                            final isSelected =
-                                                tempTeammates.contains(code);
-                                            return MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  setSheetState(() {
-                                                    if (isSelected) {
-                                                      tempTeammates
-                                                          .remove(code);
-                                                    } else {
-                                                      tempTeammates.add(code);
-                                                    }
-                                                  });
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 4),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                            replacement.short,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        11)),
-                                                      ),
-                                                      if (isSelected)
-                                                        Icon(Icons.check,
-                                                            size: 12,
-                                                            color: Colors
-                                                                .blue.shade600),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
+                                      backgroundColor: Colors.blue.shade50,
+                                      side: BorderSide(
+                                        color: Colors.blue.shade300,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                // Away team
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 4, horizontal: 6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.red.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          selectedAwayTeam ?? 'Away Team',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.red.shade700,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
+                                      onDeleted: () => setSheetState(
+                                        () => tempTeammates.remove(code),
                                       ),
-                                      const SizedBox(height: 2),
-                                      Expanded(
-                                        child: ListView.builder(
-                                          padding: EdgeInsets.zero,
-                                          itemCount: filteredAway.length,
-                                          itemBuilder: (ctx, idx) {
-                                            final code = filteredAway[idx];
-                                            final replacement =
-                                                codeReplacements[code]!;
-                                            final isSelected =
-                                                tempOpponents.contains(code);
-                                            return MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  setSheetState(() {
-                                                    if (isSelected) {
-                                                      tempOpponents
-                                                          .remove(code);
-                                                    } else {
-                                                      tempOpponents.add(code);
-                                                    }
-                                                  });
-                                                },
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 4),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                            replacement.short,
-                                                            style:
-                                                                const TextStyle(
-                                                                    fontSize:
-                                                                        11)),
-                                                      ),
-                                                      if (isSelected)
-                                                        Icon(Icons.check,
-                                                            size: 12,
-                                                            color: Colors
-                                                                .red.shade600),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
+                                      deleteIcon: Icon(
+                                        Icons.close,
+                                        size: 10,
+                                        color: Colors.blue.shade600,
                                       ),
-                                    ],
-                                  ),
-                                ),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.all(0),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  );
+                                }),
+                                ...tempOpponents.map((code) {
+                                  final replacement = codeReplacements[code]!;
+                                  return Transform.scale(
+                                    scale: 0.7,
+                                    child: InputChip(
+                                      label: Text(
+                                        replacement.short,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                      backgroundColor: Colors.red.shade50,
+                                      side: BorderSide(
+                                        color: Colors.red.shade300,
+                                      ),
+                                      onDeleted: () => setSheetState(
+                                        () => tempOpponents.remove(code),
+                                      ),
+                                      deleteIcon: Icon(
+                                        Icons.close,
+                                        size: 10,
+                                        color: Colors.red.shade600,
+                                      ),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.all(0),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  );
+                                }),
                               ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Team lists
+                        Expanded(
+                          child: Row(
+                            children: [
+                              // Home team
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        selectedHomeTeam ?? 'Home Team',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: filteredHome.length,
+                                        itemBuilder: (ctx, idx) {
+                                          final code = filteredHome[idx];
+                                          final replacement =
+                                              codeReplacements[code]!;
+                                          final isSelected =
+                                              tempTeammates.contains(code);
+                                          return MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setSheetState(() {
+                                                  if (isSelected) {
+                                                    tempTeammates.remove(code);
+                                                  } else {
+                                                    tempTeammates.add(code);
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 4,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        replacement.short,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isSelected)
+                                                      Icon(
+                                                        Icons.check,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .blue.shade600,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              // Away team
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        selectedAwayTeam ?? 'Away Team',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red.shade700,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: filteredAway.length,
+                                        itemBuilder: (ctx, idx) {
+                                          final code = filteredAway[idx];
+                                          final replacement =
+                                              codeReplacements[code]!;
+                                          final isSelected =
+                                              tempOpponents.contains(code);
+                                          return MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setSheetState(() {
+                                                  if (isSelected) {
+                                                    tempOpponents.remove(code);
+                                                  } else {
+                                                    tempOpponents.add(code);
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 4,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        replacement.short,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isSelected)
+                                                      Icon(
+                                                        Icons.check,
+                                                        size: 12,
+                                                        color:
+                                                            Colors.red.shade600,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          // Clear all selections
-                          setSheetState(() {
-                            tempTeammates.clear();
-                            tempOpponents.clear();
-                          });
-                          setState(() {
-                            celebrateWith.clear();
-                            celebrateAgainst.clear();
-                            _isSoloCelebration = false;
-                            _updateCaption();
-                            _updatePersonality();
-                          });
-                        },
-                        child: const Text('Clear'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          celebrateWith = tempTeammates.toList();
-                          celebrateAgainst = tempOpponents.toList();
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        // Clear all selections
+                        setSheetState(() {
+                          tempTeammates.clear();
+                          tempOpponents.clear();
+                        });
+                        setState(() {
+                          celebrateWith.clear();
+                          celebrateAgainst.clear();
+                          _isSoloCelebration = false;
                           _updateCaption();
                           _updatePersonality();
-                          Navigator.of(ctx).pop();
-                        },
-                        child: const Text('Done'),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        celebrateWith = tempTeammates.toList();
+                        celebrateAgainst = tempOpponents.toList();
+                        _updateCaption();
+                        _updatePersonality();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text('Done'),
+                    ),
+                  ],
+                );
+              },
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   String _combinePlayersWithSingleTeam(List<String> codes) {
@@ -7184,7 +7397,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper for competition verbs: combine home and opponent players - this is for specific phrasing
   String _combineCompetitionPlayers(
-      List<String> homeCodes, List<String> oppCodes) {
+    List<String> homeCodes,
+    List<String> oppCodes,
+  ) {
     final homeShorts = homeCodes
         .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
         .toList();
@@ -7256,8 +7471,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   border: Border.all(color: Colors.grey.shade400),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 4.0,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.min, // Prevent overflow
@@ -7270,7 +7487,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             : (_rbiCount == 0 ? 'No RBI' : '$_rbiCount RBI'),
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.color,
                         ),
                         overflow:
                             TextOverflow.ellipsis, // Add ellipsis for long text
@@ -7296,13 +7515,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 });
               },
               style: MenuItemButton.styleFrom(
-                  minimumSize: const Size(0, 24),
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0)),
-              child: const Text('Clear Selection',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.redAccent)),
+                minimumSize: const Size(0, 24),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              ),
+              child: const Text(
+                'Clear Selection',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.redAccent,
+                ),
+              ),
             ),
             const Divider(height: 1),
           ],
@@ -7316,10 +7539,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 });
               },
               style: MenuItemButton.styleFrom(
-                  minimumSize: const Size(0, 24),
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0)),
-              child: Text(rbi == 0 ? 'No RBI' : '$rbi    RBI',
-                  style: const TextStyle(fontSize: 12)),
+                minimumSize: const Size(0, 24),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              ),
+              child: Text(
+                rbi == 0 ? 'No RBI' : '$rbi    RBI',
+                style: const TextStyle(fontSize: 12),
+              ),
             );
           }),
         ],
@@ -7359,14 +7585,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4),
                       side: const BorderSide(
-                          color: Color(0xFF0052CC), width: 1.0),
+                        color: Color(0xFF0052CC),
+                        width: 1.0,
+                      ),
                     ),
                     child: InkWell(
                       onTap: _onFtpPressed,
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -7413,7 +7643,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             '← Prev',
@@ -7445,7 +7677,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             'Next →',
@@ -7483,14 +7717,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               captionController.text = _lastCaption;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text('Last caption pasted!')),
+                                  content: Text('Last caption pasted!'),
+                                ),
                               );
                             }
                           : null,
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             'Paste Last Caption',
@@ -7529,7 +7766,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             'Copy',
@@ -7561,7 +7800,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             'Paste',
@@ -7598,7 +7839,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         child: Center(
                           child: Text(
                             'Reset Caption',
@@ -7710,7 +7953,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       print(
-          'DEBUG: Active player team prefix: ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+        'DEBUG: Active player team prefix: ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}',
+      );
       print('DEBUG: Final opponent team: $opponentTeam');
       final stadium = stadiumController.text;
       final photoBy = creatorController.text;
@@ -7731,8 +7975,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Handle opponent players if selected
       String opponentPart = '';
       if (opponentPlayers.isNotEmpty) {
-        final opponentNames =
-            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        final opponentNames = _combinePlayersWithSingleTeam(
+          opponentPlayers.toList(),
+        );
         opponentPart = '$opponentNames and the $opponentTeam';
       } else {
         opponentPart = 'the $opponentTeam';
@@ -7821,7 +8066,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       print(
-          'DEBUG: Active player team prefix (looks on): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+        'DEBUG: Active player team prefix (looks on): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}',
+      );
       print('DEBUG: Final opponent team (looks on): $opponentTeam');
       final stadium = stadiumController.text;
       final photoBy = creatorController.text;
@@ -7829,8 +8075,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Handle opponent players if selected
       String opponentPart = '';
       if (opponentPlayers.isNotEmpty) {
-        final opponentNames =
-            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        final opponentNames = _combinePlayersWithSingleTeam(
+          opponentPlayers.toList(),
+        );
         opponentPart = '$opponentNames and the $opponentTeam';
       } else {
         opponentPart = 'the $opponentTeam';
@@ -7921,7 +8168,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       print(
-          'DEBUG: Active player team prefix (post game): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}');
+        'DEBUG: Active player team prefix (post game): ${activePlayers.isNotEmpty ? activePlayers.first[0] : "none"}',
+      );
       print('DEBUG: Final opponent team (post game): $opponentTeam');
 
       final stadium = stadiumController.text;
@@ -7940,8 +8188,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Handle opponent players if selected
       String opponentPart = '';
       if (opponentPlayers.isNotEmpty) {
-        final opponentNames =
-            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        final opponentNames = _combinePlayersWithSingleTeam(
+          opponentPlayers.toList(),
+        );
         opponentPart = '$opponentNames and the $opponentTeam';
       } else {
         opponentPart = 'the $opponentTeam';
@@ -8000,8 +8249,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
 
       // 1. Determine the detailed hit phrase.
       String hitPhrase = '';
@@ -8113,8 +8363,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
         if (celebrateAgainst.isNotEmpty) {
           // Both teammates and opponents selected
-          final opponentStr =
-              _combineOpponentPlayersForCelebration(celebrateAgainst);
+          final opponentStr = _combineOpponentPlayersForCelebration(
+            celebrateAgainst,
+          );
           if (_walkOff == true) {
             mainCaptionPart =
                 "$playersString $celebrationPart $opponentStr to defeat the $opponentTeamName";
@@ -8132,8 +8383,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         }
       } else if (celebrateAgainst.isNotEmpty) {
-        final opponentStr =
-            _combineOpponentPlayersForCelebration(celebrateAgainst);
+        final opponentStr = _combineOpponentPlayersForCelebration(
+          celebrateAgainst,
+        );
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
         final celebrationPart = "celebrates a $formattedHitPhrase $opponentStr";
 
@@ -8193,8 +8445,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
       String actionPhrase = _selectedFieldingAction!;
       if (_selectedFieldingAction == 'makes a catch' &&
           _isDivingCatch == true) {
@@ -8222,14 +8475,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         activePlayers = selectedPlayers;
         opponentTeamName = selectedAwayTeam;
         print(
-            'DEBUG: Home team players selected for Base Running: $activePlayers');
+          'DEBUG: Home team players selected for Base Running: $activePlayers',
+        );
         print('DEBUG: Opponent team for Base Running: $opponentTeamName');
       } else if (selectedOpponentPlayers.isNotEmpty) {
         // Away team players are selected
         activePlayers = selectedOpponentPlayers;
         opponentTeamName = selectedHomeTeam;
         print(
-            'DEBUG: Away team players selected for Base Running: $activePlayers');
+          'DEBUG: Away team players selected for Base Running: $activePlayers',
+        );
         print('DEBUG: Opponent team for Base Running: $opponentTeamName');
       } else {
         print('DEBUG: No players selected for Base Running');
@@ -8243,8 +8498,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
 
       if (_selectedBaseRunningAction == 'steals' &&
           _selectedStealBase != null) {
@@ -8253,8 +8509,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
         if (_showStealAgainstPlayer && selectedOpponentPlayers.isNotEmpty) {
           // Against specific player
-          final opponentStr =
-              _combinePlayersWithSingleTeam(selectedOpponentPlayers.toList());
+          final opponentStr = _combinePlayersWithSingleTeam(
+            selectedOpponentPlayers.toList(),
+          );
           mainCaptionPart = "$playersString $stealPhrase against $opponentStr";
         } else {
           // Against team
@@ -8327,8 +8584,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
 
       final actionReplacement = codeReplacements[_selectedBattingAction!];
       if (actionReplacement == null) return; // Should not happen
@@ -8377,8 +8635,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
 
       final actionReplacement = codeReplacements[_selectedAtBatAction!];
       if (actionReplacement == null) return; // Should not happen
@@ -8414,16 +8673,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final opponentTeamName = isHome ? selectedAwayTeam! : selectedHomeTeam!;
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString =
-          _combinePlayersWithSingleTeam(activePlayers.toList());
+      final playersString = _combinePlayersWithSingleTeam(
+        activePlayers.toList(),
+      );
 
       if (_customCelebrationVerb.isNotEmpty) {
         // Custom celebration verb - add after "celebrates"
         print('DEBUG: Using custom celebration verb: $_customCelebrationVerb');
         mainCaptionPart = "$playersString celebrates $_customCelebrationVerb";
         if (celebrateAgainst.isNotEmpty) {
-          final opponentStr =
-              _combineOpponentPlayersForCelebration(celebrateAgainst);
+          final opponentStr = _combineOpponentPlayersForCelebration(
+            celebrateAgainst,
+          );
           mainCaptionPart += " $opponentStr";
         } else if (celebrateWith.isNotEmpty) {
           final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
@@ -8438,8 +8699,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else if (_selectedCelebrationType == 'against' &&
           celebrateAgainst.isNotEmpty) {
         // Celebrates against = celebrates against specific players
-        final opponentStr =
-            _combineOpponentPlayersForCelebration(celebrateAgainst);
+        final opponentStr = _combineOpponentPlayersForCelebration(
+          celebrateAgainst,
+        );
         mainCaptionPart = "$playersString celebrates $opponentStr";
       } else if (_selectedCelebrationType == 'with' &&
           celebrateWith.isNotEmpty) {
@@ -8499,9 +8761,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Since all remaining verbs are solo actions, the logic is simplified.
       if (activePlayers.isNotEmpty) {
         print(
-            'DEBUG: About to call _combinePlayersWithSingleTeam with: ${activePlayers.toList()}');
-        final playersString =
-            _combinePlayersWithSingleTeam(activePlayers.toList());
+          'DEBUG: About to call _combinePlayersWithSingleTeam with: ${activePlayers.toList()}',
+        );
+        final playersString = _combinePlayersWithSingleTeam(
+          activePlayers.toList(),
+        );
         print('DEBUG: _combinePlayersWithSingleTeam returned: $playersString');
         mainCaptionPart =
             "$playersString ${verbReplacement.full} $opponentTeamName";
@@ -8528,8 +8792,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (activePlayers.isNotEmpty) {
         mainCaptionPart = _combinePlayersWithSingleTeam(activePlayers.toList());
       } else if (inactivePlayers.isNotEmpty) {
-        mainCaptionPart =
-            _combinePlayersWithSingleTeam(inactivePlayers.toList());
+        mainCaptionPart = _combinePlayersWithSingleTeam(
+          inactivePlayers.toList(),
+        );
       }
     }
 
@@ -8654,7 +8919,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper to format the dateline for captions
   String _formatDateline(
-      String city, String stateOrProvince, String monthUpper, int day) {
+    String city,
+    String stateOrProvince,
+    String monthUpper,
+    int day,
+  ) {
     if (_isGameInUnitedStates()) {
       // US format: CITY, STATE - DATE
       return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
@@ -8667,7 +8936,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper to format the location suffix for captions
   String _formatLocationSuffix(
-      String city, String stateOrProvince, String formattedDate) {
+    String city,
+    String stateOrProvince,
+    String formattedDate,
+  ) {
     if (_isGameInUnitedStates()) {
       // US format: in City, State (no country needed)
       // Special case for Washington DC - keep DC capitalized
@@ -8737,13 +9009,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'nineteenth',
       'twentieth',
       'twenty-first',
-      'twenty-second'
+      'twenty-second',
     ];
 
     // Sort players by number
     final homePlayers = codeReplacements.keys
-        .where((k) =>
-            k.startsWith('h') && codeReplacements[k]?.jerseyNumber != null)
+        .where(
+          (k) => k.startsWith('h') && codeReplacements[k]?.jerseyNumber != null,
+        )
         .toList()
       ..sort((a, b) {
         try {
@@ -8758,8 +9031,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       });
     final awayPlayers = codeReplacements.keys
-        .where((k) =>
-            k.startsWith('v') && codeReplacements[k]?.jerseyNumber != null)
+        .where(
+          (k) => k.startsWith('v') && codeReplacements[k]?.jerseyNumber != null,
+        )
         .toList()
       ..sort((a, b) {
         try {
@@ -8928,8 +9202,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     title: const Text(
                                       'Auto-fill Metadata?',
                                       style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     content: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -8941,40 +9216,47 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           style: TextStyle(fontSize: 15),
                                         ),
                                         const SizedBox(height: 12),
-                                        Text('• City: $city',
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        Text('• Province/State: $province',
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        Text('• Country: $country',
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        Text('• Country Code: $code',
-                                            style:
-                                                const TextStyle(fontSize: 13)),
-                                        Text('• Stadium: $stadium',
-                                            style:
-                                                const TextStyle(fontSize: 13)),
+                                        Text(
+                                          '• City: $city',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        Text(
+                                          '• Province/State: $province',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        Text(
+                                          '• Country: $country',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        Text(
+                                          '• Country Code: $code',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
+                                        Text(
+                                          '• Stadium: $stadium',
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
                                       ],
                                     ),
                                     actionsPadding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 12),
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
                                     actions: [
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
                                         children: [
                                           _buildStyledButton(
-                                              'No',
-                                              () => Navigator.pop(
-                                                  context, false)),
+                                            'No',
+                                            () => Navigator.pop(context, false),
+                                          ),
                                           const SizedBox(width: 12),
                                           _buildStyledButton(
-                                              'Yes',
-                                              () =>
-                                                  Navigator.pop(context, true),
-                                              isBlue: true),
+                                            'Yes',
+                                            () => Navigator.pop(context, true),
+                                            isBlue: true,
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -8990,7 +9272,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                           ),
                           const SizedBox(
-                              height: 4), // Reduced to 4px for closer spacing
+                            height: 4,
+                          ), // Reduced to 4px for closer spacing
                           // Manage Favorites Button
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -8999,8 +9282,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 cursor: SystemMouseCursors.click,
                                 child: GestureDetector(
                                   onTap: _showManageFavoritesDialog,
-                                  child: const Icon(Icons.star,
-                                      size: 14, color: Colors.amber),
+                                  child: const Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Colors.amber,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -9032,7 +9318,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       onTap: pickFolder,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey[50],
                           borderRadius: BorderRadius.circular(8),
@@ -9042,8 +9330,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
-                            const Icon(Icons.folder_open,
-                                size: 22, color: Colors.amber),
+                            const Icon(
+                              Icons.folder_open,
+                              size: 22,
+                              color: Colors.amber,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Pick Images Folder: ',
@@ -9107,10 +9398,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               width: double.infinity,
                                               decoration: BoxDecoration(
                                                 color: const Color(
-                                                    0x09000000), // 3.5% opacity black background
+                                                  0x09000000,
+                                                ), // 3.5% opacity black background
                                                 border: Border.all(
-                                                    color:
-                                                        Colors.grey.shade400),
+                                                  color: Colors.grey.shade400,
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
@@ -9121,12 +9413,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     child: imagePaths.isNotEmpty
                                                         ? GestureDetector(
                                                             onSecondaryTapDown:
-                                                                (TapDownDetails
-                                                                    details) {
+                                                                (
+                                                              TapDownDetails
+                                                                  details,
+                                                            ) {
                                                               _showPicturePreviewContextMenuAtPosition(
-                                                                  context,
-                                                                  details
-                                                                      .globalPosition);
+                                                                context,
+                                                                details
+                                                                    .globalPosition,
+                                                              );
                                                             },
                                                             child: ClipRRect(
                                                               borderRadius:
@@ -9134,19 +9429,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       .only(
                                                                 topLeft: Radius
                                                                     .circular(
-                                                                        4),
+                                                                  4,
+                                                                ),
                                                                 topRight: Radius
                                                                     .circular(
-                                                                        4),
+                                                                  4,
+                                                                ),
                                                               ),
-                                                              child: _buildPreviewImage(
-                                                                  imagePaths[
-                                                                      currentIndex]),
+                                                              child:
+                                                                  _buildPreviewImage(
+                                                                imagePaths[
+                                                                    currentIndex],
+                                                              ),
                                                             ),
                                                           )
                                                         : Container(
                                                             color: const Color(
-                                                                0x0D000000),
+                                                              0x0D000000,
+                                                            ),
                                                             child: const Center(
                                                               child: Column(
                                                                 mainAxisAlignment:
@@ -9154,19 +9454,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         .center,
                                                                 children: [
                                                                   Icon(
-                                                                      Icons
-                                                                          .image,
-                                                                      size: 48,
-                                                                      color: const Color(
-                                                                          0xFF808080)),
+                                                                    Icons.image,
+                                                                    size: 48,
+                                                                    color:
+                                                                        const Color(
+                                                                      0xFF808080,
+                                                                    ),
+                                                                  ),
                                                                   SizedBox(
-                                                                      height:
-                                                                          8),
+                                                                    height: 8,
+                                                                  ),
                                                                   Text(
-                                                                      'No image selected',
-                                                                      style: TextStyle(
-                                                                          color:
-                                                                              const Color(0xFF808080))),
+                                                                    'No image selected',
+                                                                    style:
+                                                                        TextStyle(
+                                                                      color:
+                                                                          const Color(
+                                                                        0xFF808080,
+                                                                      ),
+                                                                    ),
+                                                                  ),
                                                                 ],
                                                               ),
                                                             ),
@@ -9179,8 +9486,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       width: double.infinity,
                                                       padding: const EdgeInsets
                                                           .symmetric(
-                                                          horizontal: 8.0,
-                                                          vertical: 7.5),
+                                                        horizontal: 8.0,
+                                                        vertical: 7.5,
+                                                      ),
                                                       decoration: BoxDecoration(
                                                         color:
                                                             Colors.grey.shade50,
@@ -9189,10 +9497,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 .only(
                                                           bottomLeft:
                                                               Radius.circular(
-                                                                  4),
+                                                            4,
+                                                          ),
                                                           bottomRight:
                                                               Radius.circular(
-                                                                  4),
+                                                            4,
+                                                          ),
                                                         ),
                                                       ),
                                                       child: Text(
@@ -9225,7 +9535,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         style: const TextStyle(
                                                           fontSize: 10,
                                                           color: const Color(
-                                                              0xFF808080),
+                                                            0xFF808080,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
@@ -9268,7 +9579,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 padding:
                                                                     const EdgeInsets
                                                                         .all(
-                                                                        16),
+                                                                  16,
+                                                                ),
                                                                 decoration:
                                                                     BoxDecoration(
                                                                   color: Colors
@@ -9277,7 +9589,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              8),
+                                                                    8,
+                                                                  ),
                                                                   border: Border
                                                                       .all(
                                                                     color: Colors
@@ -9300,8 +9613,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       size: 32,
                                                                     ),
                                                                     const SizedBox(
-                                                                        height:
-                                                                            8),
+                                                                      height: 8,
+                                                                    ),
                                                                     Text(
                                                                       'Pick image folder to load thumbnails.',
                                                                       style:
@@ -9326,11 +9639,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         : Padding(
                                                             padding:
                                                                 const EdgeInsets
-                                                                    .all(8.0),
+                                                                    .all(
+                                                              8.0,
+                                                            ),
                                                             child:
                                                                 LayoutBuilder(
-                                                              builder: (context,
-                                                                  constraints) {
+                                                              builder: (
+                                                                context,
+                                                                constraints,
+                                                              ) {
                                                                 int columns = 5;
                                                                 int rows = 3;
                                                                 double spacing =
@@ -9372,9 +9689,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   itemCount:
                                                                       imagePaths
                                                                           .length,
-                                                                  itemBuilder:
-                                                                      (context,
-                                                                          index) {
+                                                                  itemBuilder: (
+                                                                    context,
+                                                                    index,
+                                                                  ) {
                                                                     final imagePath =
                                                                         imagePaths[
                                                                             index];
@@ -9382,26 +9700,39 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       child:
                                                                           GestureDetector(
                                                                         onSecondaryTapDown:
-                                                                            (TapDownDetails
-                                                                                details) {
+                                                                            (
+                                                                          TapDownDetails
+                                                                              details,
+                                                                        ) {
                                                                           _showThumbnailContextMenuAtPosition(
-                                                                              context,
-                                                                              index,
-                                                                              details.globalPosition);
+                                                                            context,
+                                                                            index,
+                                                                            details.globalPosition,
+                                                                          );
                                                                         },
                                                                         onTap:
                                                                             () async {
                                                                           // Check for modifier keys - use Option to avoid conflicts with normal selection
-                                                                          if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altLeft) ||
-                                                                              HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altRight)) {
+                                                                          if (HardwareKeyboard.instance.logicalKeysPressed.contains(
+                                                                                LogicalKeyboardKey.altLeft,
+                                                                              ) ||
+                                                                              HardwareKeyboard.instance.logicalKeysPressed.contains(
+                                                                                LogicalKeyboardKey.altRight,
+                                                                              )) {
                                                                             // Check if Shift is also pressed (Option+Shift+click for paste)
-                                                                            if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-                                                                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
+                                                                            if (HardwareKeyboard.instance.logicalKeysPressed.contains(
+                                                                                  LogicalKeyboardKey.shiftLeft,
+                                                                                ) ||
+                                                                                HardwareKeyboard.instance.logicalKeysPressed.contains(
+                                                                                  LogicalKeyboardKey.shiftRight,
+                                                                                )) {
                                                                               // Option+Shift+click: Select thumbnail first, then paste metadata
                                                                               if (index != currentIndex) {
-                                                                                setState(() {
-                                                                                  currentIndex = index;
-                                                                                });
+                                                                                setState(
+                                                                                  () {
+                                                                                    currentIndex = index;
+                                                                                  },
+                                                                                );
                                                                                 await _loadMetadata();
                                                                               }
                                                                               await _pasteMetadataToCurrentImage();
@@ -9409,9 +9740,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             } else {
                                                                               // Option+click: Save current caption first, then copy metadata from clicked image
                                                                               if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
-                                                                                await _saveCaptionToFile(imagePaths[currentIndex]);
+                                                                                await _saveCaptionToFile(
+                                                                                  imagePaths[currentIndex],
+                                                                                );
                                                                               }
-                                                                              await _copyMetadataFromIndex(index);
+                                                                              await _copyMetadataFromIndex(
+                                                                                index,
+                                                                              );
                                                                               return;
                                                                             }
                                                                           }
@@ -9419,7 +9754,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           // Regular click: Select thumbnail and load metadata
                                                                           if (index !=
                                                                               currentIndex) {
-                                                                            await _selectImage(index);
+                                                                            await _selectImage(
+                                                                              index,
+                                                                            );
                                                                           }
                                                                         },
                                                                         child:
@@ -9434,36 +9771,57 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 Colors.grey.shade100,
                                                                             border:
                                                                                 Border.all(
-                                                                              color: index == currentIndex ? Theme.of(context).colorScheme.primary : Colors.grey.shade400,
+                                                                              color: index == currentIndex
+                                                                                  ? Theme.of(
+                                                                                      context,
+                                                                                    ).colorScheme.primary
+                                                                                  : Colors.grey.shade400,
                                                                               width: index == currentIndex ? 2.5 : 1.5,
                                                                             ),
                                                                             borderRadius:
-                                                                                BorderRadius.circular(4),
+                                                                                BorderRadius.circular(
+                                                                              4,
+                                                                            ),
                                                                           ),
                                                                           child:
                                                                               Column(
                                                                             children: [
                                                                               Expanded(
                                                                                 child: Container(
-                                                                                  margin: const EdgeInsets.all(3),
+                                                                                  margin: const EdgeInsets.all(
+                                                                                    3,
+                                                                                  ),
                                                                                   child: ClipRRect(
-                                                                                    borderRadius: BorderRadius.circular(2),
-                                                                                    child: _buildProportionalThumbnail(imagePath),
+                                                                                    borderRadius: BorderRadius.circular(
+                                                                                      2,
+                                                                                    ),
+                                                                                    child: _buildProportionalThumbnail(
+                                                                                      imagePath,
+                                                                                    ),
                                                                                   ),
                                                                                 ),
                                                                               ),
                                                                               Container(
                                                                                 width: double.infinity,
-                                                                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                padding: const EdgeInsets.symmetric(
+                                                                                  horizontal: 2,
+                                                                                  vertical: 1,
+                                                                                ),
                                                                                 decoration: BoxDecoration(
                                                                                   color: Colors.grey.shade200,
                                                                                   borderRadius: const BorderRadius.only(
-                                                                                    bottomLeft: Radius.circular(4),
-                                                                                    bottomRight: Radius.circular(4),
+                                                                                    bottomLeft: Radius.circular(
+                                                                                      4,
+                                                                                    ),
+                                                                                    bottomRight: Radius.circular(
+                                                                                      4,
+                                                                                    ),
                                                                                   ),
                                                                                 ),
                                                                                 child: Text(
-                                                                                  p.basenameWithoutExtension(imagePath),
+                                                                                  p.basenameWithoutExtension(
+                                                                                    imagePath,
+                                                                                  ),
                                                                                   style: const TextStyle(
                                                                                     color: Colors.black,
                                                                                     fontSize: 8,
@@ -9490,8 +9848,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       width: double.infinity,
                                                       padding: const EdgeInsets
                                                           .symmetric(
-                                                          horizontal: 8.0,
-                                                          vertical: 2.0),
+                                                        horizontal: 8.0,
+                                                        vertical: 2.0,
+                                                      ),
                                                       decoration: BoxDecoration(
                                                         color:
                                                             Colors.grey.shade50,
@@ -9513,11 +9872,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       .normal,
                                                               fontSize: 10,
                                                               color: Color(
-                                                                  0xFF808080),
+                                                                0xFF808080,
+                                                              ),
                                                             ),
                                                           ),
                                                           const SizedBox(
-                                                              width: 4),
+                                                            width: 4,
+                                                          ),
                                                           DropdownButton<
                                                               String>(
                                                             value: _sortType,
@@ -9529,35 +9890,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 const TextStyle(
                                                               fontSize: 9,
                                                               color: Color(
-                                                                  0xFF808080),
+                                                                0xFF808080,
+                                                              ),
                                                             ),
                                                             items: const [
                                                               DropdownMenuItem(
                                                                 value: 'date',
                                                                 child: Padding(
-                                                                  padding: EdgeInsets
-                                                                      .symmetric(
-                                                                          vertical:
-                                                                              0),
+                                                                  padding:
+                                                                      EdgeInsets
+                                                                          .symmetric(
+                                                                    vertical: 0,
+                                                                  ),
                                                                   child: Text(
-                                                                      'Date/Time'),
+                                                                    'Date/Time',
+                                                                  ),
                                                                 ),
                                                               ),
                                                               DropdownMenuItem(
                                                                 value:
                                                                     'filename',
                                                                 child: Padding(
-                                                                  padding: EdgeInsets
-                                                                      .symmetric(
-                                                                          vertical:
-                                                                              0),
+                                                                  padding:
+                                                                      EdgeInsets
+                                                                          .symmetric(
+                                                                    vertical: 0,
+                                                                  ),
                                                                   child: Text(
-                                                                      'Filename'),
+                                                                    'Filename',
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ],
-                                                            onChanged: (String?
-                                                                newValue) {
+                                                            onChanged: (
+                                                              String? newValue,
+                                                            ) {
                                                               if (newValue !=
                                                                   null) {
                                                                 setState(() {
@@ -9602,7 +9969,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             builder: (context, value, child) {
                                               return Padding(
                                                 padding: const EdgeInsets.only(
-                                                    right: 8.0),
+                                                  right: 8.0,
+                                                ),
                                                 child: Material(
                                                   elevation: 2.0,
                                                   color: Colors.white,
@@ -9615,7 +9983,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     maxLines: 4,
                                                     minLines: 4,
                                                     style: const TextStyle(
-                                                        fontSize: 14),
+                                                      fontSize: 14,
+                                                    ),
                                                     decoration: InputDecoration(
                                                       labelText: 'Caption',
                                                       floatingLabelBehavior:
@@ -9625,35 +9994,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       contentPadding:
                                                           const EdgeInsets
                                                               .symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 12),
+                                                        horizontal: 8,
+                                                        vertical: 12,
+                                                      ),
                                                       labelStyle:
                                                           const TextStyle(
-                                                              fontSize: 15,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              letterSpacing:
-                                                                  -0.5),
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        letterSpacing: -0.5,
+                                                      ),
                                                       enabledBorder:
                                                           OutlineInputBorder(
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(4),
+                                                                .circular(
+                                                          4,
+                                                        ),
                                                         borderSide: BorderSide(
-                                                            color: Colors
-                                                                .grey.shade400,
-                                                            width: 1.0),
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0,
+                                                        ),
                                                       ),
                                                       focusedBorder:
                                                           OutlineInputBorder(
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(4),
+                                                                .circular(
+                                                          4,
+                                                        ),
                                                         borderSide: BorderSide(
-                                                            color: Colors
-                                                                .grey.shade400,
-                                                            width: 1.0),
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0,
+                                                        ),
                                                       ),
                                                     ),
                                                     onTap: () {
@@ -9684,7 +10059,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             children: [
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                    left: 8.0),
+                                                  left: 8.0,
+                                                ),
                                                 child: Material(
                                                   elevation: 2,
                                                   shadowColor:
@@ -9697,7 +10073,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     maxLines: 4,
                                                     minLines: 4,
                                                     style: const TextStyle(
-                                                        fontSize: 14),
+                                                      fontSize: 14,
+                                                    ),
                                                     decoration: InputDecoration(
                                                       labelText: 'Personality',
                                                       floatingLabelBehavior:
@@ -9705,47 +10082,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               .always,
                                                       labelStyle:
                                                           const TextStyle(
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              fontSize: 15,
-                                                              letterSpacing:
-                                                                  -0.5),
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 15,
+                                                        letterSpacing: -0.5,
+                                                      ),
                                                       border:
                                                           OutlineInputBorder(
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(8),
+                                                                .circular(
+                                                          8,
+                                                        ),
                                                         gapPadding: 0,
                                                       ),
                                                       enabledBorder:
                                                           OutlineInputBorder(
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(8),
+                                                                .circular(
+                                                          8,
+                                                        ),
                                                         gapPadding: 0,
                                                         borderSide: BorderSide(
-                                                            color: Colors
-                                                                .grey.shade400),
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                        ),
                                                       ),
                                                       focusedBorder:
                                                           OutlineInputBorder(
                                                         borderRadius:
                                                             BorderRadius
-                                                                .circular(8),
+                                                                .circular(
+                                                          8,
+                                                        ),
                                                         gapPadding: 0,
                                                         borderSide: BorderSide(
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .colorScheme
-                                                                .primary,
-                                                            width: 2),
+                                                          color: Theme.of(
+                                                            context,
+                                                          ).colorScheme.primary,
+                                                          width: 2,
+                                                        ),
                                                       ),
                                                       contentPadding:
                                                           const EdgeInsets
                                                               .symmetric(
-                                                              horizontal: 12,
-                                                              vertical: 12),
+                                                        horizontal: 12,
+                                                        vertical: 12,
+                                                      ),
                                                       filled: true,
                                                       fillColor: Colors.white,
                                                     ),
@@ -9755,7 +10139,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               // Navigation Buttons directly under Personality field
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                    left: 8.0, top: 8.0),
+                                                  left: 8.0,
+                                                  top: 8.0,
+                                                ),
                                                 child: Row(
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.end,
@@ -9794,39 +10180,46 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               borderRadius:
                                                   const BorderRadius.only(
                                                 topLeft: Radius.circular(4),
-                                                topRight: Radius.circular(4),
+                                                topRight: Radius.circular(
+                                                  4,
+                                                ),
                                               ),
                                               border: Border(
                                                 bottom: BorderSide(
-                                                    color:
-                                                        Colors.grey.shade300),
+                                                  color: Colors.grey.shade300,
+                                                ),
                                               ),
                                             ),
                                             child: TabBar(
                                               labelColor: Colors.black,
                                               unselectedLabelColor: Colors.grey,
                                               indicatorColor: Colors.blue,
-                                              labelStyle:
-                                                  TextStyle(fontSize: 11),
-                                              unselectedLabelStyle:
-                                                  TextStyle(fontSize: 11),
+                                              labelStyle: TextStyle(
+                                                fontSize: 11,
+                                              ),
+                                              unselectedLabelStyle: TextStyle(
+                                                fontSize: 11,
+                                              ),
                                               indicatorWeight: 2,
                                               isScrollable: false,
                                               labelPadding: EdgeInsets.zero,
                                               tabs: [
                                                 Tab(
-                                                    child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(Icons.person_search,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.person_search,
                                                         size: 12,
                                                         color: Colors
-                                                            .grey.shade700),
-                                                    SizedBox(width: 4),
-                                                    Text('PLAYERS'),
-                                                  ],
-                                                )),
+                                                            .grey.shade700,
+                                                      ),
+                                                      SizedBox(width: 4),
+                                                      Text('PLAYERS'),
+                                                    ],
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                           ),
@@ -9836,15 +10229,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               children: [
                                                 // Player Picker Tab
                                                 Container(
-                                                  padding:
-                                                      const EdgeInsets.all(16),
+                                                  padding: const EdgeInsets.all(
+                                                    16,
+                                                  ),
                                                   decoration: BoxDecoration(
                                                     border: Border.all(
-                                                        color: Colors
-                                                            .grey.shade400),
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                   ),
                                                   child: Column(
                                                     crossAxisAlignment:
@@ -9853,29 +10249,32 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     children: [
                                                       // Search input
                                                       Material(
-                                                        elevation: 2.0,
+                                                        elevation: 1.0,
                                                         color:
                                                             Colors.transparent,
                                                         shape:
                                                             RoundedRectangleBorder(
                                                           borderRadius:
                                                               BorderRadius
-                                                                  .circular(4),
+                                                                  .circular(
+                                                            4,
+                                                          ),
                                                         ),
                                                         child: Container(
                                                           height: 40,
                                                           decoration:
                                                               BoxDecoration(
-                                                            color: Colors
-                                                                .red.shade100,
+                                                            color: Colors.white,
                                                             border: Border.all(
-                                                                color:
-                                                                    Colors.red,
-                                                                width: 2),
+                                                              color: Colors.grey
+                                                                  .shade400,
+                                                              width: 1,
+                                                            ),
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
-                                                                        4),
+                                                              4,
+                                                            ),
                                                           ),
                                                           child: TextField(
                                                             controller:
@@ -9886,17 +10285,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   'Type player name or number...',
                                                               prefixIcon:
                                                                   const Icon(
-                                                                      Icons
-                                                                          .search,
-                                                                      size: 16),
+                                                                Icons.search,
+                                                                size: 16,
+                                                              ),
                                                               isDense: true,
                                                               contentPadding:
                                                                   const EdgeInsets
                                                                       .symmetric(
-                                                                      horizontal:
-                                                                          12,
-                                                                      vertical:
-                                                                          12),
+                                                                horizontal: 12,
+                                                                vertical: 12,
+                                                              ),
                                                               filled: true,
                                                               fillColor:
                                                                   Colors.white,
@@ -9905,29 +10303,37 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 borderRadius:
                                                                     BorderRadius
                                                                         .circular(
-                                                                            4),
-                                                                borderSide: BorderSide(
-                                                                    color: Colors
-                                                                        .blue
-                                                                        .shade300,
-                                                                    width: 1.0),
+                                                                  4,
+                                                                ),
+                                                                borderSide:
+                                                                    BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400,
+                                                                  width: 1.0,
+                                                                ),
                                                               ),
                                                               focusedBorder:
                                                                   OutlineInputBorder(
                                                                 borderRadius:
                                                                     BorderRadius
                                                                         .circular(
-                                                                            4),
-                                                                borderSide: BorderSide(
-                                                                    color: Colors
-                                                                        .blue
-                                                                        .shade500,
-                                                                    width: 2.0),
+                                                                  4,
+                                                                ),
+                                                                borderSide:
+                                                                    BorderSide(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade500,
+                                                                  width: 2.0,
+                                                                ),
                                                               ),
                                                             ),
-                                                            style: const TextStyle(
-                                                                fontSize:
-                                                                    kInputTextSize),
+                                                            style:
+                                                                const TextStyle(
+                                                              fontSize:
+                                                                  kInputTextSize,
+                                                            ),
                                                             onChanged: (value) {
                                                               setState(() {
                                                                 _playerPickerSearchText =
@@ -9948,24 +10354,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           runSpacing: 4,
                                                           children: [
                                                             ...selectedPlayers
-                                                                .map((code) {
+                                                                .map((
+                                                              code,
+                                                            ) {
                                                               final replacement =
                                                                   codeReplacements[
                                                                           code] ??
                                                                       Replacement(
-                                                                          '',
-                                                                          '',
-                                                                          '');
+                                                                        '',
+                                                                        '',
+                                                                        '',
+                                                                      );
                                                               final playerName =
                                                                   replacement
                                                                       .short;
                                                               return Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical:
-                                                                        3),
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 3,
+                                                                ),
                                                                 decoration:
                                                                     BoxDecoration(
                                                                   color: Colors
@@ -9974,11 +10383,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              4),
-                                                                  border: Border.all(
-                                                                      color: Colors
-                                                                          .blue
-                                                                          .shade300),
+                                                                    4,
+                                                                  ),
+                                                                  border: Border
+                                                                      .all(
+                                                                    color: Colors
+                                                                        .blue
+                                                                        .shade300,
+                                                                  ),
                                                                 ),
                                                                 child: Row(
                                                                   mainAxisSize:
@@ -9999,15 +10411,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       ),
                                                                     ),
                                                                     const SizedBox(
-                                                                        width:
-                                                                            4),
+                                                                      width: 4,
+                                                                    ),
                                                                     GestureDetector(
                                                                       onTap:
                                                                           () {
                                                                         setState(
                                                                             () {
                                                                           selectedPlayers
-                                                                              .remove(code);
+                                                                              .remove(
+                                                                            code,
+                                                                          );
                                                                           _updateCaption();
                                                                         });
                                                                       },
@@ -10023,7 +10437,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .blue
                                                                               .shade600,
                                                                           borderRadius:
-                                                                              BorderRadius.circular(2),
+                                                                              BorderRadius.circular(
+                                                                            2,
+                                                                          ),
                                                                         ),
                                                                         child:
                                                                             const Icon(
@@ -10041,24 +10457,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               );
                                                             }).toList(),
                                                             ...selectedOpponentPlayers
-                                                                .map((code) {
+                                                                .map((
+                                                              code,
+                                                            ) {
                                                               final replacement =
                                                                   codeReplacements[
                                                                           code] ??
                                                                       Replacement(
-                                                                          '',
-                                                                          '',
-                                                                          '');
+                                                                        '',
+                                                                        '',
+                                                                        '',
+                                                                      );
                                                               final playerName =
                                                                   replacement
                                                                       .short;
                                                               return Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical:
-                                                                        3),
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 3,
+                                                                ),
                                                                 decoration:
                                                                     BoxDecoration(
                                                                   color: Colors
@@ -10067,11 +10486,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              4),
-                                                                  border: Border.all(
-                                                                      color: Colors
-                                                                          .red
-                                                                          .shade300),
+                                                                    4,
+                                                                  ),
+                                                                  border: Border
+                                                                      .all(
+                                                                    color: Colors
+                                                                        .red
+                                                                        .shade300,
+                                                                  ),
                                                                 ),
                                                                 child: Row(
                                                                   mainAxisSize:
@@ -10092,15 +10514,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       ),
                                                                     ),
                                                                     const SizedBox(
-                                                                        width:
-                                                                            4),
+                                                                      width: 4,
+                                                                    ),
                                                                     GestureDetector(
                                                                       onTap:
                                                                           () {
                                                                         setState(
                                                                             () {
                                                                           selectedOpponentPlayers
-                                                                              .remove(code);
+                                                                              .remove(
+                                                                            code,
+                                                                          );
                                                                           _updateCaption();
                                                                         });
                                                                       },
@@ -10116,7 +10540,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .red
                                                                               .shade600,
                                                                           borderRadius:
-                                                                              BorderRadius.circular(2),
+                                                                              BorderRadius.circular(
+                                                                            2,
+                                                                          ),
                                                                         ),
                                                                         child:
                                                                             const Icon(
@@ -10136,7 +10562,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ],
                                                         ),
                                                         const SizedBox(
-                                                            height: 8),
+                                                          height: 8,
+                                                        ),
                                                       ],
                                                       // Results - Search results or team containers
                                                       Expanded(
@@ -10152,7 +10579,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       title: selectedAwayTeam !=
                                                                               null
                                                                           ? _getTeamShortName(
-                                                                              selectedAwayTeam!)
+                                                                              selectedAwayTeam!,
+                                                                            )
                                                                           : 'Away Team',
                                                                       codes:
                                                                           awayPlayers,
@@ -10163,7 +10591,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     ),
                                                                   ),
                                                                   const SizedBox(
-                                                                      width: 8),
+                                                                    width: 8,
+                                                                  ),
                                                                   // Home Team Column
                                                                   Expanded(
                                                                     child:
@@ -10171,7 +10600,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       title: selectedHomeTeam !=
                                                                               null
                                                                           ? _getTeamShortName(
-                                                                              selectedHomeTeam!)
+                                                                              selectedHomeTeam!,
+                                                                            )
                                                                           : 'Home Team',
                                                                       codes:
                                                                           homePlayers,
@@ -10199,7 +10629,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   Expanded(
                                     child: Padding(
                                       padding: const EdgeInsets.only(
-                                          top: 0.0, left: 0.0, right: 0.0),
+                                        top: 0.0,
+                                        left: 0.0,
+                                        right: 0.0,
+                                      ),
                                       child: Row(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
@@ -10221,15 +10654,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           const BorderRadius
                                                               .only(
                                                         topLeft:
-                                                            Radius.circular(4),
+                                                            Radius.circular(
+                                                          4,
+                                                        ),
                                                         topRight:
-                                                            Radius.circular(4),
+                                                            Radius.circular(
+                                                          4,
+                                                        ),
                                                       ),
                                                     ),
                                                     child: Padding(
                                                       padding: const EdgeInsets
                                                           .symmetric(
-                                                          horizontal: 16.0),
+                                                        horizontal: 16.0,
+                                                      ),
                                                       child: Row(
                                                         children: [
                                                           if (_selectedVerb ==
@@ -10273,10 +10711,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   if (_selectedHitType !=
                                                                       null) ...[
                                                                     Padding(
-                                                                      padding: const EdgeInsets
-                                                                          .symmetric(
-                                                                          horizontal:
-                                                                              3.0),
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            3.0,
+                                                                      ),
                                                                       child:
                                                                           Text(
                                                                         '→',
@@ -10330,10 +10770,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       _selectedHomeRunType !=
                                                                           null) ...[
                                                                     Padding(
-                                                                      padding: const EdgeInsets
-                                                                          .symmetric(
-                                                                          horizontal:
-                                                                              3.0),
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            3.0,
+                                                                      ),
                                                                       child:
                                                                           Text(
                                                                         '→',
@@ -10390,10 +10832,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       _rbiCount! >
                                                                           0) ...[
                                                                     Padding(
-                                                                      padding: const EdgeInsets
-                                                                          .symmetric(
-                                                                          horizontal:
-                                                                              3.0),
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            3.0,
+                                                                      ),
                                                                       child:
                                                                           Text(
                                                                         '→',
@@ -10416,7 +10860,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           _rbiCount =
                                                                               null;
                                                                           _rbiCountByHit
-                                                                              .remove(_selectedHitType!);
+                                                                              .remove(
+                                                                            _selectedHitType!,
+                                                                          );
                                                                           _updateCaption();
                                                                         });
                                                                       },
@@ -10469,18 +10915,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   child: Container(
                                                     padding:
                                                         const EdgeInsets.all(
-                                                            5.0),
+                                                      5.0,
+                                                    ),
                                                     decoration: BoxDecoration(
                                                       border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400),
+                                                        color: Colors
+                                                            .grey.shade400,
+                                                      ),
                                                       borderRadius:
                                                           const BorderRadius
                                                               .only(
                                                         bottomLeft:
-                                                            Radius.circular(4),
+                                                            Radius.circular(
+                                                          4,
+                                                        ),
                                                         bottomRight:
-                                                            Radius.circular(4),
+                                                            Radius.circular(
+                                                          4,
+                                                        ),
                                                       ),
                                                     ),
                                                     child: ConstrainedBox(
@@ -10500,7 +10952,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             padding:
                                                                 const EdgeInsets
                                                                     .only(
-                                                                    top: 8.0),
+                                                              top: 8.0,
+                                                            ),
                                                             child:
                                                                 ConstrainedBox(
                                                               constraints:
@@ -10518,7 +10971,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              4),
+                                                                    4,
+                                                                  ),
                                                                 ),
                                                                 child:
                                                                     FlashingFilterChip(
@@ -10538,15 +10992,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             MainAxisSize.min,
                                                                         children: [
                                                                           const Icon(
-                                                                              Icons.arrow_back,
-                                                                              size: 14,
-                                                                              color: Colors.grey),
+                                                                            Icons.arrow_back,
+                                                                            size:
+                                                                                14,
+                                                                            color:
+                                                                                Colors.grey,
+                                                                          ),
                                                                           const SizedBox(
-                                                                              width: 4),
+                                                                            width:
+                                                                                4,
+                                                                          ),
                                                                           const Text(
                                                                             'Back',
                                                                             style:
-                                                                                TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                                                                                TextStyle(
+                                                                              fontSize: 12,
+                                                                              fontWeight: FontWeight.normal,
+                                                                            ),
                                                                             overflow:
                                                                                 TextOverflow.ellipsis,
                                                                           ),
@@ -10584,7 +11046,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Transform.translate(
                                               offset: const Offset(300, 0),
                                               child: _buildHitInningSelector(
-                                                  showWalkOffOption: true),
+                                                showWalkOffOption: true,
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
@@ -10609,9 +11072,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           children: [
                                             // Metadata section
                                             SizedBox(
-                                              width: MediaQuery.of(context)
-                                                      .size
-                                                      .width *
+                                              width: MediaQuery.of(
+                                                    context,
+                                                  ).size.width *
                                                   0.49,
                                               child: Column(
                                                 crossAxisAlignment:
@@ -10632,27 +11095,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   Row(
                                                     children: [
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Photographer',
-                                                              creatorController)),
+                                                        child: _buildField(
+                                                          'Photographer',
+                                                          creatorController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'MEID',
-                                                              jobIdController)),
+                                                        child: _buildField(
+                                                          'MEID',
+                                                          jobIdController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       SizedBox(
-                                                          width: 120,
-                                                          child: _buildField(
-                                                              'Description Writers',
-                                                              descriptionWritersController)),
+                                                        width: 120,
+                                                        child: _buildField(
+                                                          'Description Writers',
+                                                          descriptionWritersController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       _buildJobTitleDropdown(),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Copyright',
-                                                              copyrightController)),
+                                                        child: _buildField(
+                                                          'Copyright',
+                                                          copyrightController,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
@@ -10668,14 +11139,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
-                                                                        4),
+                                                              4,
+                                                            ),
                                                           ),
                                                           child: InkWell(
                                                             onTap: _pickDate,
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
-                                                                        4),
+                                                              4,
+                                                            ),
                                                             child:
                                                                 InputDecorator(
                                                               decoration:
@@ -10689,51 +11162,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 contentPadding:
                                                                     const EdgeInsets
                                                                         .symmetric(
-                                                                        horizontal:
-                                                                            8,
-                                                                        vertical:
-                                                                            12),
+                                                                  horizontal: 8,
+                                                                  vertical: 12,
+                                                                ),
                                                                 filled: true,
                                                                 fillColor:
                                                                     Colors
                                                                         .white,
                                                                 labelStyle:
                                                                     const TextStyle(
-                                                                        fontSize:
-                                                                            10),
+                                                                  fontSize: 10,
+                                                                ),
                                                                 enabledBorder:
                                                                     OutlineInputBorder(
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              4),
-                                                                  borderSide: BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade400,
-                                                                      width:
-                                                                          1.0),
+                                                                    4,
+                                                                  ),
+                                                                  borderSide:
+                                                                      BorderSide(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1.0,
+                                                                  ),
                                                                 ),
                                                                 focusedBorder:
                                                                     OutlineInputBorder(
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
-                                                                              4),
-                                                                  borderSide: BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade400,
-                                                                      width:
-                                                                          1.0),
+                                                                    4,
+                                                                  ),
+                                                                  borderSide:
+                                                                      BorderSide(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1.0,
+                                                                  ),
                                                                 ),
                                                               ),
                                                               child: Text(
                                                                 '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
                                                                 style:
                                                                     const TextStyle(
-                                                                        fontSize:
-                                                                            11),
+                                                                  fontSize: 11,
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
@@ -10741,47 +11217,61 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Stadium',
-                                                              stadiumController)),
+                                                        child: _buildField(
+                                                          'Stadium',
+                                                          stadiumController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'City',
-                                                              cityController)),
+                                                        child: _buildField(
+                                                          'City',
+                                                          cityController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'State/Province',
-                                                              provinceController)),
+                                                        child: _buildField(
+                                                          'State/Province',
+                                                          provinceController,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
                                                   Row(
                                                     children: [
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Headline',
-                                                              headlineController)),
+                                                        child: _buildField(
+                                                          'Headline',
+                                                          headlineController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Keywords',
-                                                              keywordsController)),
+                                                        child: _buildField(
+                                                          'Keywords',
+                                                          keywordsController,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
                                                   Row(
                                                     children: [
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Credit',
-                                                              creditController)),
+                                                        child: _buildField(
+                                                          'Credit',
+                                                          creditController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Source',
-                                                              sourceController)),
+                                                        child: _buildField(
+                                                          'Source',
+                                                          sourceController,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
@@ -10790,9 +11280,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       _buildUrgencyDropdown(),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Country',
-                                                              countryController)),
+                                                        child: _buildField(
+                                                          'Country',
+                                                          countryController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       _buildCountryCodeDropdown(),
                                                     ],
@@ -10801,35 +11293,46 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   Row(
                                                     children: [
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Title/Object Name',
-                                                              titleObjectNameController)),
+                                                        child: _buildField(
+                                                          'Title/Object Name',
+                                                          titleObjectNameController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Category',
-                                                              categoryController)),
+                                                        child: _buildField(
+                                                          'Category',
+                                                          categoryController,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Supp Cat 1',
-                                                              suppCat1Controller)),
+                                                        child: _buildField(
+                                                          'Supp Cat 1',
+                                                          suppCat1Controller,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Supp Cat 2',
-                                                              suppCat2Controller)),
+                                                        child: _buildField(
+                                                          'Supp Cat 2',
+                                                          suppCat2Controller,
+                                                        ),
+                                                      ),
                                                       const SizedBox(width: 8),
                                                       Expanded(
-                                                          child: _buildField(
-                                                              'Supp Cat 3',
-                                                              suppCat3Controller)),
+                                                        child: _buildField(
+                                                          'Supp Cat 3',
+                                                          suppCat3Controller,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 8),
                                                   _buildField(
-                                                      'Special Instructions',
-                                                      specialInstructionsController),
+                                                    'Special Instructions',
+                                                    specialInstructionsController,
+                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -10902,7 +11405,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Text(
                   'No images loaded. Select a folder to begin.',
                   style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               )
             : GridView.builder(
@@ -10949,14 +11453,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  Widget _buildField(String label, TextEditingController c,
-      {int? maxLines = 1, bool expands = false}) {
+  Widget _buildField(
+    String label,
+    TextEditingController c, {
+    int? maxLines = 1,
+    bool expands = false,
+  }) {
     return Material(
       elevation: 2.0,
       color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       child: TextField(
         controller: c,
         maxLines: maxLines,
@@ -10966,8 +11472,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           labelText: label,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 12,
+          ),
           filled: true,
           fillColor: Colors.white,
           labelStyle: const TextStyle(fontSize: 10),
@@ -11015,9 +11523,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final dropdown = Material(
       elevation: 2.0,
       color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       child: DropdownButtonFormField<String>(
         isExpanded: true,
         value: value,
@@ -11026,8 +11532,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           labelText: label,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
           filled: true,
           fillColor: Colors.white,
           labelStyle: const TextStyle(fontSize: 11),
@@ -11041,7 +11549,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           ),
         ),
         items: sortedTeams
-            .map((item) => DropdownMenuItem(
+            .map(
+              (item) => DropdownMenuItem(
                 value: item,
                 child: Container(
                   height: 32,
@@ -11049,15 +11558,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(item,
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.black)),
+                        child: Text(
+                          item,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black,
+                          ),
+                        ),
                       ),
                       if (_favoriteTeams.contains(item))
                         const Icon(Icons.star, size: 14, color: Colors.amber),
                     ],
                   ),
-                )))
+                ),
+              ),
+            )
             .toList(),
         onChanged: onChanged,
         style: const TextStyle(fontSize: 11, color: Colors.black),
@@ -11142,7 +11657,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: Text(
           'Type a name or number to search for players',
           style: TextStyle(
-              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+            fontSize: 12,
+            color: Colors.grey,
+            fontStyle: FontStyle.italic,
+          ),
         ),
       );
     }
@@ -11252,7 +11770,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: Text(
           'No players found',
           style: TextStyle(
-              fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+            fontSize: 12,
+            color: Colors.grey,
+            fontStyle: FontStyle.italic,
+          ),
         ),
       );
     }
@@ -11303,7 +11824,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'September',
       'October',
       'November',
-      'December'
+      'December',
     ];
     return names[m - 1];
   }
@@ -11346,9 +11867,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   Expanded(
                     child: Text(
                       player['name'],
-                      style: TextStyle(
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -11363,7 +11882,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper for condensed item rendering in popup columns
   Widget _buildCondensedItem(
-      String label, bool isSelected, VoidCallback onTap) {
+    String label,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -11387,15 +11909,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final playersList = codeReplacements.keys
         .where((k) => k.startsWith(prefix) && _isNumeric(k.substring(1)))
         .toList()
-      ..sort((a, b) =>
-          int.parse(a.substring(1)).compareTo(int.parse(b.substring(1))));
+      ..sort(
+        (a, b) =>
+            int.parse(a.substring(1)).compareTo(int.parse(b.substring(1))),
+      );
 
     // Initialize tempSelected based on which set we're modifying
     if (isSelectingHomePlayers) {
       tempSelected = Set.from(selectedPlayers.where((k) => k.startsWith('h')));
     } else {
-      tempSelected =
-          Set.from(selectedOpponentPlayers.where((k) => k.startsWith('v')));
+      tempSelected = Set.from(
+        selectedOpponentPlayers.where((k) => k.startsWith('v')),
+      );
     }
 
     await showDialog(
@@ -11411,7 +11936,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             }).toList();
             return AlertDialog(
               title: Text(
-                  'Select ${isSelectingHomePlayers ? 'Home' : 'Away'} Players'),
+                'Select ${isSelectingHomePlayers ? 'Home' : 'Away'} Players',
+              ),
               content: SizedBox(
                 width: double.maxFinite,
                 height: 400,
@@ -11515,7 +12041,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'nineteenth',
       'twentieth',
       'twenty-first',
-      'twenty-second'
+      'twenty-second',
     ];
     final result = await showDialog<String>(
       context: context,
@@ -11700,13 +12226,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     finalFilteredCodes.addAll(containsNumberMatches);
     finalFilteredCodes.addAll(nameMatches);
 
-    final filteredCodes =
-        LinkedHashSet<String>.from(finalFilteredCodes).toList();
+    final filteredCodes = LinkedHashSet<String>.from(
+      finalFilteredCodes,
+    ).toList();
 
     return Container(
       height: 500,
-      padding:
-          const EdgeInsets.all(8.0), // Add some padding inside the container
+      padding: const EdgeInsets.all(
+        8.0,
+      ), // Add some padding inside the container
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -11718,14 +12246,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 text: TextSpan(
                   // Default style for the team name
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          12, // Reduced from 14 to 12 to make team name smaller
-                      color: Colors.black,
-                      fontFamily: 'RobotoCondensed'),
-                  children: <TextSpan>[
-                    TextSpan(text: title),
-                  ],
+                    fontWeight: FontWeight.bold,
+                    fontSize:
+                        12, // Reduced from 14 to 12 to make team name smaller
+                    color: Colors.black,
+                    fontFamily: 'RobotoCondensed',
+                  ),
+                  children: <TextSpan>[TextSpan(text: title)],
                 ),
               ),
               const SizedBox(width: 8),
@@ -11763,6 +12290,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             color: Colors.grey,
                           ),
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(
                             horizontal: 4.0,
                             vertical: 0.0,
@@ -11779,8 +12311,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         },
                         child: const Padding(
                           padding: EdgeInsets.only(right: 6.0),
-                          child:
-                              Icon(Icons.clear, size: 12, color: Colors.grey),
+                          child: Icon(
+                            Icons.clear,
+                            size: 12,
+                            color: Colors.grey,
+                          ),
                         ),
                       ),
                   ],
@@ -11793,15 +12328,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             Align(
               alignment: Alignment.centerLeft,
               child: Transform.translate(
-                offset:
-                    const Offset(-8, 0), // Move left to align with team name
+                offset: const Offset(
+                  -8,
+                  0,
+                ), // Move left to align with team name
                 child: TextButton.icon(
                   icon: const Icon(Icons.refresh, size: 10), // Smaller icon
-                  label: const Text('Switch Team',
-                      style: TextStyle(
-                        fontSize: 10, // Smaller text
-                        fontWeight: FontWeight.normal, // Remove bold
-                      )),
+                  label: const Text(
+                    'Switch Team',
+                    style: TextStyle(
+                      fontSize: 10, // Smaller text
+                      fontWeight: FontWeight.normal, // Remove bold
+                    ),
+                  ),
                   // Disable the button if players are selected from the current list.
                   onPressed: (isHomeList && selectedPlayers.isNotEmpty) ||
                           (!isHomeList && selectedOpponentPlayers.isNotEmpty)
@@ -11828,9 +12367,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     foregroundColor:
                         Colors.black, // Match other non-primary buttons
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2), // Smaller padding
-                    minimumSize:
-                        const Size(0, 0), // Remove minimum size constraints
+                      horizontal: 6,
+                      vertical: 2,
+                    ), // Smaller padding
+                    minimumSize: const Size(
+                      0,
+                      0,
+                    ), // Remove minimum size constraints
                     tapTargetSize:
                         MaterialTapTargetSize.shrinkWrap, // Shrink tap target
                     shape: RoundedRectangleBorder(
@@ -11852,7 +12395,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 runSpacing: 4,
                 children:
                     (isHomeList ? selectedPlayers : selectedOpponentPlayers)
-                        .map((code) {
+                        .map((
+                  code,
+                ) {
                   final replacement =
                       codeReplacements[code] ?? Replacement('', '', '');
                   final playerName = replacement.short;
@@ -11861,7 +12406,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         96, // Fixed width to fit 2 chips in 200px container (96*2 + 8 spacing = 200)
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(6),
@@ -11893,7 +12440,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 // Update personality field when player is deselected
                                 final allSelectedCodes = [
                                   ...selectedPlayers,
-                                  ...selectedOpponentPlayers
+                                  ...selectedOpponentPlayers,
                                 ];
                                 final personalityText = allSelectedCodes
                                     .map((c) {
@@ -11958,8 +12505,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         String nameOnly = replacement.short;
                         if (jerseyNumber != null &&
                             nameOnly.startsWith('$jerseyNumber ')) {
-                          nameOnly =
-                              nameOnly.substring(jerseyNumber.length + 1);
+                          nameOnly = nameOnly.substring(
+                            jerseyNumber.length + 1,
+                          );
                         }
                         // Remove trailing number if present
                         nameOnly = nameOnly.split(' #').first;
@@ -11985,7 +12533,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     'pitches',
                                     'At Bat',
                                     'Batting',
-                                    'Base Running'
+                                    'Base Running',
                                   ];
 
                                   if (_selectedVerb != null &&
@@ -12011,7 +12559,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     'pitches',
                                     'At Bat',
                                     'Batting',
-                                    'Base Running'
+                                    'Base Running',
                                   ];
 
                                   if (_selectedVerb != null &&
@@ -12032,7 +12580,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               // personality box to reflect the current selections.
                               final allSelectedCodes = [
                                 ...selectedPlayers,
-                                ...selectedOpponentPlayers
+                                ...selectedOpponentPlayers,
                               ];
                               final personalityText = allSelectedCodes
                                   .map((c) {
@@ -12053,7 +12601,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ? Colors.grey.shade400
                                 : Colors.transparent,
                             padding: const EdgeInsets.symmetric(
-                                vertical: 2, horizontal: 8),
+                              vertical: 2,
+                              horizontal: 8,
+                            ),
                             child: Row(
                               children: [
                                 Text(
@@ -12121,13 +12671,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       : null,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        vertical: 1.0, horizontal: 8.0),
+                      vertical: 1.0,
+                      horizontal: 8.0,
+                    ),
                     color:
                         isSelected ? Colors.blue.shade50 : Colors.transparent,
-                    child: Text(
-                      item,
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                    child: Text(item, style: const TextStyle(fontSize: 12)),
                   ),
                 );
               }).toList(),
@@ -12203,9 +12752,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Material(
         elevation: 2.0,
         color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         child: DropdownButtonFormField<String>(
           isExpanded: true,
           value: currentValue,
@@ -12213,8 +12760,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             labelText: 'Country Code',
             floatingLabelBehavior: FloatingLabelBehavior.always,
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: Colors.white,
             labelStyle: const TextStyle(fontSize: 10),
@@ -12228,11 +12777,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
           items: countryCodes
-              .map((country) => DropdownMenuItem(
+              .map(
+                (country) => DropdownMenuItem(
                   value: country['code'],
-                  child: Text('${country['code']} - ${country['name']}',
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.black))))
+                  child: Text(
+                    '${country['code']} - ${country['name']}',
+                    style: const TextStyle(fontSize: 11, color: Colors.black),
+                  ),
+                ),
+              )
               .toList(),
           onChanged: (value) {
             if (value != null) {
@@ -12287,9 +12840,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Material(
         elevation: 2.0,
         color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         child: DropdownButtonFormField<String>(
           isExpanded: true,
           value: currentValue,
@@ -12297,8 +12848,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             labelText: 'Urgency',
             floatingLabelBehavior: FloatingLabelBehavior.always,
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: Colors.white,
             labelStyle: const TextStyle(fontSize: 10),
@@ -12312,11 +12865,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
           items: urgencyLevels
-              .map((urgency) => DropdownMenuItem(
+              .map(
+                (urgency) => DropdownMenuItem(
                   value: urgency['code'],
-                  child: Text(urgency['name']!,
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.black))))
+                  child: Text(
+                    urgency['name']!,
+                    style: const TextStyle(fontSize: 11, color: Colors.black),
+                  ),
+                ),
+              )
               .toList(),
           onChanged: (value) {
             if (value != null) {
@@ -12349,9 +12906,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Material(
         elevation: 2.0,
         color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         child: DropdownButtonFormField<String>(
           isExpanded: true,
           value: currentValue,
@@ -12359,8 +12914,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             labelText: 'Job Title',
             floatingLabelBehavior: FloatingLabelBehavior.always,
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             filled: true,
             fillColor: Colors.white,
             labelStyle: const TextStyle(fontSize: 10),
@@ -12374,11 +12931,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
           items: jobTitles
-              .map((title) => DropdownMenuItem(
+              .map(
+                (title) => DropdownMenuItem(
                   value: title,
-                  child: Text(title,
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.black))))
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 11, color: Colors.black),
+                  ),
+                ),
+              )
               .toList(),
           onChanged: (value) {
             if (value != null) {
@@ -12409,9 +12970,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return Material(
       elevation: 2.0,
       color: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       child: TextField(
         controller: titleObjectNameController,
         readOnly: true,
@@ -12420,8 +12979,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           labelText: 'Title/Object Name',
           floatingLabelBehavior: FloatingLabelBehavior.always,
           isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 12,
+          ),
           filled: true,
           fillColor: Colors.grey.shade50,
           labelStyle: const TextStyle(fontSize: 10),
@@ -12466,9 +13027,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 // Home Team Selection Dropdown
                 Row(
                   children: [
-                    const Text('Home Team: ',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Home Team: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: DropdownButton<String>(
@@ -12480,8 +13045,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             selectedHomeTeam = newValue;
                           });
                         },
-                        items: teamStates.keys
-                            .map<DropdownMenuItem<String>>((String value) {
+                        items: teamStates.keys.map<DropdownMenuItem<String>>((
+                          String value,
+                        ) {
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(value),
@@ -12565,7 +13131,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'relievers',
       'starters',
       'bench',
-      'reserve'
+      'reserve',
     ];
 
     for (String line in lines) {
@@ -12591,14 +13157,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           final stancePart = parts[1].trim();
           final heightPart = parts[2].trim();
 
-          final nameNumberMatch =
-              RegExp(r'^(.+?)\s+(\d+)$').firstMatch(namePart);
+          final nameNumberMatch = RegExp(
+            r'^(.+?)\s+(\d+)$',
+          ).firstMatch(namePart);
           if (nameNumberMatch != null) {
             final fullName = nameNumberMatch.group(1)?.trim();
             final playerNumber = nameNumberMatch.group(2);
 
-            final nameMatch =
-                RegExp(r'^(.+?)\s+(.+)$').firstMatch(fullName ?? '');
+            final nameMatch = RegExp(
+              r'^(.+?)\s+(.+)$',
+            ).firstMatch(fullName ?? '');
             if (nameMatch != null) {
               final firstName = nameMatch.group(1)?.trim();
               final lastName = nameMatch.group(2)?.trim();
@@ -12607,9 +13175,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   lastName != null &&
                   firstName.length > 1 &&
                   lastName.length > 1) {
-                if (!skipKeywords.any((keyword) =>
-                    (firstName.toLowerCase()).contains(keyword) ||
-                    (lastName.toLowerCase()).contains(keyword))) {
+                if (!skipKeywords.any(
+                  (keyword) =>
+                      (firstName.toLowerCase()).contains(keyword) ||
+                      (lastName.toLowerCase()).contains(keyword),
+                )) {
                   final playerKey =
                       '${firstName.toLowerCase()}_${lastName.toLowerCase()}';
 
@@ -12668,9 +13238,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (firstName != null && lastName != null) {
         if (firstName.length > 1 && lastName.length > 1) {
-          if (!skipKeywords.any((keyword) =>
-              (firstName?.toLowerCase() ?? '').contains(keyword) ||
-              (lastName?.toLowerCase() ?? '').contains(keyword))) {
+          if (!skipKeywords.any(
+            (keyword) =>
+                (firstName?.toLowerCase() ?? '').contains(keyword) ||
+                (lastName?.toLowerCase() ?? '').contains(keyword),
+          )) {
             final player = {
               'firstName': firstName,
               'lastName': lastName,
@@ -12686,7 +13258,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'No players found in the pasted text. Please check the format.'),
+            'No players found in the pasted text. Please check the format.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -12696,8 +13269,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _showParsedPlayersDialog(parsedPlayers, isHomeTeam: isHomeTeam);
   }
 
-  void _showParsedPlayersDialog(List<Map<String, String>> players,
-      {required bool isHomeTeam}) {
+  void _showParsedPlayersDialog(
+    List<Map<String, String>> players, {
+    required bool isHomeTeam,
+  }) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -12736,13 +13311,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Text(
                                   '#$number',
                                   style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              Expanded(
-                                child: Text('$firstName $lastName'),
-                              ),
+                              Expanded(child: Text('$firstName $lastName')),
                             ],
                           ),
                         );
@@ -12766,8 +13340,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 await Future.delayed(Duration.zero);
 
                 Future.microtask(() {
-                  _addParsedPlayersToCodeReplacements(players,
-                      isHomeTeam: isHomeTeam);
+                  _addParsedPlayersToCodeReplacements(
+                    players,
+                    isHomeTeam: isHomeTeam,
+                  );
                 });
               },
               child: const Text('Add Players'),
@@ -12778,10 +13354,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     );
   }
 
-  void _addParsedPlayersToCodeReplacements(List<Map<String, String>> players,
-      {required bool isHomeTeam}) {
+  void _addParsedPlayersToCodeReplacements(
+    List<Map<String, String>> players, {
+    required bool isHomeTeam,
+  }) {
     print(
-        '_addParsedPlayersToCodeReplacements called with ${players.length} players');
+      '_addParsedPlayersToCodeReplacements called with ${players.length} players',
+    );
 
     final prefix = isHomeTeam ? 'h' : 'v';
     final Map<String, Replacement> newReplacements = {};
@@ -12830,7 +13409,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Added ${players.length} players to ${teamName ?? (isHomeTeam ? 'home' : 'visiting')} team'),
+              'Added ${players.length} players to ${teamName ?? (isHomeTeam ? 'home' : 'visiting')} team',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -12861,8 +13441,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   border: Border.all(color: Colors.grey.shade400),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 4.0,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.min,
@@ -12880,7 +13462,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         : 'Grand Slam',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.color,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -12905,11 +13489,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 minimumSize: const Size(0, 24),
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
               ),
-              child: const Text('Clear Selection',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.redAccent)),
+              child: const Text(
+                'Clear Selection',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.redAccent,
+                ),
+              ),
             ),
             const Divider(height: 1),
           ],
@@ -13011,14 +13598,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.chevron_right,
-                                      size: 14, color: Colors.grey),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
                                     style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.normal,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
@@ -13168,9 +13759,7 @@ class _PressToZoomImageState extends State<_PressToZoomImage> {
               return Container(
                 color: Colors.black,
                 child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                  ),
+                  child: CircularProgressIndicator(color: Colors.white),
                 ),
               );
             case LoadState.completed:
