@@ -1601,24 +1601,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 60,
+          width: 80,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               // Gradient header
               Container(
-                width: 60,
+                width: 80,
                 height: 28,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      Colors.grey.shade200,
-                      Colors.white,
-                    ],
-                  ),
+                  color: Colors.grey.shade200,
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(4),
                     topRight: Radius.circular(4),
@@ -1629,10 +1622,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Row(
                     children: [
                       Text(
-                        'INNING',
+                        'Inning',
                         style: TextStyle(
                           color: Colors.grey.shade700,
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1642,6 +1635,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
               // Inning box content
               Container(
+                width: 80,
                 padding: const EdgeInsets.all(6.0),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade300),
@@ -1660,8 +1654,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         child: GestureDetector(
                           onTap: () => onInningSelected(inning),
                           child: Container(
-                            width: 40,
-                            height: 20,
+                            width: 50,
+                            height: 28,
                             decoration: BoxDecoration(
                               color: selectedInning == inning
                                   ? Colors.grey.shade600
@@ -1694,8 +1688,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           _showExtraInningsDialog(onInningSelected);
                         },
                         child: Container(
-                          width: 40,
-                          height: 20,
+                          width: 50,
+                          height: 28,
                           decoration: BoxDecoration(
                             color:
                                 (selectedInning != null && selectedInning >= 10)
@@ -1705,7 +1699,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                           child: Center(
                             child: Text(
-                              'X',
+                              'EXT',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: (selectedInning != null &&
@@ -9563,7 +9557,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 8),
                                   // Verb chips on the right
                                   Expanded(
                                     child: Padding(
@@ -9582,16 +9576,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   width: 280,
                                                   height: 28,
                                                   decoration: BoxDecoration(
-                                                    gradient: LinearGradient(
-                                                      begin:
-                                                          Alignment.centerLeft,
-                                                      end:
-                                                          Alignment.centerRight,
-                                                      colors: [
-                                                        Colors.grey.shade200,
-                                                        Colors.white,
-                                                      ],
-                                                    ),
+                                                    color: Colors.grey.shade200,
                                                     borderRadius:
                                                         const BorderRadius.only(
                                                       topLeft:
@@ -9641,8 +9626,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           FontWeight
                                                                               .bold,
                                                                       color: Colors
-                                                                          .grey
-                                                                          .shade700,
+                                                                          .black,
                                                                     ),
                                                                   ),
                                                                 ),
@@ -9662,8 +9646,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9694,8 +9677,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9718,8 +9700,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9750,8 +9731,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9777,8 +9757,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9809,8 +9788,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         fontWeight:
                                                                             FontWeight.bold,
                                                                         color: Colors
-                                                                            .grey
-                                                                            .shade700,
+                                                                            .black,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -9820,11 +9798,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ),
                                                         ] else ...[
                                                           Text(
-                                                            'Action Verbs',
+                                                            'Action',
                                                             style: TextStyle(
-                                                              color: Colors.grey
-                                                                  .shade700,
-                                                              fontSize: 10,
+                                                              color:
+                                                                  Colors.black,
+                                                              fontSize: 11,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w600,
@@ -9946,13 +9924,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ],
                                             ),
                                           ),
-                                          const SizedBox(width: 16),
+                                          const SizedBox(width: 8),
                                           Expanded(
                                             flex: 1,
                                             child: _buildHitInningSelector(
                                                 showWalkOffOption: true),
                                           ),
-                                          const SizedBox(width: 16),
+                                          const SizedBox(width: 8),
                                         ],
                                       ),
                                     ),
