@@ -11590,14 +11590,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required bool isHomeList,
     required bool toggle,
   }) {
-    final searchController =
-        isHomeList ? _homeSearchController : _awaySearchController;
-    final teamSearchText = searchController.text.toLowerCase();
-    final mainSearchText = _playerPickerSearchText.toLowerCase();
-
-    // Use main search text if available, otherwise use team search text
-    final searchText =
-        mainSearchText.isNotEmpty ? mainSearchText : teamSearchText;
+    final searchText = _playerPickerSearchText.toLowerCase();
 
     // Separate lists for different match types to apply priority sorting
     final List<String> exactNumberMatches = [];
@@ -11654,30 +11647,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name and search bar in a row
-          Row(
-            children: [
-              // Team name
-              RichText(
-                text: TextSpan(
-                  // Default style for the team name
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          12, // Reduced from 14 to 12 to make team name smaller
-                      color: Colors.black,
-                      fontFamily: 'RobotoCondensed'),
-                  children: <TextSpan>[
-                    TextSpan(text: title),
-                  ],
-                ),
-              ),
-              const SizedBox(
-                  width: 8), // Space between team name and search bar
-              // Search bar
-              _buildSearchWithDropdown(
-                  searchController, searchText, isHomeList, filteredCodes),
-            ],
+          // Team name
+          RichText(
+            text: TextSpan(
+              // Default style for the team name
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize:
+                      12, // Reduced from 14 to 12 to make team name smaller
+                  color: Colors.black,
+                  fontFamily: 'RobotoCondensed'),
+              children: <TextSpan>[
+                TextSpan(text: title),
+              ],
+            ),
           ),
           // Switch Team button below the row
           if (toggle)
@@ -11698,8 +11681,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           (!isHomeList && selectedOpponentPlayers.isNotEmpty)
                       ? null
                       : () {
-                          _homeSearchController.clear();
-                          _awaySearchController.clear();
                           setState(() {
                             _showHomeFirst = !_showHomeFirst;
                             // When switching, clear all selections to avoid confusion.
@@ -11732,12 +11713,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 8),
-          SizedBox(
-              height: (teamSearchText.isNotEmpty &&
-                      RegExp(r'^\d+$').hasMatch(teamSearchText) &&
-                      filteredCodes.isNotEmpty)
-                  ? 220
-                  : 8), // Extra space when dropdown is visible
+          const SizedBox(height: 8), // Fixed height since no dropdown
           // Selected players chips
           if ((isHomeList && selectedPlayers.isNotEmpty) ||
               (!isHomeList && selectedOpponentPlayers.isNotEmpty))
