@@ -8586,168 +8586,166 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               ),
                                                             ),
                                                           )
-                                                        : LayoutBuilder(
-                                                            builder: (context,
-                                                                constraints) {
-                                                              int columns = 5;
-                                                              int rows = 3;
-                                                              double spacing =
-                                                                  2.0;
-                                                              double
-                                                                  totalSpacingWidth =
-                                                                  (columns -
-                                                                          1) *
-                                                                      spacing;
-                                                              double
-                                                                  totalSpacingHeight =
-                                                                  (rows - 1) *
-                                                                      spacing;
-                                                              double
-                                                                  thumbWidth =
-                                                                  (constraints.maxWidth -
-                                                                          totalSpacingWidth) /
-                                                                      columns;
-                                                              double
-                                                                  thumbHeight =
-                                                                  (constraints.maxHeight -
-                                                                          totalSpacingHeight) /
-                                                                      rows;
+                                                        : Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .all(8.0),
+                                                            child:
+                                                                LayoutBuilder(
+                                                              builder: (context,
+                                                                  constraints) {
+                                                                int columns = 5;
+                                                                int rows = 3;
+                                                                double spacing =
+                                                                    4.0;
+                                                                double
+                                                                    totalSpacingWidth =
+                                                                    (columns -
+                                                                            1) *
+                                                                        spacing;
+                                                                double
+                                                                    totalSpacingHeight =
+                                                                    (rows - 1) *
+                                                                        spacing;
+                                                                double
+                                                                    thumbWidth =
+                                                                    (constraints.maxWidth -
+                                                                            totalSpacingWidth) /
+                                                                        columns;
+                                                                double
+                                                                    thumbHeight =
+                                                                    (constraints.maxHeight -
+                                                                            totalSpacingHeight) /
+                                                                        rows;
 
-                                                              return GridView
-                                                                  .builder(
-                                                                gridDelegate:
-                                                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                                                  crossAxisCount:
-                                                                      columns,
-                                                                  crossAxisSpacing:
-                                                                      spacing,
-                                                                  mainAxisSpacing:
-                                                                      spacing,
-                                                                  childAspectRatio:
-                                                                      thumbWidth /
-                                                                          thumbHeight,
-                                                                ),
-                                                                itemCount:
-                                                                    imagePaths
-                                                                        .length,
-                                                                itemBuilder:
-                                                                    (context,
-                                                                        index) {
-                                                                  final imagePath =
-                                                                      imagePaths[
-                                                                          index];
-                                                                  return MouseRegion(
-                                                                    child:
-                                                                        GestureDetector(
-                                                                      onSecondaryTapDown:
-                                                                          (TapDownDetails
-                                                                              details) {
-                                                                        _showThumbnailContextMenuAtPosition(
-                                                                            context,
-                                                                            index,
-                                                                            details.globalPosition);
-                                                                      },
-                                                                      onTap:
-                                                                          () async {
-                                                                        // Check for modifier keys - use Option to avoid conflicts with normal selection
-                                                                        if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altLeft) ||
-                                                                            HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altRight)) {
-                                                                          // Check if Shift is also pressed (Option+Shift+click for paste)
-                                                                          if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-                                                                              HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
-                                                                            // Option+Shift+click: Select thumbnail first, then paste metadata
-                                                                            if (index !=
-                                                                                currentIndex) {
-                                                                              setState(() {
-                                                                                currentIndex = index;
-                                                                              });
-                                                                              await _loadMetadata();
-                                                                            }
-                                                                            await _pasteMetadataToCurrentImage();
-                                                                            return;
-                                                                          } else {
-                                                                            // Option+click: Save current caption first, then copy metadata from clicked image
-                                                                            if (imagePaths.isNotEmpty &&
-                                                                                currentIndex < imagePaths.length) {
-                                                                              await _saveCaptionToFile(imagePaths[currentIndex]);
-                                                                            }
-                                                                            await _copyMetadataFromIndex(index);
-                                                                            return;
-                                                                          }
-                                                                        }
-
-                                                                        // Regular click: Select thumbnail and load metadata
-                                                                        if (index !=
-                                                                            currentIndex) {
-                                                                          await _selectImage(
-                                                                              index);
-                                                                        }
-                                                                      },
-                                                                      child:
-                                                                          Container(
-                                                                        width:
-                                                                            thumbWidth,
-                                                                        height:
+                                                                return GridView
+                                                                    .builder(
+                                                                  gridDelegate:
+                                                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                                                    crossAxisCount:
+                                                                        columns,
+                                                                    crossAxisSpacing:
+                                                                        spacing,
+                                                                    mainAxisSpacing:
+                                                                        spacing,
+                                                                    childAspectRatio:
+                                                                        thumbWidth /
                                                                             thumbHeight,
-                                                                        decoration:
-                                                                            BoxDecoration(
-                                                                          color: Colors
-                                                                              .grey
-                                                                              .shade100,
-                                                                          border:
-                                                                              Border.all(
-                                                                            color: index == currentIndex
-                                                                                ? Theme.of(context).colorScheme.primary
-                                                                                : Colors.grey.shade400,
-                                                                            width: index == currentIndex
-                                                                                ? 2.5
-                                                                                : 1.5,
-                                                                          ),
-                                                                          borderRadius:
-                                                                              BorderRadius.circular(4),
-                                                                        ),
+                                                                  ),
+                                                                  itemCount:
+                                                                      imagePaths
+                                                                          .length,
+                                                                  itemBuilder:
+                                                                      (context,
+                                                                          index) {
+                                                                    final imagePath =
+                                                                        imagePaths[
+                                                                            index];
+                                                                    return MouseRegion(
+                                                                      child:
+                                                                          GestureDetector(
+                                                                        onSecondaryTapDown:
+                                                                            (TapDownDetails
+                                                                                details) {
+                                                                          _showThumbnailContextMenuAtPosition(
+                                                                              context,
+                                                                              index,
+                                                                              details.globalPosition);
+                                                                        },
+                                                                        onTap:
+                                                                            () async {
+                                                                          // Check for modifier keys - use Option to avoid conflicts with normal selection
+                                                                          if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altLeft) ||
+                                                                              HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.altRight)) {
+                                                                            // Check if Shift is also pressed (Option+Shift+click for paste)
+                                                                            if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+                                                                                HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.shiftRight)) {
+                                                                              // Option+Shift+click: Select thumbnail first, then paste metadata
+                                                                              if (index != currentIndex) {
+                                                                                setState(() {
+                                                                                  currentIndex = index;
+                                                                                });
+                                                                                await _loadMetadata();
+                                                                              }
+                                                                              await _pasteMetadataToCurrentImage();
+                                                                              return;
+                                                                            } else {
+                                                                              // Option+click: Save current caption first, then copy metadata from clicked image
+                                                                              if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
+                                                                                await _saveCaptionToFile(imagePaths[currentIndex]);
+                                                                              }
+                                                                              await _copyMetadataFromIndex(index);
+                                                                              return;
+                                                                            }
+                                                                          }
+
+                                                                          // Regular click: Select thumbnail and load metadata
+                                                                          if (index !=
+                                                                              currentIndex) {
+                                                                            await _selectImage(index);
+                                                                          }
+                                                                        },
                                                                         child:
-                                                                            Column(
-                                                                          children: [
-                                                                            Expanded(
-                                                                              child: Container(
-                                                                                margin: const EdgeInsets.all(3),
-                                                                                child: ClipRRect(
-                                                                                  borderRadius: BorderRadius.circular(2),
-                                                                                  child: _buildProportionalThumbnail(imagePath),
-                                                                                ),
-                                                                              ),
-                                                                            ),
                                                                             Container(
-                                                                              width: double.infinity,
-                                                                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                                                                              decoration: BoxDecoration(
-                                                                                color: Colors.grey.shade200,
-                                                                                borderRadius: const BorderRadius.only(
-                                                                                  bottomLeft: Radius.circular(4),
-                                                                                  bottomRight: Radius.circular(4),
-                                                                                ),
-                                                                              ),
-                                                                              child: Text(
-                                                                                p.basenameWithoutExtension(imagePath),
-                                                                                style: const TextStyle(
-                                                                                  color: Colors.black,
-                                                                                  fontSize: 8,
-                                                                                  fontWeight: FontWeight.w500,
-                                                                                ),
-                                                                                textAlign: TextAlign.center,
-                                                                                maxLines: 1,
-                                                                                overflow: TextOverflow.ellipsis,
-                                                                              ),
+                                                                          width:
+                                                                              thumbWidth,
+                                                                          height:
+                                                                              thumbHeight,
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color:
+                                                                                Colors.grey.shade100,
+                                                                            border:
+                                                                                Border.all(
+                                                                              color: index == currentIndex ? Theme.of(context).colorScheme.primary : Colors.grey.shade400,
+                                                                              width: index == currentIndex ? 2.5 : 1.5,
                                                                             ),
-                                                                          ],
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(4),
+                                                                          ),
+                                                                          child:
+                                                                              Column(
+                                                                            children: [
+                                                                              Expanded(
+                                                                                child: Container(
+                                                                                  margin: const EdgeInsets.all(3),
+                                                                                  child: ClipRRect(
+                                                                                    borderRadius: BorderRadius.circular(2),
+                                                                                    child: _buildProportionalThumbnail(imagePath),
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                              Container(
+                                                                                width: double.infinity,
+                                                                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                decoration: BoxDecoration(
+                                                                                  color: Colors.grey.shade200,
+                                                                                  borderRadius: const BorderRadius.only(
+                                                                                    bottomLeft: Radius.circular(4),
+                                                                                    bottomRight: Radius.circular(4),
+                                                                                  ),
+                                                                                ),
+                                                                                child: Text(
+                                                                                  p.basenameWithoutExtension(imagePath),
+                                                                                  style: const TextStyle(
+                                                                                    color: Colors.black,
+                                                                                    fontSize: 8,
+                                                                                    fontWeight: FontWeight.w500,
+                                                                                  ),
+                                                                                  textAlign: TextAlign.center,
+                                                                                  maxLines: 1,
+                                                                                  overflow: TextOverflow.ellipsis,
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
                                                                         ),
                                                                       ),
-                                                                    ),
-                                                                  );
-                                                                },
-                                                              );
-                                                            },
+                                                                    );
+                                                                  },
+                                                                );
+                                                              },
+                                                            ),
                                                           ),
                                                   ),
                                                   if (imagePaths.isNotEmpty)
