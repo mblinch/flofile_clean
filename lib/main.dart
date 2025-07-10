@@ -11735,7 +11735,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 height: 24,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border.all(color: Colors.grey.shade400),
+                  border: Border.all(color: Colors.blue.shade300),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
