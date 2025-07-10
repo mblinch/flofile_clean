@@ -10138,60 +10138,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       ],
                                                       // Results - Both teams side by side
                                                       Expanded(
-                                                        child:
-                                                            _playerPickerSearchText
-                                                                    .isEmpty
-                                                                ? const Center(
-                                                                    child: Text(
-                                                                      'Type a name or number to search for players',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            12,
-                                                                        color: Colors
-                                                                            .grey,
-                                                                        fontStyle:
-                                                                            FontStyle.italic,
-                                                                      ),
-                                                                    ),
-                                                                  )
-                                                                : Row(
-                                                                    children: [
-                                                                      // Away Team Column
-                                                                      Expanded(
-                                                                        child:
-                                                                            _buildPlayerContainer(
-                                                                          title: selectedAwayTeam != null
-                                                                              ? _getTeamShortName(selectedAwayTeam!)
-                                                                              : 'Away Team',
-                                                                          codes:
-                                                                              awayPlayers,
-                                                                          isHomeList:
-                                                                              false,
-                                                                          toggle:
-                                                                              false,
-                                                                        ),
-                                                                      ),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              8),
-                                                                      // Home Team Column
-                                                                      Expanded(
-                                                                        child:
-                                                                            _buildPlayerContainer(
-                                                                          title: selectedHomeTeam != null
-                                                                              ? _getTeamShortName(selectedHomeTeam!)
-                                                                              : 'Home Team',
-                                                                          codes:
-                                                                              homePlayers,
-                                                                          isHomeList:
-                                                                              true,
-                                                                          toggle:
-                                                                              false,
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
+                                                        child: Row(
+                                                          children: [
+                                                            // Away Team Column
+                                                            Expanded(
+                                                              child:
+                                                                  _buildPlayerContainer(
+                                                                title: selectedAwayTeam !=
+                                                                        null
+                                                                    ? _getTeamShortName(
+                                                                        selectedAwayTeam!)
+                                                                    : 'Away Team',
+                                                                codes:
+                                                                    awayPlayers,
+                                                                isHomeList:
+                                                                    false,
+                                                                toggle: false,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                                width: 8),
+                                                            // Home Team Column
+                                                            Expanded(
+                                                              child:
+                                                                  _buildPlayerContainer(
+                                                                title: selectedHomeTeam !=
+                                                                        null
+                                                                    ? _getTeamShortName(
+                                                                        selectedHomeTeam!)
+                                                                    : 'Home Team',
+                                                                codes:
+                                                                    homePlayers,
+                                                                isHomeList:
+                                                                    true,
+                                                                toggle: false,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
                                                     ],
                                                   ),
