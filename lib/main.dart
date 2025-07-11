@@ -1326,19 +1326,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Widget _buildActionToolbar() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 35),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red, width: 5.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.shade300,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: const Color(0xFFFFFFFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200, width: 1.0),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -7677,18 +7669,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         });
       },
       trailing: Container(
-        padding: const EdgeInsets.all(50),
+        padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 35),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade400, width: 1.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade400,
-              blurRadius: 2,
-              offset: const Offset(0, 1),
-            ),
-          ],
+          border: Border.all(color: Colors.grey.shade200, width: 1.0),
         ),
         child: Padding(
           padding: const EdgeInsets.only(top: 34.0),
@@ -9289,7 +9274,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         child: Focus(
           autofocus: true,
           child: Scaffold(
-            backgroundColor: const Color(0xFFF5F5F5),
+            backgroundColor: Color(0xFFF5F5F5),
             appBar: AdaptiveAppBar(
               toolbarHeight: 70,
               titleSpacing: 8,
@@ -10380,7 +10365,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 children: [
                                   // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
                                   SizedBox(
-                                    width: 382,
+                                    width: 387,
                                     height: 550,
                                     child: DefaultTabController(
                                       length: 1,
