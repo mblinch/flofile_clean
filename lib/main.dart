@@ -1347,9 +1347,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: _selectedRbiInning == null
-                  ? Colors.orange.shade100
-                  : Colors.green.shade100,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
                   color: _selectedRbiInning == null
@@ -1388,7 +1386,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 24),
         // Second row: Navigation buttons
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -1413,7 +1411,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: Colors.grey.shade200, width: 1),
             ),
@@ -7723,9 +7721,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _selectedRbiInning == null
-                      ? Colors.orange.shade100
-                      : Colors.green.shade100,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
                       color: _selectedRbiInning == null
@@ -7764,7 +7760,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 24),
             // Second row: Previous, Next
             Row(
               children: [
@@ -7845,7 +7841,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: Colors.grey.shade200, width: 1),
                 ),
@@ -7863,7 +7859,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 24),
             // Fourth row: Paste Last Caption
             Row(
               children: [
@@ -7899,7 +7895,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           child: Text(
                             'Paste Last Caption',
                             style: TextStyle(
-                              fontSize: 8,
+                              fontSize: 10,
                               color: _lastCaption.isNotEmpty
                                   ? Colors.black
                                   : Colors.grey,
@@ -7986,7 +7982,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 24),
             // Sixth row: Reset Caption
             Row(
               children: [
