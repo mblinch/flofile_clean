@@ -1325,165 +1325,181 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildActionToolbar() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Top row: FTP button only
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // FTP button
-            _buildCompactButton(
-              'FTP',
-              _onFtpPressed,
-              isBlue: true,
-            ),
-          ],
-        ),
-        // Inning selection status
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 200,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                  color: _selectedRbiInning == null
-                      ? Colors.orange.shade300
-                      : Colors.green.shade300,
-                  width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                    _selectedRbiInning == null
-                        ? Icons.warning
-                        : Icons.check_circle,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red, width: 5.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.shade300,
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Top row: FTP button only
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // FTP button
+              _buildCompactButton(
+                'FTP',
+                _onFtpPressed,
+                isBlue: true,
+              ),
+            ],
+          ),
+          // Inning selection status
+          const SizedBox(height: 4),
+          SizedBox(
+            width: 200,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
                     color: _selectedRbiInning == null
-                        ? Colors.orange.shade700
-                        : Colors.green.shade700,
-                    size: 16),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    _selectedRbiInning == null
-                        ? 'Please select an inning'
-                        : 'Inning ${_selectedRbiInning} selected',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
+                        ? Colors.orange.shade300
+                        : Colors.green.shade300,
+                    width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                      _selectedRbiInning == null
+                          ? Icons.warning
+                          : Icons.check_circle,
                       color: _selectedRbiInning == null
                           ? Colors.orange.shade700
                           : Colors.green.shade700,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                      size: 16),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      _selectedRbiInning == null
+                          ? 'Please select an inning'
+                          : 'Inning ${_selectedRbiInning} selected',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _selectedRbiInning == null
+                            ? Colors.orange.shade700
+                            : Colors.green.shade700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        // Second row: Navigation buttons
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSquareIconButton(
-              icon: Icons.arrow_back,
-              tooltip: 'Previous Image',
-              onPressed: imagePaths.isNotEmpty ? () => previousImage() : null,
-            ),
-            const SizedBox(width: 8),
-            _buildSquareIconButton(
-              icon: Icons.arrow_forward,
-              tooltip: 'Next Image',
-              onPressed: imagePaths.isNotEmpty ? () => nextImage() : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        // Bottom row: Image counter box
-        SizedBox(
-          width: 200, // Make it 200 pixels wide
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade200, width: 1),
-            ),
-            child: Center(
-              child: Text(
-                imagePaths.isEmpty
-                    ? 'No images'
-                    : '${currentIndex + 1} of ${imagePaths.length}',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
+          const SizedBox(height: 24),
+          // Second row: Navigation buttons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildSquareIconButton(
+                icon: Icons.arrow_back,
+                tooltip: 'Previous Image',
+                onPressed: imagePaths.isNotEmpty ? () => previousImage() : null,
+              ),
+              const SizedBox(width: 8),
+              _buildSquareIconButton(
+                icon: Icons.arrow_forward,
+                tooltip: 'Next Image',
+                onPressed: imagePaths.isNotEmpty ? () => nextImage() : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Bottom row: Image counter box
+          SizedBox(
+            width: 200, // Make it 200 pixels wide
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade200, width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  imagePaths.isEmpty
+                      ? 'No images'
+                      : '${currentIndex + 1} of ${imagePaths.length}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        // Burst mode indicator (if needed)
-        if (_isBurstMode) ...[
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.orange,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.orange.shade700, width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.burst_mode, color: Colors.white, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  'BURST (${_burstIndices.length})',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+          // Burst mode indicator (if needed)
+          if (_isBurstMode) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.orange.shade700, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.burst_mode, color: Colors.white, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    'BURST (${_burstIndices.length})',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-        // Sort mode indicator (if needed)
-        if (_isSortedByDate || _isSortedByFilename) ...[
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.blue,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.blue.shade700, width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.sort, color: Colors.white, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  _isSortedByDate ? 'SORTED BY DATE' : 'SORTED BY NAME',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+          ],
+          // Sort mode indicator (if needed)
+          if (_isSortedByDate || _isSortedByFilename) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue.shade700, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.sort, color: Colors.white, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    _isSortedByDate ? 'SORTED BY DATE' : 'SORTED BY NAME',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -7660,368 +7676,392 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           _updateCaption();
         });
       },
-      trailing: Padding(
-        padding: const EdgeInsets.only(top: 34.0),
-        child: Column(
-          children: [
-            // First row: FTP
-            Row(
-              children: [
-                SizedBox(
-                  width: 200,
-                  height: 24,
-                  child: Material(
-                    color: const Color(0xFF0052CC),
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: const BorderSide(
-                        color: Color(0xFF0052CC),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: InkWell(
-                      onTap: _onFtpPressed,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
+      trailing: Container(
+        padding: const EdgeInsets.all(50),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade400, width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade400,
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 34.0),
+          child: Column(
+            children: [
+              // First row: FTP
+              Row(
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 24,
+                    child: Material(
+                      color: const Color(0xFF0052CC),
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side: const BorderSide(
+                          color: Color(0xFF0052CC),
+                          width: 1.0,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.cloud_upload,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'FTP',
-                              style: TextStyle(
-                                fontSize: 10,
+                      ),
+                      child: InkWell(
+                        onTap: _onFtpPressed,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.cloud_upload,
+                                size: 14,
                                 color: Colors.white,
-                                fontWeight: FontWeight.normal,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              const Text(
+                                'FTP',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            // Inning selection status
-            const SizedBox(height: 4),
-            SizedBox(
-              width: 200,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: _selectedRbiInning == null
-                          ? Colors.orange.shade300
-                          : Colors.green.shade300,
-                      width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                        _selectedRbiInning == null
-                            ? Icons.warning
-                            : Icons.check_circle,
+                ],
+              ),
+              // Inning selection status
+              const SizedBox(height: 4),
+              SizedBox(
+                width: 200,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
                         color: _selectedRbiInning == null
-                            ? Colors.orange.shade700
-                            : Colors.green.shade700,
-                        size: 16),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        _selectedRbiInning == null
-                            ? 'Please select an inning'
-                            : 'Inning ${_selectedRbiInning} selected',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
+                            ? Colors.orange.shade300
+                            : Colors.green.shade300,
+                        width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                          _selectedRbiInning == null
+                              ? Icons.warning
+                              : Icons.check_circle,
                           color: _selectedRbiInning == null
                               ? Colors.orange.shade700
                               : Colors.green.shade700,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Second row: Previous, Next
-            Row(
-              children: [
-                SizedBox(
-                  width: 100,
-                  height: 24,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
-                    ),
-                    child: InkWell(
-                      onTap:
-                          imagePaths.isNotEmpty ? () => previousImage() : null,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            '← Prev',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                              fontWeight: FontWeight.normal,
-                            ),
+                          size: 16),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          _selectedRbiInning == null
+                              ? 'Please select an inning'
+                              : 'Inning ${_selectedRbiInning} selected',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _selectedRbiInning == null
+                                ? Colors.orange.shade700
+                                : Colors.green.shade700,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 100,
-                  height: 24,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
-                    ),
-                    child: InkWell(
-                      onTap: imagePaths.isNotEmpty ? () => nextImage() : null,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Next →',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                              fontWeight: FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Third row: Image counter box
-            SizedBox(
-              width: 200,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.shade200, width: 1),
-                ),
-                child: Center(
-                  child: Text(
-                    imagePaths.isEmpty
-                        ? 'No images'
-                        : '${currentIndex + 1} of ${imagePaths.length}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black87,
-                    ),
+                    ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            // Fourth row: Paste Last Caption
-            Row(
-              children: [
-                SizedBox(
-                  width: 200,
-                  height: 24,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
-                    ),
-                    child: InkWell(
-                      onTap: _lastCaption.isNotEmpty
-                          ? () {
-                              captionController.text = _lastCaption;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Last caption pasted!'),
-                                ),
-                              );
-                            }
-                          : null,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Paste Last Caption',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: _lastCaption.isNotEmpty
-                                  ? Colors.black
-                                  : Colors.grey,
-                              fontWeight: FontWeight.normal,
+              const SizedBox(height: 24),
+              // Second row: Previous, Next
+              Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: imagePaths.isNotEmpty
+                            ? () => previousImage()
+                            : null,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              '← Prev',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            // Fifth row: Copy, Paste
-            Row(
-              children: [
-                SizedBox(
-                  width: 100,
-                  height: 24,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
-                    ),
-                    child: InkWell(
-                      onTap: _onCopyPressed,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Copy',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                              fontWeight: FontWeight.normal,
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 100,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: imagePaths.isNotEmpty ? () => nextImage() : null,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Next →',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 100,
-                  height: 24,
-                  child: Material(
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Third row: Image counter box
+              SizedBox(
+                width: 200,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade200, width: 1),
+                  ),
+                  child: Center(
+                    child: Text(
+                      imagePaths.isEmpty
+                          ? 'No images'
+                          : '${currentIndex + 1} of ${imagePaths.length}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
                     ),
-                    child: InkWell(
-                      onTap: _onPastePressed,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Paste',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                              fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Fourth row: Paste Last Caption
+              Row(
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: _lastCaption.isNotEmpty
+                            ? () {
+                                captionController.text = _lastCaption;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Last caption pasted!'),
+                                  ),
+                                );
+                              }
+                            : null,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Paste Last Caption',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: _lastCaption.isNotEmpty
+                                    ? Colors.black
+                                    : Colors.grey,
+                                fontWeight: FontWeight.normal,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            // Sixth row: Reset Caption
-            Row(
-              children: [
-                SizedBox(
-                  width: 200,
-                  height: 24,
-                  child: Material(
-                    color: Colors.white,
-                    elevation: 2,
-                    shadowColor: Colors.grey.shade400,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      side: BorderSide(color: Colors.grey.shade400, width: 1.0),
-                    ),
-                    child: InkWell(
-                      onTap: _resetCaption,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Reset Caption',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.black,
-                              fontWeight: FontWeight.normal,
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Fifth row: Copy, Paste
+              Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: _onCopyPressed,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Copy',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 100,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: _onPastePressed,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Paste',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Sixth row: Reset Caption
+              Row(
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 24,
+                    child: Material(
+                      color: Colors.white,
+                      elevation: 2,
+                      shadowColor: Colors.grey.shade400,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        side:
+                            BorderSide(color: Colors.grey.shade400, width: 1.0),
+                      ),
+                      child: InkWell(
+                        onTap: _resetCaption,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Reset Caption',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
