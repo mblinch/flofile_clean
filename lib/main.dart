@@ -179,6 +179,15 @@ class ToggleHomeAwayIntent extends Intent {}
 
 class PasteLastCaptionIntent extends Intent {}
 
+/// Intents for image navigation
+class PreviousImageIntent extends Intent {}
+
+class NextImageIntent extends Intent {}
+
+class NavigateUpIntent extends Intent {}
+
+class NavigateDownIntent extends Intent {}
+
 class CaptionBuilder extends StatefulWidget {
   const CaptionBuilder({super.key});
 
@@ -9282,67 +9291,140 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             },
           ),
         },
-        child: KeyboardListener(
-          focusNode: FocusNode(),
-          autofocus: true,
-          onKeyEvent: (KeyEvent event) {
-            // Handle arrow keys on key down events
-            if (event is KeyDownEvent && imagePaths.isNotEmpty) {
-              // Check if Cmd key is pressed
-              final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
-
-              // Check if we're in a text field
-              final currentFocus = FocusScope.of(context).focusedChild;
-              bool isInTextField = false;
-
-              if (currentFocus != null) {
-                final widget = currentFocus.context?.widget;
-                if (widget != null) {
-                  isInTextField = widget is TextField ||
-                      widget is EditableText ||
-                      widget.runtimeType.toString().contains('TextField') ||
-                      widget.runtimeType.toString().contains('EditableText');
-                }
-              }
-
-              // Determine if we should handle navigation
-              bool shouldNavigate = false;
-
-              if (isInTextField) {
-                // In text field: only navigate with Cmd+Arrow
-                shouldNavigate = isCmdPressed;
-              } else {
-                // Not in text field (e.g., GridView): navigate with plain arrows or Cmd+arrows
-                shouldNavigate = true;
-              }
-
-              if (shouldNavigate) {
-                if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                  previousImage();
-                } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                  // Save current caption before moving to next image
-                  _saveCaptionToFile(imagePaths[currentIndex]).then((_) {
-                    nextImage();
-                  });
-                } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                  // Navigate to thumbnail above (5 columns back)
-                  final newIndex = currentIndex - 5;
-                  if (newIndex >= 0) {
-                    _selectImage(newIndex);
-                  }
-                } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  // Navigate to thumbnail below (5 columns forward)
-                  final newIndex = currentIndex + 5;
-                  if (newIndex < imagePaths.length) {
-                    _selectImage(newIndex);
-                  }
-                }
-              }
-            }
+        child: Shortcuts(
+          shortcuts: {
+            // Cmd+Arrow keys for navigation when typing
+            const SingleActivator(LogicalKeyboardKey.arrowLeft, meta: true): PreviousImageIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowRight, meta: true): NextImageIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowUp, meta: true): NavigateUpIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowDown, meta: true): NavigateDownIntent(),
+            // Plain arrow keys for navigation when not typing
+            const SingleActivator(LogicalKeyboardKey.arrowLeft): PreviousImageIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowRight): NextImageIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowUp): NavigateUpIntent(),
+            const SingleActivator(LogicalKeyboardKey.arrowDown): NavigateDownIntent(),
           },
-          child: Focus(
-            autofocus: true,
-            child: Scaffold(
+          child: Actions(
+            actions: {
+              PreviousImageIntent: CallbackAction<PreviousImageIntent>(
+                onInvoke: (intent) {
+                  if (imagePaths.isNotEmpty) {
+                    // Check if we're in a text field
+                    final currentFocus = FocusScope.of(context).focusedChild;
+                    bool isInTextField = false;
+
+                    if (currentFocus != null) {
+                      final widget = currentFocus.context?.widget;
+                      if (widget != null) {
+                        isInTextField = widget is TextField ||
+                            widget is EditableText ||
+                            widget.runtimeType.toString().contains('TextField') ||
+                            widget.runtimeType.toString().contains('EditableText');
+                      }
+                    }
+
+                    // Only navigate if not in text field OR if Cmd is pressed
+                    final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
+                    if (!isInTextField || isCmdPressed) {
+                      previousImage();
+                    }
+                  }
+                  return null;
+                },
+              ),
+              NextImageIntent: CallbackAction<NextImageIntent>(
+                onInvoke: (intent) {
+                  if (imagePaths.isNotEmpty) {
+                    // Check if we're in a text field
+                    final currentFocus = FocusScope.of(context).focusedChild;
+                    bool isInTextField = false;
+
+                    if (currentFocus != null) {
+                      final widget = currentFocus.context?.widget;
+                      if (widget != null) {
+                        isInTextField = widget is TextField ||
+                            widget is EditableText ||
+                            widget.runtimeType.toString().contains('TextField') ||
+                            widget.runtimeType.toString().contains('EditableText');
+                      }
+                    }
+
+                    // Only navigate if not in text field OR if Cmd is pressed
+                    final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
+                    if (!isInTextField || isCmdPressed) {
+                      // Save current caption before moving to next image
+                      _saveCaptionToFile(imagePaths[currentIndex]).then((_) {
+                        nextImage();
+                      });
+                    }
+                  }
+                  return null;
+                },
+              ),
+              NavigateUpIntent: CallbackAction<NavigateUpIntent>(
+                onInvoke: (intent) {
+                  if (imagePaths.isNotEmpty) {
+                    // Check if we're in a text field
+                    final currentFocus = FocusScope.of(context).focusedChild;
+                    bool isInTextField = false;
+
+                    if (currentFocus != null) {
+                      final widget = currentFocus.context?.widget;
+                      if (widget != null) {
+                        isInTextField = widget is TextField ||
+                            widget is EditableText ||
+                            widget.runtimeType.toString().contains('TextField') ||
+                            widget.runtimeType.toString().contains('EditableText');
+                      }
+                    }
+
+                    // Only navigate if not in text field OR if Cmd is pressed
+                    final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
+                    if (!isInTextField || isCmdPressed) {
+                      // Navigate to thumbnail above (5 columns back)
+                      final newIndex = currentIndex - 5;
+                      if (newIndex >= 0) {
+                        _selectImage(newIndex);
+                      }
+                    }
+                  }
+                  return null;
+                },
+              ),
+              NavigateDownIntent: CallbackAction<NavigateDownIntent>(
+                onInvoke: (intent) {
+                  if (imagePaths.isNotEmpty) {
+                    // Check if we're in a text field
+                    final currentFocus = FocusScope.of(context).focusedChild;
+                    bool isInTextField = false;
+
+                    if (currentFocus != null) {
+                      final widget = currentFocus.context?.widget;
+                      if (widget != null) {
+                        isInTextField = widget is TextField ||
+                            widget is EditableText ||
+                            widget.runtimeType.toString().contains('TextField') ||
+                            widget.runtimeType.toString().contains('EditableText');
+                      }
+                    }
+
+                    // Only navigate if not in text field OR if Cmd is pressed
+                    final isCmdPressed = HardwareKeyboard.instance.isMetaPressed;
+                    if (!isInTextField || isCmdPressed) {
+                      // Navigate to thumbnail below (5 columns forward)
+                      final newIndex = currentIndex + 5;
+                      if (newIndex < imagePaths.length) {
+                        _selectImage(newIndex);
+                      }
+                    }
+                  }
+                  return null;
+                },
+              ),
+            },
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
               backgroundColor: Color(0xFFF5F5F5),
               appBar: AdaptiveAppBar(
                 toolbarHeight: 70,
@@ -11789,7 +11871,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   void _scrollToSelectedImage() {
