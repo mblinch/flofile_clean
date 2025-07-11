@@ -9867,10 +9867,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   .grey.shade600
                                                               : Colors.grey
                                                                   .shade400,
-                                                      width:
-                                                          _isThumbnailGridFocused
-                                                              ? 2.0
-                                                              : 1.0,
+                                                      width: 2.0,
                                                     ),
                                                     borderRadius:
                                                         BorderRadius.circular(
