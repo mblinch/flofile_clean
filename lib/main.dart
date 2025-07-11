@@ -9348,7 +9348,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           const SizedBox(height: 20), // Reduced from 32 to 20
                           SizedBox(
-                            width: 180,
+                            width: 170,
                             child: _buildTeamDropdown(
                               label: 'Away Team',
                               value: selectedAwayTeam,
@@ -9373,7 +9373,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           const SizedBox(height: 20), // Reduced from 32 to 20
                           SizedBox(
-                            width: 180,
+                            width: 170,
                             child: _buildTeamDropdown(
                               label: 'Home Team',
                               value: selectedHomeTeam,
@@ -10165,14 +10165,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       children: [
                                         // Personality Field (left side) - taking less space
                                         Expanded(
-                                          flex: 5,
+                                          flex: 6,
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Padding(
                                                 padding: const EdgeInsets.only(
-                                                  right: 8.0,
+                                                  right: 4.0,
                                                 ),
                                                 child: Material(
                                                   elevation: 2,
@@ -10279,7 +10279,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 return Padding(
                                                   padding:
                                                       const EdgeInsets.only(
-                                                    left: 8.0,
+                                                    left: 4.0,
                                                   ),
                                                   child: Material(
                                                     elevation: 2.0,
@@ -10373,14 +10373,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ],
                               ),
 
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 5),
                               // Main horizontal layout: Left side (player picker/verbs) and Right side (metadata only)
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
                                   SizedBox(
-                                    width: 480,
+                                    width: 382,
                                     height: 550,
                                     child: DefaultTabController(
                                       length: 1,
@@ -10443,8 +10443,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               children: [
                                                 // Player Picker Tab
                                                 Container(
-                                                  padding: const EdgeInsets.all(
-                                                    16,
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    top: 6,
+                                                    left: 16,
+                                                    right: 16,
+                                                    bottom: 16,
                                                   ),
                                                   decoration: BoxDecoration(
                                                     border: Border.all(
@@ -12539,8 +12543,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return Container(
       height: 500,
       padding: const EdgeInsets.all(
-        8.0,
-      ), // Add some padding inside the container
+        1.0,
+      ), // Minimal padding to fit more content
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -12561,10 +12565,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   children: <TextSpan>[TextSpan(text: title)],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
               // Smaller search bar beside team name
               Container(
-                width: 120,
+                width: 80,
                 height: 24,
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -12689,13 +12693,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 2),
           // Selected players chips
           if ((isHomeList && selectedPlayers.isNotEmpty) ||
               (!isHomeList && selectedOpponentPlayers.isNotEmpty))
             Container(
-              width: 200,
-              margin: const EdgeInsets.only(bottom: 8),
+              width: 160,
+              margin: const EdgeInsets.only(bottom: 2),
               child: Wrap(
                 spacing: 4,
                 runSpacing: 4,
@@ -12709,7 +12713,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   final playerName = replacement.short;
                   return SizedBox(
                     width:
-                        96, // Fixed width to fit 2 chips in 200px container (96*2 + 8 spacing = 200)
+                        76, // Fixed width to fit 2 chips in 160px container (76*2 + 8 spacing = 160)
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 4,
@@ -12724,14 +12728,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Flexible(
-                            child: Text(
-                              playerName,
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
+                            child: Tooltip(
+                              message: playerName,
+                              child: Text(
+                                playerName,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 2),
@@ -12912,9 +12920,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                             child: Row(
                               children: [
-                                Text(
-                                  displayText,
-                                  style: const TextStyle(fontSize: 10),
+                                Expanded(
+                                  child: Tooltip(
+                                    message: displayText,
+                                    child: Text(
+                                      displayText,
+                                      style: const TextStyle(fontSize: 10),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
