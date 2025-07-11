@@ -1325,22 +1325,115 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildActionToolbar() {
-    return Row(
-      mainAxisSize: MainAxisSize.min, // Prevent overflow by using minimum size
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _buildSquareIconButton(
-          icon: Icons.arrow_back,
-          tooltip: 'Previous Image',
-          onPressed: imagePaths.isNotEmpty ? () => previousImage() : null,
+        // Top row: FTP button only
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // FTP button
+            _buildCompactButton(
+              'FTP',
+              _onFtpPressed,
+              isBlue: true,
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        _buildSquareIconButton(
-          icon: Icons.arrow_forward,
-          tooltip: 'Next Image',
-          onPressed: imagePaths.isNotEmpty ? () => nextImage() : null,
+        // Inning selection status
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 200,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _selectedRbiInning == null
+                  ? Colors.orange.shade100
+                  : Colors.green.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                  color: _selectedRbiInning == null
+                      ? Colors.orange.shade300
+                      : Colors.green.shade300,
+                  width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                    _selectedRbiInning == null
+                        ? Icons.warning
+                        : Icons.check_circle,
+                    color: _selectedRbiInning == null
+                        ? Colors.orange.shade700
+                        : Colors.green.shade700,
+                    size: 16),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    _selectedRbiInning == null
+                        ? 'Please select an inning'
+                        : 'Inning ${_selectedRbiInning} selected',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _selectedRbiInning == null
+                          ? Colors.orange.shade700
+                          : Colors.green.shade700,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
+        const SizedBox(height: 14),
+        // Second row: Navigation buttons
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSquareIconButton(
+              icon: Icons.arrow_back,
+              tooltip: 'Previous Image',
+              onPressed: imagePaths.isNotEmpty ? () => previousImage() : null,
+            ),
+            const SizedBox(width: 8),
+            _buildSquareIconButton(
+              icon: Icons.arrow_forward,
+              tooltip: 'Next Image',
+              onPressed: imagePaths.isNotEmpty ? () => nextImage() : null,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        // Bottom row: Image counter box
+        SizedBox(
+          width: 200, // Make it 200 pixels wide
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Center(
+              child: Text(
+                imagePaths.isEmpty
+                    ? 'No images'
+                    : '${currentIndex + 1} of ${imagePaths.length}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Burst mode indicator (if needed)
         if (_isBurstMode) ...[
-          const SizedBox(width: 8),
+          const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -1365,8 +1458,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           ),
         ],
+        // Sort mode indicator (if needed)
         if (_isSortedByDate || _isSortedByFilename) ...[
-          const SizedBox(width: 8),
+          const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -7622,7 +7716,55 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
               ],
             ),
+            // Inning selection status
             const SizedBox(height: 4),
+            SizedBox(
+              width: 200,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _selectedRbiInning == null
+                      ? Colors.orange.shade100
+                      : Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                      color: _selectedRbiInning == null
+                          ? Colors.orange.shade300
+                          : Colors.green.shade300,
+                      width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                        _selectedRbiInning == null
+                            ? Icons.warning
+                            : Icons.check_circle,
+                        color: _selectedRbiInning == null
+                            ? Colors.orange.shade700
+                            : Colors.green.shade700,
+                        size: 16),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _selectedRbiInning == null
+                            ? 'Please select an inning'
+                            : 'Inning ${_selectedRbiInning} selected',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _selectedRbiInning == null
+                              ? Colors.orange.shade700
+                              : Colors.green.shade700,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             // Second row: Previous, Next
             Row(
               children: [
@@ -7697,7 +7839,32 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ],
             ),
             const SizedBox(height: 4),
-            // Third row: Paste Last Caption
+            // Third row: Image counter box
+            SizedBox(
+              width: 200,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade200, width: 1),
+                ),
+                child: Center(
+                  child: Text(
+                    imagePaths.isEmpty
+                        ? 'No images'
+                        : '${currentIndex + 1} of ${imagePaths.length}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Fourth row: Paste Last Caption
             Row(
               children: [
                 SizedBox(
@@ -7747,7 +7914,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ],
             ),
             const SizedBox(height: 4),
-            // Fourth row: Copy, Paste
+            // Fifth row: Copy, Paste
             Row(
               children: [
                 SizedBox(
@@ -7820,7 +7987,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ],
             ),
             const SizedBox(height: 4),
-            // Fifth row: Reset Caption
+            // Sixth row: Reset Caption
             Row(
               children: [
                 SizedBox(
