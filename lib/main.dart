@@ -7145,6 +7145,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (shorts.length == 1) {
       return shorts.first;
     }
+    if (shorts.length == 2) {
+      // Two players: "Player1 and Player2"
+      return '${shorts[0]} and ${shorts[1]}';
+    }
+    // Three or more players: "Player1, Player2, and Player3"
     final last = shorts.removeLast();
     return '${shorts.join(', ')}, and $last';
   }
@@ -8255,23 +8260,39 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           final celebrationPart =
               "celebrates a $formattedHitPhrase with $teammatesStr";
 
+          // Check if opposing players are selected
+          String opponentPart;
+          if (celebrateAgainst.isNotEmpty) {
+            final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
+            opponentPart = "against $opponentStr of the $opponentTeamName";
+          } else {
+            opponentPart = "against the $opponentTeamName";
+          }
+
           if (_walkOff == true) {
             mainCaptionPart =
-                "$playersString $celebrationPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart $opponentPart to defeat the $opponentTeamName";
           } else {
-            mainCaptionPart =
-                "$playersString $celebrationPart against the $opponentTeamName";
+            mainCaptionPart = "$playersString $celebrationPart $opponentPart";
           }
         } else {
           // Solo celebration (no teammates selected)
           final celebrationPart = "celebrates a $formattedHitPhrase";
 
+          // Check if opposing players are selected
+          String opponentPart;
+          if (celebrateAgainst.isNotEmpty) {
+            final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
+            opponentPart = "against $opponentStr of the $opponentTeamName";
+          } else {
+            opponentPart = "against the $opponentTeamName";
+          }
+
           if (_walkOff == true) {
             mainCaptionPart =
-                "$playersString $celebrationPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart $opponentPart to defeat the $opponentTeamName";
           } else {
-            mainCaptionPart =
-                "$playersString $celebrationPart against the $opponentTeamName";
+            mainCaptionPart = "$playersString $celebrationPart $opponentPart";
           }
         }
       } else {
