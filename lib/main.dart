@@ -2143,7 +2143,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           // Show hit type options when hit is selected (but no hit type selected yet)
                           if (_selectedHitType == null ||
                               ((_selectedHitType == 'Single' ||
-                                      _selectedHitType == 'Double') &&
+                                      _selectedHitType == 'Double' ||
+                                      _selectedHitType == 'Triple') &&
                                   _rbiCount != null)) ...[
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2184,9 +2185,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
-                                                  // Add RBI options for Single and Double when selected
+                                                  // Add RBI options for Single, Double, and Triple when selected
                                                   if ((label == 'Single' ||
-                                                          label == 'Double') &&
+                                                          label == 'Double' ||
+                                                          label == 'Triple') &&
                                                       _selectedHitType ==
                                                           label) ...[
                                                     const SizedBox(width: 8),
@@ -2322,9 +2324,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     )
                                     .toList(),
-                                // Add celebration checkbox when Single or Double + RBI is selected
+                                // Add celebration checkbox when Single, Double, or Triple + RBI is selected
                                 if ((_selectedHitType == 'Single' ||
-                                        _selectedHitType == 'Double') &&
+                                        _selectedHitType == 'Double' ||
+                                        _selectedHitType == 'Triple') &&
                                     _rbiCount != null) ...[
                                   const SizedBox(height: 8),
                                   Padding(
