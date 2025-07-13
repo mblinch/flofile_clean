@@ -8264,7 +8264,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           String opponentPart;
           if (celebrateAgainst.isNotEmpty) {
             final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
-            opponentPart = "against $opponentStr of the $opponentTeamName";
+            opponentPart = "beside $opponentStr of the $opponentTeamName";
           } else {
             opponentPart = "against the $opponentTeamName";
           }
@@ -8283,7 +8283,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           String opponentPart;
           if (celebrateAgainst.isNotEmpty) {
             final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
-            opponentPart = "against $opponentStr of the $opponentTeamName";
+            opponentPart = "beside $opponentStr of the $opponentTeamName";
           } else {
             opponentPart = "against the $opponentTeamName";
           }
