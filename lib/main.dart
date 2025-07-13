@@ -6699,6 +6699,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _showPlayersInFrameDialog() async {
+    // Determine which team the selected player belongs to
+    bool selectedPlayerIsHome;
+    if (selectedPlayers.isNotEmpty) {
+      selectedPlayerIsHome = true;
+    } else if (selectedOpponentPlayers.isNotEmpty) {
+      selectedPlayerIsHome = false;
+    } else {
+      // Fallback: use the current team view if no players are selected
+      selectedPlayerIsHome = _showHomeFirst;
+    }
+
     // Get both team rosters
     final homeRoster =
         codeReplacements.keys.where((k) => k.startsWith('h')).toList()..sort();
@@ -6775,6 +6786,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               children: [
                                 ...tempTeammates.map((code) {
                                   final replacement = codeReplacements[code]!;
+                                  final isAway = code.startsWith('v');
                                   return Transform.scale(
                                     scale: 0.7,
                                     child: InputChip(
@@ -6782,9 +6794,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         replacement.short,
                                         style: const TextStyle(fontSize: 13),
                                       ),
-                                      backgroundColor: Colors.blue.shade50,
+                                      backgroundColor: isAway
+                                          ? Colors.red.shade50
+                                          : Colors.blue.shade50,
                                       side: BorderSide(
-                                        color: Colors.blue.shade300,
+                                        color: isAway
+                                            ? Colors.red.shade300
+                                            : Colors.blue.shade300,
                                       ),
                                       onDeleted: () => setSheetState(
                                         () => tempTeammates.remove(code),
@@ -6792,7 +6808,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       deleteIcon: Icon(
                                         Icons.close,
                                         size: 10,
-                                        color: Colors.blue.shade600,
+                                        color: isAway
+                                            ? Colors.red.shade600
+                                            : Colors.blue.shade600,
                                       ),
                                       materialTapTargetSize:
                                           MaterialTapTargetSize.shrinkWrap,
@@ -6803,6 +6821,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 }),
                                 ...tempOpponents.map((code) {
                                   final replacement = codeReplacements[code]!;
+                                  final isAway = code.startsWith('v');
                                   return Transform.scale(
                                     scale: 0.7,
                                     child: InputChip(
@@ -6810,9 +6829,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         replacement.short,
                                         style: const TextStyle(fontSize: 13),
                                       ),
-                                      backgroundColor: Colors.red.shade50,
+                                      backgroundColor: isAway
+                                          ? Colors.red.shade50
+                                          : Colors.blue.shade50,
                                       side: BorderSide(
-                                        color: Colors.red.shade300,
+                                        color: isAway
+                                            ? Colors.red.shade300
+                                            : Colors.blue.shade300,
                                       ),
                                       onDeleted: () => setSheetState(
                                         () => tempOpponents.remove(code),
@@ -6820,7 +6843,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       deleteIcon: Icon(
                                         Icons.close,
                                         size: 10,
-                                        color: Colors.red.shade600,
+                                        color: isAway
+                                            ? Colors.red.shade600
+                                            : Colors.blue.shade600,
                                       ),
                                       materialTapTargetSize:
                                           MaterialTapTargetSize.shrinkWrap,
@@ -6839,90 +6864,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         Expanded(
                           child: Row(
                             children: [
-                              // Home team
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                        horizontal: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        selectedHomeTeam ?? 'Home Team',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.blue.shade700,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        padding: EdgeInsets.zero,
-                                        itemCount: filteredHome.length,
-                                        itemBuilder: (ctx, idx) {
-                                          final code = filteredHome[idx];
-                                          final replacement =
-                                              codeReplacements[code]!;
-                                          final isSelected =
-                                              tempTeammates.contains(code);
-                                          return MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                              onTap: () {
-                                                setSheetState(() {
-                                                  if (isSelected) {
-                                                    tempTeammates.remove(code);
-                                                  } else {
-                                                    tempTeammates.add(code);
-                                                  }
-                                                });
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 4,
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        replacement.short,
-                                                        style: const TextStyle(
-                                                          fontSize: 11,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    if (isSelected)
-                                                      Icon(
-                                                        Icons.check,
-                                                        size: 12,
-                                                        color: Colors
-                                                            .blue.shade600,
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              // Away team
+                              // Away team (always red, left side)
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -6956,17 +6898,31 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           final code = filteredAway[idx];
                                           final replacement =
                                               codeReplacements[code]!;
+                                          // If selected player is away team, these are teammates; otherwise opponents
                                           final isSelected =
-                                              tempOpponents.contains(code);
+                                              !selectedPlayerIsHome
+                                                  ? tempTeammates.contains(code)
+                                                  : tempOpponents
+                                                      .contains(code);
                                           return MouseRegion(
                                             cursor: SystemMouseCursors.click,
                                             child: GestureDetector(
                                               onTap: () {
                                                 setSheetState(() {
                                                   if (isSelected) {
-                                                    tempOpponents.remove(code);
+                                                    if (!selectedPlayerIsHome) {
+                                                      tempTeammates
+                                                          .remove(code);
+                                                    } else {
+                                                      tempOpponents
+                                                          .remove(code);
+                                                    }
                                                   } else {
-                                                    tempOpponents.add(code);
+                                                    if (!selectedPlayerIsHome) {
+                                                      tempTeammates.add(code);
+                                                    } else {
+                                                      tempOpponents.add(code);
+                                                    }
                                                   }
                                                 });
                                               },
@@ -6992,6 +6948,103 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         size: 12,
                                                         color:
                                                             Colors.red.shade600,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              // Home team (always blue, right side)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                        horizontal: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        selectedHomeTeam ?? 'Home Team',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: filteredHome.length,
+                                        itemBuilder: (ctx, idx) {
+                                          final code = filteredHome[idx];
+                                          final replacement =
+                                              codeReplacements[code]!;
+                                          // If selected player is home team, these are teammates; otherwise opponents
+                                          final isSelected =
+                                              selectedPlayerIsHome
+                                                  ? tempTeammates.contains(code)
+                                                  : tempOpponents
+                                                      .contains(code);
+                                          return MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setSheetState(() {
+                                                  if (isSelected) {
+                                                    if (selectedPlayerIsHome) {
+                                                      tempTeammates
+                                                          .remove(code);
+                                                    } else {
+                                                      tempOpponents
+                                                          .remove(code);
+                                                    }
+                                                  } else {
+                                                    if (selectedPlayerIsHome) {
+                                                      tempTeammates.add(code);
+                                                    } else {
+                                                      tempOpponents.add(code);
+                                                    }
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 4,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        replacement.short,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isSelected)
+                                                      Icon(
+                                                        Icons.check,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .blue.shade600,
                                                       ),
                                                   ],
                                                 ),
@@ -8192,25 +8245,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         print('DEBUG: coreActionPart = $coreActionPart');
       }
 
-      if (celebrateWith.isNotEmpty) {
-        final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+      if (_isSoloCelebration) {
+        // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart =
-            "celebrates a $formattedHitPhrase with $teammatesStr";
 
-        if (celebrateAgainst.isNotEmpty) {
-          // Both teammates and opponents selected
-          final opponentStr = _combineOpponentPlayersForCelebration(
-            celebrateAgainst,
-          );
+        if (celebrateWith.isNotEmpty) {
+          // With teammates selected
+          final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+          final celebrationPart =
+              "celebrates a $formattedHitPhrase with $teammatesStr";
+
           if (_walkOff == true) {
             mainCaptionPart =
-                "$playersString $celebrationPart $opponentStr to defeat the $opponentTeamName";
+                "$playersString $celebrationPart to defeat the $opponentTeamName";
           } else {
-            mainCaptionPart = "$playersString $celebrationPart $opponentStr";
+            mainCaptionPart =
+                "$playersString $celebrationPart against the $opponentTeamName";
           }
         } else {
-          // Only teammates selected
+          // Solo celebration (no teammates selected)
+          final celebrationPart = "celebrates a $formattedHitPhrase";
+
           if (_walkOff == true) {
             mainCaptionPart =
                 "$playersString $celebrationPart to defeat the $opponentTeamName";
@@ -8219,30 +8274,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 "$playersString $celebrationPart against the $opponentTeamName";
           }
         }
-      } else if (celebrateAgainst.isNotEmpty) {
-        final opponentStr = _combineOpponentPlayersForCelebration(
-          celebrateAgainst,
-        );
-        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart = "celebrates a $formattedHitPhrase $opponentStr";
-
-        if (_walkOff == true) {
-          mainCaptionPart =
-              "$playersString $celebrationPart to defeat the $opponentTeamName";
-        } else {
-          mainCaptionPart = "$playersString $celebrationPart";
-        }
-      } else if (_isSoloCelebration) {
-        final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
-        final celebrationPart = "celebrates a $formattedHitPhrase";
-        if (_walkOff == true) {
-          mainCaptionPart =
-              "$playersString $celebrationPart to defeat the $opponentTeamName";
-        } else {
-          mainCaptionPart =
-              "$playersString $celebrationPart against the $opponentTeamName";
-        }
       } else {
+        // Standard hit caption (no celebration)
         mainCaptionPart = (_walkOff == true)
             ? "$coreActionPart to defeat the $opponentTeamName"
             : "$coreActionPart against the $opponentTeamName";
