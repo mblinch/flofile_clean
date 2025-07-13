@@ -310,7 +310,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
   String selectedState = '';
-  final double _fixedChipWidth = 250.0;
+  final double _fixedChipWidth = 300.0;
   final double _dropdownWidth = 120.0;
 
   // Animation controllers for caption effects
@@ -2140,12 +2140,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             padding: EdgeInsets.zero,
                           ),
                         ] else ...[
-                          // Show hit type options when hit is selected (but no hit type selected yet)
+                          // Show hit type options when hit is selected
                           if (_selectedHitType == null ||
-                              ((_selectedHitType == 'Single' ||
-                                      _selectedHitType == 'Double' ||
-                                      _selectedHitType == 'Triple') &&
-                                  _rbiCount != null)) ...[
+                              (_selectedHitType == 'Single' ||
+                                  _selectedHitType == 'Double' ||
+                                  _selectedHitType == 'Triple' ||
+                                  _selectedHitType == 'Home Run')) ...[
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -2185,10 +2185,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
-                                                  // Add RBI options for Single, Double, and Triple when selected
+                                                  // Add RBI options for all hit types when selected
                                                   if ((label == 'Single' ||
                                                           label == 'Double' ||
-                                                          label == 'Triple') &&
+                                                          label == 'Triple' ||
+                                                          label ==
+                                                              'Home Run') &&
                                                       _selectedHitType ==
                                                           label) ...[
                                                     const SizedBox(width: 8),
@@ -2197,16 +2199,34 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                       size: 10,
                                                       color: Colors.grey,
                                                     ),
-                                                    const SizedBox(width: 4),
-                                                    ...List.generate(
-                                                      3,
-                                                      (i) => i + 1,
-                                                    ).map((rbiCount) {
+                                                    const SizedBox(width: 2),
+                                                    ...(label == 'Home Run'
+                                                            ? [
+                                                                'Solo',
+                                                                '2 Run',
+                                                                '3 Run',
+                                                                'GS'
+                                                              ]
+                                                            : [
+                                                                '1 RBI',
+                                                                '2 RBI',
+                                                                '3 RBI'
+                                                              ])
+                                                        .asMap()
+                                                        .entries
+                                                        .map((entry) {
+                                                      final index = entry.key;
+                                                      final rbiLabel =
+                                                          entry.value;
+                                                      final rbiCount =
+                                                          label == 'Home Run'
+                                                              ? index
+                                                              : index + 1;
                                                       return Padding(
                                                         padding:
                                                             const EdgeInsets
                                                                 .only(
-                                                          right: 4.0,
+                                                          right: 2.0,
                                                         ),
                                                         child: MouseRegion(
                                                           cursor:
@@ -2233,8 +2253,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               padding:
                                                                   const EdgeInsets
                                                                       .symmetric(
-                                                                horizontal: 6,
-                                                                vertical: 2,
+                                                                horizontal: 3,
+                                                                vertical: 1,
                                                               ),
                                                               child: Row(
                                                                 mainAxisSize:
@@ -2257,10 +2277,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         : null,
                                                                   ),
                                                                   const SizedBox(
-                                                                    width: 2,
+                                                                    width: 1,
                                                                   ),
                                                                   Text(
-                                                                    '$rbiCount RBI',
+                                                                    rbiLabel,
                                                                     style:
                                                                         TextStyle(
                                                                       fontSize:
@@ -2324,10 +2344,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     )
                                     .toList(),
-                                // Add celebration checkbox when Single, Double, or Triple + RBI is selected
+                                // Add celebration checkbox when any hit type + RBI is selected
                                 if ((_selectedHitType == 'Single' ||
                                         _selectedHitType == 'Double' ||
-                                        _selectedHitType == 'Triple') &&
+                                        _selectedHitType == 'Triple' ||
+                                        _selectedHitType == 'Home Run') &&
                                     _rbiCount != null) ...[
                                   const SizedBox(height: 8),
                                   Padding(
@@ -2412,417 +2433,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ],
                                     ),
                                   ),
-                                ],
-                              ],
-                            ),
-                          ] else ...[
-                            // Show runs scored options when hit type is selected
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (_selectedHitType == 'Home Run') ...[
-                                  // Home run specific options
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      'Solo',
-                                      '2 Run',
-                                      '3 Run',
-                                      'Grand Slam'
-                                    ]
-                                        .map(
-                                          (hrType) => Padding(
-                                            padding: const EdgeInsets.only(
-                                              bottom: 8.0,
-                                            ),
-                                            child: FlashingFilterChip(
-                                              label: SizedBox(
-                                                width: _fixedChipWidth,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      const Icon(
-                                                        Icons.chevron_right,
-                                                        size: 14,
-                                                        color: Colors.grey,
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        hrType,
-                                                        style: const TextStyle(
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              selected: (_selectedHomeRunType ==
-                                                          'solo' &&
-                                                      hrType == 'Solo') ||
-                                                  (_selectedHomeRunType ==
-                                                          'two-run' &&
-                                                      hrType == '2 Run') ||
-                                                  (_selectedHomeRunType ==
-                                                          'three-run' &&
-                                                      hrType == '3 Run') ||
-                                                  (_selectedHomeRunType ==
-                                                          'grand slam' &&
-                                                      hrType == 'Grand Slam'),
-                                              onSelected: (isSelected) {
-                                                setState(() {
-                                                  if (isSelected) {
-                                                    switch (hrType) {
-                                                      case 'Solo':
-                                                        _selectedHomeRunType =
-                                                            'solo';
-                                                        break;
-                                                      case '2 Run':
-                                                        _selectedHomeRunType =
-                                                            'two-run';
-                                                        break;
-                                                      case '3 Run':
-                                                        _selectedHomeRunType =
-                                                            'three-run';
-                                                        break;
-                                                      case 'Grand Slam':
-                                                        _selectedHomeRunType =
-                                                            'grand slam';
-                                                        break;
-                                                    }
-                                                  } else {
-                                                    _selectedHomeRunType = null;
-                                                  }
-                                                  _updateCaption();
-                                                });
-                                              },
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding: EdgeInsets.zero,
-                                              labelPadding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                              ),
-                                              materialTapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                  ),
-                                  // Celebration options when home run type is selected
-                                  if (_selectedHomeRunType != null) ...[
-                                    const SizedBox(height: 8),
-                                    const Padding(
-                                      padding: EdgeInsets.only(
-                                        left: 16.0,
-                                        bottom: 2.0,
-                                      ),
-                                      child: Text(
-                                        'Optional:',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  const Text(
-                                                    'Celebrates Alone',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          selected: _isSoloCelebration,
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              _isSoloCelebration = isSelected;
-                                              if (isSelected) {
-                                                celebrateWith.clear();
-                                                celebrateAgainst.clear();
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 8.0,
-                                          ),
-                                          child: FlashingFilterChip(
-                                            label: SizedBox(
-                                              width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      'Celebrates With (${celebrateWith.length})',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            selected: celebrateWith.isNotEmpty,
-                                            onSelected: (isSelected) async {
-                                              if (isSelected) {
-                                                setState(() {
-                                                  _isSoloCelebration =
-                                                      false; // Deselect celebrates alone
-                                                });
-                                                await _showCelebrateDialog();
-                                              } else {
-                                                setState(() {
-                                                  celebrateWith.clear();
-                                                  _isSoloCelebration = false;
-                                                  _updateCaption();
-                                                });
-                                              }
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ] else ...[
-                                  // RBI options for other hit types
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      'RBI ${_selectedHitType}',
-                                      'Two RBI ${_selectedHitType}',
-                                      'Three RBI ${_selectedHitType}',
-                                    ].asMap().entries.map((entry) {
-                                      final index = entry.key;
-                                      final label = entry.value;
-                                      final rbi = index + 1;
-                                      return Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 8.0,
-                                        ),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          selected: _rbiCount == rbi,
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              if (isSelected) {
-                                                _rbiCount = rbi;
-                                                _rbiCountByHit[
-                                                    _selectedHitType!] = rbi;
-                                              } else {
-                                                _rbiCount = null;
-                                                _rbiCountByHit.remove(
-                                                  _selectedHitType!,
-                                                );
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                  // Celebration options when RBI is selected
-                                  if (_rbiCount != null && _rbiCount! > 0) ...[
-                                    const SizedBox(height: 8),
-                                    const Padding(
-                                      padding: EdgeInsets.only(
-                                        left: 16.0,
-                                        bottom: 2.0,
-                                      ),
-                                      child: Text(
-                                        'Optional:',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  const Text(
-                                                    'Celebrates Alone',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          selected: _isSoloCelebration,
-                                          onSelected: (isSelected) {
-                                            setState(() {
-                                              _isSoloCelebration = isSelected;
-                                              if (isSelected) {
-                                                celebrateWith.clear();
-                                                celebrateAgainst.clear();
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 8.0,
-                                          ),
-                                          child: FlashingFilterChip(
-                                            label: SizedBox(
-                                              width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      'Celebrates With (${celebrateWith.length})',
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            selected: celebrateWith.isNotEmpty,
-                                            onSelected: (isSelected) async {
-                                              if (isSelected) {
-                                                setState(() {
-                                                  _isSoloCelebration =
-                                                      false; // Deselect celebrates alone
-                                                });
-                                                await _showCelebrateDialog();
-                                              } else {
-                                                setState(() {
-                                                  celebrateWith.clear();
-                                                  _isSoloCelebration = false;
-                                                  _updateCaption();
-                                                });
-                                              }
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
                                 ],
                               ],
                             ),
