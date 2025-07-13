@@ -887,7 +887,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _selectedHitType = null;
       _selectedHomeRunType = null;
       _rbiCount = null;
-      _isBatterRunning = null;
+      _isBatterRunning = false;
       _selectedRbiInning = null;
 
       // Reset fielding-related state
@@ -962,7 +962,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedHomeRunType = null;
         _rbiCount = null;
         _selectedRbiInning = null;
-        _isBatterRunning = null;
+        _isBatterRunning = false;
       } else if (_showFieldingOptions && _selectedVerb == 'Fielding') {
         // If in fielding options, go back to verb selection
         _showFieldingOptions = false;
@@ -1005,7 +1005,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedHitType = null;
         _selectedHomeRunType = null;
         _rbiCount = null;
-        _isBatterRunning = null;
+        _isBatterRunning = false;
         _showFieldingOptions = false;
         _selectedFieldingAction = null;
         _isDivingCatch = false;
@@ -1706,7 +1706,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   int? _rbiCount;
   int? _selectedRbiInning;
   int? _onBaseCount;
-  bool? _isBatterRunning;
+  bool _isBatterRunning = false;
 
   // Preserve per-hit-type selections
   Widget _buildArrow() {
@@ -2133,7 +2133,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _selectedHomeRunType = null;
                               _rbiCount = null;
                               _selectedRbiInning = null;
-                              _isBatterRunning = null;
+                              _isBatterRunning = false;
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
@@ -2422,6 +2422,83 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             celebrateAgainst
                                                                 .isNotEmpty)
                                                         ? Colors.blue.shade700
+                                                        : Colors.grey.shade600,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  // Add runs the bases checkbox
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Transform.scale(
+                                          scale: 0.6,
+                                          child: Checkbox(
+                                            value: _isBatterRunning,
+                                            onChanged: (bool? value) {
+                                              setState(() {
+                                                _isBatterRunning =
+                                                    value ?? false;
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        ),
+                                        Transform.translate(
+                                          offset: const Offset(-4, 0),
+                                          child: const Text(
+                                            'Runs the bases',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                        // Show players in frame option when Runs the bases is checked
+                                        if (_isBatterRunning == true) ...[
+                                          const SizedBox(width: 8),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _showPlayersInFrameDialog(),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: celebrateWith
+                                                          .isNotEmpty
+                                                      ? Colors.green.shade50
+                                                      : Colors.grey.shade100,
+                                                  border: Border.all(
+                                                    color: celebrateWith
+                                                            .isNotEmpty
+                                                        ? Colors.green.shade300
+                                                        : Colors.grey.shade300,
+                                                    width: 1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
+                                                ),
+                                                child: Text(
+                                                  'Players in frame',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: celebrateWith
+                                                            .isNotEmpty
+                                                        ? Colors.green.shade700
                                                         : Colors.grey.shade600,
                                                     fontWeight: FontWeight.w500,
                                                   ),
@@ -4379,6 +4456,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _stealsClicked = false;
   List<String> celebrateWith = [];
   List<String> celebrateAgainst = [];
+  List<String> playersInFrame = [];
 
   // Personality controller
   final TextEditingController _personalityController = TextEditingController();
@@ -4501,7 +4579,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'Oakland Athletics',
       'Philadelphia Phillies',
       'Pittsburgh Pirates',
-      'San Diego Paders',
+      'San Diego Padres',
       'San Francisco Giants',
       'Seattle Mariners',
       'St. Louis Cardinals',
@@ -6393,14 +6471,50 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _showCelebrateDialog() async {
-    // Determine which roster to show based on `isHome` for the "celebrator"
-    final roster = (isHome
-            ? codeReplacements.keys.where((k) => k.startsWith('h'))
-            : codeReplacements.keys.where((k) => k.startsWith('v')))
+    await _showPlayersSelectionDialog(
+      title: 'Select Teammates',
+      selectedPlayers: celebrateWith,
+      onPlayersSelected: (players) {
+        setState(() {
+          celebrateWith = players;
+          celebrateAgainst.clear();
+          _updateCaption();
+          _updatePersonality();
+        });
+      },
+      onClear: () {
+        setState(() {
+          celebrateWith.clear();
+          celebrateAgainst.clear();
+          _isSoloCelebration = false;
+          _updateCaption();
+          _updatePersonality();
+        });
+      },
+    );
+  }
+
+  Future<void> _showPlayersSelectionDialog({
+    required String title,
+    required List<String> selectedPlayers,
+    required Function(List<String>) onPlayersSelected,
+    required VoidCallback onClear,
+    bool showOpposingTeam = false,
+  }) async {
+    // Determine which roster to show
+    final roster = (showOpposingTeam
+            ? (isHome
+                ? codeReplacements.keys.where((k) => k.startsWith(
+                    'v')) // Show away players if celebrating player is home
+                : codeReplacements.keys.where((k) => k.startsWith(
+                    'h'))) // Show home players if celebrating player is away
+            : (isHome
+                ? codeReplacements.keys.where((k) => k.startsWith('h'))
+                : codeReplacements.keys.where((k) => k.startsWith('v'))))
         .toList()
       ..sort();
 
-    Set<String> temp = celebrateWith.toSet();
+    Set<String> temp = selectedPlayers.toSet();
     String search = '';
 
     await showDialog(
@@ -6420,7 +6534,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 }).toList();
 
                 return AlertDialog(
-                  title: const Text('Select Teammates'),
+                  title: Text(title),
                   content: SizedBox(
                     width: 300,
                     height: MediaQuery.of(ctx).size.height * 0.4,
@@ -6509,15 +6623,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       onPressed: () {
                         // Clear the temporary selection for the dialog UI
                         setSheetState(() => temp.clear());
-                        // Clear the main selection and update the main UI to uncheck the chip
-                        setState(() {
-                          celebrateWith.clear();
-                          celebrateAgainst.clear();
-                          _isSoloCelebration = false;
-                          _updateCaption();
-                          // Clear personality field - rebuild without celebration players
-                          _updatePersonality();
-                        });
+                        // Clear the main selection and update the main UI
+                        onClear();
                       },
                       child: const Text('Clear'),
                     ),
@@ -6527,9 +6634,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                     TextButton(
                       onPressed: () {
-                        celebrateWith = temp.toList();
-                        _updateCaption();
-                        _updatePersonality();
+                        onPlayersSelected(temp.toList());
                         Navigator.of(ctx).pop();
                       },
                       child: const Text('Done'),
@@ -6545,156 +6650,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _showCelebrateAgainstDialog() async {
-    // Determine which roster to show - the OPPOSING team
-    final roster = (isHome
-            ? codeReplacements.keys.where(
-                (k) => k.startsWith('v'),
-              ) // Show away players if celebrating player is home
-            : codeReplacements.keys.where(
-                (k) => k.startsWith('h'),
-              )) // Show home players if celebrating player is away
-        .toList()
-      ..sort();
-
-    Set<String> temp = celebrateAgainst.toSet();
-    String search = '';
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext ctx) {
-        return Align(
-          alignment: Alignment.topCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 80.0),
-            child: StatefulBuilder(
-              builder: (BuildContext innerCtx, StateSetter setSheetState) {
-                final filtered = roster.where((code) {
-                  final replacement = codeReplacements[code];
-                  if (replacement == null) return false;
-                  final player = replacement.short.toLowerCase();
-                  return player.contains(search.toLowerCase());
-                }).toList();
-
-                return AlertDialog(
-                  title: const Text('Select Opposing Players'),
-                  content: SizedBox(
-                    width: 300,
-                    height: MediaQuery.of(ctx).size.height * 0.4,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 1. Search Field (unchanged)
-                        TextField(
-                          decoration: const InputDecoration(
-                            hintText: 'Search...',
-                            prefixIcon: Icon(Icons.search),
-                            isDense: true,
-                          ),
-                          style: const TextStyle(fontSize: kInputTextSize),
-                          cursorHeight: 12.0,
-                          onChanged: (value) =>
-                              setSheetState(() => search = value),
-                        ),
-                        const SizedBox(height: 8),
-                        // 2. Selected Chips Row (moved here)
-                        if (temp.isNotEmpty)
-                          Wrap(
-                            spacing: 4.0,
-                            runSpacing: 4.0,
-                            children: temp.map((code) {
-                              final replacement = codeReplacements[code]!;
-                              return InputChip(
-                                label: Text(
-                                  replacement.short,
-                                  style: const TextStyle(
-                                    fontSize: kInputTextSize,
-                                  ),
-                                ),
-                                onDeleted: () =>
-                                    setSheetState(() => temp.remove(code)),
-                                elevation: 2, // Add shadow
-                                shape: RoundedRectangleBorder(
-                                  // Add thin dark grey border
-                                  borderRadius: BorderRadius.circular(4),
-                                  side: BorderSide(
-                                    color: Colors.grey.shade400,
-                                    width: 1.0,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        if (temp.isNotEmpty) const SizedBox(height: 8),
-                        // 3. Thumbnail List
-                        Expanded(
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            itemCount: filtered.length,
-                            itemBuilder: (ctx, idx) {
-                              final code = filtered[idx];
-                              final replacement = codeReplacements[code]!;
-                              final isSelected = temp.contains(code);
-                              return ListTile(
-                                title: Text(replacement.short),
-                                trailing: isSelected
-                                    ? const Icon(Icons.check, size: 16)
-                                    : null,
-                                onTap: () {
-                                  setSheetState(() {
-                                    if (isSelected) {
-                                      temp.remove(code);
-                                    } else {
-                                      temp.add(code);
-                                    }
-                                  });
-                                },
-                                dense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 0,
-                                  vertical: 0,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        // Clear the temporary selection for the dialog UI
-                        setSheetState(() => temp.clear());
-                        // Clear the main selection and update the main UI to uncheck the chip
-                        setState(() {
-                          celebrateAgainst.clear();
-                          _updateCaption();
-                          // Clear personality field - rebuild without celebration players
-                          _updatePersonality();
-                        });
-                      },
-                      child: const Text('Clear'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        celebrateAgainst = temp.toList();
-                        _updateCaption();
-                        _updatePersonality();
-                        Navigator.of(ctx).pop();
-                      },
-                      child: const Text('Done'),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        );
+    await _showPlayersSelectionDialog(
+      title: 'Select Opposing Players',
+      selectedPlayers: celebrateAgainst,
+      onPlayersSelected: (players) {
+        setState(() {
+          celebrateAgainst = players;
+          celebrateWith.clear();
+          _updateCaption();
+          _updatePersonality();
+        });
       },
+      onClear: () {
+        setState(() {
+          celebrateAgainst.clear();
+          _updateCaption();
+          _updatePersonality();
+        });
+      },
+      showOpposingTeam: true,
     );
   }
 
@@ -7189,6 +7163,64 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     result += ' and ${lastPlayer} of the $opponentTeam';
 
     return result;
+  }
+
+  // Helper function for base running with opposing players - formats as "Player, player and player of the team"
+  String _combineOpponentPlayersForBaseRunning(List<String> codes) {
+    if (codes.isEmpty) return '';
+
+    // Separate players by team
+    final homeTeamPlayers = <String>[];
+    final awayTeamPlayers = <String>[];
+
+    for (final code in codes) {
+      final replacement = codeReplacements[code];
+      if (replacement != null) {
+        if (code.startsWith('h')) {
+          homeTeamPlayers.add(replacement.short);
+        } else if (code.startsWith('v')) {
+          awayTeamPlayers.add(replacement.short);
+        }
+      }
+    }
+
+    // Build the result string
+    final List<String> parts = [];
+
+    if (homeTeamPlayers.isNotEmpty) {
+      if (homeTeamPlayers.length == 1) {
+        parts.add('${homeTeamPlayers.first} of the ${selectedHomeTeam!}');
+      } else if (homeTeamPlayers.length == 2) {
+        parts.add(
+            '${homeTeamPlayers[0]} and ${homeTeamPlayers[1]} of the ${selectedHomeTeam!}');
+      } else {
+        final last = homeTeamPlayers.removeLast();
+        parts.add(
+            '${homeTeamPlayers.join(', ')}, and $last of the ${selectedHomeTeam!}');
+      }
+    }
+
+    if (awayTeamPlayers.isNotEmpty) {
+      if (awayTeamPlayers.length == 1) {
+        parts.add('${awayTeamPlayers.first} of the ${selectedAwayTeam!}');
+      } else if (awayTeamPlayers.length == 2) {
+        parts.add(
+            '${awayTeamPlayers[0]} and ${awayTeamPlayers[1]} of the ${selectedAwayTeam!}');
+      } else {
+        final last = awayTeamPlayers.removeLast();
+        parts.add(
+            '${awayTeamPlayers.join(', ')}, and $last of the ${selectedAwayTeam!}');
+      }
+    }
+
+    if (parts.length == 1) {
+      return parts.first;
+    } else if (parts.length == 2) {
+      return '${parts[0]} and ${parts[1]}';
+    } else {
+      final last = parts.removeLast();
+      return '${parts.join(', ')}, and $last';
+    }
   }
 
   // Helper for competition verbs: combine home and opponent players - this is for specific phrasing
@@ -8231,23 +8263,77 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (_walkOff == true && _isBatterRunning == true) {
         if (_selectedHitType == 'Home Run') {
           coreActionPart =
-              "$playersString rounds the bases after hitting a walk-off $hitPhrase";
+              "$playersString rounds the bases on his walk-off $hitPhrase";
+        } else if (_selectedHitType == 'Single') {
+          coreActionPart =
+              "$playersString runs to first base on his walk-off $hitPhrase";
         } else {
           coreActionPart =
-              "$playersString runs after hitting a walk-off $hitPhrase";
+              "$playersString runs the bases on his walk-off $hitPhrase";
         }
       } else if (_walkOff == true) {
         coreActionPart = "$playersString hits a walk-off $hitPhrase";
       } else if (_isBatterRunning == true) {
         if (_selectedHitType == 'Home Run') {
+          coreActionPart = "$playersString rounds the bases on his $hitPhrase";
+        } else if (_selectedHitType == 'Single') {
           coreActionPart =
-              "$playersString rounds the bases after hitting a $hitPhrase";
+              "$playersString runs to first base on his $hitPhrase";
         } else {
-          coreActionPart = "$playersString runs after hitting a $hitPhrase";
+          coreActionPart = "$playersString runs the bases on his $hitPhrase";
         }
       } else {
         coreActionPart = "$playersString hits a $hitPhrase";
         print('DEBUG: coreActionPart = $coreActionPart');
+      }
+
+      // Check if players in frame are selected for base running
+      if (_isBatterRunning == true &&
+          (celebrateWith.isNotEmpty || celebrateAgainst.isNotEmpty)) {
+        String playersInFrameStr = '';
+        String opposingPlayersStr = '';
+
+        if (celebrateWith.isNotEmpty) {
+          playersInFrameStr = _combinePlayersWithoutTeam(celebrateWith);
+        }
+
+        if (celebrateAgainst.isNotEmpty) {
+          opposingPlayersStr =
+              _combineOpponentPlayersForBaseRunning(celebrateAgainst);
+        }
+
+        // Modify the core action to include players in frame and/or opposing players
+        if (_selectedHitType == 'Home Run') {
+          if (opposingPlayersStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'rounds the bases on his $hitPhrase',
+                'runs the base path past $opposingPlayersStr on his $hitPhrase');
+          } else if (playersInFrameStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'rounds the bases on his $hitPhrase',
+                'rounds the bases with $playersInFrameStr on his $hitPhrase');
+          }
+        } else if (_selectedHitType == 'Single') {
+          if (opposingPlayersStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs to first base on his $hitPhrase',
+                'runs the base path past $opposingPlayersStr on his $hitPhrase');
+          } else if (playersInFrameStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs to first base on his $hitPhrase',
+                'runs to first base with $playersInFrameStr on his $hitPhrase');
+          }
+        } else {
+          if (opposingPlayersStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs the bases on his $hitPhrase',
+                'runs the base path past $opposingPlayersStr on his $hitPhrase');
+          } else if (playersInFrameStr.isNotEmpty) {
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs the bases on his $hitPhrase',
+                'runs the bases with $playersInFrameStr on his $hitPhrase');
+          }
+        }
       }
 
       if (_isSoloCelebration) {
@@ -8868,7 +8954,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'Oakland Athletics',
       'Philadelphia Phillies',
       'Pittsburgh Pirates',
-      'San Diego Paders',
+      'San Diego Padres',
       'San Francisco Giants',
       'Seattle Mariners',
       'St. Louis Cardinals',
@@ -10744,7 +10830,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           _selectedRbiInning =
                                                                               null;
                                                                           _isBatterRunning =
-                                                                              null;
+                                                                              false;
                                                                           _updateCaption();
                                                                         });
                                                                       },
@@ -10798,7 +10884,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             _selectedRbiInning =
                                                                                 null;
                                                                             _isBatterRunning =
-                                                                                null;
+                                                                                false;
                                                                             _updateCaption();
                                                                           });
                                                                         },
@@ -12874,7 +12960,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedHitType = null;
         _selectedHomeRunType = null;
         _rbiCount = null;
-        _isBatterRunning = null;
+        _isBatterRunning = false;
       }
 
       // Reset fielding-related state
