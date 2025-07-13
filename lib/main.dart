@@ -2142,7 +2142,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ] else ...[
                           // Show hit type options when hit is selected (but no hit type selected yet)
                           if (_selectedHitType == null ||
-                              (_selectedHitType == 'Single' &&
+                              ((_selectedHitType == 'Single' ||
+                                      _selectedHitType == 'Double') &&
                                   _rbiCount != null)) ...[
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2183,10 +2184,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
-                                                  // Add RBI options for Single only when it's selected
-                                                  if (label == 'Single' &&
+                                                  // Add RBI options for Single and Double when selected
+                                                  if ((label == 'Single' ||
+                                                          label == 'Double') &&
                                                       _selectedHitType ==
-                                                          'Single') ...[
+                                                          label) ...[
                                                     const SizedBox(width: 8),
                                                     const Icon(
                                                       Icons.arrow_forward,
@@ -2213,11 +2215,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             onTap: () {
                                                               setState(() {
                                                                 _selectedHitType =
-                                                                    'Single';
+                                                                    label;
                                                                 _rbiCount =
                                                                     rbiCount;
                                                                 _rbiCountByHit[
-                                                                        'Single'] =
+                                                                        label] =
                                                                     rbiCount;
                                                                 _updateCaption();
                                                               });
@@ -2240,8 +2242,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   Container(
                                                                     width: 4,
                                                                     height: 4,
-                                                                    decoration: _rbiCount ==
-                                                                            rbiCount
+                                                                    decoration: (_rbiCount ==
+                                                                                rbiCount &&
+                                                                            _selectedHitType ==
+                                                                                label)
                                                                         ? const BoxDecoration(
                                                                             color:
                                                                                 Colors.black,
@@ -2259,8 +2263,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         TextStyle(
                                                                       fontSize:
                                                                           10,
-                                                                      fontWeight: _rbiCount ==
-                                                                              rbiCount
+                                                                      fontWeight: (_rbiCount == rbiCount &&
+                                                                              _selectedHitType ==
+                                                                                  label)
                                                                           ? FontWeight
                                                                               .w600
                                                                           : FontWeight
@@ -2282,7 +2287,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             ),
                                           ),
                                           selected: _selectedHitType == label,
-                                          disableColorChange: label == 'Single',
+                                          disableColorChange:
+                                              _selectedHitType == label,
                                           onSelected: (isSelected) {
                                             setState(() {
                                               if (isSelected) {
@@ -2316,8 +2322,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     )
                                     .toList(),
-                                // Add celebration checkbox when Single + RBI is selected
-                                if (_selectedHitType == 'Single' &&
+                                // Add celebration checkbox when Single or Double + RBI is selected
+                                if ((_selectedHitType == 'Single' ||
+                                        _selectedHitType == 'Double') &&
                                     _rbiCount != null) ...[
                                   const SizedBox(height: 8),
                                   Padding(
