@@ -2150,7 +2150,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show all verbs when none selected, or show only the selected verb and its sub-options
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'at bat' ||
+            _selectedVerb == 'At Bat' ||
             _selectedVerb == 'celebrate' ||
             _selectedVerb == 'fielding';
 
@@ -2192,7 +2192,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show all verbs when none selected, or show only the selected verb and its sub-options
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'at bat' ||
+            _selectedVerb == 'At Bat' ||
             _selectedVerb == 'celebrate' ||
             _selectedVerb == 'fielding';
 
