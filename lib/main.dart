@@ -2157,6 +2157,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
+            _selectedVerb == 'Bunt' ||
             _selectedVerb == 'celebrate' ||
             _selectedVerb == 'fielding';
 
@@ -2199,6 +2200,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
+            _selectedVerb == 'Bunt' ||
             _selectedVerb == 'celebrate' ||
             _selectedVerb == 'fielding';
 
@@ -3963,6 +3965,67 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _selectedVerb = isSelected ? 'At Bat' : null;
                               _selectedAtBatAction = null;
                               _selectedRbiInning = null;
+                              _updateCaption();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Bunt') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Bunt',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            selected: _selectedVerb == 'Bunt',
+                            selectedColor: Colors.grey.shade300,
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'Bunt' : null;
+                              _selectedRbiInning = null;
+                              // Create code replacement for Bunt
+                              if (isSelected) {
+                                codeReplacements['Bunt'] = Replacement(
+                                    'bunts against the', 'Bunt', '');
+                              }
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
@@ -13417,12 +13480,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       codeReplacements[verb] = Replacement('$verb against the', verb, '');
     }
 
+    // Add code replacement for Bunt
+    if (verb == 'Bunt') {
+      codeReplacements[verb] = Replacement('bunts against the', verb, '');
+    }
+
     final isTogglingOff = _selectedVerb == verb;
 
     setState(() {
       _selectedVerb = isTogglingOff ? null : verb;
-      // Reset inning state when the verb selection changes, except for 'pitches', 'At Bat', and 'Batting'
-      if (verb != 'pitches' && verb != 'At Bat' && verb != 'Batting') {
+      // Reset inning state when the verb selection changes, except for 'pitches', 'At Bat', 'Bunt', and 'Batting'
+      if (verb != 'pitches' &&
+          verb != 'At Bat' &&
+          verb != 'Bunt' &&
+          verb != 'Batting') {
         _selectedRbiInning = null;
       }
 
