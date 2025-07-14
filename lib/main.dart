@@ -4651,7 +4651,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   final List<String> celebrationVerbs = const ['Celebrate'];
 
   Map<String, List<String>> get verbCategories => {
-        'Offense': ['hit', 'At Bat', 'Batting'],
+        'Offense': ['hit', 'At Bat', 'Bunt', 'Swing'],
         'Defense': ['pitches', 'Fielding'],
         'Base Running': ['Base Running'],
         'Reaction': ['Celebrate'],
