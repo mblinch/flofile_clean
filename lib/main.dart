@@ -9661,7 +9661,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               const SizedBox(
                                   height: 20), // Reduced from 32 to 20
                               SizedBox(
-                                width: 170,
+                                width: 240,
                                 child: _buildTeamDropdown(
                                   label: 'Away Team',
                                   value: selectedAwayTeam,
@@ -9687,7 +9687,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               const SizedBox(
                                   height: 20), // Reduced from 32 to 20
                               SizedBox(
-                                width: 170,
+                                width: 240,
                                 child: _buildTeamDropdown(
                                   label: 'Home Team',
                                   value: selectedHomeTeam,
@@ -10963,7 +10963,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             ),
                                                           ),
                                                           const SizedBox(
-                                                              height: 8),
+                                                              height: 12),
+                                                          // Divider line under search bar
+                                                          Container(
+                                                            height: 1,
+                                                            width:
+                                                                double.infinity,
+                                                            color: Colors
+                                                                .grey.shade300,
+                                                            margin:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    vertical:
+                                                                        4),
+                                                          ),
+                                                          const SizedBox(
+                                                              height: 12),
                                                           // Selected players chips
                                                           if (selectedPlayers
                                                                   .isNotEmpty ||
@@ -12234,84 +12249,91 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       elevation: 2.0,
       color: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      child: DropdownButtonFormField<String>(
-        isExpanded: true,
-        value: value,
-        iconSize: 16, // Smaller dropdown arrow
-        decoration: InputDecoration(
-          labelText: label,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 8,
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          labelStyle: const TextStyle(fontSize: 11),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
-          ),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+          borderRadius: BorderRadius.circular(4),
+          color: Colors.white,
         ),
-        items: sortedTeams
-            .map(
-              (item) => DropdownMenuItem(
-                value: item,
-                child: Container(
-                  height: 32,
+        child: PopupMenuButton<String>(
+          initialValue: value,
+          onSelected: onChanged,
+          constraints: const BoxConstraints(maxHeight: 600),
+          itemBuilder: (context) => sortedTeams
+              .map(
+                (item) => PopupMenuItem<String>(
+                  value: item,
+                  height: 18,
                   padding: EdgeInsets.zero,
-                  child: Row(
-                    children: [
-                      // Home/Away symbol
-                      if (label == 'Home Team')
-                        const Icon(Icons.home, size: 12, color: Colors.blue),
-                      if (label == 'Away Team')
-                        const Icon(Icons.flight_takeoff,
-                            size: 12, color: Colors.red),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          item,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.black,
+                  child: Container(
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        // Home/Away symbol
+                        if (label == 'Home Team')
+                          Icon(Icons.home,
+                              size: 10, color: Colors.grey.shade700),
+                        if (label == 'Away Team')
+                          Icon(Icons.flight_takeoff,
+                              size: 10, color: Colors.grey.shade700),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black,
+                              fontWeight: FontWeight.normal,
+                            ),
                           ),
                         ),
-                      ),
-                      if (_favoriteTeams.contains(item))
-                        const Icon(Icons.star, size: 14, color: Colors.amber),
-                    ],
+                        if (_favoriteTeams.contains(item))
+                          const Icon(Icons.star, size: 10, color: Colors.amber),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            )
-            .toList(),
-        onChanged: onChanged,
-        style: const TextStyle(fontSize: 11, color: Colors.black),
-        selectedItemBuilder: (context) => sortedTeams.map((item) {
-          return Row(
-            children: [
-              // Home/Away symbol for selected item
-              if (label == 'Home Team')
-                const Icon(Icons.home, size: 12, color: Colors.blue),
-              if (label == 'Away Team')
-                const Icon(Icons.flight_takeoff, size: 12, color: Colors.red),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  item,
-                  style: const TextStyle(fontSize: 11, color: Colors.black),
-                  overflow: TextOverflow.ellipsis,
+              )
+              .toList(),
+          child: Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                // Label
+                Text(
+                  '${label.replaceAll(' Team', '')}: ',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
-              ),
-            ],
-          );
-        }).toList(),
+                // Home/Away symbol for selected item
+                if (value != null) ...[
+                  if (label == 'Home Team')
+                    Icon(Icons.home, size: 9, color: Colors.grey.shade700),
+                  if (label == 'Away Team')
+                    Icon(Icons.flight_takeoff,
+                        size: 9, color: Colors.grey.shade700),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      value ?? 'Select Team',
+                      style: const TextStyle(fontSize: 11, color: Colors.black),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ] else ...[
+                  const Expanded(
+                    child: Text(
+                      'Select Team',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                ],
+                const Icon(Icons.arrow_drop_down, size: 14),
+              ],
+            ),
+          ),
+        ),
       ),
     );
 
@@ -12352,6 +12374,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         return 'LAA';
       case 'Los Angeles Dodgers':
         return 'LAD';
+      case 'Miami Marlins':
+        return 'MIA';
       case 'Milwaukee Brewers':
         return 'MIL';
       case 'Minnesota Twins':
