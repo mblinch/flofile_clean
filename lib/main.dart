@@ -10767,7 +10767,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     children: [
                                       // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
                                       SizedBox(
-                                        width: 387,
+                                        width: 413,
                                         height: 550,
                                         child: DefaultTabController(
                                           length: 1,
@@ -11203,7 +11203,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             _buildPlayerContainer(
                                                                           title: selectedAwayTeam != null
                                                                               ? _getTeamShortName(selectedAwayTeam!)
-                                                                              : 'Away Team',
+                                                                              : 'Away',
                                                                           titleIcon:
                                                                               Icons.flight_takeoff,
                                                                           codes:
@@ -13027,68 +13027,69 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
               const SizedBox(width: 4),
               // Smaller search bar beside team name
-              Container(
-                width: 80,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.blue.shade300),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.only(left: 6.0),
-                      child: Icon(Icons.search, size: 12, color: Colors.grey),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: searchController,
-                        onChanged: (value) {
-                          setState(() {}); // Rebuild to filter list
-                        },
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.black,
-                          height: 1.0,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: 'Search...',
-                          hintStyle: TextStyle(
+              Expanded(
+                child: Container(
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(left: 6.0),
+                        child: Icon(Icons.search, size: 12, color: Colors.grey),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: (value) {
+                            setState(() {}); // Rebuild to filter list
+                          },
+                          style: const TextStyle(
                             fontSize: 10,
-                            color: Colors.grey,
+                            color: Colors.black,
+                            height: 1.0,
                           ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 4.0,
-                            vertical: 0.0,
-                          ),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                    if (searchText.isNotEmpty)
-                      GestureDetector(
-                        onTap: () {
-                          searchController.clear();
-                          setState(() {}); // Rebuild
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 6.0),
-                          child: Icon(
-                            Icons.clear,
-                            size: 12,
-                            color: Colors.grey,
+                          decoration: const InputDecoration(
+                            hintText: 'Search...',
+                            hintStyle: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 4.0,
+                              vertical: 0.0,
+                            ),
+                            isDense: true,
                           ),
                         ),
                       ),
-                  ],
+                      if (searchText.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            searchController.clear();
+                            setState(() {}); // Rebuild
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.only(right: 6.0),
+                            child: Icon(
+                              Icons.clear,
+                              size: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -13154,103 +13155,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             ),
           const SizedBox(height: 2),
-          // Selected players chips
-          if ((isHomeList && selectedPlayers.isNotEmpty) ||
-              (!isHomeList && selectedOpponentPlayers.isNotEmpty))
-            Container(
-              width: 160,
-              margin: const EdgeInsets.only(bottom: 2),
-              child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children:
-                    (isHomeList ? selectedPlayers : selectedOpponentPlayers)
-                        .map((
-                  code,
-                ) {
-                  final replacement =
-                      codeReplacements[code] ?? Replacement('', '', '');
-                  final playerName = replacement.short;
-                  return SizedBox(
-                    width:
-                        76, // Fixed width to fit 2 chips in 160px container (76*2 + 8 spacing = 160)
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Tooltip(
-                              message: playerName,
-                              child: Text(
-                                playerName,
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isHomeList) {
-                                  selectedPlayers.remove(code);
-                                } else {
-                                  selectedOpponentPlayers.remove(code);
-                                }
-                                // Update personality field when player is deselected
-                                final allSelectedCodes = [
-                                  ...selectedPlayers,
-                                  ...selectedOpponentPlayers,
-                                ];
-                                final personalityText = allSelectedCodes
-                                    .map((c) {
-                                      final replacement = codeReplacements[c];
-                                      if (replacement == null) return null;
-                                      return replacement.short
-                                          .split(' #')
-                                          .first;
-                                    })
-                                    .nonNulls
-                                    .join(';');
-                                personalityController.text = personalityText;
-                                _updateCaption();
-                              });
-                            },
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade600,
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                size: 7,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
           Flexible(
             child: (filteredCodes.isEmpty && searchText.isNotEmpty)
                 ? const Align(
