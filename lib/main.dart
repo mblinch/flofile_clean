@@ -11015,8 +11015,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     decoration:
                                                                         BoxDecoration(
                                                                       color: Colors
-                                                                          .blue
-                                                                          .shade100,
+                                                                          .grey
+                                                                          .shade700,
                                                                       borderRadius:
                                                                           BorderRadius
                                                                               .circular(
@@ -11026,8 +11026,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           Border
                                                                               .all(
                                                                         color: Colors
-                                                                            .blue
-                                                                            .shade300,
+                                                                            .grey
+                                                                            .shade600,
                                                                       ),
                                                                     ),
                                                                     child: Row(
@@ -11042,7 +11042,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             fontSize:
                                                                                 11,
                                                                             color:
-                                                                                Colors.blue.shade800,
+                                                                                Colors.white,
                                                                             fontWeight:
                                                                                 FontWeight.w500,
                                                                           ),
@@ -11069,7 +11069,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 12,
                                                                             decoration:
                                                                                 BoxDecoration(
-                                                                              color: Colors.blue.shade600,
+                                                                              color: Colors.grey.shade500,
                                                                               borderRadius: BorderRadius.circular(
                                                                                 2,
                                                                               ),
