@@ -11187,10 +11187,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         child:
                                                                             _buildPlayerContainer(
                                                                           title: selectedAwayTeam != null
-                                                                              ? _getTeamShortName(
-                                                                                  selectedAwayTeam!,
-                                                                                )
+                                                                              ? _getTeamShortName(selectedAwayTeam!)
                                                                               : 'Away Team',
+                                                                          titleIcon:
+                                                                              Icons.flight_takeoff,
                                                                           codes:
                                                                               awayPlayers,
                                                                           isHomeList:
@@ -11208,10 +11208,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         child:
                                                                             _buildPlayerContainer(
                                                                           title: selectedHomeTeam != null
-                                                                              ? _getTeamShortName(
-                                                                                  selectedHomeTeam!,
-                                                                                )
+                                                                              ? _getTeamShortName(selectedHomeTeam!)
                                                                               : 'Home Team',
+                                                                          titleIcon:
+                                                                              Icons.home,
                                                                           codes:
                                                                               homePlayers,
                                                                           isHomeList:
@@ -12267,6 +12267,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   padding: EdgeInsets.zero,
                   child: Row(
                     children: [
+                      // Home/Away symbol
+                      if (label == 'Home Team')
+                        const Icon(Icons.home, size: 12, color: Colors.blue),
+                      if (label == 'Away Team')
+                        const Icon(Icons.flight_takeoff,
+                            size: 12, color: Colors.red),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           item,
@@ -12286,6 +12293,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             .toList(),
         onChanged: onChanged,
         style: const TextStyle(fontSize: 11, color: Colors.black),
+        selectedItemBuilder: (context) => sortedTeams.map((item) {
+          return Row(
+            children: [
+              // Home/Away symbol for selected item
+              if (label == 'Home Team')
+                const Icon(Icons.home, size: 12, color: Colors.blue),
+              if (label == 'Away Team')
+                const Icon(Icons.flight_takeoff, size: 12, color: Colors.red),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  item,
+                  style: const TextStyle(fontSize: 11, color: Colors.black),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+        }).toList(),
       ),
     );
 
@@ -12880,6 +12906,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required List<String> codes,
     required bool isHomeList,
     required bool toggle,
+    IconData? titleIcon,
+    Color? iconColor,
   }) {
     final searchController =
         isHomeList ? _homeSearchController : _awaySearchController;
@@ -12952,18 +12980,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           Row(
             children: [
               // Team name
-              RichText(
-                text: TextSpan(
-                  // Default style for the team name
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize:
-                        12, // Reduced from 14 to 12 to make team name smaller
-                    color: Colors.black,
-                    fontFamily: 'RobotoCondensed',
+              Row(
+                children: [
+                  if (titleIcon != null) ...[
+                    Icon(
+                      titleIcon,
+                      size: 14,
+                      color: iconColor ?? Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.black,
+                      fontFamily: 'RobotoCondensed',
+                    ),
                   ),
-                  children: <TextSpan>[TextSpan(text: title)],
-                ),
+                ],
               ),
               const SizedBox(width: 4),
               // Smaller search bar beside team name
