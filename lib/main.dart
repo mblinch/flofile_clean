@@ -11008,9 +11008,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         const EdgeInsets
                                                                             .symmetric(
                                                                       horizontal:
-                                                                          6,
-                                                                      vertical:
                                                                           3,
+                                                                      vertical:
+                                                                          1,
                                                                     ),
                                                                     decoration:
                                                                         BoxDecoration(
@@ -11020,7 +11020,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       borderRadius:
                                                                           BorderRadius
                                                                               .circular(
-                                                                        4,
+                                                                        3,
                                                                       ),
                                                                       border:
                                                                           Border
@@ -11040,7 +11040,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           style:
                                                                               TextStyle(
                                                                             fontSize:
-                                                                                11,
+                                                                                10,
                                                                             color:
                                                                                 Colors.white,
                                                                             fontWeight:
@@ -11049,7 +11049,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         ),
                                                                         const SizedBox(
                                                                           width:
-                                                                              4,
+                                                                              3,
                                                                         ),
                                                                         GestureDetector(
                                                                           onTap:
@@ -11064,9 +11064,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           child:
                                                                               Container(
                                                                             width:
-                                                                                12,
+                                                                                11,
                                                                             height:
-                                                                                12,
+                                                                                11,
                                                                             decoration:
                                                                                 BoxDecoration(
                                                                               color: Colors.grey.shade500,
@@ -11077,7 +11077,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             child:
                                                                                 const Icon(
                                                                               Icons.close,
-                                                                              size: 8,
+                                                                              size: 6,
                                                                               color: Colors.white,
                                                                             ),
                                                                           ),
@@ -11106,26 +11106,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         const EdgeInsets
                                                                             .symmetric(
                                                                       horizontal:
-                                                                          6,
+                                                                          4,
                                                                       vertical:
-                                                                          3,
+                                                                          2,
                                                                     ),
                                                                     decoration:
                                                                         BoxDecoration(
                                                                       color: Colors
-                                                                          .red
-                                                                          .shade100,
+                                                                          .white,
                                                                       borderRadius:
                                                                           BorderRadius
                                                                               .circular(
-                                                                        4,
+                                                                        3,
                                                                       ),
                                                                       border:
                                                                           Border
                                                                               .all(
                                                                         color: Colors
-                                                                            .red
-                                                                            .shade300,
+                                                                            .grey
+                                                                            .shade400,
                                                                       ),
                                                                     ),
                                                                     child: Row(
@@ -11138,16 +11137,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           style:
                                                                               TextStyle(
                                                                             fontSize:
-                                                                                11,
+                                                                                10,
                                                                             color:
-                                                                                Colors.red.shade800,
+                                                                                Colors.black,
                                                                             fontWeight:
                                                                                 FontWeight.w500,
                                                                           ),
                                                                         ),
                                                                         const SizedBox(
                                                                           width:
-                                                                              4,
+                                                                              3,
                                                                         ),
                                                                         GestureDetector(
                                                                           onTap:
@@ -11162,12 +11161,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           child:
                                                                               Container(
                                                                             width:
-                                                                                12,
+                                                                                11,
                                                                             height:
-                                                                                12,
+                                                                                11,
                                                                             decoration:
                                                                                 BoxDecoration(
-                                                                              color: Colors.red.shade600,
+                                                                              color: Colors.grey.shade600,
                                                                               borderRadius: BorderRadius.circular(
                                                                                 2,
                                                                               ),
@@ -11175,7 +11174,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             child:
                                                                                 const Icon(
                                                                               Icons.close,
-                                                                              size: 8,
+                                                                              size: 6,
                                                                               color: Colors.white,
                                                                             ),
                                                                           ),
