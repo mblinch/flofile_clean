@@ -11008,9 +11008,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         const EdgeInsets
                                                                             .symmetric(
                                                                       horizontal:
-                                                                          3,
+                                                                          4,
                                                                       vertical:
-                                                                          1,
+                                                                          2,
                                                                     ),
                                                                     decoration:
                                                                         BoxDecoration(
