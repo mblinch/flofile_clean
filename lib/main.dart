@@ -2309,11 +2309,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               setState(() {
                                                                 _selectedHitType =
                                                                     label;
-                                                                _rbiCount =
-                                                                    rbiCount;
-                                                                _rbiCountByHit[
-                                                                        label] =
-                                                                    rbiCount;
+                                                                // Toggle RBI: if already selected, remove it; otherwise set it
+                                                                if (_rbiCount ==
+                                                                        rbiCount &&
+                                                                    _selectedHitType ==
+                                                                        label) {
+                                                                  // Remove RBI
+                                                                  _rbiCount =
+                                                                      null;
+                                                                  _rbiCountByHit
+                                                                      .remove(
+                                                                          label);
+                                                                } else {
+                                                                  // Set RBI
+                                                                  _rbiCount =
+                                                                      rbiCount;
+                                                                  _rbiCountByHit[
+                                                                          label] =
+                                                                      rbiCount;
+                                                                }
                                                                 _updateCaption();
                                                               });
                                                             },
@@ -2434,6 +2448,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               setState(() {
                                                 _isSoloCelebration =
                                                     value ?? false;
+                                                // Uncheck other options when this one is selected
+                                                if (_isSoloCelebration) {
+                                                  _isBatterRunning = false;
+                                                  _isSliding = false;
+                                                }
                                                 _updateCaption();
                                               });
                                             },
@@ -2517,6 +2536,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               setState(() {
                                                 _isBatterRunning =
                                                     value ?? false;
+                                                // Uncheck other options when this one is selected
+                                                if (_isBatterRunning) {
+                                                  _isSoloCelebration = false;
+                                                  _isSliding = false;
+                                                }
                                                 _updateCaption();
                                               });
                                             },
@@ -2581,40 +2605,49 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ],
                                     ),
                                   ),
-                                  // Add sliding checkbox
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Row(
-                                      children: [
-                                        Transform.scale(
-                                          scale: 0.6,
-                                          child: Checkbox(
-                                            value: _isSliding,
-                                            onChanged: (bool? value) {
-                                              setState(() {
-                                                _isSliding = value ?? false;
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                        ),
-                                        Transform.translate(
-                                          offset: const Offset(-4, 0),
-                                          child: const Text(
-                                            'Slides into base',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.normal,
+                                  // Add sliding checkbox (not for singles)
+                                  if (_selectedHitType != 'Single') ...[
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          Transform.scale(
+                                            scale: 0.6,
+                                            child: Checkbox(
+                                              value: _isSliding,
+                                              onChanged: (bool? value) {
+                                                setState(() {
+                                                  _isSliding = value ?? false;
+                                                  // Uncheck other options when this one is selected
+                                                  if (_isSliding) {
+                                                    _isSoloCelebration = false;
+                                                    _isBatterRunning = false;
+                                                  }
+                                                  _updateCaption();
+                                                });
+                                              },
+                                              visualDensity:
+                                                  VisualDensity.compact,
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          Transform.translate(
+                                            offset: const Offset(-4, 0),
+                                            child: const Text(
+                                              'Slides into base',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  // Add sliding opponent option when sliding is checked
-                                  if (_isSliding == true) ...[
+                                  ],
+                                  // Add sliding opponent option when sliding is checked (not for singles)
+                                  if (_isSliding == true &&
+                                      _selectedHitType != 'Single') ...[
                                     Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 8.0),
@@ -2665,8 +2698,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     ),
                                   ],
-                                  // Add out option when sliding is checked
-                                  if (_isSliding == true) ...[
+                                  // Add out option when sliding is checked (not for singles)
+                                  if (_isSliding == true &&
+                                      _selectedHitType != 'Single') ...[
                                     Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 8.0),
@@ -8580,20 +8614,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (_selectedHitType == 'Home Run') {
           coreActionPart = "$playersString rounds the bases on his $hitPhrase";
         } else if (_selectedHitType == 'Single') {
-          if (_isSliding && _isOut) {
-            coreActionPart =
-                "$playersString is out trying to stretch a single at first base";
-          } else if (_isSliding) {
-            coreActionPart =
-                "$playersString slides into first base on his $hitPhrase";
-          } else {
-            coreActionPart =
-                "$playersString runs to first base on his $hitPhrase";
-          }
+          coreActionPart =
+              "$playersString runs to first base on his $hitPhrase";
         } else if (_selectedHitType == 'Double') {
           if (_isSliding && _isOut) {
             coreActionPart =
-                "$playersString is out trying to stretch a double at second base";
+                "$playersString is out trying to stretch a single at second base";
           } else if (_isSliding) {
             coreActionPart =
                 "$playersString slides into second base on his $hitPhrase";
@@ -8603,7 +8629,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         } else if (_selectedHitType == 'Triple') {
           if (_isSliding && _isOut) {
             coreActionPart =
-                "$playersString is out trying to stretch a triple at third base";
+                "$playersString is out trying to stretch a double at third base";
           } else if (_isSliding) {
             coreActionPart =
                 "$playersString slides into third base on his $hitPhrase";
@@ -8616,17 +8642,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else if (_isSliding == true) {
         // Handle sliding without base running
         if (_selectedHitType == 'Single') {
-          if (_isOut) {
-            coreActionPart =
-                "$playersString is out trying to stretch a single at first base";
-          } else {
-            coreActionPart =
-                "$playersString slides into first base on his $hitPhrase";
-          }
+          coreActionPart = "$playersString hits a $hitPhrase";
         } else if (_selectedHitType == 'Double') {
           if (_isOut) {
             coreActionPart =
-                "$playersString is out trying to stretch a double at second base";
+                "$playersString is out trying to stretch a single at second base";
           } else {
             coreActionPart =
                 "$playersString slides into second base on his $hitPhrase";
@@ -8634,7 +8654,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         } else if (_selectedHitType == 'Triple') {
           if (_isOut) {
             coreActionPart =
-                "$playersString is out trying to stretch a triple at third base";
+                "$playersString is out trying to stretch a double at third base";
           } else {
             coreActionPart =
                 "$playersString slides into third base on his $hitPhrase";
@@ -8647,11 +8667,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (celebrateAgainst.isNotEmpty && !_isOut) {
           String opposingPlayersStr =
               _combineOpponentPlayersForBaseRunning(celebrateAgainst);
-          if (_selectedHitType == 'Single') {
-            coreActionPart = coreActionPart.replaceFirst(
-                'slides into first base on his $hitPhrase',
-                'slides into first base safely past $opposingPlayersStr on his $hitPhrase');
-          } else if (_selectedHitType == 'Double') {
+          if (_selectedHitType == 'Double') {
             coreActionPart = coreActionPart.replaceFirst(
                 'slides into second base on his $hitPhrase',
                 'slides into second base safely past $opposingPlayersStr on his $hitPhrase');
@@ -8666,18 +8682,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (celebrateAgainst.isNotEmpty && _isOut) {
           String opposingPlayersStr =
               _combineOpponentPlayersForBaseRunning(celebrateAgainst);
-          if (_selectedHitType == 'Single') {
+          if (_selectedHitType == 'Double') {
             coreActionPart = coreActionPart.replaceFirst(
-                'is out trying to stretch a single at first base',
-                'is out trying to stretch a single at first base on a tag by $opposingPlayersStr');
-          } else if (_selectedHitType == 'Double') {
-            coreActionPart = coreActionPart.replaceFirst(
-                'is out trying to stretch a double at second base',
-                'is out trying to stretch a double at second base on a tag by $opposingPlayersStr');
+                'is out trying to stretch a single at second base',
+                'is out trying to stretch a single at second base on a tag by $opposingPlayersStr');
           } else if (_selectedHitType == 'Triple') {
             coreActionPart = coreActionPart.replaceFirst(
-                'is out trying to stretch a triple at third base',
-                'is out trying to stretch a triple at third base on a tag by $opposingPlayersStr');
+                'is out trying to stretch a double at third base',
+                'is out trying to stretch a double at third base on a tag by $opposingPlayersStr');
           }
         }
       } else {
@@ -8713,36 +8725,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         } else if (_selectedHitType == 'Single') {
           if (opposingPlayersStr.isNotEmpty) {
-            if (_isSliding && _isOut) {
-              coreActionPart = coreActionPart.replaceFirst(
-                  'is out trying to stretch a single at first base',
-                  'is out trying to stretch a single at first base on a tag by $opposingPlayersStr');
-            } else if (_isSliding) {
-              coreActionPart = coreActionPart.replaceFirst(
-                  'slides into first base on his $hitPhrase',
-                  'slides into first base safely past $opposingPlayersStr on his $hitPhrase');
-            } else {
-              coreActionPart = coreActionPart.replaceFirst(
-                  'runs to first base on his $hitPhrase',
-                  'runs the base path past $opposingPlayersStr on his $hitPhrase');
-            }
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs to first base on his $hitPhrase',
+                'runs the base path past $opposingPlayersStr on his $hitPhrase');
           } else if (playersInFrameStr.isNotEmpty) {
-            if (_isSliding) {
-              coreActionPart = coreActionPart.replaceFirst(
-                  'slides into first base on his $hitPhrase',
-                  'slides into first base with $playersInFrameStr on his $hitPhrase');
-            } else {
-              coreActionPart = coreActionPart.replaceFirst(
-                  'runs to first base on his $hitPhrase',
-                  'runs to first base with $playersInFrameStr on his $hitPhrase');
-            }
+            coreActionPart = coreActionPart.replaceFirst(
+                'runs to first base on his $hitPhrase',
+                'runs to first base with $playersInFrameStr on his $hitPhrase');
           }
         } else if (_selectedHitType == 'Double') {
           if (opposingPlayersStr.isNotEmpty) {
             if (_isSliding && _isOut) {
               coreActionPart = coreActionPart.replaceFirst(
-                  'is out trying to stretch a double at second base',
-                  'is out trying to stretch a double at second base on a tag by $opposingPlayersStr');
+                  'is out trying to stretch a single at second base',
+                  'is out trying to stretch a single at second base on a tag by $opposingPlayersStr');
             } else if (_isSliding) {
               coreActionPart = coreActionPart.replaceFirst(
                   'slides into second base on his $hitPhrase',
@@ -8767,8 +8763,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           if (opposingPlayersStr.isNotEmpty) {
             if (_isSliding && _isOut) {
               coreActionPart = coreActionPart.replaceFirst(
-                  'is out trying to stretch a triple at third base',
-                  'is out trying to stretch a triple at third base on a tag by $opposingPlayersStr');
+                  'is out trying to stretch a double at third base',
+                  'is out trying to stretch a double at third base on a tag by $opposingPlayersStr');
             } else if (_isSliding) {
               coreActionPart = coreActionPart.replaceFirst(
                   'slides into third base on his $hitPhrase',
@@ -8850,7 +8846,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else {
         // Standard hit caption (no celebration)
         // Check if we already have opposing player info in the action part
-        bool hasOpposingPlayerInAction = _isOut && celebrateAgainst.isNotEmpty;
+        bool hasOpposingPlayerInAction = celebrateAgainst.isNotEmpty;
 
         if (_walkOff == true) {
           mainCaptionPart = "$coreActionPart to defeat the $opponentTeamName";
