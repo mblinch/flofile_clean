@@ -11035,6 +11035,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           MainAxisSize
                                                                               .min,
                                                                       children: [
+                                                                        Icon(
+                                                                          Icons
+                                                                              .home,
+                                                                          size:
+                                                                              10,
+                                                                          color:
+                                                                              Colors.white,
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              2,
+                                                                        ),
                                                                         Text(
                                                                           playerName,
                                                                           style:
@@ -11132,6 +11144,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           MainAxisSize
                                                                               .min,
                                                                       children: [
+                                                                        Icon(
+                                                                          Icons
+                                                                              .flight_takeoff,
+                                                                          size:
+                                                                              10,
+                                                                          color:
+                                                                              Colors.black,
+                                                                        ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              2,
+                                                                        ),
                                                                         Text(
                                                                           playerName,
                                                                           style:
