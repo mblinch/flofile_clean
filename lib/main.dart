@@ -3863,7 +3863,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                             const SizedBox(width: 16.0),
-                            ...['At Bat', 'Swings', 'Runs to First Base'].map((
+                            ...['Swings', 'Runs to First Base'].map((
                               label,
                             ) {
                               print('DEBUG: Rendering Batting action: $label');
@@ -3961,80 +3961,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                           ),
-                          if (_selectedVerb == 'At Bat') ...[
-                            const SizedBox(width: 16.0),
-                            // Vertical divider line
-                            Container(
-                              width: 1,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                borderRadius: BorderRadius.circular(0.5),
-                              ),
-                            ),
-                            buildInlineInningSelector(
-                              selectedInning: _selectedRbiInning,
-                              onInningSelected: (val) {
-                                setState(() {
-                                  _selectedRbiInning = val;
-                                  _walkOff = false;
-                                  _updateCaption();
-                                });
-                              },
-                            ),
-
-                            const SizedBox(width: 16.0),
-                            // Vertical divider line between inning and at bat action selection
-                            Container(
-                              width: 1,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade400,
-                                borderRadius: BorderRadius.circular(0.5),
-                              ),
-                            ),
-                            const SizedBox(width: 16.0),
-                            ...['swings', 'runs to first base'].map((label) {
-                              print(
-                                  'DEBUG: Rendering At Bat sub-action: $label');
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: FlashingFilterChip(
-                                  label: SizedBox(
-                                    width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                  selected: _selectedAtBatAction == label,
-                                  onSelected: (isSelected) {
-                                    print(
-                                      'DEBUG: At Bat action selected: $label, isSelected: $isSelected',
-                                    );
-                                    setState(() {
-                                      _selectedAtBatAction =
-                                          isSelected ? label : null;
-                                      print(
-                                        'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction',
-                                      );
-                                      _updateCaption();
-                                    });
-                                  },
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  key: UniqueKey(),
-                                ),
-                              );
-                            }),
-                          ],
                         ],
                       ),
                     ),
