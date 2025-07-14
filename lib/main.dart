@@ -196,6 +196,7 @@ class FlashingFilterChip extends StatefulWidget {
   final MaterialTapTargetSize? materialTapTargetSize;
   final bool showCheckmark;
   final bool disableColorChange;
+  final Color? selectedColor;
 
   const FlashingFilterChip({
     Key? key,
@@ -208,6 +209,7 @@ class FlashingFilterChip extends StatefulWidget {
     this.materialTapTargetSize,
     this.showCheckmark = true,
     this.disableColorChange = false,
+    this.selectedColor,
   }) : super(key: key);
 
   @override
@@ -281,7 +283,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
               color: widget.disableColorChange
                   ? Colors.grey.shade200
                   : (widget.selected
-                      ? Colors.grey.shade500
+                      ? (widget.selectedColor ?? Colors.grey.shade500)
                       : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(4),
             ),
@@ -294,7 +296,11 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
                       widget.selected ? FontWeight.w600 : FontWeight.normal,
                   color: widget.disableColorChange
                       ? Colors.black
-                      : (widget.selected ? Colors.white : Colors.black),
+                      : (widget.selected
+                          ? (widget.selectedColor != null
+                              ? Colors.black
+                              : Colors.white)
+                          : Colors.black),
                 ),
                 child: widget.label,
               ),
@@ -3952,6 +3958,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                             selected: _selectedVerb == 'At Bat',
+                            selectedColor: Colors.grey.shade300,
                             onSelected: (isSelected) => setState(() {
                               _selectedVerb = isSelected ? 'At Bat' : null;
                               _selectedAtBatAction = null;
