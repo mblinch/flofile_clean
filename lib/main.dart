@@ -354,6 +354,69 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Thumbnail grid focus state
   bool _isThumbnailGridFocused = false;
 
+  // Accent removal state
+  bool _removeAccents = true;
+
+  // Function to remove accents from text
+  String _removeAccentsFromText(String text) {
+    if (!_removeAccents) return text;
+
+    return text
+        .replaceAll('á', 'a')
+        .replaceAll('à', 'a')
+        .replaceAll('â', 'a')
+        .replaceAll('ã', 'a')
+        .replaceAll('ä', 'a')
+        .replaceAll('å', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('è', 'e')
+        .replaceAll('ê', 'e')
+        .replaceAll('ë', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ì', 'i')
+        .replaceAll('î', 'i')
+        .replaceAll('ï', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ò', 'o')
+        .replaceAll('ô', 'o')
+        .replaceAll('õ', 'o')
+        .replaceAll('ö', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll('ù', 'u')
+        .replaceAll('û', 'u')
+        .replaceAll('ü', 'u')
+        .replaceAll('ý', 'y')
+        .replaceAll('ÿ', 'y')
+        .replaceAll('ñ', 'n')
+        .replaceAll('ç', 'c')
+        .replaceAll('Á', 'A')
+        .replaceAll('À', 'A')
+        .replaceAll('Â', 'A')
+        .replaceAll('Ã', 'A')
+        .replaceAll('Ä', 'A')
+        .replaceAll('Å', 'A')
+        .replaceAll('É', 'E')
+        .replaceAll('È', 'E')
+        .replaceAll('Ê', 'E')
+        .replaceAll('Ë', 'E')
+        .replaceAll('Í', 'I')
+        .replaceAll('Ì', 'I')
+        .replaceAll('Î', 'I')
+        .replaceAll('Ï', 'I')
+        .replaceAll('Ó', 'O')
+        .replaceAll('Ò', 'O')
+        .replaceAll('Ô', 'O')
+        .replaceAll('Õ', 'O')
+        .replaceAll('Ö', 'O')
+        .replaceAll('Ú', 'U')
+        .replaceAll('Ù', 'U')
+        .replaceAll('Û', 'U')
+        .replaceAll('Ü', 'U')
+        .replaceAll('Ý', 'Y')
+        .replaceAll('Ñ', 'N')
+        .replaceAll('Ç', 'C');
+  }
+
   // Copy metadata from the thumbnail at the given index
   Future<void> _copyMetadataFromIndex(int index) async {
     if (index < 0 || index >= imagePaths.length) return;
@@ -888,6 +951,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _selectedHomeRunType = null;
       _rbiCount = null;
       _isBatterRunning = false;
+      _isSliding = false;
+      _showSlidingOpponent = false;
+      _isOut = false;
       _selectedRbiInning = null;
 
       // Reset fielding-related state
@@ -963,6 +1029,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _rbiCount = null;
         _selectedRbiInning = null;
         _isBatterRunning = false;
+        _isSliding = false;
       } else if (_showFieldingOptions && _selectedVerb == 'Fielding') {
         // If in fielding options, go back to verb selection
         _showFieldingOptions = false;
@@ -1006,6 +1073,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedHomeRunType = null;
         _rbiCount = null;
         _isBatterRunning = false;
+        _isSliding = false;
         _showFieldingOptions = false;
         _selectedFieldingAction = null;
         _isDivingCatch = false;
@@ -1707,6 +1775,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   int? _selectedRbiInning;
   int? _onBaseCount;
   bool _isBatterRunning = false;
+  bool _isSliding = false;
+  bool _showSlidingOpponent = false;
+  bool _isOut = false;
 
   // Preserve per-hit-type selections
   Widget _buildArrow() {
@@ -2510,6 +2581,126 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ],
                                     ),
                                   ),
+                                  // Add sliding checkbox
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: Row(
+                                      children: [
+                                        Transform.scale(
+                                          scale: 0.6,
+                                          child: Checkbox(
+                                            value: _isSliding,
+                                            onChanged: (bool? value) {
+                                              setState(() {
+                                                _isSliding = value ?? false;
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        ),
+                                        Transform.translate(
+                                          offset: const Offset(-4, 0),
+                                          child: const Text(
+                                            'Slides into base',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Add sliding opponent option when sliding is checked
+                                  if (_isSliding == true) ...[
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          const SizedBox(width: 20),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _showSlidingOpponentDialog(),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: celebrateAgainst
+                                                          .isNotEmpty
+                                                      ? Colors.orange.shade50
+                                                      : Colors.grey.shade100,
+                                                  border: Border.all(
+                                                    color: celebrateAgainst
+                                                            .isNotEmpty
+                                                        ? Colors.orange.shade300
+                                                        : Colors.grey.shade300,
+                                                    width: 1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
+                                                ),
+                                                child: Text(
+                                                  'Sliding against opponent',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: celebrateAgainst
+                                                            .isNotEmpty
+                                                        ? Colors.orange.shade700
+                                                        : Colors.grey.shade600,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  // Add out option when sliding is checked
+                                  if (_isSliding == true) ...[
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          const SizedBox(width: 20),
+                                          Transform.scale(
+                                            scale: 0.6,
+                                            child: Checkbox(
+                                              value: _isOut,
+                                              onChanged: (bool? value) {
+                                                setState(() {
+                                                  _isOut = value ?? false;
+                                                  _updateCaption();
+                                                });
+                                              },
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          ),
+                                          Transform.translate(
+                                            offset: const Offset(-4, 0),
+                                            child: const Text(
+                                              'Out',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ],
                             ),
@@ -4328,6 +4519,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     } else if (label == 'Celebrates Against') {
       await _showCelebrateAgainstDialog();
     }
+  }
+
+  // Helper method to show sliding opponent dialog
+  Future<void> _showSlidingOpponentDialog() async {
+    await _showCelebrateAgainstDialog();
   }
 
   final List<String> soloVerbs = const [
@@ -7083,7 +7279,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     print('DEBUG: _combinePlayersWithSingleTeam called with: $codes');
     if (codes.isEmpty) return '';
     final shorts = codes
-        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .map((c) => _removeAccentsFromText(
+            (codeReplacements[c] ?? Replacement('', '', '')).short))
         .toList();
     print('DEBUG: shorts: $shorts');
     // Determine the team from the first player's code to infer if it's home or away
@@ -7114,7 +7311,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _combinePlayersWithoutTeam(List<String> codes) {
     if (codes.isEmpty) return '';
     final shorts = codes
-        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .map((c) => _removeAccentsFromText(
+            (codeReplacements[c] ?? Replacement('', '', '')).short))
         .toList();
     if (shorts.length == 1) {
       return shorts.first;
@@ -7132,7 +7330,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   String _combineOpponentPlayersForCelebration(List<String> codes) {
     if (codes.isEmpty) return '';
     final shorts = codes
-        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .map((c) => _removeAccentsFromText(
+            (codeReplacements[c] ?? Replacement('', '', '')).short))
         .toList();
 
     // Determine the team from the first player's code
@@ -7177,9 +7376,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final replacement = codeReplacements[code];
       if (replacement != null) {
         if (code.startsWith('h')) {
-          homeTeamPlayers.add(replacement.short);
+          homeTeamPlayers.add(_removeAccentsFromText(replacement.short));
         } else if (code.startsWith('v')) {
-          awayTeamPlayers.add(replacement.short);
+          awayTeamPlayers.add(_removeAccentsFromText(replacement.short));
         }
       }
     }
@@ -7229,10 +7428,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     List<String> oppCodes,
   ) {
     final homeShorts = homeCodes
-        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .map((c) => _removeAccentsFromText(
+            (codeReplacements[c] ?? Replacement('', '', '')).short))
         .toList();
     final oppShorts = oppCodes
-        .map((c) => (codeReplacements[c] ?? Replacement('', '', '')).short)
+        .map((c) => _removeAccentsFromText(
+            (codeReplacements[c] ?? Replacement('', '', '')).short))
         .toList();
 
     // Add null checks before using the null check operator
@@ -7783,6 +7984,54 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                // Accent removal toggle
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 200,
+                      height: 24,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.grey.shade400,
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Transform.scale(
+                              scale: 0.7,
+                              child: Checkbox(
+                                value: _removeAccents,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _removeAccents = value ?? false;
+                                  });
+                                  _updateCaption();
+                                },
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Remove Accents',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.black,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -8265,11 +8514,65 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           coreActionPart =
               "$playersString rounds the bases on his walk-off $hitPhrase";
         } else if (_selectedHitType == 'Single') {
-          coreActionPart =
-              "$playersString runs to first base on his walk-off $hitPhrase";
+          if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into first base on his walk-off $hitPhrase";
+          } else {
+            coreActionPart =
+                "$playersString runs to first base on his walk-off $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Double') {
+          if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into second base on his walk-off $hitPhrase";
+          } else {
+            coreActionPart =
+                "$playersString runs the bases on his walk-off $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Triple') {
+          if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into third base on his walk-off $hitPhrase";
+          } else {
+            coreActionPart =
+                "$playersString runs the bases on his walk-off $hitPhrase";
+          }
         } else {
           coreActionPart =
               "$playersString runs the bases on his walk-off $hitPhrase";
+        }
+      } else if (_walkOff == true && _isSliding == true) {
+        // Handle walk-off sliding without base running
+        if (_selectedHitType == 'Single') {
+          coreActionPart =
+              "$playersString slides into first base on his walk-off $hitPhrase";
+        } else if (_selectedHitType == 'Double') {
+          coreActionPart =
+              "$playersString slides into second base on his walk-off $hitPhrase";
+        } else if (_selectedHitType == 'Triple') {
+          coreActionPart =
+              "$playersString slides into third base on his walk-off $hitPhrase";
+        } else {
+          coreActionPart = "$playersString hits a walk-off $hitPhrase";
+        }
+
+        // Check if sliding past opponents are selected for walk-off
+        if (celebrateAgainst.isNotEmpty) {
+          String opposingPlayersStr =
+              _combineOpponentPlayersForBaseRunning(celebrateAgainst);
+          if (_selectedHitType == 'Single') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into first base on his walk-off $hitPhrase',
+                'slides into first base safely past $opposingPlayersStr on his walk-off $hitPhrase');
+          } else if (_selectedHitType == 'Double') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into second base on his walk-off $hitPhrase',
+                'slides into second base safely past $opposingPlayersStr on his walk-off $hitPhrase');
+          } else if (_selectedHitType == 'Triple') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into third base on his walk-off $hitPhrase',
+                'slides into third base safely past $opposingPlayersStr on his walk-off $hitPhrase');
+          }
         }
       } else if (_walkOff == true) {
         coreActionPart = "$playersString hits a walk-off $hitPhrase";
@@ -8277,10 +8580,105 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (_selectedHitType == 'Home Run') {
           coreActionPart = "$playersString rounds the bases on his $hitPhrase";
         } else if (_selectedHitType == 'Single') {
-          coreActionPart =
-              "$playersString runs to first base on his $hitPhrase";
+          if (_isSliding && _isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a single at first base";
+          } else if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into first base on his $hitPhrase";
+          } else {
+            coreActionPart =
+                "$playersString runs to first base on his $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Double') {
+          if (_isSliding && _isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a double at second base";
+          } else if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into second base on his $hitPhrase";
+          } else {
+            coreActionPart = "$playersString runs the bases on his $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Triple') {
+          if (_isSliding && _isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a triple at third base";
+          } else if (_isSliding) {
+            coreActionPart =
+                "$playersString slides into third base on his $hitPhrase";
+          } else {
+            coreActionPart = "$playersString runs the bases on his $hitPhrase";
+          }
         } else {
           coreActionPart = "$playersString runs the bases on his $hitPhrase";
+        }
+      } else if (_isSliding == true) {
+        // Handle sliding without base running
+        if (_selectedHitType == 'Single') {
+          if (_isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a single at first base";
+          } else {
+            coreActionPart =
+                "$playersString slides into first base on his $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Double') {
+          if (_isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a double at second base";
+          } else {
+            coreActionPart =
+                "$playersString slides into second base on his $hitPhrase";
+          }
+        } else if (_selectedHitType == 'Triple') {
+          if (_isOut) {
+            coreActionPart =
+                "$playersString is out trying to stretch a triple at third base";
+          } else {
+            coreActionPart =
+                "$playersString slides into third base on his $hitPhrase";
+          }
+        } else {
+          coreActionPart = "$playersString hits a $hitPhrase";
+        }
+
+        // Check if sliding past opponents are selected (only when not out)
+        if (celebrateAgainst.isNotEmpty && !_isOut) {
+          String opposingPlayersStr =
+              _combineOpponentPlayersForBaseRunning(celebrateAgainst);
+          if (_selectedHitType == 'Single') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into first base on his $hitPhrase',
+                'slides into first base safely past $opposingPlayersStr on his $hitPhrase');
+          } else if (_selectedHitType == 'Double') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into second base on his $hitPhrase',
+                'slides into second base safely past $opposingPlayersStr on his $hitPhrase');
+          } else if (_selectedHitType == 'Triple') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'slides into third base on his $hitPhrase',
+                'slides into third base safely past $opposingPlayersStr on his $hitPhrase');
+          }
+        }
+
+        // Check if opposing players are selected for out scenarios
+        if (celebrateAgainst.isNotEmpty && _isOut) {
+          String opposingPlayersStr =
+              _combineOpponentPlayersForBaseRunning(celebrateAgainst);
+          if (_selectedHitType == 'Single') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'is out trying to stretch a single at first base',
+                'is out trying to stretch a single at first base on a tag by $opposingPlayersStr');
+          } else if (_selectedHitType == 'Double') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'is out trying to stretch a double at second base',
+                'is out trying to stretch a double at second base on a tag by $opposingPlayersStr');
+          } else if (_selectedHitType == 'Triple') {
+            coreActionPart = coreActionPart.replaceFirst(
+                'is out trying to stretch a triple at third base',
+                'is out trying to stretch a triple at third base on a tag by $opposingPlayersStr');
+          }
         }
       } else {
         coreActionPart = "$playersString hits a $hitPhrase";
@@ -8315,13 +8713,81 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         } else if (_selectedHitType == 'Single') {
           if (opposingPlayersStr.isNotEmpty) {
-            coreActionPart = coreActionPart.replaceFirst(
-                'runs to first base on his $hitPhrase',
-                'runs the base path past $opposingPlayersStr on his $hitPhrase');
+            if (_isSliding && _isOut) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'is out trying to stretch a single at first base',
+                  'is out trying to stretch a single at first base on a tag by $opposingPlayersStr');
+            } else if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into first base on his $hitPhrase',
+                  'slides into first base safely past $opposingPlayersStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs to first base on his $hitPhrase',
+                  'runs the base path past $opposingPlayersStr on his $hitPhrase');
+            }
           } else if (playersInFrameStr.isNotEmpty) {
-            coreActionPart = coreActionPart.replaceFirst(
-                'runs to first base on his $hitPhrase',
-                'runs to first base with $playersInFrameStr on his $hitPhrase');
+            if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into first base on his $hitPhrase',
+                  'slides into first base with $playersInFrameStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs to first base on his $hitPhrase',
+                  'runs to first base with $playersInFrameStr on his $hitPhrase');
+            }
+          }
+        } else if (_selectedHitType == 'Double') {
+          if (opposingPlayersStr.isNotEmpty) {
+            if (_isSliding && _isOut) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'is out trying to stretch a double at second base',
+                  'is out trying to stretch a double at second base on a tag by $opposingPlayersStr');
+            } else if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into second base on his $hitPhrase',
+                  'slides into second base safely past $opposingPlayersStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs the bases on his $hitPhrase',
+                  'runs the base path past $opposingPlayersStr on his $hitPhrase');
+            }
+          } else if (playersInFrameStr.isNotEmpty) {
+            if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into second base on his $hitPhrase',
+                  'slides into second base with $playersInFrameStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs the bases on his $hitPhrase',
+                  'runs the bases with $playersInFrameStr on his $hitPhrase');
+            }
+          }
+        } else if (_selectedHitType == 'Triple') {
+          if (opposingPlayersStr.isNotEmpty) {
+            if (_isSliding && _isOut) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'is out trying to stretch a triple at third base',
+                  'is out trying to stretch a triple at third base on a tag by $opposingPlayersStr');
+            } else if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into third base on his $hitPhrase',
+                  'slides into third base safely past $opposingPlayersStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs the bases on his $hitPhrase',
+                  'runs the base path past $opposingPlayersStr on his $hitPhrase');
+            }
+          } else if (playersInFrameStr.isNotEmpty) {
+            if (_isSliding) {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'slides into third base on his $hitPhrase',
+                  'slides into third base with $playersInFrameStr on his $hitPhrase');
+            } else {
+              coreActionPart = coreActionPart.replaceFirst(
+                  'runs the bases on his $hitPhrase',
+                  'runs the bases with $playersInFrameStr on his $hitPhrase');
+            }
           }
         } else {
           if (opposingPlayersStr.isNotEmpty) {
@@ -8383,9 +8849,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       } else {
         // Standard hit caption (no celebration)
-        mainCaptionPart = (_walkOff == true)
-            ? "$coreActionPart to defeat the $opponentTeamName"
-            : "$coreActionPart against the $opponentTeamName";
+        // Check if we already have opposing player info in the action part
+        bool hasOpposingPlayerInAction = _isOut && celebrateAgainst.isNotEmpty;
+
+        if (_walkOff == true) {
+          mainCaptionPart = "$coreActionPart to defeat the $opponentTeamName";
+        } else if (hasOpposingPlayerInAction) {
+          // Don't add "against the team" if we already have the specific player
+          mainCaptionPart = "$coreActionPart";
+        } else {
+          mainCaptionPart = "$coreActionPart against the $opponentTeamName";
+        }
       }
       // 3. Add inning
       if (_selectedRbiInning != null) {
@@ -8850,7 +9324,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           final replacement = codeReplacements[code];
           if (replacement == null) return '';
           // Get the player name without team info - just the name part
-          return replacement.short.split(' #').first;
+          return _removeAccentsFromText(replacement.short.split(' #').first);
         })
         .where((name) => name.isNotEmpty)
         .toSet();
@@ -12961,6 +13435,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedHomeRunType = null;
         _rbiCount = null;
         _isBatterRunning = false;
+        _isSliding = false;
       }
 
       // Reset fielding-related state
