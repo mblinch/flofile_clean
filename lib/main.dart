@@ -2117,7 +2117,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   // Helper to build a single list of all verbs with category headers.
   List<Widget> _buildAllVerbsList() {
     final List<Widget> widgets = [];
-    final allVerbs = verbCategories.values.expand((list) => list);
 
     // Check if multiple players from the same team are selected
     final multipleHomeSelected = selectedPlayers.length > 1;
@@ -2135,42 +2134,1026 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'Base Running',
     ];
 
-    for (final verb in allVerbs) {
-      // Skip solo-only verbs if multiple players are selected
-      if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
-        continue;
+    // Iterate through categories and their verbs
+    for (final category in verbCategories.entries) {
+      final categoryName = category.key;
+      final categoryVerbs = category.value;
+
+      // Check if any verbs in this category should be shown
+      bool hasVisibleVerbs = false;
+      for (final verb in categoryVerbs) {
+        // Skip solo-only verbs if multiple players are selected
+        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+          continue;
+        }
+
+        // Show all verbs when none selected, or show only the selected verb and its sub-options
+        // For one-click verbs, always show them in their original position
+        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
+            _selectedVerb == 'at bat' ||
+            _selectedVerb == 'celebrate' ||
+            _selectedVerb == 'fielding';
+
+        // Show verb if:
+        // 1. No verb is selected (show all)
+        // 2. This is the selected verb (show the selected one)
+        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
+        bool shouldShowVerb = _selectedVerb == null ||
+            _selectedVerb == verb ||
+            (_selectedVerb != null && isSelectedVerbOneClick);
+
+        if (shouldShowVerb) {
+          hasVisibleVerbs = true;
+          break;
+        }
       }
 
-      // Show all verbs when none selected, or show only the selected verb and its sub-options
-      // For one-click verbs, always show them in their original position
-      bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-          _selectedVerb == 'at bat' ||
-          _selectedVerb == 'celebrate' ||
-          _selectedVerb == 'fielding';
+      // Add category heading if there are visible verbs
+      if (hasVisibleVerbs) {
+        widgets.add(
+          Text(
+            categoryName.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+        );
+      }
 
-      // Show verb if:
-      // 1. No verb is selected (show all)
-      // 2. This is the selected verb (show the selected one)
-      // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
-      bool shouldShowVerb = _selectedVerb == null ||
-          _selectedVerb == verb ||
-          (_selectedVerb != null && isSelectedVerbOneClick);
+      // Add verbs for this category
+      for (final verb in categoryVerbs) {
+        // Skip solo-only verbs if multiple players are selected
+        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+          continue;
+        }
 
-      if (shouldShowVerb) {
-        if (verb == 'hit') {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+        // Show all verbs when none selected, or show only the selected verb and its sub-options
+        // For one-click verbs, always show them in their original position
+        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
+            _selectedVerb == 'at bat' ||
+            _selectedVerb == 'celebrate' ||
+            _selectedVerb == 'fielding';
+
+        // Show verb if:
+        // 1. No verb is selected (show all)
+        // 2. This is the selected verb (show the selected one)
+        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
+        bool shouldShowVerb = _selectedVerb == null ||
+            _selectedVerb == verb ||
+            (_selectedVerb != null && isSelectedVerbOneClick);
+
+        if (shouldShowVerb) {
+          if (verb == 'hit') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (_selectedVerb != 'hit') ...[
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Hit',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              selected: _selectedVerb == 'hit',
+                              onSelected: (isSelected) => setState(() {
+                                _selectedVerb = isSelected ? 'hit' : null;
+                                _selectedHitType = null;
+                                _selectedHomeRunType = null;
+                                _rbiCount = null;
+                                _selectedRbiInning = null;
+                                _isBatterRunning = false;
+                                _updateCaption();
+                              }),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ] else ...[
+                            // Show hit type options when hit is selected
+                            if (_selectedHitType == null ||
+                                (_selectedHitType == 'Single' ||
+                                    _selectedHitType == 'Double' ||
+                                    _selectedHitType == 'Triple' ||
+                                    _selectedHitType == 'Home Run')) ...[
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Hit type options - show only Single if it's selected with RBI
+                                  ...['Single', 'Double', 'Triple', 'Home Run']
+                                      .where(
+                                        (label) =>
+                                            _selectedHitType == null ||
+                                            label == _selectedHitType,
+                                      )
+                                      .map(
+                                        (label) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8.0,
+                                          ),
+                                          child: FlashingFilterChip(
+                                            label: SizedBox(
+                                              width: _fixedChipWidth,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      label,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal,
+                                                      ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                    // Add RBI options for all hit types when selected
+                                                    if ((label == 'Single' ||
+                                                            label == 'Double' ||
+                                                            label == 'Triple' ||
+                                                            label ==
+                                                                'Home Run') &&
+                                                        _selectedHitType ==
+                                                            label) ...[
+                                                      const SizedBox(width: 8),
+                                                      const Icon(
+                                                        Icons.arrow_forward,
+                                                        size: 10,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      ...(label == 'Home Run'
+                                                              ? [
+                                                                  'Solo',
+                                                                  '2 Run',
+                                                                  '3 Run',
+                                                                  'GS'
+                                                                ]
+                                                              : [
+                                                                  '1 RBI',
+                                                                  '2 RBI',
+                                                                  '3 RBI'
+                                                                ])
+                                                          .asMap()
+                                                          .entries
+                                                          .map((entry) {
+                                                        final index = entry.key;
+                                                        final rbiLabel =
+                                                            entry.value;
+                                                        final rbiCount =
+                                                            label == 'Home Run'
+                                                                ? index
+                                                                : index + 1;
+                                                        return Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                            right: 2.0,
+                                                          ),
+                                                          child: MouseRegion(
+                                                            cursor:
+                                                                SystemMouseCursors
+                                                                    .click,
+                                                            child:
+                                                                GestureDetector(
+                                                              onTap: () {
+                                                                setState(() {
+                                                                  _selectedHitType =
+                                                                      label;
+                                                                  // Toggle RBI: if already selected, remove it; otherwise set it
+                                                                  if (_rbiCount ==
+                                                                          rbiCount &&
+                                                                      _selectedHitType ==
+                                                                          label) {
+                                                                    // Remove RBI
+                                                                    _rbiCount =
+                                                                        null;
+                                                                    _rbiCountByHit
+                                                                        .remove(
+                                                                            label);
+                                                                  } else {
+                                                                    // Set RBI
+                                                                    _rbiCount =
+                                                                        rbiCount;
+                                                                    _rbiCountByHit[
+                                                                            label] =
+                                                                        rbiCount;
+                                                                  }
+                                                                  _updateCaption();
+                                                                });
+                                                              },
+                                                              behavior:
+                                                                  HitTestBehavior
+                                                                      .opaque,
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 3,
+                                                                  vertical: 1,
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Container(
+                                                                      width: 4,
+                                                                      height: 4,
+                                                                      decoration: (_rbiCount == rbiCount &&
+                                                                              _selectedHitType == label)
+                                                                          ? const BoxDecoration(
+                                                                              color: Colors.black,
+                                                                              shape: BoxShape.circle,
+                                                                            )
+                                                                          : null,
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 1,
+                                                                    ),
+                                                                    Text(
+                                                                      rbiLabel,
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight: (_rbiCount == rbiCount &&
+                                                                                _selectedHitType == label)
+                                                                            ? FontWeight.w600
+                                                                            : FontWeight.normal,
+                                                                        color: Colors
+                                                                            .black,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            selected: _selectedHitType == label,
+                                            disableColorChange:
+                                                _selectedHitType == label,
+                                            onSelected: (isSelected) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedHitType = label;
+                                                  if (label != 'Home Run') {
+                                                    // For Single, don't override RBI if already selected
+                                                    if (label == 'Single' &&
+                                                        _rbiCount != null) {
+                                                      // Keep existing RBI selection
+                                                    } else {
+                                                      // Pre-select "No RBI" for non-HR hits
+                                                      _rbiCount = 0;
+                                                      _rbiCountByHit[label] = 0;
+                                                    }
+                                                  } else {
+                                                    // For home runs, RBI is determined by HR type, so clear general count
+                                                    _rbiCount = null;
+                                                  }
+                                                } else {
+                                                  // Deselecting - clear the hit type and RBI
+                                                  _selectedHitType = null;
+                                                  _rbiCount = null;
+                                                }
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            key: UniqueKey(),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  // Add celebration checkbox when any hit type + RBI is selected
+                                  if ((_selectedHitType == 'Single' ||
+                                          _selectedHitType == 'Double' ||
+                                          _selectedHitType == 'Triple' ||
+                                          _selectedHitType == 'Home Run') &&
+                                      _rbiCount != null) ...[
+                                    const SizedBox(height: 8),
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          Transform.scale(
+                                            scale: 0.6,
+                                            child: Checkbox(
+                                              value: _isSoloCelebration,
+                                              onChanged: (bool? value) {
+                                                setState(() {
+                                                  _isSoloCelebration =
+                                                      value ?? false;
+                                                  // Uncheck other options when this one is selected
+                                                  if (_isSoloCelebration) {
+                                                    _isBatterRunning = false;
+                                                    _isSliding = false;
+                                                  }
+                                                  _updateCaption();
+                                                });
+                                              },
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          ),
+                                          Transform.translate(
+                                            offset: const Offset(-4, 0),
+                                            child: const Text(
+                                              'Celebrates',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                          // Show players in frame option when Celebrates is checked
+                                          if (_isSoloCelebration) ...[
+                                            const SizedBox(width: 8),
+                                            MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () =>
+                                                    _showPlayersInFrameDialog(),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: (celebrateWith
+                                                                .isNotEmpty ||
+                                                            celebrateAgainst
+                                                                .isNotEmpty)
+                                                        ? Colors.blue.shade50
+                                                        : Colors.grey.shade100,
+                                                    border: Border.all(
+                                                      color: (celebrateWith
+                                                                  .isNotEmpty ||
+                                                              celebrateAgainst
+                                                                  .isNotEmpty)
+                                                          ? Colors.blue.shade300
+                                                          : Colors
+                                                              .grey.shade300,
+                                                      width: 1,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            2),
+                                                  ),
+                                                  child: Text(
+                                                    'Players in frame',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: (celebrateWith
+                                                                  .isNotEmpty ||
+                                                              celebrateAgainst
+                                                                  .isNotEmpty)
+                                                          ? Colors.blue.shade700
+                                                          : Colors
+                                                              .grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    // Add runs the bases checkbox
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
+                                      child: Row(
+                                        children: [
+                                          Transform.scale(
+                                            scale: 0.6,
+                                            child: Checkbox(
+                                              value: _isBatterRunning,
+                                              onChanged: (bool? value) {
+                                                setState(() {
+                                                  _isBatterRunning =
+                                                      value ?? false;
+                                                  // Uncheck other options when this one is selected
+                                                  if (_isBatterRunning) {
+                                                    _isSoloCelebration = false;
+                                                    _isSliding = false;
+                                                  }
+                                                  _updateCaption();
+                                                });
+                                              },
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          ),
+                                          Transform.translate(
+                                            offset: const Offset(-4, 0),
+                                            child: const Text(
+                                              'Runs the bases',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                          // Show players in frame option when Runs the bases is checked
+                                          if (_isBatterRunning == true) ...[
+                                            const SizedBox(width: 8),
+                                            MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () =>
+                                                    _showPlayersInFrameDialog(),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: celebrateWith
+                                                            .isNotEmpty
+                                                        ? Colors.green.shade50
+                                                        : Colors.grey.shade100,
+                                                    border: Border.all(
+                                                      color: celebrateWith
+                                                              .isNotEmpty
+                                                          ? Colors
+                                                              .green.shade300
+                                                          : Colors
+                                                              .grey.shade300,
+                                                      width: 1,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            2),
+                                                  ),
+                                                  child: Text(
+                                                    'Players in frame',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: celebrateWith
+                                                              .isNotEmpty
+                                                          ? Colors
+                                                              .green.shade700
+                                                          : Colors
+                                                              .grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    // Add sliding checkbox (not for singles)
+                                    if (_selectedHitType != 'Single') ...[
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: Row(
+                                          children: [
+                                            Transform.scale(
+                                              scale: 0.6,
+                                              child: Checkbox(
+                                                value: _isSliding,
+                                                onChanged: (bool? value) {
+                                                  setState(() {
+                                                    _isSliding = value ?? false;
+                                                    // Uncheck other options when this one is selected
+                                                    if (_isSliding) {
+                                                      _isSoloCelebration =
+                                                          false;
+                                                      _isBatterRunning = false;
+                                                    }
+                                                    _updateCaption();
+                                                  });
+                                                },
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                              ),
+                                            ),
+                                            Transform.translate(
+                                              offset: const Offset(-4, 0),
+                                              child: const Text(
+                                                'Slides into base',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    // Add sliding opponent option when sliding is checked (not for singles)
+                                    if (_isSliding == true &&
+                                        _selectedHitType != 'Single') ...[
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: Row(
+                                          children: [
+                                            const SizedBox(width: 20),
+                                            MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () =>
+                                                    _showSlidingOpponentDialog(),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: celebrateAgainst
+                                                            .isNotEmpty
+                                                        ? Colors.orange.shade50
+                                                        : Colors.grey.shade100,
+                                                    border: Border.all(
+                                                      color: celebrateAgainst
+                                                              .isNotEmpty
+                                                          ? Colors
+                                                              .orange.shade300
+                                                          : Colors
+                                                              .grey.shade300,
+                                                      width: 1,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            2),
+                                                  ),
+                                                  child: Text(
+                                                    'Sliding against opponent',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: celebrateAgainst
+                                                              .isNotEmpty
+                                                          ? Colors
+                                                              .orange.shade700
+                                                          : Colors
+                                                              .grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    // Add out option when sliding is checked (not for singles)
+                                    if (_isSliding == true &&
+                                        _selectedHitType != 'Single') ...[
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 8.0),
+                                        child: Row(
+                                          children: [
+                                            const SizedBox(width: 20),
+                                            Transform.scale(
+                                              scale: 0.6,
+                                              child: Checkbox(
+                                                value: _isOut,
+                                                onChanged: (bool? value) {
+                                                  setState(() {
+                                                    _isOut = value ?? false;
+                                                    _updateCaption();
+                                                  });
+                                                },
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                              ),
+                                            ),
+                                            Transform.translate(
+                                              offset: const Offset(-4, 0),
+                                              child: const Text(
+                                                'Out',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Prior to Game') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Show the main chip only if not selected
+                    if (_selectedVerb != 'Prior to Game')
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Prior to Game',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              labelPadding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              selected: _selectedVerb == 'Prior to Game',
+                              onSelected: (isSelected) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedVerb = 'Prior to Game';
+                                    _showLooksOn = false;
+                                    _showHitTypes = false;
+                                    _selectedHitType = null;
+                                    _selectedHomeRunType = null;
+                                    _rbiCount = null;
+                                    _selectedFieldingAction = null;
+                                    _showFieldingOptions = false;
+                                    _selectedRbiInning = null;
+                                    _customPriorAction = '';
+                                    _customPriorActionController.clear();
+                                  } else {
+                                    _selectedVerb = null;
+                                    _selectedPriorAction = null;
+                                    _customPriorAction = '';
+                                    _customPriorActionController.clear();
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Prior to Game options in a new row
+                    if (_selectedVerb == 'Prior to Game') ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 4.0,
+                        children: [
+                          'Looks on',
+                          'Warms up',
+                          'Signs autographs',
+                          'Takes the field',
+                          'Stretches',
+                          'Anthem',
+                        ]
+                            .map(
+                              (label) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: _selectedPriorAction == label,
+                                  onSelected: (isSelected) {
+                                    setState(() {
+                                      _selectedPriorAction =
+                                          isSelected ? label : null;
+                                      _customPriorAction = '';
+                                      _customPriorActionController.clear();
+                                      _updateCaption();
+                                    });
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      // Custom prior to game action input
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Container(
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: TextField(
+                            controller: _customPriorActionController,
+                            maxLines: 1,
+                            textAlignVertical: TextAlignVertical.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black,
+                              height: 1.0,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Custom prior to game action...',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 8.0,
+                              ),
+                              isDense: true,
+                            ),
+                            onChanged: (value) {
+                              print(
+                                'DEBUG: Custom prior to game action changed to: $value',
+                              );
+                              _customPriorAction = value;
+                              if (value.isNotEmpty) {
+                                _selectedPriorAction = null;
+                              }
+                              _updateCaption();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Post Game') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Show the main chip only if not selected
+                    if (_selectedVerb != 'Post Game')
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Post Game',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              labelPadding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              selected: _selectedVerb == 'Post Game',
+                              onSelected: (isSelected) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedVerb = 'Post Game';
+                                    _selectedPostGameAction = null;
+                                    _customPostGameAction = '';
+                                    _customPostGameActionController.clear();
+                                  } else {
+                                    _selectedVerb = null;
+                                    _selectedPostGameAction = null;
+                                    _customPostGameAction = '';
+                                    _customPostGameActionController.clear();
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Post Game options in a new row
+                    if (_selectedVerb == 'Post Game') ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 4.0,
+                        children: [
+                          'Celebrates alone',
+                          'Celebrates with teammates'
+                        ]
+                            .map(
+                              (label) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: _selectedPostGameAction == label,
+                                  onSelected: (isSelected) async {
+                                    if (isSelected &&
+                                        label == 'Celebrates with teammates') {
+                                      // Show teammate selection dialog
+                                      await _showPostGameTeammatesDialog();
+                                    } else {
+                                      setState(() {
+                                        _selectedPostGameAction =
+                                            isSelected ? label : null;
+                                        _customPostGameAction = '';
+                                        _customPostGameActionController.clear();
+                                        _updateCaption();
+                                      });
+                                    }
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      // Custom post game action input
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Container(
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: TextField(
+                            controller: _customPostGameActionController,
+                            maxLines: 1,
+                            textAlignVertical: TextAlignVertical.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black,
+                              height: 1.0,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Custom post game action...',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 8.0,
+                              ),
+                              isDense: true,
+                            ),
+                            onChanged: (value) {
+                              print(
+                                'DEBUG: Custom post game action changed to: $value',
+                              );
+                              _customPostGameAction = value;
+                              if (value.isNotEmpty) {
+                                _selectedPostGameAction = null;
+                              }
+                              _updateCaption();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Portrait') {
+            // This block handles the 'Portrait' verb and its sub-options
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
                       key: UniqueKey(),
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (_selectedVerb != 'hit') ...[
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
@@ -2186,47 +3169,163 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     ),
                                     SizedBox(width: 4),
                                     Text(
-                                      'Hit',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
+                                      'Portrait',
+                                      style: TextStyle(fontSize: 12),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                            selected: _selectedVerb == 'hit',
-                            onSelected: (isSelected) => setState(() {
-                              _selectedVerb = isSelected ? 'hit' : null;
-                              _selectedHitType = null;
-                              _selectedHomeRunType = null;
-                              _rbiCount = null;
-                              _selectedRbiInning = null;
-                              _isBatterRunning = false;
-                              _updateCaption();
-                            }),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
+                            labelPadding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            selected: _selectedVerb == 'Portrait',
+                            onSelected: (_showHomeFirst
+                                    ? selectedPlayers.isNotEmpty
+                                    : selectedOpponentPlayers.isNotEmpty)
+                                ? (isSelected) {
+                                    setState(() {
+                                      if (isSelected) {
+                                        _selectedVerb = 'Portrait';
+                                        _showLooksOn = true;
+                                        // Reset other states
+                                        _selectedRbiInning = null;
+                                        _showHitTypes = false;
+                                        _selectedHitType = null;
+                                        _selectedHomeRunType = null;
+                                        _rbiCount = null;
+                                        _showFieldingOptions = false;
+                                        _selectedFieldingAction = null;
+                                      } else {
+                                        _selectedVerb = null;
+                                        _showLooksOn = false;
+                                        _isLooksOn = false;
+                                      }
+                                      _updateCaption();
+                                    });
+                                  }
+                                : null,
                           ),
-                        ] else ...[
-                          // Show hit type options when hit is selected
-                          if (_selectedHitType == null ||
-                              (_selectedHitType == 'Single' ||
-                                  _selectedHitType == 'Double' ||
-                                  _selectedHitType == 'Triple' ||
-                                  _selectedHitType == 'Home Run')) ...[
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Hit type options - show only Single if it's selected with RBI
-                                ...['Single', 'Double', 'Triple', 'Home Run']
-                                    .where(
-                                      (label) =>
-                                          _selectedHitType == null ||
-                                          label == _selectedHitType,
-                                    )
+                          if (_showLooksOn && _selectedVerb == 'Portrait') ...[
+                            const SizedBox(width: 8.0),
+                            _buildHitInningSelector(showWalkOffOption: true),
+                            const SizedBox(width: 8.0),
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Looks on',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                              selected: _isLooksOn,
+                              onSelected: (isSelected) {
+                                setState(() {
+                                  _isLooksOn = isSelected;
+                                  _updateCaption();
+                                });
+                              },
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              labelPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Fielding') {
+            // This block handles the 'Fielding' verb and its sub-options
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      key: UniqueKey(),
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (_selectedVerb != 'Fielding') ...[
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Fielding',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              selected: _selectedVerb == 'Fielding',
+                              onSelected: (isSelected) => setState(() {
+                                print('DEBUG: Fielding button clicked');
+                                print(
+                                    'DEBUG: _showHomeFirst: \\$_showHomeFirst');
+                                print(
+                                  'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}',
+                                );
+                                print(
+                                  'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}',
+                                );
+                                print(
+                                  'DEBUG: _selectedVerb before: \\$_selectedVerb',
+                                );
+                                _selectedVerb = isSelected ? 'Fielding' : null;
+                                print(
+                                  'DEBUG: _selectedVerb after: \\$_selectedVerb',
+                                );
+                                _selectedFieldingAction = null;
+                                _isDivingCatch = false;
+                                _isDivingForGroundBall = false;
+                                _selectedRbiInning = null;
+                                _updateCaption();
+                              }),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ] else ...[
+                            // Show fielding action options when Fielding is selected (but no action selected yet)
+                            if (_selectedFieldingAction == null) ...[
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  'Catch',
+                                  'Ground Ball',
+                                  'Throws',
+                                  'Fielding Position',
+                                  'Takes the Field',
+                                ]
                                     .map(
                                       (label) => Padding(
                                         padding: const EdgeInsets.only(
@@ -2256,168 +3355,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     overflow:
                                                         TextOverflow.ellipsis,
                                                   ),
-                                                  // Add RBI options for all hit types when selected
-                                                  if ((label == 'Single' ||
-                                                          label == 'Double' ||
-                                                          label == 'Triple' ||
-                                                          label ==
-                                                              'Home Run') &&
-                                                      _selectedHitType ==
-                                                          label) ...[
-                                                    const SizedBox(width: 8),
-                                                    const Icon(
-                                                      Icons.arrow_forward,
-                                                      size: 10,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    const SizedBox(width: 2),
-                                                    ...(label == 'Home Run'
-                                                            ? [
-                                                                'Solo',
-                                                                '2 Run',
-                                                                '3 Run',
-                                                                'GS'
-                                                              ]
-                                                            : [
-                                                                '1 RBI',
-                                                                '2 RBI',
-                                                                '3 RBI'
-                                                              ])
-                                                        .asMap()
-                                                        .entries
-                                                        .map((entry) {
-                                                      final index = entry.key;
-                                                      final rbiLabel =
-                                                          entry.value;
-                                                      final rbiCount =
-                                                          label == 'Home Run'
-                                                              ? index
-                                                              : index + 1;
-                                                      return Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(
-                                                          right: 2.0,
-                                                        ),
-                                                        child: MouseRegion(
-                                                          cursor:
-                                                              SystemMouseCursors
-                                                                  .click,
-                                                          child:
-                                                              GestureDetector(
-                                                            onTap: () {
-                                                              setState(() {
-                                                                _selectedHitType =
-                                                                    label;
-                                                                // Toggle RBI: if already selected, remove it; otherwise set it
-                                                                if (_rbiCount ==
-                                                                        rbiCount &&
-                                                                    _selectedHitType ==
-                                                                        label) {
-                                                                  // Remove RBI
-                                                                  _rbiCount =
-                                                                      null;
-                                                                  _rbiCountByHit
-                                                                      .remove(
-                                                                          label);
-                                                                } else {
-                                                                  // Set RBI
-                                                                  _rbiCount =
-                                                                      rbiCount;
-                                                                  _rbiCountByHit[
-                                                                          label] =
-                                                                      rbiCount;
-                                                                }
-                                                                _updateCaption();
-                                                              });
-                                                            },
-                                                            behavior:
-                                                                HitTestBehavior
-                                                                    .opaque,
-                                                            child: Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                horizontal: 3,
-                                                                vertical: 1,
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .min,
-                                                                children: [
-                                                                  Container(
-                                                                    width: 4,
-                                                                    height: 4,
-                                                                    decoration: (_rbiCount ==
-                                                                                rbiCount &&
-                                                                            _selectedHitType ==
-                                                                                label)
-                                                                        ? const BoxDecoration(
-                                                                            color:
-                                                                                Colors.black,
-                                                                            shape:
-                                                                                BoxShape.circle,
-                                                                          )
-                                                                        : null,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 1,
-                                                                  ),
-                                                                  Text(
-                                                                    rbiLabel,
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight: (_rbiCount == rbiCount &&
-                                                                              _selectedHitType ==
-                                                                                  label)
-                                                                          ? FontWeight
-                                                                              .w600
-                                                                          : FontWeight
-                                                                              .normal,
-                                                                      color: Colors
-                                                                          .black,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }).toList(),
-                                                  ],
                                                 ],
                                               ),
                                             ),
                                           ),
-                                          selected: _selectedHitType == label,
-                                          disableColorChange:
-                                              _selectedHitType == label,
+                                          selected: _selectedFieldingAction ==
+                                              _getFieldingActionKey(label),
                                           onSelected: (isSelected) {
                                             setState(() {
                                               if (isSelected) {
-                                                _selectedHitType = label;
-                                                if (label != 'Home Run') {
-                                                  // For Single, don't override RBI if already selected
-                                                  if (label == 'Single' &&
-                                                      _rbiCount != null) {
-                                                    // Keep existing RBI selection
-                                                  } else {
-                                                    // Pre-select "No RBI" for non-HR hits
-                                                    _rbiCount = 0;
-                                                    _rbiCountByHit[label] = 0;
-                                                  }
-                                                } else {
-                                                  // For home runs, RBI is determined by HR type, so clear general count
-                                                  _rbiCount = null;
-                                                }
+                                                _selectedFieldingAction =
+                                                    _getFieldingActionKey(
+                                                  label,
+                                                );
                                               } else {
-                                                // Deselecting - clear the hit type and RBI
-                                                _selectedHitType = null;
-                                                _rbiCount = null;
+                                                _selectedFieldingAction = null;
+                                                _isDivingCatch = false;
+                                                _isDivingForGroundBall = false;
                                               }
                                               _updateCaption();
                                             });
@@ -2429,1048 +3383,229 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     )
                                     .toList(),
-                                // Add celebration checkbox when any hit type + RBI is selected
-                                if ((_selectedHitType == 'Single' ||
-                                        _selectedHitType == 'Double' ||
-                                        _selectedHitType == 'Triple' ||
-                                        _selectedHitType == 'Home Run') &&
-                                    _rbiCount != null) ...[
-                                  const SizedBox(height: 8),
+                              ),
+                            ] else ...[
+                              // Show selected fielding action and optional diving options
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Show selected action as a chip
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Row(
-                                      children: [
-                                        Transform.scale(
-                                          scale: 0.6,
-                                          child: Checkbox(
-                                            value: _isSoloCelebration,
-                                            onChanged: (bool? value) {
-                                              setState(() {
-                                                _isSoloCelebration =
-                                                    value ?? false;
-                                                // Uncheck other options when this one is selected
-                                                if (_isSoloCelebration) {
-                                                  _isBatterRunning = false;
-                                                  _isSliding = false;
-                                                }
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
-                                        ),
-                                        Transform.translate(
-                                          offset: const Offset(-4, 0),
-                                          child: const Text(
-                                            'Celebrates',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.normal,
-                                            ),
-                                          ),
-                                        ),
-                                        // Show players in frame option when Celebrates is checked
-                                        if (_isSoloCelebration) ...[
-                                          const SizedBox(width: 8),
-                                          MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                              onTap: () =>
-                                                  _showPlayersInFrameDialog(),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: (celebrateWith
-                                                              .isNotEmpty ||
-                                                          celebrateAgainst
-                                                              .isNotEmpty)
-                                                      ? Colors.blue.shade50
-                                                      : Colors.grey.shade100,
-                                                  border: Border.all(
-                                                    color: (celebrateWith
-                                                                .isNotEmpty ||
-                                                            celebrateAgainst
-                                                                .isNotEmpty)
-                                                        ? Colors.blue.shade300
-                                                        : Colors.grey.shade300,
-                                                    width: 1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                child: Text(
-                                                  'Players in frame',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: (celebrateWith
-                                                                .isNotEmpty ||
-                                                            celebrateAgainst
-                                                                .isNotEmpty)
-                                                        ? Colors.blue.shade700
-                                                        : Colors.grey.shade600,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
+                                    child: FlashingFilterChip(
+                                      label: SizedBox(
+                                        width: _fixedChipWidth,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.chevron_right,
+                                                size: 14,
+                                                color: Colors.grey,
                                               ),
-                                            ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _getFieldingActionLabel(
+                                                  _selectedFieldingAction!,
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ],
+                                        ),
+                                      ),
+                                      selected: true,
+                                      showCheckmark: true,
+                                      onSelected: (_) => setState(() {
+                                        _selectedFieldingAction = null;
+                                        _isDivingCatch = false;
+                                        _isDivingForGroundBall = false;
+                                        _updateCaption();
+                                      }),
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      key: UniqueKey(),
                                     ),
                                   ),
-                                  // Add runs the bases checkbox
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: Row(
-                                      children: [
-                                        Transform.scale(
-                                          scale: 0.6,
-                                          child: Checkbox(
-                                            value: _isBatterRunning,
-                                            onChanged: (bool? value) {
-                                              setState(() {
-                                                _isBatterRunning =
-                                                    value ?? false;
-                                                // Uncheck other options when this one is selected
-                                                if (_isBatterRunning) {
-                                                  _isSoloCelebration = false;
-                                                  _isSliding = false;
-                                                }
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                          ),
+                                  // Show diving options if applicable
+                                  if (_selectedFieldingAction ==
+                                          'makes a catch' ||
+                                      _selectedFieldingAction ==
+                                          'fields a ground ball') ...[
+                                    const Padding(
+                                      padding: EdgeInsets.only(
+                                        left: 16.0,
+                                        bottom: 2.0,
+                                      ),
+                                      child: Text(
+                                        'Optional:',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black87,
                                         ),
-                                        Transform.translate(
-                                          offset: const Offset(-4, 0),
-                                          child: const Text(
-                                            'Runs the bases',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.normal,
-                                            ),
-                                          ),
-                                        ),
-                                        // Show players in frame option when Runs the bases is checked
-                                        if (_isBatterRunning == true) ...[
-                                          const SizedBox(width: 8),
-                                          MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                              onTap: () =>
-                                                  _showPlayersInFrameDialog(),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: celebrateWith
-                                                          .isNotEmpty
-                                                      ? Colors.green.shade50
-                                                      : Colors.grey.shade100,
-                                                  border: Border.all(
-                                                    color: celebrateWith
-                                                            .isNotEmpty
-                                                        ? Colors.green.shade300
-                                                        : Colors.grey.shade300,
-                                                    width: 1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                child: Text(
-                                                  'Players in frame',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: celebrateWith
-                                                            .isNotEmpty
-                                                        ? Colors.green.shade700
-                                                        : Colors.grey.shade600,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  // Add sliding checkbox (not for singles)
-                                  if (_selectedHitType != 'Single') ...[
                                     Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          Transform.scale(
-                                            scale: 0.6,
-                                            child: Checkbox(
-                                              value: _isSliding,
-                                              onChanged: (bool? value) {
-                                                setState(() {
-                                                  _isSliding = value ?? false;
-                                                  // Uncheck other options when this one is selected
-                                                  if (_isSliding) {
-                                                    _isSoloCelebration = false;
-                                                    _isBatterRunning = false;
-                                                  }
-                                                  _updateCaption();
-                                                });
-                                              },
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ),
-                                          ),
-                                          Transform.translate(
-                                            offset: const Offset(-4, 0),
-                                            child: const Text(
-                                              'Slides into base',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  // Add sliding opponent option when sliding is checked (not for singles)
-                                  if (_isSliding == true &&
-                                      _selectedHitType != 'Single') ...[
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          const SizedBox(width: 20),
-                                          MouseRegion(
-                                            cursor: SystemMouseCursors.click,
-                                            child: GestureDetector(
-                                              onTap: () =>
-                                                  _showSlidingOpponentDialog(),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: celebrateAgainst
-                                                          .isNotEmpty
-                                                      ? Colors.orange.shade50
-                                                      : Colors.grey.shade100,
-                                                  border: Border.all(
-                                                    color: celebrateAgainst
-                                                            .isNotEmpty
-                                                        ? Colors.orange.shade300
-                                                        : Colors.grey.shade300,
-                                                    width: 1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                child: Text(
-                                                  'Sliding against opponent',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: celebrateAgainst
-                                                            .isNotEmpty
-                                                        ? Colors.orange.shade700
-                                                        : Colors.grey.shade600,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                  // Add out option when sliding is checked (not for singles)
-                                  if (_isSliding == true &&
-                                      _selectedHitType != 'Single') ...[
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          const SizedBox(width: 20),
-                                          Transform.scale(
-                                            scale: 0.6,
-                                            child: Checkbox(
-                                              value: _isOut,
-                                              onChanged: (bool? value) {
-                                                setState(() {
-                                                  _isOut = value ?? false;
-                                                  _updateCaption();
-                                                });
-                                              },
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ),
-                                          ),
-                                          Transform.translate(
-                                            offset: const Offset(-4, 0),
-                                            child: const Text(
-                                              'Out',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      child: _selectedFieldingAction ==
+                                              'makes a catch'
+                                          ? _buildDivingCatchOption()
+                                          : _buildDivingForGroundBallOption(),
                                     ),
                                   ],
                                 ],
-                              ],
-                            ),
+                              ),
+                            ],
                           ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        } else if (verb == 'Prior to Game') {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Show the main chip only if not selected
-                  if (_selectedVerb != 'Prior to Game')
+            );
+          } else if (verb == 'Base Running') {
+            // This block handles the 'Base Running' verb and its sub-options
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     SingleChildScrollView(
+                      key: UniqueKey(),
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Prior to Game',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            selected: _selectedVerb == 'Prior to Game',
-                            onSelected: (isSelected) {
-                              setState(() {
-                                if (isSelected) {
-                                  _selectedVerb = 'Prior to Game';
-                                  _showLooksOn = false;
-                                  _showHitTypes = false;
-                                  _selectedHitType = null;
-                                  _selectedHomeRunType = null;
-                                  _rbiCount = null;
-                                  _selectedFieldingAction = null;
-                                  _showFieldingOptions = false;
-                                  _selectedRbiInning = null;
-                                  _customPriorAction = '';
-                                  _customPriorActionController.clear();
-                                } else {
-                                  _selectedVerb = null;
-                                  _selectedPriorAction = null;
-                                  _customPriorAction = '';
-                                  _customPriorActionController.clear();
-                                }
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Prior to Game options in a new row
-                  if (_selectedVerb == 'Prior to Game') ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 4.0,
-                      children: [
-                        'Looks on',
-                        'Warms up',
-                        'Signs autographs',
-                        'Takes the field',
-                        'Stretches',
-                        'Anthem',
-                      ]
-                          .map(
-                            (label) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: FlashingFilterChip(
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      label,
-                                      style: const TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected: _selectedPriorAction == label,
-                                onSelected: (isSelected) {
-                                  setState(() {
-                                    _selectedPriorAction =
-                                        isSelected ? label : null;
-                                    _customPriorAction = '';
-                                    _customPriorActionController.clear();
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                key: UniqueKey(),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    // Custom prior to game action input
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: TextField(
-                          controller: _customPriorActionController,
-                          maxLines: 1,
-                          textAlignVertical: TextAlignVertical.center,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black,
-                            height: 1.0,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Custom prior to game action...',
-                            hintStyle: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8.0,
-                              vertical: 8.0,
-                            ),
-                            isDense: true,
-                          ),
-                          onChanged: (value) {
-                            print(
-                              'DEBUG: Custom prior to game action changed to: $value',
-                            );
-                            _customPriorAction = value;
-                            if (value.isNotEmpty) {
-                              _selectedPriorAction = null;
-                            }
-                            _updateCaption();
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'Post Game') {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Show the main chip only if not selected
-                  if (_selectedVerb != 'Post Game')
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Post Game',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            selected: _selectedVerb == 'Post Game',
-                            onSelected: (isSelected) {
-                              setState(() {
-                                if (isSelected) {
-                                  _selectedVerb = 'Post Game';
-                                  _selectedPostGameAction = null;
-                                  _customPostGameAction = '';
-                                  _customPostGameActionController.clear();
-                                } else {
-                                  _selectedVerb = null;
-                                  _selectedPostGameAction = null;
-                                  _customPostGameAction = '';
-                                  _customPostGameActionController.clear();
-                                }
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Post Game options in a new row
-                  if (_selectedVerb == 'Post Game') ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      runSpacing: 4.0,
-                      children: [
-                        'Celebrates alone',
-                        'Celebrates with teammates'
-                      ]
-                          .map(
-                            (label) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: FlashingFilterChip(
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      label,
-                                      style: const TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected: _selectedPostGameAction == label,
-                                onSelected: (isSelected) async {
-                                  if (isSelected &&
-                                      label == 'Celebrates with teammates') {
-                                    // Show teammate selection dialog
-                                    await _showPostGameTeammatesDialog();
-                                  } else {
-                                    setState(() {
-                                      _selectedPostGameAction =
-                                          isSelected ? label : null;
-                                      _customPostGameAction = '';
-                                      _customPostGameActionController.clear();
-                                      _updateCaption();
-                                    });
-                                  }
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                key: UniqueKey(),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    // Custom post game action input
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: TextField(
-                          controller: _customPostGameActionController,
-                          maxLines: 1,
-                          textAlignVertical: TextAlignVertical.center,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black,
-                            height: 1.0,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Custom post game action...',
-                            hintStyle: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8.0,
-                              vertical: 8.0,
-                            ),
-                            isDense: true,
-                          ),
-                          onChanged: (value) {
-                            print(
-                              'DEBUG: Custom post game action changed to: $value',
-                            );
-                            _customPostGameAction = value;
-                            if (value.isNotEmpty) {
-                              _selectedPostGameAction = null;
-                            }
-                            _updateCaption();
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'Portrait') {
-          // This block handles the 'Portrait' verb and its sub-options
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    key: UniqueKey(),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        FlashingFilterChip(
-                          label: SizedBox(
-                            width: _fixedChipWidth,
-                            child: const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Portrait',
-                                    style: TextStyle(fontSize: 12),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          labelPadding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                          ),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          selected: _selectedVerb == 'Portrait',
-                          onSelected: (_showHomeFirst
-                                  ? selectedPlayers.isNotEmpty
-                                  : selectedOpponentPlayers.isNotEmpty)
-                              ? (isSelected) {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedVerb = 'Portrait';
-                                      _showLooksOn = true;
-                                      // Reset other states
-                                      _selectedRbiInning = null;
-                                      _showHitTypes = false;
-                                      _selectedHitType = null;
-                                      _selectedHomeRunType = null;
-                                      _rbiCount = null;
-                                      _showFieldingOptions = false;
-                                      _selectedFieldingAction = null;
-                                    } else {
-                                      _selectedVerb = null;
-                                      _showLooksOn = false;
-                                      _isLooksOn = false;
-                                    }
-                                    _updateCaption();
-                                  });
-                                }
-                              : null,
-                        ),
-                        if (_showLooksOn && _selectedVerb == 'Portrait') ...[
-                          const SizedBox(width: 8.0),
-                          _buildHitInningSelector(showWalkOffOption: true),
-                          const SizedBox(width: 8.0),
-                          FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Looks on',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                            selected: _isLooksOn,
-                            onSelected: (isSelected) {
-                              setState(() {
-                                _isLooksOn = isSelected;
-                                _updateCaption();
-                              });
-                            },
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                            ),
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'Fielding') {
-          // This block handles the 'Fielding' verb and its sub-options
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    key: UniqueKey(),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (_selectedVerb != 'Fielding') ...[
-                          FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Fielding',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            selected: _selectedVerb == 'Fielding',
-                            onSelected: (isSelected) => setState(() {
-                              print('DEBUG: Fielding button clicked');
-                              print('DEBUG: _showHomeFirst: \\$_showHomeFirst');
-                              print(
-                                'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}',
-                              );
-                              print(
-                                'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}',
-                              );
-                              print(
-                                'DEBUG: _selectedVerb before: \\$_selectedVerb',
-                              );
-                              _selectedVerb = isSelected ? 'Fielding' : null;
-                              print(
-                                'DEBUG: _selectedVerb after: \\$_selectedVerb',
-                              );
-                              _selectedFieldingAction = null;
-                              _isDivingCatch = false;
-                              _isDivingForGroundBall = false;
-                              _selectedRbiInning = null;
-                              _updateCaption();
-                            }),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                          ),
-                        ] else ...[
-                          // Show fielding action options when Fielding is selected (but no action selected yet)
-                          if (_selectedFieldingAction == null) ...[
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                'Catch',
-                                'Ground Ball',
-                                'Throws',
-                                'Fielding Position',
-                                'Takes the Field',
-                              ]
-                                  .map(
-                                    (label) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 8.0,
+                          if (_selectedVerb != 'Base Running') ...[
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
                                       ),
-                                      child: FlashingFilterChip(
-                                        label: SizedBox(
-                                          width: _fixedChipWidth,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.chevron_right,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  label,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.normal,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        selected: _selectedFieldingAction ==
-                                            _getFieldingActionKey(label),
-                                        onSelected: (isSelected) {
-                                          setState(() {
-                                            if (isSelected) {
-                                              _selectedFieldingAction =
-                                                  _getFieldingActionKey(
-                                                label,
-                                              );
-                                            } else {
-                                              _selectedFieldingAction = null;
-                                              _isDivingCatch = false;
-                                              _isDivingForGroundBall = false;
-                                            }
-                                            _updateCaption();
-                                          });
-                                        },
-                                        visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
-                                        key: UniqueKey(),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Base Running',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              selected: _selectedVerb == 'Base Running',
+                              onSelected: (_showHomeFirst
+                                      ? selectedPlayers.isNotEmpty
+                                      : selectedOpponentPlayers.isNotEmpty)
+                                  ? (isSelected) => setState(() {
+                                        _selectedVerb =
+                                            isSelected ? 'Base Running' : null;
+                                        _selectedBaseRunningAction = null;
+                                        _updateCaption();
+                                      })
+                                  : null,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
                             ),
                           ] else ...[
-                            // Show selected fielding action and optional diving options
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Show selected action as a chip
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: FlashingFilterChip(
-                                    label: SizedBox(
-                                      width: _fixedChipWidth,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              size: 14,
-                                              color: Colors.grey,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _getFieldingActionLabel(
-                                                _selectedFieldingAction!,
+                            // Show base running action options when Base Running is selected
+                            if (_stealsClicked) ...[
+                              // Show base options when Steals is clicked
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Base options
+                                  ...['Second Base', 'Third Base', 'Home Plate']
+                                      .map(
+                                        (base) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 8.0,
+                                          ),
+                                          child: FlashingFilterChip(
+                                            label: SizedBox(
+                                              width: _fixedChipWidth,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.chevron_right,
+                                                      size: 14,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      base,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.normal,
+                                                      ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ],
+                                            selected: _selectedStealBase ==
+                                                _getStealBaseKey(base),
+                                            onSelected: (isSelected) {
+                                              setState(() {
+                                                if (isSelected) {
+                                                  _selectedBaseRunningAction =
+                                                      'steals';
+                                                  _selectedStealBase =
+                                                      _getStealBaseKey(base);
+                                                } else {
+                                                  _selectedBaseRunningAction =
+                                                      null;
+                                                  _selectedStealBase = null;
+                                                }
+                                                _updateCaption();
+                                              });
+                                            },
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            key: UniqueKey(),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    selected: true,
-                                    showCheckmark: true,
-                                    onSelected: (_) => setState(() {
-                                      _selectedFieldingAction = null;
-                                      _isDivingCatch = false;
-                                      _isDivingForGroundBall = false;
-                                      _updateCaption();
-                                    }),
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                    key: UniqueKey(),
-                                  ),
-                                ),
-                                // Show diving options if applicable
-                                if (_selectedFieldingAction ==
-                                        'makes a catch' ||
-                                    _selectedFieldingAction ==
-                                        'fields a ground ball') ...[
-                                  const Padding(
-                                    padding: EdgeInsets.only(
-                                      left: 16.0,
-                                      bottom: 2.0,
-                                    ),
-                                    child: Text(
-                                      'Optional:',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: _selectedFieldingAction ==
-                                            'makes a catch'
-                                        ? _buildDivingCatchOption()
-                                        : _buildDivingForGroundBallOption(),
-                                  ),
+                                      )
+                                      .toList(),
                                 ],
-                              ],
-                            ),
-                          ],
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'Base Running') {
-          // This block handles the 'Base Running' verb and its sub-options
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    key: UniqueKey(),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (_selectedVerb != 'Base Running') ...[
-                          FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Base Running',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
                               ),
-                            ),
-                            selected: _selectedVerb == 'Base Running',
-                            onSelected: (_showHomeFirst
-                                    ? selectedPlayers.isNotEmpty
-                                    : selectedOpponentPlayers.isNotEmpty)
-                                ? (isSelected) => setState(() {
-                                      _selectedVerb =
-                                          isSelected ? 'Base Running' : null;
-                                      _selectedBaseRunningAction = null;
-                                      _updateCaption();
-                                    })
-                                : null,
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                          ),
-                        ] else ...[
-                          // Show base running action options when Base Running is selected
-                          if (_stealsClicked) ...[
-                            // Show base options when Steals is clicked
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Base options
-                                ...['Second Base', 'Third Base', 'Home Plate']
+                            ] else if (_selectedBaseRunningAction == null) ...[
+                              // Show main base running options
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  'Steals',
+                                  'Slides',
+                                  'Runs the Bases',
+                                  'Rounds the Bases',
+                                ]
                                     .map(
-                                      (base) => Padding(
+                                      (label) => Padding(
                                         padding: const EdgeInsets.only(
                                           bottom: 8.0,
                                         ),
@@ -3489,7 +3624,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   ),
                                                   const SizedBox(width: 4),
                                                   Text(
-                                                    base,
+                                                    label,
                                                     style: const TextStyle(
                                                       fontSize: 12,
                                                       fontWeight:
@@ -3502,19 +3637,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               ),
                                             ),
                                           ),
-                                          selected: _selectedStealBase ==
-                                              _getStealBaseKey(base),
+                                          selected:
+                                              _selectedBaseRunningAction ==
+                                                  _getBaseRunningActionKey(
+                                                      label),
                                           onSelected: (isSelected) {
                                             setState(() {
                                               if (isSelected) {
-                                                _selectedBaseRunningAction =
-                                                    'steals';
-                                                _selectedStealBase =
-                                                    _getStealBaseKey(base);
+                                                if (label == 'Steals') {
+                                                  _stealsClicked = true;
+                                                  _selectedBaseRunningAction =
+                                                      null;
+                                                } else {
+                                                  _selectedBaseRunningAction =
+                                                      _getBaseRunningActionKey(
+                                                    label,
+                                                  );
+                                                }
                                               } else {
                                                 _selectedBaseRunningAction =
                                                     null;
-                                                _selectedStealBase = null;
                                               }
                                               _updateCaption();
                                             });
@@ -3526,69 +3668,99 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                     )
                                     .toList(),
-                              ],
-                            ),
-                          ] else if (_selectedBaseRunningAction == null) ...[
-                            // Show main base running options
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                'Steals',
-                                'Slides',
-                                'Runs the Bases',
-                                'Rounds the Bases',
-                              ]
-                                  .map(
-                                    (label) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 8.0,
+                              ),
+                            ] else ...[
+                              // Show selected base running action and sub-options
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Show selected action as a chip
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8.0),
+                                    child: FlashingFilterChip(
+                                      label: SizedBox(
+                                        width: _fixedChipWidth,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.chevron_right,
+                                                size: 14,
+                                                color: Colors.grey,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _getBaseRunningActionLabel(
+                                                  _selectedBaseRunningAction!,
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ),
+                                      selected: true,
+                                      showCheckmark: true,
+                                      onSelected: (_) => setState(() {
+                                        _selectedBaseRunningAction = null;
+                                        _selectedStealBase = null;
+                                        _showStealAgainstPlayer = false;
+                                        _updateCaption();
+                                      }),
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      key: UniqueKey(),
+                                    ),
+                                  ),
+
+                                  // Show against player option if steal base is selected
+                                  if (_selectedBaseRunningAction == 'steals' &&
+                                      _selectedStealBase != null) ...[
+                                    const Padding(
+                                      padding: EdgeInsets.only(
+                                        left: 16.0,
+                                        bottom: 2.0,
+                                      ),
+                                      child: Text(
+                                        'Against:',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 8.0),
                                       child: FlashingFilterChip(
                                         label: SizedBox(
                                           width: _fixedChipWidth,
                                           child: Align(
                                             alignment: Alignment.centerLeft,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.chevron_right,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  label,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.normal,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
+                                            child: Text(
+                                              _showStealAgainstPlayer
+                                                  ? 'Against Player'
+                                                  : 'Against Team',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ),
-                                        selected: _selectedBaseRunningAction ==
-                                            _getBaseRunningActionKey(label),
+                                        selected: _showStealAgainstPlayer,
                                         onSelected: (isSelected) {
                                           setState(() {
-                                            if (isSelected) {
-                                              if (label == 'Steals') {
-                                                _stealsClicked = true;
-                                                _selectedBaseRunningAction =
-                                                    null;
-                                              } else {
-                                                _selectedBaseRunningAction =
-                                                    _getBaseRunningActionKey(
-                                                  label,
-                                                );
-                                              }
-                                            } else {
-                                              _selectedBaseRunningAction = null;
-                                            }
+                                            _showStealAgainstPlayer =
+                                                isSelected;
                                             _updateCaption();
                                           });
                                         },
@@ -3597,394 +3769,31 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         key: UniqueKey(),
                                       ),
                                     ),
-                                  )
-                                  .toList(),
-                            ),
-                          ] else ...[
-                            // Show selected base running action and sub-options
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Show selected action as a chip
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8.0),
-                                  child: FlashingFilterChip(
-                                    label: SizedBox(
-                                      width: _fixedChipWidth,
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              size: 14,
-                                              color: Colors.grey,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _getBaseRunningActionLabel(
-                                                _selectedBaseRunningAction!,
-                                              ),
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    selected: true,
-                                    showCheckmark: true,
-                                    onSelected: (_) => setState(() {
-                                      _selectedBaseRunningAction = null;
-                                      _selectedStealBase = null;
-                                      _showStealAgainstPlayer = false;
-                                      _updateCaption();
-                                    }),
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                    key: UniqueKey(),
-                                  ),
-                                ),
-
-                                // Show against player option if steal base is selected
-                                if (_selectedBaseRunningAction == 'steals' &&
-                                    _selectedStealBase != null) ...[
-                                  const Padding(
-                                    padding: EdgeInsets.only(
-                                      left: 16.0,
-                                      bottom: 2.0,
-                                    ),
-                                    child: Text(
-                                      'Against:',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: FlashingFilterChip(
-                                      label: SizedBox(
-                                        width: _fixedChipWidth,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            _showStealAgainstPlayer
-                                                ? 'Against Player'
-                                                : 'Against Team',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.normal,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ),
-                                      selected: _showStealAgainstPlayer,
-                                      onSelected: (isSelected) {
-                                        setState(() {
-                                          _showStealAgainstPlayer = isSelected;
-                                          _updateCaption();
-                                        });
-                                      },
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      key: UniqueKey(),
-                                    ),
-                                  ),
+                                  ],
                                 ],
-                              ],
-                            ),
+                              ),
+                            ],
                           ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        } else if (verb == 'Batting') {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      key: UniqueKey(),
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        FlashingFilterChip(
-                          label: SizedBox(
-                            width: _fixedChipWidth,
-                            child: const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Batting',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.normal,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          selected: _selectedVerb == 'Batting',
-                          onSelected: (isSelected) => setState(() {
-                            _selectedVerb = isSelected ? 'Batting' : null;
-                            _selectedBattingAction = null;
-                            _selectedRbiInning = null;
-                            _updateCaption();
-                          }),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        if (_selectedVerb == 'Batting') ...[
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          buildInlineInningSelector(
-                            selectedInning: _selectedRbiInning,
-                            onInningSelected: (val) {
-                              setState(() {
-                                _selectedRbiInning = val;
-                                _walkOff = false;
-                                _updateCaption();
-                              });
-                            },
-                          ),
-
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line between inning and batting action selection
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 16.0),
-                          ...['At Bat', 'Swings', 'Runs to First Base'].map((
-                            label,
-                          ) {
-                            print('DEBUG: Rendering Batting action: $label');
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FlashingFilterChip(
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      label,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected: _selectedBattingAction == label,
-                                onSelected: (isSelected) {
-                                  print(
-                                    'DEBUG: Batting action selected: $label, isSelected: $isSelected',
-                                  );
-                                  setState(() {
-                                    _selectedBattingAction =
-                                        isSelected ? label : null;
-                                    print(
-                                      'DEBUG: _selectedBattingAction set to: $_selectedBattingAction',
-                                    );
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                key: UniqueKey(),
-                              ),
-                            );
-                          }),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'At Bat') {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      key: UniqueKey(),
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        FlashingFilterChip(
-                          label: SizedBox(
-                            width: _fixedChipWidth,
-                            child: const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'At Bat',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.normal,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          selected: _selectedVerb == 'At Bat',
-                          onSelected: (isSelected) => setState(() {
-                            _selectedVerb = isSelected ? 'At Bat' : null;
-                            _selectedAtBatAction = null;
-                            _selectedRbiInning = null;
-                            _updateCaption();
-                          }),
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                        ),
-                        if (_selectedVerb == 'At Bat') ...[
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          buildInlineInningSelector(
-                            selectedInning: _selectedRbiInning,
-                            onInningSelected: (val) {
-                              setState(() {
-                                _selectedRbiInning = val;
-                                _walkOff = false;
-                                _updateCaption();
-                              });
-                            },
-                          ),
-
-                          const SizedBox(width: 16.0),
-                          // Vertical divider line between inning and at bat action selection
-                          Container(
-                            width: 1,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
-                              borderRadius: BorderRadius.circular(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 16.0),
-                          ...['swings', 'runs to first base'].map((label) {
-                            print('DEBUG: Rendering At Bat sub-action: $label');
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: FlashingFilterChip(
-                                label: SizedBox(
-                                  width: _fixedChipWidth,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      label,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                selected: _selectedAtBatAction == label,
-                                onSelected: (isSelected) {
-                                  print(
-                                    'DEBUG: At Bat action selected: $label, isSelected: $isSelected',
-                                  );
-                                  setState(() {
-                                    _selectedAtBatAction =
-                                        isSelected ? label : null;
-                                    print(
-                                      'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction',
-                                    );
-                                    _updateCaption();
-                                  });
-                                },
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                key: UniqueKey(),
-                              ),
-                            );
-                          }),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else if (verb == 'Celebrate') {
-          // This block handles the 'Celebrate' verb and its sub-options
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SingleChildScrollView(
-                    key: UniqueKey(),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (_selectedVerb != 'Celebrate') ...[
+            );
+          } else if (verb == 'Batting') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
@@ -4000,224 +3809,490 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     ),
                                     SizedBox(width: 4),
                                     Text(
-                                      'Celebrate',
-                                      style: TextStyle(fontSize: 12),
+                                      'Batting',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                            selected: _selectedVerb == 'Celebrate',
+                            selected: _selectedVerb == 'Batting',
                             onSelected: (isSelected) => setState(() {
-                              _selectedVerb = isSelected ? 'Celebrate' : null;
-                              _isSoloCelebration = false;
-                              _selectedCelebrationType = null;
-                              celebrateWith.clear();
-                              celebrateAgainst.clear();
+                              _selectedVerb = isSelected ? 'Batting' : null;
+                              _selectedBattingAction = null;
+                              _selectedRbiInning = null;
+                              _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                           ),
-                        ] else ...[
-                          // Show celebration options when Celebrate is selected
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ...[
-                                'Celebrates Alone',
-                                'Celebrates With Teammates',
-                                'Celebrates Against',
-                              ]
-                                  .map(
-                                    (label) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: 12.0,
-                                        bottom: 8.0,
-                                      ),
-                                      child: FlashingFilterChip(
-                                        label: SizedBox(
-                                          width: 200.0,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.chevron_right,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  label,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.normal,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
+                          if (_selectedVerb == 'Batting') ...[
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            buildInlineInningSelector(
+                              selectedInning: _selectedRbiInning,
+                              onInningSelected: (val) {
+                                setState(() {
+                                  _selectedRbiInning = val;
+                                  _walkOff = false;
+                                  _updateCaption();
+                                });
+                              },
+                            ),
+
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line between inning and batting action selection
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            const SizedBox(width: 16.0),
+                            ...['At Bat', 'Swings', 'Runs to First Base'].map((
+                              label,
+                            ) {
+                              print('DEBUG: Rendering Batting action: $label');
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal,
                                         ),
-                                        selected: _getCelebrationSelectionState(
-                                          label,
-                                        ),
-                                        onSelected: (isSelected) async {
-                                          print(
-                                            'DEBUG: Clicked on celebration option: $label, isSelected: $isSelected',
-                                          );
-                                          setState(() {
-                                            if (isSelected) {
-                                              _setCelebrationState(label);
-                                            } else {
-                                              _clearCelebrationState();
-                                            }
-                                          });
-                                          // Set isHome based on which team the currently selected player belongs to
-                                          if (selectedPlayers.isNotEmpty) {
-                                            isHome = true;
-                                          } else if (selectedOpponentPlayers
-                                              .isNotEmpty) {
-                                            isHome = false;
-                                          } else {
-                                            // Fallback: use the current team view if no players are selected
-                                            isHome = _showHomeFirst;
-                                          }
-                                          if (isSelected &&
-                                              (label == 'Celebrates With' ||
-                                                  label ==
-                                                      'Celebrates With Teammates' ||
-                                                  label ==
-                                                      'Celebrates Against')) {
-                                            await _showCelebrationDialog(label);
-                                          }
-                                          _updateCaption();
-                                        },
-                                        visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
-                                        key: UniqueKey(),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                  )
-                                  .toList(),
-                              // Custom verb input
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: SizedBox(
-                                  width: 200.0,
-                                  child: TextField(
-                                    controller: _customCelebrationController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Custom celebration verb...',
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 8.0,
-                                        vertical: 8.0,
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(
-                                          Radius.circular(4.0),
-                                        ),
-                                      ),
-                                    ),
-                                    style: const TextStyle(fontSize: 12),
-                                    onChanged: (value) {
-                                      print(
-                                        'DEBUG: Custom celebration verb changed to: $value',
-                                      );
-                                      _customCelebrationVerb = value;
-                                      _updateCaption();
-                                    },
                                   ),
+                                  selected: _selectedBattingAction == label,
+                                  onSelected: (isSelected) {
+                                    print(
+                                      'DEBUG: Batting action selected: $label, isSelected: $isSelected',
+                                    );
+                                    setState(() {
+                                      _selectedBattingAction =
+                                          isSelected ? label : null;
+                                      print(
+                                        'DEBUG: _selectedBattingAction set to: $_selectedBattingAction',
+                                      );
+                                      _updateCaption();
+                                    });
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
                                 ),
-                              ),
-                            ],
-                          ),
+                              );
+                            }),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        } else {
-          widgets.add(
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
-              child: SingleChildScrollView(
-                // Wrap the row in SingleChildScrollView
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    FlashingFilterChip(
-                      // Changed from InkWell/Container
-                      label: SizedBox(
-                        width: _fixedChipWidth,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.chevron_right,
-                                size: 14,
-                                color: Colors.grey,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _capitalize(verb),
-                                style: const TextStyle(fontSize: 12),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      labelPadding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                      ), // Consistent padding
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      selected: _selectedVerb == verb,
-                      onSelected: (isSelected) => _onVerbSelected(verb),
-                    ),
-                    if (_selectedVerb == verb && verb != 'pitches') ...[
-                      const SizedBox(width: 16.0),
-                      // Vertical divider line
-                      Container(
-                        width: 1,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(0.5),
-                        ),
-                      ),
-                      buildInlineInningSelector(
-                        selectedInning: _selectedRbiInning,
-                        onInningSelected: (val) {
-                          setState(() {
-                            _selectedRbiInning = val;
-                            _walkOff = false;
-                            _updateCaption();
-                          });
-                        },
-                      ),
-                    ],
                   ],
                 ),
               ),
-            ),
-          );
-        }
-      } // End of conditional rendering for each verb
-    }
+            );
+          } else if (verb == 'At Bat') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.chevron_right,
+                                      size: 14,
+                                      color: Colors.grey,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'At Bat',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            selected: _selectedVerb == 'At Bat',
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'At Bat' : null;
+                              _selectedAtBatAction = null;
+                              _selectedRbiInning = null;
+                              _updateCaption();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                          if (_selectedVerb == 'At Bat') ...[
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            buildInlineInningSelector(
+                              selectedInning: _selectedRbiInning,
+                              onInningSelected: (val) {
+                                setState(() {
+                                  _selectedRbiInning = val;
+                                  _walkOff = false;
+                                  _updateCaption();
+                                });
+                              },
+                            ),
+
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line between inning and at bat action selection
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            const SizedBox(width: 16.0),
+                            ...['swings', 'runs to first base'].map((label) {
+                              print(
+                                  'DEBUG: Rendering At Bat sub-action: $label');
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: FlashingFilterChip(
+                                  label: SizedBox(
+                                    width: _fixedChipWidth,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                  selected: _selectedAtBatAction == label,
+                                  onSelected: (isSelected) {
+                                    print(
+                                      'DEBUG: At Bat action selected: $label, isSelected: $isSelected',
+                                    );
+                                    setState(() {
+                                      _selectedAtBatAction =
+                                          isSelected ? label : null;
+                                      print(
+                                        'DEBUG: _selectedAtBatAction set to: $_selectedAtBatAction',
+                                      );
+                                      _updateCaption();
+                                    });
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  key: UniqueKey(),
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Celebrate') {
+            // This block handles the 'Celebrate' verb and its sub-options
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      key: UniqueKey(),
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (_selectedVerb != 'Celebrate') ...[
+                            FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chevron_right,
+                                        size: 14,
+                                        color: Colors.grey,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Celebrate',
+                                        style: TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              selected: _selectedVerb == 'Celebrate',
+                              onSelected: (isSelected) => setState(() {
+                                _selectedVerb = isSelected ? 'Celebrate' : null;
+                                _isSoloCelebration = false;
+                                _selectedCelebrationType = null;
+                                celebrateWith.clear();
+                                celebrateAgainst.clear();
+                              }),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ] else ...[
+                            // Show celebration options when Celebrate is selected
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ...[
+                                  'Celebrates Alone',
+                                  'Celebrates With Teammates',
+                                  'Celebrates Against',
+                                ]
+                                    .map(
+                                      (label) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 12.0,
+                                          bottom: 8.0,
+                                        ),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: 200.0,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected:
+                                              _getCelebrationSelectionState(
+                                            label,
+                                          ),
+                                          onSelected: (isSelected) async {
+                                            print(
+                                              'DEBUG: Clicked on celebration option: $label, isSelected: $isSelected',
+                                            );
+                                            setState(() {
+                                              if (isSelected) {
+                                                _setCelebrationState(label);
+                                              } else {
+                                                _clearCelebrationState();
+                                              }
+                                            });
+                                            // Set isHome based on which team the currently selected player belongs to
+                                            if (selectedPlayers.isNotEmpty) {
+                                              isHome = true;
+                                            } else if (selectedOpponentPlayers
+                                                .isNotEmpty) {
+                                              isHome = false;
+                                            } else {
+                                              // Fallback: use the current team view if no players are selected
+                                              isHome = _showHomeFirst;
+                                            }
+                                            if (isSelected &&
+                                                (label == 'Celebrates With' ||
+                                                    label ==
+                                                        'Celebrates With Teammates' ||
+                                                    label ==
+                                                        'Celebrates Against')) {
+                                              await _showCelebrationDialog(
+                                                  label);
+                                            }
+                                            _updateCaption();
+                                          },
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                // Custom verb input
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: SizedBox(
+                                    width: 200.0,
+                                    child: TextField(
+                                      controller: _customCelebrationController,
+                                      decoration: const InputDecoration(
+                                        hintText: 'Custom celebration verb...',
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 8.0,
+                                          vertical: 8.0,
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(
+                                            Radius.circular(4.0),
+                                          ),
+                                        ),
+                                      ),
+                                      style: const TextStyle(fontSize: 12),
+                                      onChanged: (value) {
+                                        print(
+                                          'DEBUG: Custom celebration verb changed to: $value',
+                                        );
+                                        _customCelebrationVerb = value;
+                                        _updateCaption();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: SingleChildScrollView(
+                  // Wrap the row in SingleChildScrollView
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      FlashingFilterChip(
+                        // Changed from InkWell/Container
+                        label: SizedBox(
+                          width: _fixedChipWidth,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.chevron_right,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _capitalize(verb),
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        labelPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                        ), // Consistent padding
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        selected: _selectedVerb == verb,
+                        onSelected: (isSelected) => _onVerbSelected(verb),
+                      ),
+                      if (_selectedVerb == verb && verb != 'pitches') ...[
+                        const SizedBox(width: 16.0),
+                        // Vertical divider line
+                        Container(
+                          width: 1,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade400,
+                            borderRadius: BorderRadius.circular(0.5),
+                          ),
+                        ),
+                        buildInlineInningSelector(
+                          selectedInning: _selectedRbiInning,
+                          onInningSelected: (val) {
+                            setState(() {
+                              _selectedRbiInning = val;
+                              _walkOff = false;
+                              _updateCaption();
+                            });
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+        } // End of conditional rendering for each verb
+      }
+    } // End of category loop
     return widgets;
   }
 
@@ -4575,7 +4650,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   final List<String> celebrationVerbs = const ['Celebrate'];
 
-  Map<String, List<String>> get verbCategories => {'Actions': soloVerbs};
+  Map<String, List<String>> get verbCategories => {
+        'Offense': ['hit', 'At Bat', 'Batting'],
+        'Defense': ['pitches', 'Fielding'],
+        'Base Running': ['Base Running'],
+        'Reaction': ['Celebrate'],
+        'Pre/Post': ['Prior to Game', 'Post Game'],
+        'Portrait': ['Portrait'],
+      };
 
   // ── Info section ─────────────────────────────
   DateTime selectedDate = DateTime.now();
