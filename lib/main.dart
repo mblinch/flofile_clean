@@ -10633,7 +10633,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             Expanded(
                                               flex: 12,
                                               child: Transform.translate(
-                                                offset: const Offset(0, -3),
+                                                offset: const Offset(0, 0),
                                                 child: ValueListenableBuilder<
                                                     TextEditingValue>(
                                                   valueListenable:
@@ -12046,47 +12046,36 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 CrossAxisAlignment
                                                                     .start,
                                                             children: [
-                                                              // Getty Metadata Fields (at the top)
+                                                              // Metadata fields
                                                               Row(
                                                                 children: [
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Photographer',
-                                                                      creatorController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Creator',
+                                                                          creatorController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'MEID',
-                                                                      jobIdController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'MEID',
+                                                                          jobIdController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   SizedBox(
-                                                                    width: 120,
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Description Writers',
-                                                                      descriptionWritersController,
-                                                                    ),
-                                                                  ),
+                                                                      width:
+                                                                          120,
+                                                                      child: _buildField(
+                                                                          'Description Writers',
+                                                                          descriptionWritersController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   _buildJobTitleDropdown(),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Copyright',
-                                                                      copyrightController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Copyright',
+                                                                          copyrightController)),
                                                                 ],
                                                               ),
                                                               const SizedBox(
@@ -12103,18 +12092,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       shape:
                                                                           RoundedRectangleBorder(
                                                                         borderRadius:
-                                                                            BorderRadius.circular(
-                                                                          4,
-                                                                        ),
+                                                                            BorderRadius.circular(4),
                                                                       ),
                                                                       child:
                                                                           InkWell(
                                                                         onTap:
                                                                             _pickDate,
                                                                         borderRadius:
-                                                                            BorderRadius.circular(
-                                                                          4,
-                                                                        ),
+                                                                            BorderRadius.circular(4),
                                                                         child:
                                                                             InputDecorator(
                                                                           decoration:
@@ -12126,46 +12111,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             isDense:
                                                                                 true,
                                                                             contentPadding:
-                                                                                const EdgeInsets.symmetric(
-                                                                              horizontal: 8,
-                                                                              vertical: 12,
-                                                                            ),
+                                                                                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                                                                             filled:
                                                                                 true,
                                                                             fillColor:
                                                                                 Colors.white,
                                                                             labelStyle:
-                                                                                const TextStyle(
-                                                                              fontSize: 10,
-                                                                            ),
+                                                                                const TextStyle(fontSize: 10),
                                                                             enabledBorder:
                                                                                 OutlineInputBorder(
-                                                                              borderRadius: BorderRadius.circular(
-                                                                                4,
-                                                                              ),
-                                                                              borderSide: BorderSide(
-                                                                                color: Colors.grey.shade400,
-                                                                                width: 1.0,
-                                                                              ),
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
                                                                             ),
                                                                             focusedBorder:
                                                                                 OutlineInputBorder(
-                                                                              borderRadius: BorderRadius.circular(
-                                                                                4,
-                                                                              ),
-                                                                              borderSide: BorderSide(
-                                                                                color: Colors.grey.shade400,
-                                                                                width: 1.0,
-                                                                              ),
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
                                                                             ),
                                                                           ),
                                                                           child:
                                                                               Text(
                                                                             '${_month(selectedDate.month).toUpperCase()} ${selectedDate.day}, ${selectedDate.year}',
                                                                             style:
-                                                                                const TextStyle(
-                                                                              fontSize: 11,
-                                                                            ),
+                                                                                const TextStyle(fontSize: 11),
                                                                           ),
                                                                         ),
                                                                       ),
@@ -12174,30 +12142,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Stadium',
-                                                                      stadiumController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Stadium',
+                                                                          stadiumController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'City',
-                                                                      cityController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'City',
+                                                                          cityController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'State/Province',
-                                                                      provinceController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'State/Province',
+                                                                          provinceController)),
                                                                 ],
                                                               ),
                                                               const SizedBox(
@@ -12205,21 +12164,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               Row(
                                                                 children: [
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Headline',
-                                                                      headlineController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Headline',
+                                                                          headlineController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Keywords',
-                                                                      keywordsController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Keywords',
+                                                                          keywordsController)),
                                                                 ],
                                                               ),
                                                               const SizedBox(
@@ -12227,21 +12180,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               Row(
                                                                 children: [
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Credit',
-                                                                      creditController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Credit',
+                                                                          creditController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Source',
-                                                                      sourceController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Source',
+                                                                          sourceController)),
                                                                 ],
                                                               ),
                                                               const SizedBox(
@@ -12252,12 +12199,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Country',
-                                                                      countryController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Country',
+                                                                          countryController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   _buildCountryCodeDropdown(),
@@ -12268,56 +12212,41 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               Row(
                                                                 children: [
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Title/Object Name',
-                                                                      titleObjectNameController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Title/Object Name',
+                                                                          titleObjectNameController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Category',
-                                                                      categoryController,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Category',
+                                                                          categoryController)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Supp Cat 1',
-                                                                      suppCat1Controller,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Supp Cat 1',
+                                                                          suppCat1Controller)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Supp Cat 2',
-                                                                      suppCat2Controller,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Supp Cat 2',
+                                                                          suppCat2Controller)),
                                                                   const SizedBox(
                                                                       width: 8),
                                                                   Expanded(
-                                                                    child:
-                                                                        _buildField(
-                                                                      'Supp Cat 3',
-                                                                      suppCat3Controller,
-                                                                    ),
-                                                                  ),
+                                                                      child: _buildField(
+                                                                          'Supp Cat 3',
+                                                                          suppCat3Controller)),
                                                                 ],
                                                               ),
                                                               const SizedBox(
                                                                   height: 8),
                                                               _buildField(
-                                                                'Special Instructions',
-                                                                specialInstructionsController,
-                                                              ),
+                                                                  'Special Instructions',
+                                                                  specialInstructionsController,
+                                                                  maxLines: 2),
                                                             ],
                                                           ),
                                                         ),
@@ -12338,138 +12267,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                    ),
-                    // RIGHT SIDE: Metadata only - taking 30% of screen width
-                    Expanded(
-                      flex: 3,
-                      child: SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Getty Metadata Fields',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Headline',
-                                      headlineController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Caption',
-                                      captionController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Personality',
-                                      personalityController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Keywords',
-                                      keywordsController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Event',
-                                      titleObjectNameController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'City',
-                                      cityController,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _buildField(
-                                      'Province/State',
-                                      provinceController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Country',
-                                      countryController,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _buildField(
-                                      'Country Code',
-                                      countryCodeController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildField(
-                                      'Stadium',
-                                      stadiumController,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildJobTitleDropdown(),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _buildField(
-                                      'Copyright',
-                                      copyrightController,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
