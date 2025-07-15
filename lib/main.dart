@@ -10726,8 +10726,160 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ],
                                         ),
                                       ),
+                                    ],
+                                  ),
 
-                                      // Spacing between caption/personality and metadata
+                                  // Player Picker Box - positioned right under personality and caption boxes
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Player Picker Box - 30% width, left aligned
+                                      SizedBox(
+                                        width:
+                                            MediaQuery.of(context).size.width *
+                                                0.30,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: Colors.grey.shade400,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Search input
+                                              Material(
+                                                elevation: 1.0,
+                                                color: Colors.transparent,
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Container(
+                                                  height: 40,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white,
+                                                    border: Border.all(
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                      width: 1,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                  child: TextField(
+                                                    controller:
+                                                        _playerPickerSearchController,
+                                                    decoration: InputDecoration(
+                                                      hintText:
+                                                          'Type player name or number...',
+                                                      prefixIcon: const Icon(
+                                                        Icons.search,
+                                                        size: 16,
+                                                      ),
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 12,
+                                                      ),
+                                                      filled: true,
+                                                      fillColor: Colors.white,
+                                                      enabledBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade400,
+                                                          width: 1.0,
+                                                        ),
+                                                      ),
+                                                      focusedBorder:
+                                                          OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                        borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          width: 2.0,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                    ),
+                                                    onChanged: (value) {
+                                                      setState(() {
+                                                        _playerPickerSearchText =
+                                                            value;
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              // Player list
+                                              Expanded(
+                                                child: _playerPickerSearchText
+                                                        .isNotEmpty
+                                                    ? _buildPlayerPickerResults()
+                                                    : Row(
+                                                        children: [
+                                                          // Away Team Column
+                                                          Expanded(
+                                                            child:
+                                                                _buildPlayerContainer(
+                                                              title: selectedAwayTeam !=
+                                                                      null
+                                                                  ? _getTeamShortName(
+                                                                      selectedAwayTeam!)
+                                                                  : 'Away',
+                                                              titleIcon: Icons
+                                                                  .flight_takeoff,
+                                                              codes:
+                                                                  awayPlayers,
+                                                              isHomeList: false,
+                                                              toggle: false,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 8),
+                                                          // Home Team Column
+                                                          Expanded(
+                                                            child:
+                                                                _buildPlayerContainer(
+                                                              title: selectedHomeTeam !=
+                                                                      null
+                                                                  ? _getTeamShortName(
+                                                                      selectedHomeTeam!)
+                                                                  : 'Home',
+                                                              titleIcon:
+                                                                  Icons.home,
+                                                              codes:
+                                                                  homePlayers,
+                                                              isHomeList: true,
+                                                              toggle: false,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // Spacing
                                       const SizedBox(width: 16),
 
                                       // Metadata container inline with caption/personality
