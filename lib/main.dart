@@ -10509,9 +10509,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 0.495,
                                         child: Row(
                                           children: [
-                                            // Personality Field (left side) - taking less space
+                                            // Caption Field (left side) - taking more space
                                             Expanded(
-                                              flex: 6,
+                                              flex: 12,
                                               child: Column(
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.start,
@@ -10530,7 +10530,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               8),
                                                       child: TextField(
                                                         controller:
-                                                            personalityController,
+                                                            captionController,
                                                         onTap: () {
                                                           // Remove grid focus when clicking in text field
                                                           setState(() {
@@ -10545,8 +10545,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         ),
                                                         decoration:
                                                             InputDecoration(
-                                                          labelText:
-                                                              'Personality',
+                                                          labelText: 'Caption',
                                                           floatingLabelBehavior:
                                                               FloatingLabelBehavior
                                                                   .always,
@@ -10614,9 +10613,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 ],
                                               ),
                                             ),
-                                            // Caption Field (right side) - taking more space
+                                            // Personality Field (right side) - taking less space
                                             Expanded(
-                                              flex: 12,
+                                              flex: 6,
                                               child: Transform.translate(
                                                 offset: const Offset(0, 0),
                                                 child: ValueListenableBuilder<
@@ -10646,7 +10645,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         8),
                                                             child: TextField(
                                                               controller:
-                                                                  captionController,
+                                                                  personalityController,
                                                               maxLines: 4,
                                                               minLines: 4,
                                                               style:
@@ -10656,7 +10655,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               decoration:
                                                                   InputDecoration(
                                                                 labelText:
-                                                                    'Caption',
+                                                                    'Personality',
                                                                 floatingLabelBehavior:
                                                                     FloatingLabelBehavior
                                                                         .always,
@@ -10731,8 +10730,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                                   const SizedBox(height: 16),
                                   Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
-                                      // Metadata container positioned under caption/personality
+                                      // Metadata container positioned on the right side
                                       Container(
                                         width:
                                             MediaQuery.of(context).size.width *
