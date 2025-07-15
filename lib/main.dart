@@ -10495,11 +10495,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // Caption and Personality fields - taking 48% of screen width
+                                      // Caption and Personality fields - taking 49% of screen width
                                       SizedBox(
                                         width:
                                             MediaQuery.of(context).size.width *
-                                                0.48,
+                                                0.49,
                                         child: Row(
                                           children: [
                                             // Caption Field (left side) - taking more space
@@ -10725,7 +10725,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   const SizedBox(height: 16),
                                   Container(
                                     width: MediaQuery.of(context).size.width *
-                                        0.495,
+                                        0.49,
                                     decoration: BoxDecoration(
                                       border: Border.all(
                                         color: Colors.grey.shade400,
@@ -12412,10 +12412,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 children: [
                                   // Spacer to push metadata to the right
                                   const Spacer(),
-                                  // Metadata container positioned on the right side - 48% width
+                                  // Metadata container positioned on the right side - 49% width
                                   SizedBox(
                                     width: MediaQuery.of(context).size.width *
-                                        0.48,
+                                        0.49,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
