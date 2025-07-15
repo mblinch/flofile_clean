@@ -3301,15 +3301,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                'Catches a ball',
-                                'Fields a ground ball',
-                              ]
-                                  .map(
-                                    (label) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 8.0,
-                                      ),
-                                      child: FlashingFilterChip(
+                                // Turns a double play with inline player selector
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      FlashingFilterChip(
                                         label: SizedBox(
                                           width: _fixedChipWidth,
                                           child: Align(
@@ -3323,9 +3321,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   color: Colors.grey,
                                                 ),
                                                 const SizedBox(width: 4),
-                                                Text(
-                                                  label,
-                                                  style: const TextStyle(
+                                                const Text(
+                                                  'Turns a double play',
+                                                  style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight:
                                                         FontWeight.normal,
@@ -3338,16 +3336,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ),
                                         ),
                                         selected: _selectedFieldingAction ==
-                                            (label == 'Catches a ball'
-                                                ? 'makes a catch'
-                                                : 'fields a ground ball'),
+                                            'turns a double play',
                                         onSelected: (isSelected) =>
                                             setState(() {
                                           if (isSelected) {
                                             _selectedFieldingAction =
-                                                label == 'Catches a ball'
-                                                    ? 'makes a catch'
-                                                    : 'fields a ground ball';
+                                                'turns a double play';
                                           } else {
                                             _selectedFieldingAction = null;
                                           }
@@ -3355,11 +3349,117 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         }),
                                         visualDensity: VisualDensity.compact,
                                         padding: EdgeInsets.zero,
-                                        key: UniqueKey(),
                                       ),
-                                    ),
-                                  )
-                                  .toList(),
+                                    ],
+                                  ),
+                                ),
+                                // Other fielding options
+                                ...[
+                                  'Force out',
+                                  'Tags runner out',
+                                  'Catches a ball',
+                                  'Fields a ground ball',
+                                  'Throws a ball',
+                                  'Makes a diving catch',
+                                  'Dives for a ground ball',
+                                  'Error',
+                                  'Makes a jumping catch'
+                                ]
+                                    .map(
+                                      (label) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 8.0,
+                                        ),
+                                        child: FlashingFilterChip(
+                                          label: SizedBox(
+                                            width: _fixedChipWidth,
+                                            child: Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.chevron_right,
+                                                    size: 14,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          selected: _selectedFieldingAction ==
+                                              (label == 'Force out'
+                                                  ? 'force out'
+                                                  : label == 'Tags runner out'
+                                                      ? 'tags runner out'
+                                                      : label ==
+                                                              'Catches a ball'
+                                                          ? 'makes a catch'
+                                                          : label ==
+                                                                  'Fields a ground ball'
+                                                              ? 'fields a ground ball'
+                                                              : label ==
+                                                                      'Throws a ball'
+                                                                  ? 'throws a ball'
+                                                                  : label ==
+                                                                          'Makes a diving catch'
+                                                                      ? 'makes a diving catch'
+                                                                      : label ==
+                                                                              'Dives for a ground ball'
+                                                                          ? 'dives for a ground ball'
+                                                                          : label == 'Error'
+                                                                              ? 'error'
+                                                                              : 'makes a jumping catch'),
+                                          onSelected: (isSelected) =>
+                                              setState(() {
+                                            if (isSelected) {
+                                              _selectedFieldingAction = label ==
+                                                      'Force out'
+                                                  ? 'force out'
+                                                  : label == 'Tags runner out'
+                                                      ? 'tags runner out'
+                                                      : label ==
+                                                              'Catches a ball'
+                                                          ? 'makes a catch'
+                                                          : label ==
+                                                                  'Fields a ground ball'
+                                                              ? 'fields a ground ball'
+                                                              : label ==
+                                                                      'Throws a ball'
+                                                                  ? 'throws a ball'
+                                                                  : label ==
+                                                                          'Makes a diving catch'
+                                                                      ? 'makes a diving catch'
+                                                                      : label ==
+                                                                              'Dives for a ground ball'
+                                                                          ? 'dives for a ground ball'
+                                                                          : label == 'Error'
+                                                                              ? 'error'
+                                                                              : 'makes a jumping catch';
+                                            } else {
+                                              _selectedFieldingAction = null;
+                                            }
+                                            _updateCaption();
+                                          }),
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          key: UniqueKey(),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ],
                             ),
                           ],
                         ],
@@ -8772,8 +8872,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         activePlayers.toList(),
       );
       String actionPhrase = _selectedFieldingAction!;
-      mainCaptionPart =
-          "$playersString $actionPhrase against the $opponentTeamName";
+
+      // Handle double play with selected players
+      if (_selectedFieldingAction == 'turns a double play' &&
+          activePlayers.length >= 2) {
+        // Get the first and second selected players
+        final firstPlayerCode = activePlayers.first;
+        final secondPlayerCode = activePlayers.elementAt(1);
+        final firstPlayerName = _removeAccentsFromText(
+            (codeReplacements[firstPlayerCode] ?? Replacement('', '', ''))
+                .short);
+        final secondPlayerName = _removeAccentsFromText(
+            (codeReplacements[secondPlayerCode] ?? Replacement('', '', ''))
+                .short);
+        mainCaptionPart =
+            "$firstPlayerName $actionPhrase over $secondPlayerName against the $opponentTeamName";
+      } else {
+        mainCaptionPart =
+            "$playersString $actionPhrase against the $opponentTeamName";
+      }
       // Add inning to Fielding caption
       if (_selectedRbiInning != null) {
         mainCaptionPart += _getInningTextWithWalkOff(_selectedRbiInning!);
