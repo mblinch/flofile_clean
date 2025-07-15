@@ -10502,11 +10502,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // Caption and Personality fields - taking 49.35% of screen width
+                                      // Caption and Personality fields - taking 35% of screen width
                                       SizedBox(
                                         width:
                                             MediaQuery.of(context).size.width *
-                                                0.4935,
+                                                0.35,
                                         child: Row(
                                           children: [
                                             // Personality Field (left side) - taking less space
@@ -10726,10 +10726,233 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ],
                                         ),
                                       ),
+
+                                      // Spacing between caption/personality and metadata
+                                      const SizedBox(width: 16),
+
+                                      // Metadata container inline with caption/personality
+                                      Container(
+                                        width:
+                                            MediaQuery.of(context).size.width *
+                                                0.49,
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Metadata Title - on top of border
+                                            Container(
+                                              width: double.infinity,
+                                              height: 28,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade200,
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                  topLeft: Radius.circular(4),
+                                                  topRight: Radius.circular(4),
+                                                ),
+                                                border: Border.all(
+                                                  color: Colors.grey.shade400,
+                                                  width: 1.0,
+                                                ),
+                                              ),
+                                              child: const Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                    horizontal: 16.0),
+                                                child: Row(
+                                                  children: [
+                                                    Text(
+                                                      'Metadata',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.black87,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            // Metadata content container
+                                            Container(
+                                              decoration: BoxDecoration(
+                                                border: Border(
+                                                  left: BorderSide(
+                                                    color: Colors.grey.shade400,
+                                                    width: 1.0,
+                                                  ),
+                                                  right: BorderSide(
+                                                    color: Colors.grey.shade400,
+                                                    width: 1.0,
+                                                  ),
+                                                  bottom: BorderSide(
+                                                    color: Colors.grey.shade400,
+                                                    width: 1.0,
+                                                  ),
+                                                ),
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                  bottomLeft:
+                                                      Radius.circular(4),
+                                                  bottomRight:
+                                                      Radius.circular(4),
+                                                ),
+                                              ),
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.all(8.0),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    // Metadata fields
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Creator',
+                                                                creatorController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'MEID',
+                                                                jobIdController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        SizedBox(
+                                                            width: 120,
+                                                            child: _buildField(
+                                                                'Description Writers',
+                                                                descriptionWritersController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        _buildJobTitleDropdown(),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Copyright',
+                                                                copyrightController)),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Stadium',
+                                                                stadiumController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'City',
+                                                                cityController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Province',
+                                                                provinceController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Country',
+                                                                countryController)),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Credit',
+                                                                creditController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Source',
+                                                                sourceController)),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Headline',
+                                                                headlineController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Keywords',
+                                                                keywordsController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'City',
+                                                                cityController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Province',
+                                                                provinceController)),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Title/Object Name',
+                                                                titleObjectNameController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Category',
+                                                                categoryController)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Supp Cat 1',
+                                                                suppCat1Controller)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Supp Cat 2',
+                                                                suppCat2Controller)),
+                                                        const SizedBox(
+                                                            width: 8),
+                                                        Expanded(
+                                                            child: _buildField(
+                                                                'Supp Cat 3',
+                                                                suppCat3Controller)),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    _buildField(
+                                                        'Special Instructions',
+                                                        specialInstructionsController,
+                                                        maxLines: 2),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                   ),
 
-                                  // Metadata container under the gridview
                                   const SizedBox(height: 16),
                                   Align(
                                     alignment: Alignment.centerRight,
