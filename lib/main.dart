@@ -9890,9 +9890,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 body: Row(
                   children: [
-                    // LEFT SIDE: Image, thumbnails, caption/personality, metadata (100% width)
+                    // LEFT COLUMN: Picture preview, personality/caption, player picker with verbs
                     Expanded(
-                      flex: 10,
+                      flex: 6, // Left column takes 60% of width
                       child: SingleChildScrollView(
                         // Make the main content area scrollable
                         child: Column(
@@ -12550,6 +12550,285 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   // Filmstrip removed - thumbnails now on the right side
                                 ],
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // RIGHT COLUMN: Grid view and metadata
+                    Expanded(
+                      flex: 4, // Right column takes 40% of width
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Grid View Section
+                            Container(
+                              height: 578, // Same height as original layout
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: _isThumbnailGridFocused
+                                      ? Colors.grey.shade600
+                                      : Colors.grey.shade400,
+                                  width: 2.0,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: imagePaths.isEmpty
+                                        ? Center(
+                                            child: GestureDetector(
+                                              onTap: pickFolder,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(16),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: Colors.grey.shade300,
+                                                    width: 1,
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.folder_open,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      size: 32,
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      'Pick image folder to load thumbnails.',
+                                                      style: TextStyle(
+                                                        color: Colors
+                                                            .grey.shade700,
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : _buildFilmstrip(),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Metadata Section
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                // Spacer to push metadata to the right
+                                const Spacer(),
+                                // Metadata container positioned on the right side - 48% width
+                                SizedBox(
+                                  width:
+                                      MediaQuery.of(context).size.width * 0.48,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Metadata Title - on top of border
+                                      Container(
+                                        width: double.infinity,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(4),
+                                            topRight: Radius.circular(4),
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.shade400,
+                                            width: 1.0,
+                                          ),
+                                        ),
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 16.0),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                'Metadata',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      // Metadata content container
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            left: BorderSide(
+                                              color: Colors.grey.shade400,
+                                              width: 1.0,
+                                            ),
+                                            right: BorderSide(
+                                              color: Colors.grey.shade400,
+                                              width: 1.0,
+                                            ),
+                                            bottom: BorderSide(
+                                              color: Colors.grey.shade400,
+                                              width: 1.0,
+                                            ),
+                                          ),
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(4),
+                                            bottomRight: Radius.circular(4),
+                                          ),
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Metadata fields
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Creator',
+                                                          creatorController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField('MEID',
+                                                          jobIdController)),
+                                                  const SizedBox(width: 8),
+                                                  SizedBox(
+                                                      width: 120,
+                                                      child: _buildField(
+                                                          'Description Writers',
+                                                          descriptionWritersController)),
+                                                  const SizedBox(width: 8),
+                                                  _buildJobTitleDropdown(),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Urgency',
+                                                          urgencyController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField('City',
+                                                          cityController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Province/State',
+                                                          provinceController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Country',
+                                                          countryController)),
+                                                  const SizedBox(width: 8),
+                                                  SizedBox(
+                                                      width: 80,
+                                                      child: _buildField(
+                                                          'Country Code',
+                                                          countryCodeController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Stadium',
+                                                          stadiumController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Credit',
+                                                          creditController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Source',
+                                                          sourceController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Headline',
+                                                          headlineController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Keywords',
+                                                          keywordsController)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Sub Cat 1',
+                                                          suppCat1Controller)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField('Cat',
+                                                          categoryController)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 1',
+                                                          suppCat1Controller)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 2',
+                                                          suppCat2Controller)),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                      child: _buildField(
+                                                          'Supp Cat 3',
+                                                          suppCat3Controller)),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              _buildField(
+                                                  'Special Instructions',
+                                                  specialInstructionsController,
+                                                  maxLines: 2),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
