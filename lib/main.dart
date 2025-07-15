@@ -9892,7 +9892,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   children: [
                     // LEFT COLUMN: Picture preview, personality/caption, player picker with verbs
                     Expanded(
-                      flex: 6, // Left column takes 60% of width
+                      flex: 5, // Left column takes 50% of width
                       child: SingleChildScrollView(
                         // Make the main content area scrollable
                         child: Column(
@@ -9912,10 +9912,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        // LEFT: Image Display (reduced due to duplicate metadata)
+                                        // LEFT: Image Display (full area)
                                         Expanded(
                                           flex:
-                                              20, // Take only 20% to account for duplicate metadata
+                                              100, // Take all space
                                           child: Column(
                                             children: [
                                               // Image Container with EXIF data included
@@ -12325,7 +12325,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                     // RIGHT COLUMN: Grid view and metadata
                     Expanded(
-                      flex: 4, // Right column takes 40% of width
+                      flex: 5, // Right column takes 50% of width
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(8),
                         child: Column(
