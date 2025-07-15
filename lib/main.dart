@@ -8876,15 +8876,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Handle double play with selected players
       if (_selectedFieldingAction == 'turns a double play' &&
           activePlayers.length >= 2) {
+        // Convert set to list to preserve selection order
+        final activePlayersList = activePlayers.toList();
         // Get the first and second selected players
-        final firstPlayerCode = activePlayers.first;
-        final secondPlayerCode = activePlayers.elementAt(1);
+        final firstPlayerCode = activePlayersList[0];
+        final secondPlayerCode = activePlayersList[1];
         final firstPlayerName = _removeAccentsFromText(
             (codeReplacements[firstPlayerCode] ?? Replacement('', '', ''))
                 .short);
         final secondPlayerName = _removeAccentsFromText(
             (codeReplacements[secondPlayerCode] ?? Replacement('', '', ''))
                 .short);
+
+        print('DEBUG Double Play:');
+        print('  activePlayers: $activePlayers');
+        print('  activePlayersList: $activePlayersList');
+        print('  firstPlayerCode: $firstPlayerCode');
+        print('  secondPlayerCode: $secondPlayerCode');
+        print('  firstPlayerName: $firstPlayerName');
+        print('  secondPlayerName: $secondPlayerName');
+
         mainCaptionPart =
             "$firstPlayerName $actionPhrase over $secondPlayerName against the $opponentTeamName";
       } else {
@@ -13225,8 +13236,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                                   if (_selectedVerb != null &&
                                       soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedPlayers.isNotEmpty) {
+                                      selectedPlayers.isNotEmpty &&
+                                      _selectedFieldingAction !=
+                                          'turns a double play') {
                                     // For solo verbs, replace the existing player instead of adding
+                                    // But allow multiple players for double play
                                     selectedPlayers.clear();
                                     selectedPlayers.add(code);
                                     // Force caption update for player replacement
@@ -13251,8 +13265,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                                   if (_selectedVerb != null &&
                                       soloOnlyVerbs.contains(_selectedVerb) &&
-                                      selectedOpponentPlayers.isNotEmpty) {
+                                      selectedOpponentPlayers.isNotEmpty &&
+                                      _selectedFieldingAction !=
+                                          'turns a double play') {
                                     // For solo verbs, replace the existing player instead of adding
+                                    // But allow multiple players for double play
                                     selectedOpponentPlayers.clear();
                                     selectedOpponentPlayers.add(code);
                                     // Force caption update for player replacement
