@@ -965,8 +965,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Reset fielding-related state
       _showFieldingOptions = false;
       _selectedFieldingAction = null;
-      _isDivingCatch = false;
-      _isDivingForGroundBall = false;
 
       // Reset celebration-related state
       _isSoloCelebration = false;
@@ -1036,12 +1034,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _selectedRbiInning = null;
         _isBatterRunning = false;
         _isSliding = false;
-      } else if (_showFieldingOptions && _selectedVerb == 'Fielding') {
+      } else if (_selectedVerb == 'Fielding' &&
+          _selectedFieldingAction != null) {
         // If in fielding options, go back to verb selection
-        _showFieldingOptions = false;
         _selectedFieldingAction = null;
-        _isDivingCatch = false;
-        _isDivingForGroundBall = false;
       } else if (_selectedVerb == 'Base Running' &&
           _selectedBaseRunningAction != null) {
         // If in base running options, go back to verb selection
@@ -1082,8 +1078,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _isSliding = false;
         _showFieldingOptions = false;
         _selectedFieldingAction = null;
-        _isDivingCatch = false;
-        _isDivingForGroundBall = false;
         _selectedBaseRunningAction = null;
         _selectedStealBase = null;
         _showStealAgainstPlayer = false;
@@ -2158,8 +2152,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
             _selectedVerb == 'Bunt' ||
-            _selectedVerb == 'celebrate' ||
-            _selectedVerb == 'fielding';
+            _selectedVerb == 'celebrate';
 
         // Show verb if:
         // 1. No verb is selected (show all)
@@ -2201,8 +2194,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
             _selectedVerb == 'Bunt' ||
-            _selectedVerb == 'celebrate' ||
-            _selectedVerb == 'fielding';
+            _selectedVerb == 'celebrate';
 
         // Show verb if:
         // 1. No verb is selected (show all)
@@ -3258,7 +3250,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               ),
             );
           } else if (verb == 'Fielding') {
-            // This block handles the 'Fielding' verb and its sub-options
             widgets.add(
               Padding(
                 padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
@@ -3266,9 +3257,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SingleChildScrollView(
-                      key: UniqueKey(),
                       scrollDirection: Axis.horizontal,
                       child: Row(
+                        key: UniqueKey(),
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           if (_selectedVerb != 'Fielding') ...[
@@ -3297,25 +3288,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                               selected: _selectedVerb == 'Fielding',
                               onSelected: (isSelected) => setState(() {
-                                print('DEBUG: Fielding button clicked');
-                                print(
-                                    'DEBUG: _showHomeFirst: \\$_showHomeFirst');
-                                print(
-                                  'DEBUG: selectedPlayers: \\${selectedPlayers.toString()}',
-                                );
-                                print(
-                                  'DEBUG: selectedOpponentPlayers: \\${selectedOpponentPlayers.toString()}',
-                                );
-                                print(
-                                  'DEBUG: _selectedVerb before: \\$_selectedVerb',
-                                );
                                 _selectedVerb = isSelected ? 'Fielding' : null;
-                                print(
-                                  'DEBUG: _selectedVerb after: \\$_selectedVerb',
-                                );
                                 _selectedFieldingAction = null;
-                                _isDivingCatch = false;
-                                _isDivingForGroundBall = false;
                                 _selectedRbiInning = null;
                                 _updateCaption();
                               }),
@@ -3323,155 +3297,70 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               padding: EdgeInsets.zero,
                             ),
                           ] else ...[
-                            // Show fielding action options when Fielding is selected (but no action selected yet)
-                            if (_selectedFieldingAction == null) ...[
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  'Catch',
-                                  'Ground Ball',
-                                  'Throws',
-                                  'Fielding Position',
-                                  'Takes the Field',
-                                ]
-                                    .map(
-                                      (label) => Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 8.0,
-                                        ),
-                                        child: FlashingFilterChip(
-                                          label: SizedBox(
-                                            width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
+                            // Show fielding sub-options when Fielding is selected
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                'Catches a ball',
+                                'Fields a ground ball',
+                              ]
+                                  .map(
+                                    (label) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8.0,
+                                      ),
+                                      child: FlashingFilterChip(
+                                        label: SizedBox(
+                                          width: _fixedChipWidth,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.chevron_right,
+                                                  size: 14,
+                                                  color: Colors.grey,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  label,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight:
+                                                        FontWeight.normal,
                                                   ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          selected: _selectedFieldingAction ==
-                                              _getFieldingActionKey(label),
-                                          onSelected: (isSelected) {
+                                        ),
+                                        selected: _selectedFieldingAction ==
+                                            (label == 'Catches a ball'
+                                                ? 'makes a catch'
+                                                : 'fields a ground ball'),
+                                        onSelected: (isSelected) =>
                                             setState(() {
-                                              if (isSelected) {
-                                                _selectedFieldingAction =
-                                                    _getFieldingActionKey(
-                                                  label,
-                                                );
-                                              } else {
-                                                _selectedFieldingAction = null;
-                                                _isDivingCatch = false;
-                                                _isDivingForGroundBall = false;
-                                              }
-                                              _updateCaption();
-                                            });
-                                          },
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          key: UniqueKey(),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                            ] else ...[
-                              // Show selected fielding action and optional diving options
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Show selected action as a chip
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 8.0),
-                                    child: FlashingFilterChip(
-                                      label: SizedBox(
-                                        width: _fixedChipWidth,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(
-                                                Icons.chevron_right,
-                                                size: 14,
-                                                color: Colors.grey,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                _getFieldingActionLabel(
-                                                  _selectedFieldingAction!,
-                                                ),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.normal,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      selected: true,
-                                      showCheckmark: true,
-                                      onSelected: (_) => setState(() {
-                                        _selectedFieldingAction = null;
-                                        _isDivingCatch = false;
-                                        _isDivingForGroundBall = false;
-                                        _updateCaption();
-                                      }),
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      key: UniqueKey(),
-                                    ),
-                                  ),
-                                  // Show diving options if applicable
-                                  if (_selectedFieldingAction ==
-                                          'makes a catch' ||
-                                      _selectedFieldingAction ==
-                                          'fields a ground ball') ...[
-                                    const Padding(
-                                      padding: EdgeInsets.only(
-                                        left: 16.0,
-                                        bottom: 2.0,
-                                      ),
-                                      child: Text(
-                                        'Optional:',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
+                                          if (isSelected) {
+                                            _selectedFieldingAction =
+                                                label == 'Catches a ball'
+                                                    ? 'makes a catch'
+                                                    : 'fields a ground ball';
+                                          } else {
+                                            _selectedFieldingAction = null;
+                                          }
+                                          _updateCaption();
+                                        }),
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        key: UniqueKey(),
                                       ),
                                     ),
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8.0),
-                                      child: _selectedFieldingAction ==
-                                              'makes a catch'
-                                          ? _buildDivingCatchOption()
-                                          : _buildDivingForGroundBallOption(),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
+                                  )
+                                  .toList(),
+                            ),
                           ],
                         ],
                       ),
@@ -4411,8 +4300,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               _selectedFieldingAction = actionKey;
             } else {
               _selectedFieldingAction = null;
-              _isDivingCatch =
-                  false; // Reset sub-option if parent is deselected
             }
             _updateCaption();
           });
@@ -4423,93 +4310,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
-  }
-
-  Widget _buildDivingCatchOption() {
-    return FlashingFilterChip(
-      label: SizedBox(
-        width: _fixedChipWidth,
-        child: const Center(
-          child: Text(
-            'Diving catch',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-          ),
-        ),
-      ),
-      selected: _isDivingCatch == true,
-      onSelected: (isSelected) {
-        setState(() {
-          _isDivingCatch = isSelected;
-          _updateCaption();
-        });
-      },
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-  }
-
-  // Helper for 'Diving' option on 'Fields a ground ball'
-  Widget _buildDivingForGroundBallOption() {
-    return FlashingFilterChip(
-      label: SizedBox(
-        width: _fixedChipWidth,
-        child: const Center(
-          child: Text(
-            'Diving',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-          ),
-        ),
-      ),
-      selected: _isDivingForGroundBall == true,
-      onSelected: (isSelected) {
-        setState(() {
-          _isDivingForGroundBall = isSelected;
-          _updateCaption();
-        });
-      },
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-  }
-
-  // Helper method to get fielding action key from label
-  String _getFieldingActionKey(String label) {
-    switch (label) {
-      case 'Catch':
-        return 'makes a catch';
-      case 'Ground Ball':
-        return 'fields a ground ball';
-      case 'Throws':
-        return 'throws a ball';
-      case 'Fielding Position':
-        return 'stands in fielding position';
-      case 'Takes the Field':
-        return 'takes the field';
-      default:
-        return label;
-    }
-  }
-
-  // Helper method to get fielding action label from key
-  String _getFieldingActionLabel(String key) {
-    switch (key) {
-      case 'makes a catch':
-        return 'Catch';
-      case 'fields a ground ball':
-        return 'Ground Ball';
-      case 'throws a ball':
-        return 'Throws';
-      case 'stands in fielding position':
-        return 'Fielding Position';
-      case 'takes the field':
-        return 'Takes the Field';
-      default:
-        return key;
-    }
   }
 
   // Helper method to get base running action key from label
@@ -4753,9 +4553,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _showDivingCatch = false;
   bool _showFieldingOptions = false;
   String? _selectedFieldingAction;
-  bool _isDivingForGroundBall =
-      false; // Added: State for 'Diving' on ground ball
-  bool _isDivingCatch = false;
+
   bool _showBaseRunningOptions = false;
   String? _selectedBaseRunningAction;
   String? _selectedStealBase;
@@ -8974,13 +8772,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         activePlayers.toList(),
       );
       String actionPhrase = _selectedFieldingAction!;
-      if (_selectedFieldingAction == 'makes a catch' &&
-          _isDivingCatch == true) {
-        actionPhrase = 'makes a diving catch';
-      } else if (_selectedFieldingAction == 'fields a ground ball' &&
-          _isDivingForGroundBall == true) {
-        actionPhrase = 'dives for a ground ball';
-      }
       mainCaptionPart =
           "$playersString $actionPhrase against the $opponentTeamName";
       // Add inning to Fielding caption
@@ -13510,8 +13301,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Reset fielding-related state
       _showFieldingOptions = false;
       _selectedFieldingAction = null;
-      _showDivingCatch = false;
-      _isDivingCatch = false;
 
       // Reset batting-related state when changing verbs
       if (verb != 'At Bat' && verb != 'Batting') {
