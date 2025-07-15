@@ -10496,6 +10496,239 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     ),
                                   ),
 
+                                  // Caption and Personality boxes right under the image
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Caption and Personality fields - taking 49.35% of screen width
+                                      SizedBox(
+                                        width:
+                                            MediaQuery.of(context).size.width *
+                                                0.4935,
+                                        child: Row(
+                                          children: [
+                                            // Personality Field (left side) - taking less space
+                                            Expanded(
+                                              flex: 6,
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                      right: 4.0,
+                                                    ),
+                                                    child: Material(
+                                                      elevation: 2,
+                                                      shadowColor:
+                                                          Colors.grey.shade400,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                      child: TextField(
+                                                        controller:
+                                                            personalityController,
+                                                        onTap: () {
+                                                          // Remove grid focus when clicking in text field
+                                                          setState(() {
+                                                            _isThumbnailGridFocused =
+                                                                false;
+                                                          });
+                                                        },
+                                                        maxLines: 4,
+                                                        minLines: 4,
+                                                        style: const TextStyle(
+                                                          fontSize: 14,
+                                                        ),
+                                                        decoration:
+                                                            InputDecoration(
+                                                          labelText:
+                                                              'Personality',
+                                                          floatingLabelBehavior:
+                                                              FloatingLabelBehavior
+                                                                  .always,
+                                                          labelStyle:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 15,
+                                                            letterSpacing: -0.5,
+                                                          ),
+                                                          border:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              8,
+                                                            ),
+                                                            gapPadding: 0,
+                                                          ),
+                                                          enabledBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              8,
+                                                            ),
+                                                            gapPadding: 0,
+                                                            borderSide:
+                                                                BorderSide(
+                                                              color: Colors.grey
+                                                                  .shade400,
+                                                            ),
+                                                          ),
+                                                          focusedBorder:
+                                                              OutlineInputBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              8,
+                                                            ),
+                                                            gapPadding: 0,
+                                                            borderSide:
+                                                                BorderSide(
+                                                              color: Theme.of(
+                                                                context,
+                                                              )
+                                                                  .colorScheme
+                                                                  .primary,
+                                                              width: 2,
+                                                            ),
+                                                          ),
+                                                          contentPadding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 12,
+                                                          ),
+                                                          filled: true,
+                                                          fillColor:
+                                                              Colors.white,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Caption Field (right side) - taking more space
+                                            Expanded(
+                                              flex: 12,
+                                              child: Transform.translate(
+                                                offset: const Offset(0, 0),
+                                                child: ValueListenableBuilder<
+                                                    TextEditingValue>(
+                                                  valueListenable:
+                                                      captionController,
+                                                  builder:
+                                                      (context, value, child) {
+                                                    return Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                        left: 4.0,
+                                                      ),
+                                                      child: AnimatedBuilder(
+                                                        animation:
+                                                            _typewriterController,
+                                                        builder:
+                                                            (context, child) {
+                                                          return Material(
+                                                            elevation: 2.0,
+                                                            color: Colors.white,
+                                                            shadowColor:
+                                                                Colors.grey,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8),
+                                                            child: TextField(
+                                                              controller:
+                                                                  captionController,
+                                                              maxLines: 4,
+                                                              minLines: 4,
+                                                              style:
+                                                                  const TextStyle(
+                                                                fontSize: 14,
+                                                              ),
+                                                              decoration:
+                                                                  InputDecoration(
+                                                                labelText:
+                                                                    'Caption',
+                                                                floatingLabelBehavior:
+                                                                    FloatingLabelBehavior
+                                                                        .always,
+                                                                isDense: true,
+                                                                contentPadding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 8,
+                                                                  vertical: 11,
+                                                                ),
+                                                                labelStyle:
+                                                                    const TextStyle(
+                                                                  fontSize: 15,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  letterSpacing:
+                                                                      -0.5,
+                                                                ),
+                                                                enabledBorder:
+                                                                    OutlineInputBorder(
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    8,
+                                                                  ),
+                                                                  borderSide:
+                                                                      BorderSide(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1.0,
+                                                                  ),
+                                                                ),
+                                                                focusedBorder:
+                                                                    OutlineInputBorder(
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    8,
+                                                                  ),
+                                                                  borderSide:
+                                                                      BorderSide(
+                                                                    color: Theme
+                                                                            .of(
+                                                                      context,
+                                                                    )
+                                                                        .colorScheme
+                                                                        .primary,
+                                                                    width: 2.0,
+                                                                  ),
+                                                                ),
+                                                                fillColor:
+                                                                    Colors
+                                                                        .white,
+                                                                filled: true,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
                                   // Metadata container under the gridview
                                   const SizedBox(height: 16),
                                   Align(
@@ -10781,268 +11014,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ],
                                       ),
                                     ),
-                                  ),
-
-                                  // Caption and Personality boxes under the team pickers
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // Caption and Personality fields - taking 49.35% of screen width
-                                      SizedBox(
-                                        width:
-                                            MediaQuery.of(context).size.width *
-                                                0.4935,
-                                        child: Row(
-                                          children: [
-                                            // Personality Field (left side) - taking less space
-                                            Expanded(
-                                              flex: 6,
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      right: 4.0,
-                                                    ),
-                                                    child: Material(
-                                                      elevation: 2,
-                                                      shadowColor:
-                                                          Colors.grey.shade400,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8),
-                                                      child: TextField(
-                                                        controller:
-                                                            personalityController,
-                                                        onTap: () {
-                                                          // Remove grid focus when clicking in text field
-                                                          setState(() {
-                                                            _isThumbnailGridFocused =
-                                                                false;
-                                                          });
-                                                        },
-                                                        maxLines: 4,
-                                                        minLines: 4,
-                                                        style: const TextStyle(
-                                                          fontSize: 14,
-                                                        ),
-                                                        decoration:
-                                                            InputDecoration(
-                                                          labelText:
-                                                              'Personality',
-                                                          floatingLabelBehavior:
-                                                              FloatingLabelBehavior
-                                                                  .always,
-                                                          labelStyle:
-                                                              const TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: 15,
-                                                            letterSpacing: -0.5,
-                                                          ),
-                                                          border:
-                                                              OutlineInputBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              8,
-                                                            ),
-                                                            gapPadding: 0,
-                                                          ),
-                                                          enabledBorder:
-                                                              OutlineInputBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              8,
-                                                            ),
-                                                            gapPadding: 0,
-                                                            borderSide:
-                                                                BorderSide(
-                                                              color: Colors.grey
-                                                                  .shade400,
-                                                            ),
-                                                          ),
-                                                          focusedBorder:
-                                                              OutlineInputBorder(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              8,
-                                                            ),
-                                                            gapPadding: 0,
-                                                            borderSide:
-                                                                BorderSide(
-                                                              color: Theme.of(
-                                                                context,
-                                                              )
-                                                                  .colorScheme
-                                                                  .primary,
-                                                              width: 2,
-                                                            ),
-                                                          ),
-                                                          contentPadding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                            horizontal: 12,
-                                                            vertical: 12,
-                                                          ),
-                                                          filled: true,
-                                                          fillColor:
-                                                              Colors.white,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  // Navigation Buttons directly under Personality field
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                      right: 8.0,
-                                                      top: 8.0,
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment.end,
-                                                      children: [
-                                                        // FTP, Previous, Next buttons moved to above Copy/Paste
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // Caption Field (right side) - taking more space
-                                            Expanded(
-                                              flex: 12,
-                                              child: Transform.translate(
-                                                offset: const Offset(0, 0),
-                                                child: ValueListenableBuilder<
-                                                    TextEditingValue>(
-                                                  valueListenable:
-                                                      captionController,
-                                                  builder:
-                                                      (context, value, child) {
-                                                    return Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                        left: 4.0,
-                                                      ),
-                                                      child: AnimatedBuilder(
-                                                        animation:
-                                                            _typewriterController,
-                                                        builder:
-                                                            (context, child) {
-                                                          return Material(
-                                                            elevation: 2.0,
-                                                            color: Colors.white,
-                                                            shadowColor:
-                                                                Colors.grey,
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        8),
-                                                            child: TextField(
-                                                              controller:
-                                                                  captionController,
-                                                              maxLines: 4,
-                                                              minLines: 4,
-                                                              style:
-                                                                  const TextStyle(
-                                                                fontSize: 14,
-                                                              ),
-                                                              decoration:
-                                                                  InputDecoration(
-                                                                labelText:
-                                                                    'Caption',
-                                                                floatingLabelBehavior:
-                                                                    FloatingLabelBehavior
-                                                                        .always,
-                                                                isDense: true,
-                                                                contentPadding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 11,
-                                                                ),
-                                                                labelStyle:
-                                                                    const TextStyle(
-                                                                  fontSize: 15,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  letterSpacing:
-                                                                      -0.5,
-                                                                ),
-                                                                enabledBorder:
-                                                                    OutlineInputBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    8,
-                                                                  ),
-                                                                  borderSide:
-                                                                      BorderSide(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade400,
-                                                                    width: 1.0,
-                                                                  ),
-                                                                ),
-                                                                focusedBorder:
-                                                                    OutlineInputBorder(
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                    8,
-                                                                  ),
-                                                                  borderSide:
-                                                                      BorderSide(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade400,
-                                                                    width: 1.0,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              onTap: () {
-                                                                // Remove grid focus when clicking in text field
-                                                                setState(() {
-                                                                  _isThumbnailGridFocused =
-                                                                      false;
-                                                                });
-                                                                // Stop typewriter effect when user starts typing
-                                                                if (_typewriterController
-                                                                    .isAnimating) {
-                                                                  _typewriterController
-                                                                      .stop();
-                                                                }
-                                                                // Only set manually typing if user actually types
-                                                                // Don't set it on tap - let onChanged handle it
-                                                              },
-                                                              onChanged:
-                                                                  (value) {
-                                                                // Mark as manually typing when user changes text
-                                                                _isManuallyTyping =
-                                                                    true;
-                                                              },
-                                                            ),
-                                                          );
-                                                        },
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
                                   ),
 
                                   const SizedBox(height: 5),
