@@ -9888,9 +9888,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ],
                   ),
                 ),
-                body: Column(
+                body: Row(
                   children: [
+                    // LEFT SIDE: Image, thumbnails, caption/personality (70% width)
                     Expanded(
+                      flex: 7,
                       child: SingleChildScrollView(
                         // Make the main content area scrollable
                         child: Column(
@@ -11238,6 +11240,249 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         width:
                                                                             8,
                                                                       ),
+                                                                      // Verb chips in the middle between teams
+                                                                      Container(
+                                                                        width:
+                                                                            280,
+                                                                        child:
+                                                                            Column(
+                                                                          children: [
+                                                                            // App bar style header
+                                                                            Container(
+                                                                              width: 280,
+                                                                              height: 28,
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.grey.shade200,
+                                                                                borderRadius: const BorderRadius.only(
+                                                                                  topLeft: Radius.circular(
+                                                                                    4,
+                                                                                  ),
+                                                                                  topRight: Radius.circular(
+                                                                                    4,
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                              child: Padding(
+                                                                                padding: const EdgeInsets.symmetric(
+                                                                                  horizontal: 16.0,
+                                                                                ),
+                                                                                child: Row(
+                                                                                  children: [
+                                                                                    if (_selectedVerb == 'hit') ...[
+                                                                                      // Breadcrumb menu
+                                                                                      Expanded(
+                                                                                        child: Row(
+                                                                                          children: [
+                                                                                            GestureDetector(
+                                                                                              onTap: () {
+                                                                                                setState(() {
+                                                                                                  _selectedVerb = null;
+                                                                                                  _selectedHitType = null;
+                                                                                                  _selectedHomeRunType = null;
+                                                                                                  _rbiCount = null;
+                                                                                                  _selectedRbiInning = null;
+                                                                                                  _isBatterRunning = false;
+                                                                                                  _updateCaption();
+                                                                                                });
+                                                                                              },
+                                                                                              child: Text(
+                                                                                                'HIT',
+                                                                                                style: TextStyle(
+                                                                                                  fontSize: 10,
+                                                                                                  fontWeight: FontWeight.bold,
+                                                                                                  color: Colors.black,
+                                                                                                ),
+                                                                                              ),
+                                                                                            ),
+                                                                                            if (_selectedHitType != null) ...[
+                                                                                              Padding(
+                                                                                                padding: const EdgeInsets.symmetric(
+                                                                                                  horizontal: 3.0,
+                                                                                                ),
+                                                                                                child: Text(
+                                                                                                  '→',
+                                                                                                  style: TextStyle(
+                                                                                                    fontSize: 8,
+                                                                                                    fontWeight: FontWeight.bold,
+                                                                                                    color: Colors.black,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                              GestureDetector(
+                                                                                                onTap: () {
+                                                                                                  setState(() {
+                                                                                                    _selectedHitType = null;
+                                                                                                    _selectedHomeRunType = null;
+                                                                                                    _rbiCount = null;
+                                                                                                    _selectedRbiInning = null;
+                                                                                                    _isBatterRunning = false;
+                                                                                                    _updateCaption();
+                                                                                                  });
+                                                                                                },
+                                                                                                child: Text(
+                                                                                                  _selectedHitType!.toUpperCase(),
+                                                                                                  style: TextStyle(
+                                                                                                    fontSize: 10,
+                                                                                                    fontWeight: FontWeight.bold,
+                                                                                                    color: Colors.black,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                            ],
+                                                                                            if (_selectedHitType == 'single' && _rbiCount != null) ...[
+                                                                                              Padding(
+                                                                                                padding: const EdgeInsets.symmetric(
+                                                                                                  horizontal: 3.0,
+                                                                                                ),
+                                                                                                child: Text(
+                                                                                                  '→',
+                                                                                                  style: TextStyle(
+                                                                                                    fontSize: 8,
+                                                                                                    fontWeight: FontWeight.bold,
+                                                                                                    color: Colors.black,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                              Text(
+                                                                                                _rbiCount == 1
+                                                                                                    ? 'RBI SINGLE'
+                                                                                                    : _rbiCount == 2
+                                                                                                        ? 'TWO RBI SINGLE'
+                                                                                                        : _rbiCount == 3
+                                                                                                            ? 'THREE RBI SINGLE'
+                                                                                                            : '',
+                                                                                                style: TextStyle(
+                                                                                                  fontSize: 10,
+                                                                                                  fontWeight: FontWeight.bold,
+                                                                                                  color: Colors.black,
+                                                                                                ),
+                                                                                              ),
+                                                                                            ],
+                                                                                          ],
+                                                                                        ),
+                                                                                      ),
+                                                                                    ] else ...[
+                                                                                      Text(
+                                                                                        'Action',
+                                                                                        style: TextStyle(
+                                                                                          color: Colors.black,
+                                                                                          fontSize: 11,
+                                                                                          fontWeight: FontWeight.w600,
+                                                                                        ),
+                                                                                      ),
+                                                                                    ],
+                                                                                  ],
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            // Verb box content
+                                                                            Container(
+                                                                              padding: const EdgeInsets.all(
+                                                                                5.0,
+                                                                              ),
+                                                                              decoration: BoxDecoration(
+                                                                                border: Border.all(
+                                                                                  color: Colors.grey.shade400,
+                                                                                ),
+                                                                                borderRadius: const BorderRadius.only(
+                                                                                  bottomLeft: Radius.circular(
+                                                                                    4,
+                                                                                  ),
+                                                                                  bottomRight: Radius.circular(
+                                                                                    4,
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                              child: ConstrainedBox(
+                                                                                constraints: const BoxConstraints(
+                                                                                  minWidth: 280,
+                                                                                  minHeight: 509,
+                                                                                ),
+                                                                                child: Column(
+                                                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                  children: [
+                                                                                    ..._buildAllVerbsList(),
+                                                                                    // Add the permanent Back button at the bottom
+                                                                                    Padding(
+                                                                                      padding: const EdgeInsets.only(
+                                                                                        top: 8.0,
+                                                                                      ),
+                                                                                      child: ConstrainedBox(
+                                                                                        constraints: BoxConstraints(
+                                                                                          maxWidth: _fixedChipWidth / 2,
+                                                                                        ),
+                                                                                        child: Container(
+                                                                                          decoration: BoxDecoration(
+                                                                                            color: Colors.lightBlue.shade100,
+                                                                                            borderRadius: BorderRadius.circular(
+                                                                                              4,
+                                                                                            ),
+                                                                                          ),
+                                                                                          child: FlashingFilterChip(
+                                                                                            label: SizedBox(
+                                                                                              width: _fixedChipWidth / 2,
+                                                                                              child: Align(
+                                                                                                alignment: Alignment.centerLeft,
+                                                                                                child: Row(
+                                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                                  children: [
+                                                                                                    const Icon(
+                                                                                                      Icons.arrow_back,
+                                                                                                      size: 14,
+                                                                                                      color: Colors.grey,
+                                                                                                    ),
+                                                                                                    const SizedBox(
+                                                                                                      width: 4,
+                                                                                                    ),
+                                                                                                    const Text(
+                                                                                                      'Back',
+                                                                                                      style: TextStyle(
+                                                                                                        fontSize: 12,
+                                                                                                        fontWeight: FontWeight.normal,
+                                                                                                      ),
+                                                                                                      overflow: TextOverflow.ellipsis,
+                                                                                                    ),
+                                                                                                  ],
+                                                                                                ),
+                                                                                              ),
+                                                                                            ),
+                                                                                            selected: false,
+                                                                                            onSelected: (isSelected) {
+                                                                                              setState(() {
+                                                                                                _selectedVerb = null;
+                                                                                                _selectedHitType = null;
+                                                                                                _selectedHomeRunType = null;
+                                                                                                _rbiCount = null;
+                                                                                                _selectedRbiInning = null;
+                                                                                                _isBatterRunning = false;
+                                                                                                _selectedFieldingAction = null;
+                                                                                                _selectedBaseRunningAction = null;
+                                                                                                _selectedAtBatAction = null;
+                                                                                                _selectedBattingAction = null;
+                                                                                                _selectedPriorAction = null;
+                                                                                                _customPriorAction = '';
+                                                                                                _customPriorActionController.clear();
+                                                                                                _stealsClicked = false;
+                                                                                                _updateCaption();
+                                                                                              });
+                                                                                            },
+                                                                                            visualDensity: VisualDensity.compact,
+                                                                                            padding: EdgeInsets.zero,
+                                                                                          ),
+                                                                                        ),
+                                                                                      ),
+                                                                                    ),
+                                                                                  ],
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            8,
+                                                                      ),
                                                                       // Home Team Column
                                                                       Expanded(
                                                                         child:
@@ -12092,6 +12337,138 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                    // RIGHT SIDE: Metadata only - taking 30% of screen width
+                    Expanded(
+                      flex: 3,
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Getty Metadata Fields',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Headline',
+                                      headlineController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Caption',
+                                      captionController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Personality',
+                                      personalityController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Keywords',
+                                      keywordsController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Event',
+                                      titleObjectNameController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'City',
+                                      cityController,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildField(
+                                      'Province/State',
+                                      provinceController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Country',
+                                      countryController,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildField(
+                                      'Country Code',
+                                      countryCodeController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildField(
+                                      'Stadium',
+                                      stadiumController,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildJobTitleDropdown(),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _buildField(
+                                      'Copyright',
+                                      copyrightController,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
