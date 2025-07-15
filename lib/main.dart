@@ -11514,8 +11514,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Verb chips on the right
-                                      Expanded(
+                                      // Old verb chips hidden
+                                      SizedBox(
+                                        width: 0,
                                         child: Padding(
                                           padding: const EdgeInsets.only(
                                             top: 0.0,
