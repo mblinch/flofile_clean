@@ -318,7 +318,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
   String selectedState = '';
-  final double _fixedChipWidth = 300.0;
+  final double _fixedChipWidth = 440.0;
   final double _dropdownWidth = 120.0;
 
   // Animation controllers for caption effects
