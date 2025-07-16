@@ -2265,7 +2265,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 _updateCaption();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show hit type options when hit is selected
@@ -2333,7 +2334,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             },
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
                                             key: UniqueKey(),
                                           ),
                                         ),
@@ -2855,8 +2857,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                               ),
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               selected: _selectedVerb == 'Post Game',
@@ -2919,7 +2923,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     }
                                   },
                                   visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   key: UniqueKey(),
                                 ),
                               ),
@@ -3058,8 +3063,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 });
                               },
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                             ),
@@ -3103,7 +3110,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 _updateCaption();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show fielding sub-options when Fielding is selected
@@ -3143,7 +3151,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           _updateCaption();
                                         }),
                                         visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                       ),
                                     ],
                                   ),
@@ -3233,7 +3242,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             _updateCaption();
                                           }),
                                           visualDensity: VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3286,7 +3296,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       })
                                   : null,
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show base running action options when Base Running is selected
@@ -3334,7 +3345,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             },
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
                                             key: UniqueKey(),
                                           ),
                                         ),
@@ -3395,7 +3407,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             });
                                           },
                                           visualDensity: VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3434,7 +3447,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         _updateCaption();
                                       }),
                                       visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
                                       key: UniqueKey(),
                                     ),
                                   ),
@@ -3483,7 +3497,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           });
                                         },
                                         visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                         key: UniqueKey(),
                                       ),
                                     ),
@@ -3533,7 +3548,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                           ),
                           if (_selectedVerb == 'Batting') ...[
                             const SizedBox(width: 16.0),
@@ -3602,7 +3618,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     });
                                   },
                                   visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   key: UniqueKey(),
                                 ),
                               );
@@ -3650,7 +3667,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                           ),
                         ],
                       ),
@@ -3698,7 +3716,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                           ),
                         ],
                       ),
@@ -3741,7 +3760,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 celebrateAgainst.clear();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show celebration options when Celebrate is selected
@@ -3809,7 +3829,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             _updateCaption();
                                           },
                                           visualDensity: VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3964,7 +3985,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               }),
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              labelPadding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           );
@@ -3990,7 +4012,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             }),
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            labelPadding:
+                const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
@@ -6236,7 +6259,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         // 3. Player List
                         Expanded(
                           child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             itemCount: filtered.length,
                             itemBuilder: (ctx, idx) {
                               final code = filtered[idx];
@@ -6422,7 +6446,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         // 3. Thumbnail List
                         Expanded(
                           child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             itemCount: filtered.length,
                             itemBuilder: (ctx, idx) {
                               final code = filtered[idx];
@@ -6703,7 +6728,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 2),
                                     Expanded(
                                       child: ListView.builder(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                         itemCount: filteredAway.length,
                                         itemBuilder: (ctx, idx) {
                                           final code = filteredAway[idx];
@@ -6800,7 +6826,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 2),
                                     Expanded(
                                       child: ListView.builder(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
                                         itemCount: filteredHome.length,
                                         itemBuilder: (ctx, idx) {
                                           final code = filteredHome[idx];
@@ -7587,6 +7614,47 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 const SizedBox(height: 24),
                 // Sixth row: Reset Caption
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 200,
+                      height: 24,
+                      child: Material(
+                        color: Colors.white,
+                        elevation: 2,
+                        shadowColor: Colors.grey.shade400,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          side: BorderSide(
+                              color: Colors.grey.shade400, width: 1.0),
+                        ),
+                        child: InkWell(
+                          onTap: _resetCaption,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Reset Caption',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Accent removal toggle
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -9338,7 +9406,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Scaffold(
                 backgroundColor: Color(0xFFF5F5F5),
                 appBar: AdaptiveAppBar(
-                  toolbarHeight: 70,
+                  toolbarHeight: 90,
                   titleSpacing: 8,
                   title: Row(
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -10516,7 +10584,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   unselectedLabelStyle:
                                                       TextStyle(fontSize: 11),
                                                   isScrollable: false,
-                                                  labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  labelPadding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 1),
                                                   tabs: [
                                                     Tab(
                                                       child: SizedBox(
@@ -10559,7 +10630,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           style:
                                                                               const TextStyle(
                                                                             fontSize:
-                                                                                9,
+                                                                                12,
                                                                             fontWeight:
                                                                                 FontWeight.bold,
                                                                             color:
@@ -10576,7 +10647,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       child:
                                                                           Container(
                                                                         height:
-                                                                            20,
+                                                                            23,
                                                                         decoration:
                                                                             BoxDecoration(
                                                                           color:
@@ -10601,14 +10672,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   setState(() {}); // Rebuild to filter list
                                                                                 },
                                                                                 style: const TextStyle(
-                                                                                  fontSize: 8,
+                                                                                  fontSize: 12,
                                                                                   color: Colors.black,
                                                                                   height: 1.0,
                                                                                 ),
                                                                                 decoration: const InputDecoration(
                                                                                   hintText: 'Search...',
                                                                                   hintStyle: TextStyle(
-                                                                                    fontSize: 8,
+                                                                                    fontSize: 12,
                                                                                     color: Colors.grey,
                                                                                   ),
                                                                                   border: InputBorder.none,
@@ -10647,48 +10718,47 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           _switchTeamOrder,
                                                                       child:
                                                                           Container(
-                                                                        padding:
-                                                                            const EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              6,
-                                                                          vertical:
-                                                                              2,
-                                                                        ),
+                                                                        width:
+                                                                            120,
+                                                                        height:
+                                                                            24,
+                                                                        padding: const EdgeInsets
+                                                                            .all(
+                                                                            1),
                                                                         decoration:
                                                                             BoxDecoration(
-                                                                          color: Colors
-                                                                              .blue
-                                                                              .shade50,
-                                                                          border:
-                                                                              Border.all(
-                                                                            color:
-                                                                                Colors.blue.shade300,
-                                                                            width:
-                                                                                1,
-                                                                          ),
+                                                                          color:
+                                                                              const Color(0xFFCCCCCC),
                                                                           borderRadius:
-                                                                              BorderRadius.circular(3),
-                                                                        ),
-                                                                        child:
-                                                                            Row(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.min,
-                                                                          children: [
-                                                                            Icon(
-                                                                              Icons.swap_horiz,
-                                                                              size: 10,
-                                                                              color: Colors.blue.shade700,
-                                                                            ),
-                                                                            const SizedBox(width: 2),
-                                                                            Text(
-                                                                              'Switch',
-                                                                              style: TextStyle(
-                                                                                fontSize: 8,
-                                                                                color: Colors.blue.shade700,
-                                                                                fontWeight: FontWeight.w500,
-                                                                              ),
+                                                                              BorderRadius.circular(4),
+                                                                          boxShadow: [
+                                                                            BoxShadow(
+                                                                              color: Colors.grey.shade300,
+                                                                              blurRadius: 2,
+                                                                              offset: const Offset(0, 1),
                                                                             ),
                                                                           ],
+                                                                        ),
+                                                                        child:
+                                                                            Center(
+                                                                          child:
+                                                                              Column(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.min,
+                                                                            children: [
+                                                                              Icon(
+                                                                                Icons.arrow_back,
+                                                                                size: 10,
+                                                                                color: Colors.black,
+                                                                              ),
+                                                                              const SizedBox(height: 1),
+                                                                              Icon(
+                                                                                Icons.arrow_forward,
+                                                                                size: 10,
+                                                                                color: Colors.black,
+                                                                              ),
+                                                                            ],
+                                                                          ),
                                                                         ),
                                                                       ),
                                                                     ),
@@ -10732,7 +10802,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           style:
                                                                               const TextStyle(
                                                                             fontSize:
-                                                                                9,
+                                                                                12,
                                                                             fontWeight:
                                                                                 FontWeight.bold,
                                                                             color:
@@ -10749,7 +10819,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       child:
                                                                           Container(
                                                                         height:
-                                                                            20,
+                                                                            23,
                                                                         decoration:
                                                                             BoxDecoration(
                                                                           color:
@@ -10774,14 +10844,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   setState(() {}); // Rebuild to filter list
                                                                                 },
                                                                                 style: const TextStyle(
-                                                                                  fontSize: 8,
+                                                                                  fontSize: 12,
                                                                                   color: Colors.black,
                                                                                   height: 1.0,
                                                                                 ),
                                                                                 decoration: const InputDecoration(
                                                                                   hintText: 'Search...',
                                                                                   hintStyle: TextStyle(
-                                                                                    fontSize: 8,
+                                                                                    fontSize: 12,
                                                                                     color: Colors.grey,
                                                                                   ),
                                                                                   border: InputBorder.none,
@@ -11562,7 +11632,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       horizontal:
                                                                           12,
                                                                       vertical:
-                                                                          12,
+                                                                          16,
                                                                     ),
                                                                     filled:
                                                                         true,
@@ -11605,7 +11675,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   style:
                                                                       const TextStyle(
                                                                     fontSize:
-                                                                        kInputTextSize,
+                                                                        14,
+                                                                    height: 1.2,
                                                                   ),
                                                                   onChanged:
                                                                       (value) {
@@ -13039,7 +13110,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 (item) => PopupMenuItem<String>(
                   value: item,
                   height: 18,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   child: Container(
                     height: 18,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -13072,27 +13144,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               )
               .toList(),
           child: Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
               children: [
                 // Label
                 Text(
                   '${label.replaceAll(' Team', '')}: ',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
                 ),
                 // Home/Away symbol for selected item
                 if (value != null) ...[
                   if (label == 'Home Team')
-                    Icon(Icons.home, size: 9, color: Colors.grey.shade700),
+                    Icon(Icons.home, size: 11, color: Colors.grey.shade700),
                   if (label == 'Away Team')
                     Icon(Icons.flight_takeoff,
-                        size: 9, color: Colors.grey.shade700),
+                        size: 11, color: Colors.grey.shade700),
                   const SizedBox(width: 3),
                   Expanded(
                     child: Text(
                       value ?? 'Select Team',
-                      style: const TextStyle(fontSize: 11, color: Colors.black),
+                      style: const TextStyle(fontSize: 13, color: Colors.black),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -13100,11 +13172,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   const Expanded(
                     child: Text(
                       'Select Team',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                   ),
                 ],
-                const Icon(Icons.arrow_drop_down, size: 14),
+                const Icon(Icons.arrow_drop_down, size: 16),
               ],
             ),
           ),
@@ -13495,7 +13567,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                     Expanded(
                       child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         children: filtered.map((code) {
                           final replacement =
                               codeReplacements[code] ?? Replacement('', '', '');
@@ -13784,7 +13857,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 // Search bar beside team name
                 Expanded(
                   child: Container(
-                    height: 20,
+                    height: 23,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       border: Border.all(color: Colors.grey.shade400),
@@ -15068,7 +15141,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             });
                           },
                           visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                         ),
                       );
                     }),
