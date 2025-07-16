@@ -2227,7 +2227,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -2282,7 +2282,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             label: SizedBox(
                                               width: _fixedChipWidth,
                                               child: Align(
-                                                alignment: Alignment.centerLeft,
+                                                alignment: Alignment.center,
                                                 child: Row(
                                                   mainAxisSize:
                                                       MainAxisSize.min,
@@ -2819,7 +2819,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -2887,7 +2887,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   label: SizedBox(
                                     width: _fixedChipWidth,
                                     child: Align(
-                                      alignment: Alignment.centerLeft,
+                                      alignment: Alignment.center,
                                       child: Text(
                                         label,
                                         style: const TextStyle(fontSize: 12),
@@ -2981,7 +2981,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -3038,7 +3038,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   label: SizedBox(
                                     width: _fixedChipWidth,
                                     child: Align(
-                                      alignment: Alignment.centerLeft,
+                                      alignment: Alignment.center,
                                       child: Text(
                                         label,
                                         style: const TextStyle(fontSize: 12),
@@ -3138,7 +3138,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             label: SizedBox(
                               width: _fixedChipWidth,
                               child: const Align(
-                                alignment: Alignment.centerLeft,
+                                alignment: Alignment.center,
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -3193,7 +3193,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Text(
                                     'Looks on',
                                     style: TextStyle(fontSize: 12),
@@ -3241,7 +3241,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -3279,7 +3279,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         label: SizedBox(
                                           width: _fixedChipWidth,
                                           child: Align(
-                                            alignment: Alignment.centerLeft,
+                                            alignment: Alignment.center,
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
@@ -3336,7 +3336,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           label: SizedBox(
                                             width: _fixedChipWidth,
                                             child: Align(
-                                              alignment: Alignment.centerLeft,
+                                              alignment: Alignment.center,
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
@@ -3444,7 +3444,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -3489,7 +3489,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             label: SizedBox(
                                               width: _fixedChipWidth,
                                               child: Align(
-                                                alignment: Alignment.centerLeft,
+                                                alignment: Alignment.center,
                                                 child: Row(
                                                   mainAxisSize:
                                                       MainAxisSize.min,
@@ -3554,7 +3554,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           label: SizedBox(
                                             width: _fixedChipWidth,
                                             child: Align(
-                                              alignment: Alignment.centerLeft,
+                                              alignment: Alignment.center,
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
@@ -3616,7 +3616,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       label: SizedBox(
                                         width: _fixedChipWidth,
                                         child: Align(
-                                          alignment: Alignment.centerLeft,
+                                          alignment: Alignment.center,
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
@@ -3672,7 +3672,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         label: SizedBox(
                                           width: _fixedChipWidth,
                                           child: Align(
-                                            alignment: Alignment.centerLeft,
+                                            alignment: Alignment.center,
                                             child: Text(
                                               _showStealAgainstPlayer
                                                   ? 'Against Player'
@@ -3727,7 +3727,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             label: SizedBox(
                               width: _fixedChipWidth,
                               child: const Align(
-                                alignment: Alignment.centerLeft,
+                                alignment: Alignment.center,
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -3796,7 +3796,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   label: SizedBox(
                                     width: _fixedChipWidth,
                                     child: Align(
-                                      alignment: Alignment.centerLeft,
+                                      alignment: Alignment.center,
                                       child: Text(
                                         label,
                                         style: const TextStyle(
@@ -3852,7 +3852,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             label: SizedBox(
                               width: _fixedChipWidth,
                               child: const Align(
-                                alignment: Alignment.centerLeft,
+                                alignment: Alignment.center,
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -3903,7 +3903,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             label: SizedBox(
                               width: _fixedChipWidth,
                               child: const Align(
-                                alignment: Alignment.centerLeft,
+                                alignment: Alignment.center,
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -3960,7 +3960,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               label: SizedBox(
                                 width: _fixedChipWidth,
                                 child: const Align(
-                                  alignment: Alignment.centerLeft,
+                                  alignment: Alignment.center,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -4004,7 +4004,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           label: SizedBox(
                                             width: 200.0,
                                             child: Align(
-                                              alignment: Alignment.centerLeft,
+                                              alignment: Alignment.center,
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
@@ -4121,7 +4121,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         label: SizedBox(
                           width: _fixedChipWidth,
                           child: Align(
-                            alignment: Alignment.centerLeft,
+                            alignment: Alignment.center,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -4194,7 +4194,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               label: SizedBox(
                 width: _fixedChipWidth,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: Alignment.center,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -4226,7 +4226,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             label: SizedBox(
               width: _fixedChipWidth,
               child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.center,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -5657,7 +5657,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               vertical: 10,
                             ),
                             child: Align(
-                              alignment: Alignment.centerLeft,
+                              alignment: Alignment.center,
                               child: Text(
                                 displayText,
                                 style: TextStyle(
@@ -12349,7 +12349,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                               label: SizedBox(
                                                                                                 width: _fixedChipWidth / 2,
                                                                                                 child: Align(
-                                                                                                  alignment: Alignment.centerLeft,
+                                                                                                  alignment: Alignment.center,
                                                                                                   child: Row(
                                                                                                     mainAxisSize: MainAxisSize.min,
                                                                                                     children: [
@@ -12772,7 +12772,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         child:
                                                                             Align(
                                                                           alignment:
-                                                                              Alignment.centerLeft,
+                                                                              Alignment.center,
                                                                           child:
                                                                               Row(
                                                                             mainAxisSize:
@@ -13770,7 +13770,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Column(
                   children: [
                     Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       child: SizedBox(
                         height: 30,
                         child: TextField(
@@ -14126,7 +14126,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           // Switch Team button below the row
           if (toggle)
             Align(
-              alignment: Alignment.centerLeft,
+              alignment: Alignment.center,
               child: Transform.translate(
                 offset: const Offset(
                   -8,
@@ -15332,7 +15332,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           label: SizedBox(
                             width: _fixedChipWidth,
                             child: Align(
-                              alignment: Alignment.centerLeft,
+                              alignment: Alignment.center,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
