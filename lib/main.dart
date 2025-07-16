@@ -950,6 +950,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Clear player selections
       selectedPlayers.clear();
       selectedOpponentPlayers.clear();
+      _playerSelectionOrder.clear();
 
       // Reset verb selection
       _selectedVerb = null;
@@ -5543,6 +5544,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
                                     selectedPlayers.isNotEmpty) {
+                                  // Remove home players from selection order
+                                  for (final playerCode in selectedPlayers) {
+                                    _removeFromSelectionOrder(playerCode);
+                                  }
                                   selectedPlayers.clear();
                                 }
                                 selectedPlayers.add(code);
@@ -5564,6 +5569,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
                                     selectedOpponentPlayers.isNotEmpty) {
+                                  // Remove opponent players from selection order
+                                  for (final playerCode
+                                      in selectedOpponentPlayers) {
+                                    _removeFromSelectionOrder(playerCode);
+                                  }
                                   selectedOpponentPlayers.clear();
                                 }
                                 selectedOpponentPlayers.add(code);
@@ -5693,6 +5703,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     setState(() {
       selectedPlayers.clear();
       selectedOpponentPlayers.clear(); // Clear opponent players too
+      _playerSelectionOrder.clear();
       _selectedVerb = null;
       selectedInning = null;
       celebrateWith.clear();
@@ -5778,8 +5789,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       setState(() {
         codeReplacements.removeWhere((key, _) => key.startsWith(prefix));
         if (isHomeTeam) {
+          // Remove home players from selection order
+          for (final playerCode in selectedPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
           selectedPlayers.clear();
         } else {
+          // Remove opponent players from selection order
+          for (final playerCode in selectedOpponentPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
           selectedOpponentPlayers.clear();
         }
         codeReplacements.addAll(newReplacements);
@@ -11086,200 +11105,270 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                 ),
                                               ),
                                               // Selected players display box
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
+                                              Builder(
+                                                builder: (context) {
+                                                  final mainPlayer =
+                                                      _getFirstSelectedPlayer();
+                                                  return Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
                                                         horizontal: 8,
                                                         vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade50,
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                        color: Colors
-                                                            .grey.shade300),
-                                                  ),
-                                                ),
-                                                child: SingleChildScrollView(
-                                                  scrollDirection:
-                                                      Axis.horizontal,
-                                                  child: Row(
-                                                    children: [
-                                                      // Home team selected players
-                                                      ...selectedPlayers
-                                                          .map((code) {
-                                                        final replacement =
-                                                            codeReplacements[
-                                                                code];
-                                                        if (replacement == null)
-                                                          return const SizedBox
-                                                              .shrink();
-                                                        return Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  right: 4.0),
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          Colors.grey.shade50,
+                                                      border: Border(
+                                                        bottom: BorderSide(
+                                                            color: Colors
+                                                                .grey.shade300),
+                                                      ),
+                                                    ),
+                                                    child:
+                                                        SingleChildScrollView(
+                                                      scrollDirection:
+                                                          Axis.horizontal,
+                                                      child: Row(
+                                                        children: [
+                                                          // Home team selected players
+                                                          ...selectedPlayers
+                                                              .map((code) {
+                                                            final replacement =
+                                                                codeReplacements[
+                                                                    code];
+                                                            if (replacement ==
+                                                                null)
+                                                              return const SizedBox
+                                                                  .shrink();
+                                                            final isMain =
+                                                                code ==
+                                                                    mainPlayer;
+                                                            return Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      right:
+                                                                          4.0),
+                                                              child: Container(
+                                                                padding: const EdgeInsets
                                                                     .symmetric(
                                                                     horizontal:
                                                                         6,
                                                                     vertical:
                                                                         2),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color: Colors.grey
-                                                                  .shade700,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          3),
-                                                              border: Border.all(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade600,
-                                                                  width: 1),
-                                                            ),
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                const Icon(
-                                                                    Icons.home,
-                                                                    size: 10,
-                                                                    color: Colors
-                                                                        .white),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                Text(
-                                                                  _getPlayerDisplayText(
-                                                                      replacement),
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                  ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: isMain
+                                                                      ? Colors
+                                                                          .blue
+                                                                      : Colors
+                                                                          .grey
+                                                                          .shade700,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              3),
+                                                                  border: Border.all(
+                                                                      color: isMain
+                                                                          ? Colors
+                                                                              .blue
+                                                                              .shade700
+                                                                          : Colors
+                                                                              .grey
+                                                                              .shade600,
+                                                                      width: 1),
                                                                 ),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(
-                                                                        () {
-                                                                      selectedPlayers
-                                                                          .remove(
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    if (isMain) ...[
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .star,
+                                                                          size:
+                                                                              12,
+                                                                          color:
+                                                                              Colors.white),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              2),
+                                                                    ] else ...[
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .home,
+                                                                          size:
+                                                                              10,
+                                                                          color:
+                                                                              Colors.white),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              4),
+                                                                    ],
+                                                                    Text(
+                                                                      _getPlayerDisplayText(
+                                                                          replacement),
+                                                                      style:
+                                                                          const TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        color: Colors
+                                                                            .white,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedPlayers
+                                                                              .remove(code);
+                                                                          _removeFromSelectionOrder(
                                                                               code);
-                                                                      _updateCaption();
-                                                                    });
-                                                                  },
-                                                                  child: const Icon(
-                                                                      Icons
-                                                                          .close,
-                                                                      size: 12,
-                                                                      color: Colors
-                                                                          .white),
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child: const Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              12,
+                                                                          color:
+                                                                              Colors.white),
+                                                                    ),
+                                                                  ],
                                                                 ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }).toList(),
-                                                      // Away team selected players
-                                                      ...selectedOpponentPlayers
-                                                          .map((code) {
-                                                        final replacement =
-                                                            codeReplacements[
-                                                                code];
-                                                        if (replacement == null)
-                                                          return const SizedBox
-                                                              .shrink();
-                                                        return Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  right: 4.0),
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
+                                                              ),
+                                                            );
+                                                          }).toList(),
+                                                          // Away team selected players
+                                                          ...selectedOpponentPlayers
+                                                              .map((code) {
+                                                            final replacement =
+                                                                codeReplacements[
+                                                                    code];
+                                                            if (replacement ==
+                                                                null)
+                                                              return const SizedBox
+                                                                  .shrink();
+                                                            final isMain =
+                                                                code ==
+                                                                    mainPlayer;
+                                                            return Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .only(
+                                                                      right:
+                                                                          4.0),
+                                                              child: Container(
+                                                                padding: const EdgeInsets
                                                                     .symmetric(
                                                                     horizontal:
                                                                         6,
                                                                     vertical:
                                                                         2),
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color:
-                                                                  Colors.white,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          3),
-                                                              border: Border.all(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade400,
-                                                                  width: 1),
-                                                            ),
-                                                            child: Row(
-                                                              mainAxisSize:
-                                                                  MainAxisSize
-                                                                      .min,
-                                                              children: [
-                                                                const Icon(
-                                                                    Icons
-                                                                        .flight_takeoff,
-                                                                    size: 10,
-                                                                    color: Colors
-                                                                        .black87),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                Text(
-                                                                  _getPlayerDisplayText(
-                                                                      replacement),
-                                                                  style:
-                                                                      const TextStyle(
-                                                                    fontSize:
-                                                                        10,
-                                                                    color: Colors
-                                                                        .black87,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                  ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: isMain
+                                                                      ? Colors
+                                                                          .blue
+                                                                      : Colors
+                                                                          .white,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              3),
+                                                                  border: Border.all(
+                                                                      color: isMain
+                                                                          ? Colors
+                                                                              .blue
+                                                                              .shade700
+                                                                          : Colors
+                                                                              .grey
+                                                                              .shade400,
+                                                                      width: 1),
                                                                 ),
-                                                                const SizedBox(
-                                                                    width: 4),
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(
-                                                                        () {
-                                                                      selectedOpponentPlayers
-                                                                          .remove(
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    if (isMain) ...[
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .star,
+                                                                          size:
+                                                                              12,
+                                                                          color:
+                                                                              Colors.white),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              2),
+                                                                    ] else ...[
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .flight_takeoff,
+                                                                          size:
+                                                                              10,
+                                                                          color:
+                                                                              Colors.black87),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              4),
+                                                                    ],
+                                                                    Text(
+                                                                      _getPlayerDisplayText(
+                                                                          replacement),
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        color: isMain
+                                                                            ? Colors.white
+                                                                            : Colors.black87,
+                                                                        fontWeight:
+                                                                            FontWeight.w500,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    GestureDetector(
+                                                                      onTap:
+                                                                          () {
+                                                                        setState(
+                                                                            () {
+                                                                          selectedOpponentPlayers
+                                                                              .remove(code);
+                                                                          _removeFromSelectionOrder(
                                                                               code);
-                                                                      _updateCaption();
-                                                                    });
-                                                                  },
-                                                                  child: const Icon(
-                                                                      Icons
-                                                                          .close,
-                                                                      size: 12,
-                                                                      color: Colors
-                                                                          .black54),
+                                                                          _updateCaption();
+                                                                        });
+                                                                      },
+                                                                      child: Icon(
+                                                                          Icons
+                                                                              .close,
+                                                                          size:
+                                                                              12,
+                                                                          color: isMain
+                                                                              ? Colors.white
+                                                                              : Colors.black54),
+                                                                    ),
+                                                                  ],
                                                                 ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }).toList(),
-                                                    ],
-                                                  ),
-                                                ),
+                                                              ),
+                                                            );
+                                                          }).toList(),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                               // Tab content
                                               SizedBox(
@@ -11407,8 +11496,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               setState(() {
                                                                                 if (isSelected) {
                                                                                   selectedOpponentPlayers.remove(code);
+                                                                                  _removeFromSelectionOrder(code);
                                                                                 } else {
                                                                                   selectedOpponentPlayers.add(code);
+                                                                                  _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
                                                                               });
@@ -11530,8 +11621,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               setState(() {
                                                                                 if (isSelected) {
                                                                                   selectedPlayers.remove(code);
+                                                                                  _removeFromSelectionOrder(code);
                                                                                 } else {
                                                                                   selectedPlayers.add(code);
+                                                                                  _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
                                                                               });
@@ -11688,8 +11781,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               setState(() {
                                                                                 if (isSelected) {
                                                                                   selectedPlayers.remove(code);
+                                                                                  _removeFromSelectionOrder(code);
                                                                                 } else {
                                                                                   selectedPlayers.add(code);
+                                                                                  _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
                                                                               });
@@ -11815,8 +11910,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               setState(() {
                                                                                 if (isSelected) {
                                                                                   selectedOpponentPlayers.remove(code);
+                                                                                  _removeFromSelectionOrder(code);
                                                                                 } else {
                                                                                   selectedOpponentPlayers.add(code);
+                                                                                  _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
                                                                               });
@@ -14338,6 +14435,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // When switching, clear all selections to avoid confusion.
                             selectedPlayers.clear();
                             selectedOpponentPlayers.clear();
+                            _playerSelectionOrder.clear();
                             _selectedVerb = null;
                             selectedInning = null;
                             celebrateWith.clear();
@@ -14469,6 +14567,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           'turns a double play') {
                                     // For solo verbs, replace the existing player instead of adding
                                     // But allow multiple players for double play
+                                    // Remove opponent players from selection order
+                                    for (final playerCode
+                                        in selectedOpponentPlayers) {
+                                      _removeFromSelectionOrder(playerCode);
+                                    }
                                     selectedOpponentPlayers.clear();
                                     selectedOpponentPlayers.add(code);
                                     // Force caption update for player replacement
@@ -15319,8 +15422,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         codeReplacements.addAll(newReplacements);
 
         if (isHomeTeam) {
+          // Remove home players from selection order
+          for (final playerCode in selectedPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
           selectedPlayers.clear();
         } else {
+          // Remove opponent players from selection order
+          for (final playerCode in selectedOpponentPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
           selectedOpponentPlayers.clear();
         }
         print('setState completed');
