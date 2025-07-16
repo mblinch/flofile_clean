@@ -289,7 +289,8 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
                       : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(4),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: widget.padding ??
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Center(
               child: DefaultTextStyle(
                 style: TextStyle(
@@ -304,7 +305,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
                               : Colors.white)
                           : Colors.black),
                 ),
-                child: widget.label,
+                child: Center(child: widget.label),
               ),
             ),
           ),
@@ -318,7 +319,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     with TickerProviderStateMixin {
   // At the top of _CaptionBuilderState:
   String selectedState = '';
-  final double _fixedChipWidth = 300.0;
+  final double _fixedChipWidth = 220.0;
   final double _dropdownWidth = 120.0;
 
   // Animation controllers for caption effects
@@ -2281,150 +2282,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           child: FlashingFilterChip(
                                             label: SizedBox(
                                               width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.center,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      label,
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                    // Add RBI options for all hit types when selected
-                                                    if ((label == 'Single' ||
-                                                            label == 'Double' ||
-                                                            label == 'Triple' ||
-                                                            label ==
-                                                                'Home Run') &&
-                                                        _selectedHitType ==
-                                                            label) ...[
-                                                      const SizedBox(width: 8),
-                                                      const Icon(
-                                                        Icons.arrow_forward,
-                                                        size: 10,
-                                                        color: Colors.grey,
-                                                      ),
-                                                      const SizedBox(width: 2),
-                                                      ...(label == 'Home Run'
-                                                              ? [
-                                                                  'Solo',
-                                                                  '2 Run',
-                                                                  '3 Run',
-                                                                  'GS'
-                                                                ]
-                                                              : [
-                                                                  '1 RBI',
-                                                                  '2 RBI',
-                                                                  '3 RBI'
-                                                                ])
-                                                          .asMap()
-                                                          .entries
-                                                          .map((entry) {
-                                                        final index = entry.key;
-                                                        final rbiLabel =
-                                                            entry.value;
-                                                        final rbiCount =
-                                                            label == 'Home Run'
-                                                                ? index
-                                                                : index + 1;
-                                                        return Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                            right: 2.0,
-                                                          ),
-                                                          child: MouseRegion(
-                                                            cursor:
-                                                                SystemMouseCursors
-                                                                    .click,
-                                                            child:
-                                                                GestureDetector(
-                                                              onTap: () {
-                                                                setState(() {
-                                                                  _selectedHitType =
-                                                                      label;
-                                                                  // Toggle RBI: if already selected, remove it; otherwise set it
-                                                                  if (_rbiCount ==
-                                                                          rbiCount &&
-                                                                      _selectedHitType ==
-                                                                          label) {
-                                                                    // Remove RBI
-                                                                    _rbiCount =
-                                                                        null;
-                                                                    _rbiCountByHit
-                                                                        .remove(
-                                                                            label);
-                                                                  } else {
-                                                                    // Set RBI
-                                                                    _rbiCount =
-                                                                        rbiCount;
-                                                                    _rbiCountByHit[
-                                                                            label] =
-                                                                        rbiCount;
-                                                                  }
-                                                                  _updateCaption();
-                                                                });
-                                                              },
-                                                              behavior:
-                                                                  HitTestBehavior
-                                                                      .opaque,
-                                                              child: Padding(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 3,
-                                                                  vertical: 1,
-                                                                ),
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    Container(
-                                                                      width: 4,
-                                                                      height: 4,
-                                                                      decoration: (_rbiCount == rbiCount &&
-                                                                              _selectedHitType == label)
-                                                                          ? const BoxDecoration(
-                                                                              color: Colors.black,
-                                                                              shape: BoxShape.circle,
-                                                                            )
-                                                                          : null,
-                                                                    ),
-                                                                    const SizedBox(
-                                                                      width: 1,
-                                                                    ),
-                                                                    Text(
-                                                                      rbiLabel,
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight: (_rbiCount == rbiCount &&
-                                                                                _selectedHitType == label)
-                                                                            ? FontWeight.w600
-                                                                            : FontWeight.normal,
-                                                                        color: Colors
-                                                                            .black,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }).toList(),
-                                                    ],
-                                                  ],
+                                              child: Text(
+                                                label,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.normal,
                                                 ),
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                             selected: _selectedHitType == label,
@@ -2464,7 +2329,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ),
                                       )
                                       .toList(),
-                                  // Add celebration checkbox when any hit type + RBI is selected
+                                  // Add RBI options for all hit types when selected
                                   if ((_selectedHitType == 'Single' ||
                                           _selectedHitType == 'Double' ||
                                           _selectedHitType == 'Triple' ||
@@ -2877,13 +2742,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: FlashingFilterChip(
                                   label: SizedBox(
                                     width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   selected: _selectedPriorAction == label,
@@ -3019,13 +2882,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: FlashingFilterChip(
                                   label: SizedBox(
                                     width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   selected: _selectedPostGameAction == label,
@@ -3170,6 +3031,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Text(
                                     'Looks on',
                                     style: TextStyle(fontSize: 12),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
                               ),
@@ -3243,25 +3105,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       FlashingFilterChip(
                                         label: SizedBox(
                                           width: _fixedChipWidth,
-                                          child: Align(
-                                            alignment: Alignment.center,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.max,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                const Text(
-                                                  'Turns a double play',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight:
-                                                        FontWeight.normal,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
+                                          child: const Text(
+                                            'Turns a double play',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.normal,
                                             ),
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
                                           ),
                                         ),
                                         selected: _selectedFieldingAction ==
@@ -3302,25 +3153,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: FlashingFilterChip(
                                           label: SizedBox(
                                             width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.center,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
+                                            child: Text(
+                                              label,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
                                               ),
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
                                             ),
                                           ),
                                           selected: _selectedFieldingAction ==
@@ -3450,24 +3290,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           child: FlashingFilterChip(
                                             label: SizedBox(
                                               width: _fixedChipWidth,
-                                              child: Align(
-                                                alignment: Alignment.center,
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      base,
-                                                      style: const TextStyle(
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.normal,
-                                                      ),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ],
+                                              child: Text(
+                                                base,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.normal,
                                                 ),
+                                                overflow: TextOverflow.ellipsis,
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                             selected: _selectedStealBase ==
@@ -3515,25 +3345,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: FlashingFilterChip(
                                           label: SizedBox(
                                             width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.center,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
+                                            child: Text(
+                                              label,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
                                               ),
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
                                             ),
                                           ),
                                           selected:
@@ -3579,25 +3398,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     child: FlashingFilterChip(
                                       label: SizedBox(
                                         width: _fixedChipWidth,
-                                        child: Align(
-                                          alignment: Alignment.center,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.max,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                _getBaseRunningActionLabel(
-                                                  _selectedBaseRunningAction!,
-                                                ),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.normal,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
+                                        child: Text(
+                                          _getBaseRunningActionLabel(
+                                            _selectedBaseRunningAction!,
                                           ),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.normal,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
                                         ),
                                       ),
                                       selected: true,
@@ -3637,18 +3447,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       child: FlashingFilterChip(
                                         label: SizedBox(
                                           width: _fixedChipWidth,
-                                          child: Align(
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              _showStealAgainstPlayer
-                                                  ? 'Against Player'
-                                                  : 'Against Team',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                                          child: Text(
+                                            _showStealAgainstPlayer
+                                                ? 'Against Player'
+                                                : 'Against Team',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.normal,
                                             ),
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
                                           ),
                                         ),
                                         selected: _showStealAgainstPlayer,
@@ -3754,16 +3562,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: FlashingFilterChip(
                                   label: SizedBox(
                                     width: _fixedChipWidth,
-                                    child: Align(
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        label,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
+                                    child: Text(
+                                      label,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.normal,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
                                     ),
                                   ),
                                   selected: _selectedBattingAction == label,
@@ -3810,22 +3616,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'At Bat',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              child: const Text(
+                                'At Bat',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
                               ),
                             ),
                             selected: _selectedVerb == 'At Bat',
@@ -3862,22 +3660,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           FlashingFilterChip(
                             label: SizedBox(
                               width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Bunt',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              child: const Text(
+                                'Bunt',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
                               ),
                             ),
                             selected: _selectedVerb == 'Bunt',
@@ -3957,25 +3747,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: FlashingFilterChip(
                                           label: SizedBox(
                                             width: _fixedChipWidth,
-                                            child: Align(
-                                              alignment: Alignment.center,
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.max,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    label,
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.normal,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ],
+                                            child: Text(
+                                              label,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal,
                                               ),
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
                                             ),
                                           ),
                                           selected:
@@ -4072,31 +3851,38 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      FlashingFilterChip(
-                        // Changed from InkWell/Container
-                        label: SizedBox(
-                          width: _fixedChipWidth,
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.max,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
+                      Container(
+                        width: _fixedChipWidth,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () => _onVerbSelected(verb),
+                            child: Container(
+                              width: _fixedChipWidth,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: _selectedVerb == verb
+                                    ? Colors.grey.shade500
+                                    : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Center(
+                                child: Text(
                                   _capitalize(verb),
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: _selectedVerb == verb
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: _selectedVerb == verb
+                                        ? Colors.white
+                                        : Colors.black,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                        labelPadding: EdgeInsets.zero,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        selected: _selectedVerb == verb,
-                        onSelected: (isSelected) => _onVerbSelected(verb),
                       ),
                       if (_selectedVerb == verb && verb != 'pitches') ...[
                         const SizedBox(width: 16.0),
@@ -4148,18 +3934,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             child: FlashingFilterChip(
               label: SizedBox(
                 width: _fixedChipWidth,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        hrDisplayLabels[type]!,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
+                child: Text(
+                  hrDisplayLabels[type]!,
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
               ),
               selected: _selectedHomeRunType == type,
@@ -4181,18 +3960,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           child: FlashingFilterChip(
             label: SizedBox(
               width: _fixedChipWidth,
-              child: Align(
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      hrDisplayLabels[_selectedHomeRunType!]!,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
+              child: Text(
+                hrDisplayLabels[_selectedHomeRunType!]!,
+                style: const TextStyle(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
             ),
             selected: true,
@@ -4223,15 +3995,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: FlashingFilterChip(
         label: SizedBox(
           width: _fixedChipWidth,
-          child: Center(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.normal,
-              ),
-              overflow: TextOverflow.ellipsis,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.normal,
             ),
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
         ),
         selected: _selectedFieldingAction == actionKey,
@@ -7801,47 +7572,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 const SizedBox(height: 24),
                 // Sixth row: Reset Caption
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      height: 24,
-                      child: Material(
-                        color: Colors.white,
-                        elevation: 2,
-                        shadowColor: Colors.grey.shade400,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          side: BorderSide(
-                              color: Colors.grey.shade400, width: 1.0),
-                        ),
-                        child: InkWell(
-                          onTap: _resetCaption,
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            child: Center(
-                              child: Text(
-                                'Reset Caption',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.normal,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Accent removal toggle
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -12269,9 +11999,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               ),
                                                                               // Verb box content
                                                                               Container(
-                                                                                padding: const EdgeInsets.all(
-                                                                                  5.0,
-                                                                                ),
+                                                                                padding: EdgeInsets.zero,
                                                                                 decoration: BoxDecoration(
                                                                                   border: Border.all(
                                                                                     color: Colors.grey.shade400,
@@ -12291,7 +12019,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     minHeight: 509,
                                                                                   ),
                                                                                   child: Column(
-                                                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                    crossAxisAlignment: CrossAxisAlignment.center,
                                                                                     children: [
                                                                                       ..._buildAllVerbsList(),
                                                                                       // Add the permanent Back button at the bottom
@@ -15171,6 +14899,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ).textTheme.bodyMedium?.color,
                         ),
                         overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                       ),
                     ),
                     const Icon(Icons.arrow_drop_down, size: 20),
@@ -15300,22 +15029,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         child: FlashingFilterChip(
                           label: SizedBox(
                             width: _fixedChipWidth,
-                            child: Align(
-                              alignment: Alignment.center,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.max,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.normal,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                            child: Text(
+                              '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.normal,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
                             ),
                           ),
                           selected: _rbiCount == rbi,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 class FlashingFilterChip extends StatefulWidget {
   final Widget label;
+  final double? width;
   final bool selected;
   final ValueChanged<bool>? onSelected;
   final VisualDensity? visualDensity;
@@ -15,6 +16,7 @@ class FlashingFilterChip extends StatefulWidget {
   const FlashingFilterChip({
     Key? key,
     required this.label,
+    this.width,
     required this.selected,
     this.onSelected,
     this.visualDensity,
@@ -90,6 +92,9 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
               : null,
           child: Container(
             height: 24,
+            width: widget.width,
+            alignment: Alignment.center,
+            padding: widget.padding ?? const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
               color: widget.disableColorChange
                   ? Colors.grey.shade200
@@ -98,23 +103,20 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
                       : Colors.grey.shade200),
               borderRadius: BorderRadius.circular(4),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Center(
-              child: DefaultTextStyle(
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight:
-                      widget.selected ? FontWeight.w600 : FontWeight.normal,
-                  color: widget.disableColorChange
-                      ? Colors.black
-                      : (widget.selected
-                          ? (widget.selectedColor != null
-                              ? Colors.black
-                              : Colors.white)
-                          : Colors.black),
-                ),
-                child: widget.label,
+            child: DefaultTextStyle(
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight:
+                    widget.selected ? FontWeight.w600 : FontWeight.normal,
+                color: widget.disableColorChange
+                    ? Colors.black
+                    : (widget.selected
+                        ? (widget.selectedColor != null
+                            ? Colors.black
+                            : Colors.white)
+                        : Colors.black),
               ),
+              child: widget.label,
             ),
           ),
         );
