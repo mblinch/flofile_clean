@@ -11175,16 +11175,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       MainAxisSize
                                                                           .min,
                                                                   children: [
-                                                                    const Icon(
-                                                                        Icons
-                                                                            .home,
-                                                                        size:
-                                                                            10,
-                                                                        color: Colors
-                                                                            .white),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            4),
                                                                     if (isMain) ...[
                                                                       const Icon(
                                                                           Icons
@@ -11197,6 +11187,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           width:
                                                                               2),
                                                                     ],
+                                                                    const Icon(
+                                                                        Icons
+                                                                            .home,
+                                                                        size:
+                                                                            10,
+                                                                        color: Colors
+                                                                            .white),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
                                                                     Text(
                                                                       _getPlayerDisplayText(
                                                                           replacement),
@@ -11283,16 +11283,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       MainAxisSize
                                                                           .min,
                                                                   children: [
-                                                                    const Icon(
-                                                                        Icons
-                                                                            .flight_takeoff,
-                                                                        size:
-                                                                            10,
-                                                                        color: Colors
-                                                                            .black87),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            4),
                                                                     if (isMain) ...[
                                                                       const Icon(
                                                                           Icons
@@ -11305,6 +11295,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           width:
                                                                               2),
                                                                     ],
+                                                                    const Icon(
+                                                                        Icons
+                                                                            .flight_takeoff,
+                                                                        size:
+                                                                            10,
+                                                                        color: Colors
+                                                                            .black87),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
                                                                     Text(
                                                                       _getPlayerDisplayText(
                                                                           replacement),
