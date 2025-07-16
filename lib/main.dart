@@ -6849,7 +6849,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                       deleteIcon: Icon(
                                         Icons.close,
-                                        size: 10,
+                                        size: 12,
                                         color: isAway
                                             ? Colors.red.shade600
                                             : Colors.blue.shade600,
@@ -6884,7 +6884,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       ),
                                       deleteIcon: Icon(
                                         Icons.close,
-                                        size: 10,
+                                        size: 12,
                                         color: isAway
                                             ? Colors.red.shade600
                                             : Colors.blue.shade600,
@@ -10974,13 +10974,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             children: [
                                                                               Icon(
                                                                                 Icons.arrow_back,
-                                                                                size: 10,
+                                                                                size: 12,
                                                                                 color: Colors.black,
                                                                               ),
                                                                               const SizedBox(height: 1),
                                                                               Icon(
                                                                                 Icons.arrow_forward,
-                                                                                size: 10,
+                                                                                size: 12,
                                                                                 color: Colors.black,
                                                                               ),
                                                                             ],
@@ -11180,7 +11180,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           Icons
                                                                               .star,
                                                                           size:
-                                                                              12,
+                                                                              14,
                                                                           color:
                                                                               Colors.orange),
                                                                       const SizedBox(
@@ -11288,7 +11288,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           Icons
                                                                               .star,
                                                                           size:
-                                                                              12,
+                                                                              14,
                                                                           color:
                                                                               Colors.orange),
                                                                       const SizedBox(
@@ -11503,7 +11503,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   if (isSelected && code == _getFirstSelectedPlayer()) ...[
                                                                                     const Icon(
                                                                                       Icons.star,
-                                                                                      size: 10,
+                                                                                      size: 12,
                                                                                       color: Colors.orange,
                                                                                     ),
                                                                                     const SizedBox(width: 2),
@@ -11641,7 +11641,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   if (isSelected && code == _getFirstSelectedPlayer()) ...[
                                                                                     const Icon(
                                                                                       Icons.star,
-                                                                                      size: 10,
+                                                                                      size: 12,
                                                                                       color: Colors.orange,
                                                                                     ),
                                                                                     const SizedBox(width: 2),
@@ -11817,7 +11817,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     if (isSelected && code == _getFirstSelectedPlayer()) ...[
                                                                                       const Icon(
                                                                                         Icons.star,
-                                                                                        size: 10,
+                                                                                        size: 12,
                                                                                         color: Colors.orange,
                                                                                       ),
                                                                                       const SizedBox(width: 2),
@@ -11960,7 +11960,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     if (isSelected && code == _getFirstSelectedPlayer()) ...[
                                                                                       const Icon(
                                                                                         Icons.star,
-                                                                                        size: 10,
+                                                                                        size: 12,
                                                                                         color: Colors.orange,
                                                                                       ),
                                                                                       const SizedBox(width: 2),
@@ -13656,10 +13656,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         // Home/Away symbol
                         if (label == 'Home Team')
                           Icon(Icons.home,
-                              size: 10, color: Colors.grey.shade700),
+                              size: 12, color: Colors.grey.shade700),
                         if (label == 'Away Team')
                           Icon(Icons.flight_takeoff,
-                              size: 10, color: Colors.grey.shade700),
+                              size: 12, color: Colors.grey.shade700),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
@@ -13672,7 +13672,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ),
                         ),
                         if (_favoriteTeams.contains(item))
-                          const Icon(Icons.star, size: 10, color: Colors.amber),
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
                       ],
                     ),
                   ),
@@ -14404,7 +14404,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         const Padding(
                           padding: EdgeInsets.only(left: 4.0),
                           child:
-                              Icon(Icons.search, size: 10, color: Colors.grey),
+                              Icon(Icons.search, size: 12, color: Colors.grey),
                         ),
                         Expanded(
                           child: TextField(
