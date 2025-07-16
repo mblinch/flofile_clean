@@ -9350,12 +9350,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final numberPart = fullName.split('#')[1].trim();
       final parts = namePart.split(' ');
       final lastName = parts.length > 1 ? parts.last : namePart;
-      return '#$numberPart $lastName';
+      return '$lastName #$numberPart';
     } else {
       // If no number in short name, use the number from jerseyNumber field
       final parts = fullName.split(' ');
       final lastName = parts.length > 1 ? parts.last : fullName;
-      return number.isNotEmpty ? '#$number $lastName' : lastName;
+      return number.isNotEmpty ? '$lastName #$number' : lastName;
     }
   }
 
