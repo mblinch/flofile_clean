@@ -4028,7 +4028,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         ),
                                         child: FlashingFilterChip(
                                           label: SizedBox(
-                                            width: 200.0,
+                                            width: _fixedChipWidth,
                                             child: Align(
                                               alignment: Alignment.center,
                                               child: Row(
@@ -4097,7 +4097,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: SizedBox(
-                                    width: 200.0,
+                                    width: _fixedChipWidth,
                                     child: TextField(
                                       controller: _customCelebrationController,
                                       decoration: const InputDecoration(
