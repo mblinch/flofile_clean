@@ -8449,9 +8449,34 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
-      final playersString = _combinePlayersWithSingleTeam(
-        activePlayers.toList(),
-      );
+
+      // Check if there are players from the other team to include
+      final otherTeamPlayers = activePlayers == selectedPlayers
+          ? selectedOpponentPlayers
+          : selectedPlayers;
+
+      String playersString;
+      bool hasMultiplePlayers = false;
+      if (otherTeamPlayers.isNotEmpty) {
+        // Both teams have players - combine them
+        final otherTeamString = _combinePlayersWithSingleTeam(
+          otherTeamPlayers.toList(),
+        );
+        final mainTeamString = _combinePlayersWithSingleTeam(
+          activePlayers.toList(),
+        );
+        playersString = "$mainTeamString and $otherTeamString";
+        hasMultiplePlayers = true;
+        print(
+            'DEBUG: Hit - Both teams included - main: $mainTeamString, other: $otherTeamString');
+      } else {
+        // Only one team has players
+        playersString = _combinePlayersWithSingleTeam(
+          activePlayers.toList(),
+        );
+        hasMultiplePlayers = activePlayers.length > 1;
+        print('DEBUG: Hit - Single team only: $playersString');
+      }
 
       // 1. Determine the detailed hit phrase.
       String hitPhrase = '';
@@ -8602,29 +8627,44 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         coreActionPart = "$playersString hits a walk-off $hitPhrase";
       } else if (_isBatterRunning == true) {
         if (_selectedHitType == 'Home Run') {
-          coreActionPart = "$playersString rounds the bases on his $hitPhrase";
-        } else if (_selectedHitType == 'Single') {
+          final verb = hasMultiplePlayers ? "round" : "rounds";
+          final pronoun = hasMultiplePlayers ? "their" : "his";
           coreActionPart =
-              "$playersString runs to first base on his $hitPhrase";
+              "$playersString $verb the bases on $pronoun $hitPhrase";
+        } else if (_selectedHitType == 'Single') {
+          final verb = hasMultiplePlayers ? "run" : "runs";
+          final pronoun = hasMultiplePlayers ? "their" : "his";
+          coreActionPart =
+              "$playersString $verb to first base on $pronoun $hitPhrase";
         } else if (_selectedHitType == 'Double') {
           if (_isSliding && _isOut) {
+            final verb = hasMultiplePlayers ? "are" : "is";
             coreActionPart =
-                "$playersString is out trying to stretch a single at second base";
+                "$playersString $verb out trying to stretch a single at second base";
           } else if (_isSliding) {
+            final pronoun = hasMultiplePlayers ? "their" : "his";
             coreActionPart =
-                "$playersString slides into second base on his $hitPhrase";
+                "$playersString slides into second base on $pronoun $hitPhrase";
           } else {
-            coreActionPart = "$playersString runs the bases on his $hitPhrase";
+            final verb = hasMultiplePlayers ? "run" : "runs";
+            final pronoun = hasMultiplePlayers ? "their" : "his";
+            coreActionPart =
+                "$playersString $verb the bases on $pronoun $hitPhrase";
           }
         } else if (_selectedHitType == 'Triple') {
           if (_isSliding && _isOut) {
+            final verb = hasMultiplePlayers ? "are" : "is";
             coreActionPart =
-                "$playersString is out trying to stretch a double at third base";
+                "$playersString $verb out trying to stretch a double at third base";
           } else if (_isSliding) {
+            final pronoun = hasMultiplePlayers ? "their" : "his";
             coreActionPart =
-                "$playersString slides into third base on his $hitPhrase";
+                "$playersString slides into third base on $pronoun $hitPhrase";
           } else {
-            coreActionPart = "$playersString runs the bases on his $hitPhrase";
+            final verb = hasMultiplePlayers ? "run" : "runs";
+            final pronoun = hasMultiplePlayers ? "their" : "his";
+            coreActionPart =
+                "$playersString $verb the bases on $pronoun $hitPhrase";
           }
         } else {
           coreActionPart = "$playersString runs the bases on his $hitPhrase";
@@ -9230,7 +9270,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (verbReplacement == null) return; // Should not happen
 
-      // Since all remaining verbs are solo actions, the logic is simplified.
+      // Handle both teams' players in the caption
       if (activePlayers.isNotEmpty) {
         print(
           'DEBUG: About to call _combinePlayersWithSingleTeam with: ${activePlayers.toList()}',
@@ -9239,8 +9279,28 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           activePlayers.toList(),
         );
         print('DEBUG: _combinePlayersWithSingleTeam returned: $playersString');
-        mainCaptionPart =
-            "$playersString ${verbReplacement.full} $opponentTeamName";
+
+        // Check if there are players from the other team to include
+        final otherTeamPlayers = activePlayers == selectedPlayers
+            ? selectedOpponentPlayers
+            : selectedPlayers;
+
+        if (otherTeamPlayers.isNotEmpty) {
+          // Both teams have players - include both in the caption
+          final otherTeamString = _combinePlayersWithSingleTeam(
+            otherTeamPlayers.toList(),
+          );
+          mainCaptionPart =
+              "$playersString and $otherTeamString ${verbReplacement.full} $opponentTeamName";
+          print(
+              'DEBUG: Both teams included - main player: $playersString, other player: $otherTeamString');
+        } else {
+          // Only one team has players
+          mainCaptionPart =
+              "$playersString ${verbReplacement.full} $opponentTeamName";
+          print('DEBUG: Single team only: $playersString');
+        }
+
         print('DEBUG: Generated caption part: $mainCaptionPart');
         print('DEBUG: playersString: $playersString');
         print('DEBUG: verbReplacement.full: ${verbReplacement.full}');
