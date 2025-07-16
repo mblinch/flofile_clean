@@ -2297,7 +2297,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 'Single') ||
                                                         (label == 'Double' &&
                                                             _selectedHitType ==
-                                                                'Double')
+                                                                'Double') ||
+                                                        (label == 'Triple' &&
+                                                            _selectedHitType ==
+                                                                'Triple') ||
+                                                        (label == 'Home Run' &&
+                                                            _selectedHitType ==
+                                                                'Home Run')
                                                     ? MainAxisAlignment.start
                                                     : MainAxisAlignment.center,
                                             children: [
@@ -2308,7 +2314,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   'Single') ||
                                                           (label == 'Double' &&
                                                               _selectedHitType ==
-                                                                  'Double')
+                                                                  'Double') ||
+                                                          (label == 'Triple' &&
+                                                              _selectedHitType ==
+                                                                  'Triple') ||
+                                                          (label ==
+                                                                  'Home Run' &&
+                                                              _selectedHitType ==
+                                                                  'Home Run')
                                                       ? 80.0
                                                       : _fixedChipWidth,
                                                   child: Text(
@@ -2332,8 +2345,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                     if (isSelected) {
                                                       _selectedHitType = label;
                                                       if (label != 'Home Run') {
-                                                        // For Single, don't override RBI if already selected
-                                                        if (label == 'Single' &&
+                                                        // For Single, Double, Triple - don't override RBI if already selected
+                                                        if ((label ==
+                                                                    'Single' ||
+                                                                label ==
+                                                                    'Double' ||
+                                                                label ==
+                                                                    'Triple') &&
                                                             _rbiCount != null) {
                                                           // Keep existing RBI selection
                                                         } else {
@@ -2347,9 +2365,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         _rbiCount = null;
                                                       }
                                                     } else {
-                                                      // Deselecting - clear the hit type and RBI
+                                                      // Deselecting - clear the hit type, RBI, and Optional section buttons
                                                       _selectedHitType = null;
                                                       _rbiCount = null;
+                                                      _isSoloCelebration =
+                                                          false;
+                                                      _isBatterRunning = false;
+                                                      _isSliding = false;
+                                                      _isOut = false;
+                                                      celebrateWith.clear();
+                                                      celebrateAgainst.clear();
                                                     }
                                                     _updateCaption();
                                                   });
@@ -2362,13 +2387,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         vertical: 2),
                                                 key: UniqueKey(),
                                               ),
-                                              // Show RBI options inline for Single and Double
-                                              if ((label == 'Single' &&
-                                                      _selectedHitType ==
-                                                          'Single') ||
+                                              // Show RBI options inline for Single, Double, and Triple
+                                              if ((label == 'Single' && _selectedHitType == 'Single') ||
                                                   (label == 'Double' &&
                                                       _selectedHitType ==
-                                                          'Double')) ...[
+                                                          'Double') ||
+                                                  (label == 'Triple' &&
+                                                      _selectedHitType ==
+                                                          'Triple')) ...[
                                                 const SizedBox(width: 8),
                                                 ...([1, 2, 3])
                                                     .map((rbi) => Padding(
@@ -2414,6 +2440,80 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         : FontWeight
                                                                             .normal,
                                                                     color: _rbiCount == rbi
+                                                                        ? Colors
+                                                                            .grey
+                                                                            .shade800
+                                                                        : Colors
+                                                                            .grey
+                                                                            .shade600,
+                                                                    decoration:
+                                                                        TextDecoration
+                                                                            .none,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ))
+                                                    .toList(),
+                                              ],
+                                              // Show Home Run options inline when Home Run is selected
+                                              if (label == 'Home Run' &&
+                                                  _selectedHitType ==
+                                                      'Home Run') ...[
+                                                const SizedBox(width: 8),
+                                                ...([
+                                                  'solo',
+                                                  'two-run',
+                                                  'three-run',
+                                                  'grand slam'
+                                                ])
+                                                    .map((type) => Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                                  right: 8.0),
+                                                          child:
+                                                              GestureDetector(
+                                                            onTap: () {
+                                                              setState(() {
+                                                                // Toggle Home Run type selection - if already selected, clear it
+                                                                if (_selectedHomeRunType ==
+                                                                    type) {
+                                                                  _selectedHomeRunType =
+                                                                      null;
+                                                                } else {
+                                                                  _selectedHomeRunType =
+                                                                      type;
+                                                                }
+                                                                _updateCaption();
+                                                              });
+                                                            },
+                                                            child: Container(
+                                                              height:
+                                                                  14, // Fixed height to prevent layout shift
+                                                              child: Center(
+                                                                child: Text(
+                                                                  type == 'solo'
+                                                                      ? 'Solo'
+                                                                      : type ==
+                                                                              'two-run'
+                                                                          ? '2-Run'
+                                                                          : type == 'three-run'
+                                                                              ? '3-Run'
+                                                                              : 'GS',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        10,
+                                                                    fontWeight: _selectedHomeRunType ==
+                                                                            type
+                                                                        ? FontWeight
+                                                                            .bold
+                                                                        : FontWeight
+                                                                            .normal,
+                                                                    color: _selectedHomeRunType ==
+                                                                            type
                                                                         ? Colors
                                                                             .grey
                                                                             .shade800
@@ -2644,8 +2744,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ],
                         ),
                       ),
-                      // Slides button (not for singles)
-                      if (_selectedHitType != 'Single') ...[
+                      // Slides button (not for singles or home runs)
+                      if (_selectedHitType != 'Single' &&
+                          _selectedHitType != 'Home Run') ...[
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
                           child: Row(
@@ -4044,9 +4145,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   List<Widget> _buildHomeRunOptions() {
     final hrDisplayLabels = {
       'solo': '1 Run HR',
-      'two-run': '2 Run HR',
-      'three-run': '3 Run HR',
-      'grand slam': 'Grand Slam',
+      'two-run': 'Two Run',
+      'three-run': 'Three Run',
+      'grand slam': 'GS',
     };
     return [
       if (_selectedHomeRunType == null) ...[
