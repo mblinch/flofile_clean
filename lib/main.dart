@@ -2291,17 +2291,24 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             bottom: 8.0,
                                           ),
                                           child: Row(
-                                            mainAxisAlignment: label ==
-                                                        'Single' &&
-                                                    _selectedHitType == 'Single'
-                                                ? MainAxisAlignment.start
-                                                : MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                (label == 'Single' &&
+                                                            _selectedHitType ==
+                                                                'Single') ||
+                                                        (label == 'Double' &&
+                                                            _selectedHitType ==
+                                                                'Double')
+                                                    ? MainAxisAlignment.start
+                                                    : MainAxisAlignment.center,
                                             children: [
                                               FlashingFilterChip(
                                                 label: SizedBox(
-                                                  width: label == 'Single' &&
-                                                          _selectedHitType ==
-                                                              'Single'
+                                                  width: (label == 'Single' &&
+                                                              _selectedHitType ==
+                                                                  'Single') ||
+                                                          (label == 'Double' &&
+                                                              _selectedHitType ==
+                                                                  'Double')
                                                       ? 80.0
                                                       : _fixedChipWidth,
                                                   child: Text(
@@ -2355,10 +2362,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                         vertical: 2),
                                                 key: UniqueKey(),
                                               ),
-                                              // Show RBI options inline for Single only
-                                              if (label == 'Single' &&
-                                                  _selectedHitType ==
-                                                      'Single') ...[
+                                              // Show RBI options inline for Single and Double
+                                              if ((label == 'Single' &&
+                                                      _selectedHitType ==
+                                                          'Single') ||
+                                                  (label == 'Double' &&
+                                                      _selectedHitType ==
+                                                          'Double')) ...[
                                                 const SizedBox(width: 8),
                                                 ...([1, 2, 3])
                                                     .map((rbi) => Padding(
@@ -2377,12 +2387,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       null;
                                                                   _rbiCountByHit
                                                                       .remove(
-                                                                          'Single');
+                                                                          label);
                                                                 } else {
                                                                   _rbiCount =
                                                                       rbi;
                                                                   _rbiCountByHit[
-                                                                          'Single'] =
+                                                                          label] =
                                                                       rbi;
                                                                 }
                                                                 _updateCaption();
@@ -2432,143 +2442,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       _selectedHitType == 'Triple' ||
                                       _selectedHitType == 'Home Run')) ...[
                                     const SizedBox(height: 4),
-                                    // Add sliding checkbox (not for singles)
-                                    if (_selectedHitType != 'Single') ...[
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: Row(
-                                          children: [
-                                            Transform.scale(
-                                              scale: 0.6,
-                                              child: Checkbox(
-                                                value: _isSliding,
-                                                onChanged: (bool? value) {
-                                                  setState(() {
-                                                    _isSliding = value ?? false;
-                                                    // Uncheck other options when this one is selected
-                                                    if (_isSliding) {
-                                                      _isSoloCelebration =
-                                                          false;
-                                                      _isBatterRunning = false;
-                                                    }
-                                                    _updateCaption();
-                                                  });
-                                                },
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                              ),
-                                            ),
-                                            Transform.translate(
-                                              offset: const Offset(-4, 0),
-                                              child: const Text(
-                                                'Slides into base',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.normal,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    // Add sliding opponent option when sliding is checked (not for singles)
-                                    if (_isSliding == true &&
-                                        _selectedHitType != 'Single') ...[
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: Row(
-                                          children: [
-                                            const SizedBox(width: 20),
-                                            MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () =>
-                                                    _showSlidingOpponentDialog(),
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: celebrateAgainst
-                                                            .isNotEmpty
-                                                        ? Colors.orange.shade50
-                                                        : Colors.grey.shade100,
-                                                    border: Border.all(
-                                                      color: celebrateAgainst
-                                                              .isNotEmpty
-                                                          ? Colors
-                                                              .orange.shade300
-                                                          : Colors
-                                                              .grey.shade300,
-                                                      width: 1,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            2),
-                                                  ),
-                                                  child: Text(
-                                                    'Sliding against opponent',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: celebrateAgainst
-                                                              .isNotEmpty
-                                                          ? Colors
-                                                              .orange.shade700
-                                                          : Colors
-                                                              .grey.shade600,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    // Add out option when sliding is checked (not for singles)
-                                    if (_isSliding == true &&
-                                        _selectedHitType != 'Single') ...[
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8.0),
-                                        child: Row(
-                                          children: [
-                                            const SizedBox(width: 20),
-                                            Transform.scale(
-                                              scale: 0.6,
-                                              child: Checkbox(
-                                                value: _isOut,
-                                                onChanged: (bool? value) {
-                                                  setState(() {
-                                                    _isOut = value ?? false;
-                                                    _updateCaption();
-                                                  });
-                                                },
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                              ),
-                                            ),
-                                            Transform.translate(
-                                              offset: const Offset(-4, 0),
-                                              child: const Text(
-                                                'Out',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.normal,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
                                   ],
                                 ],
                               ),
@@ -2771,6 +2644,121 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           ],
                         ),
                       ),
+                      // Slides button (not for singles)
+                      if (_selectedHitType != 'Single') ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _isSliding = !_isSliding;
+                                    // Uncheck other options when this one is selected
+                                    if (_isSliding) {
+                                      _isSoloCelebration = false;
+                                      _isBatterRunning = false;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                child: Container(
+                                  width: 80, // Fixed width for consistency
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _isSliding
+                                        ? Colors.grey.shade200
+                                        : Colors.grey.shade100,
+                                    border: Border.all(
+                                      color: _isSliding
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade300,
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Slides',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.normal,
+                                      color: _isSliding
+                                          ? Colors.grey.shade800
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Show out checkbox when Slides is checked
+                              if (_isSliding) ...[
+                                const SizedBox(width: 4),
+                                Transform.scale(
+                                  scale: 0.6,
+                                  child: Checkbox(
+                                    value: _isOut,
+                                    onChanged: (bool? value) {
+                                      setState(() {
+                                        _isOut = value ?? false;
+                                        _updateCaption();
+                                      });
+                                    },
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                                Transform.translate(
+                                  offset: const Offset(-4, 0),
+                                  child: const Text(
+                                    'Out',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              // Show sliding against opponent option when Slides is checked
+                              if (_isSliding) ...[
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () => _showSlidingOpponentDialog(),
+                                  child: Container(
+                                    width: 70, // Fixed width for consistency
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: celebrateAgainst.isNotEmpty
+                                          ? Colors.grey.shade200
+                                          : Colors.grey.shade100,
+                                      border: Border.all(
+                                        color: celebrateAgainst.isNotEmpty
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade300,
+                                        width: 1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Against',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.normal,
+                                        color: celebrateAgainst.isNotEmpty
+                                            ? Colors.grey.shade800
+                                            : Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                 ),
