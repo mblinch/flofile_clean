@@ -2843,9 +2843,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
-                              labelPadding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
+                              labelPadding: EdgeInsets.zero,
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               selected: _selectedVerb == 'Prior to Game',
@@ -3006,9 +3004,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
-                              labelPadding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                              ),
+                              labelPadding: EdgeInsets.zero,
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               selected: _selectedVerb == 'Post Game',
@@ -3164,9 +3160,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
-                            labelPadding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                            ),
+                            labelPadding: EdgeInsets.zero,
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             selected: _selectedVerb == 'Portrait',
@@ -4163,9 +4157,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ),
                         visualDensity: VisualDensity.compact,
                         padding: EdgeInsets.zero,
-                        labelPadding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                        ), // Consistent padding
+                        labelPadding: EdgeInsets.zero,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         selected: _selectedVerb == verb,
                         onSelected: (isSelected) => _onVerbSelected(verb),
