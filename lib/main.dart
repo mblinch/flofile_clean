@@ -2985,22 +2985,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Post Game',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              label: const Text(
+                                'Post Game',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
