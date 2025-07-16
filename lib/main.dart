@@ -11140,557 +11140,513 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
                                   const SizedBox(height: 5),
                                   // Main horizontal layout: Left side (player picker/verbs) and Right side (metadata only)
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
-                                      SizedBox(
-                                        width: 413,
-                                        height: 550,
-                                        child: DefaultTabController(
-                                          length: 1,
-                                          child: Column(
-                                            children: [
-                                              // Tab bar
-                                              Container(
-                                                height: 30,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade200,
-                                                  borderRadius:
-                                                      const BorderRadius.only(
-                                                    topLeft: Radius.circular(4),
-                                                    topRight: Radius.circular(
-                                                      4,
-                                                    ),
-                                                  ),
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                      color:
-                                                          Colors.grey.shade300,
-                                                    ),
-                                                  ),
-                                                ),
-                                                child: TabBar(
-                                                  labelColor: Colors.black,
-                                                  unselectedLabelColor:
-                                                      Colors.grey,
-                                                  indicatorColor: Colors.blue,
-                                                  labelStyle: TextStyle(
-                                                    fontSize: 11,
-                                                  ),
-                                                  unselectedLabelStyle:
-                                                      TextStyle(
-                                                    fontSize: 11,
-                                                  ),
-                                                  indicatorWeight: 2,
-                                                  isScrollable: false,
-                                                  labelPadding: EdgeInsets.zero,
-                                                  tabs: [
-                                                    Tab(
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          Icon(
-                                                            Icons.person_search,
-                                                            size: 12,
-                                                            color: Colors
-                                                                .grey.shade700,
-                                                          ),
-                                                          SizedBox(width: 4),
-                                                          Text('PLAYERS'),
-                                                        ],
+                                  Visibility(
+                                    visible:
+                                        false, // Hide duplicate player picker section
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // LEFT SIDE: Tabbed interface (player picker, verbs, etc.)
+                                        SizedBox(
+                                          width: 413,
+                                          height: 550,
+                                          child: DefaultTabController(
+                                            length: 1,
+                                            child: Column(
+                                              children: [
+                                                // Tab bar
+                                                Container(
+                                                  height: 30,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey.shade200,
+                                                    borderRadius:
+                                                        const BorderRadius.only(
+                                                      topLeft:
+                                                          Radius.circular(4),
+                                                      topRight: Radius.circular(
+                                                        4,
                                                       ),
                                                     ),
-                                                  ],
-                                                ),
-                                              ),
-                                              // Tab content
-                                              Expanded(
-                                                child: TabBarView(
-                                                  children: [
-                                                    // Player Picker Tab
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                        top: 6,
-                                                        left: 16,
-                                                        right: 16,
-                                                        bottom: 16,
+                                                    border: Border(
+                                                      bottom: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade300,
                                                       ),
-                                                      decoration: BoxDecoration(
-                                                        border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                        ),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(
-                                                          4,
-                                                        ),
-                                                      ),
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          // Search input
-                                                          Material(
-                                                            elevation: 1.0,
-                                                            color: Colors
-                                                                .transparent,
-                                                            shape:
-                                                                RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                4,
-                                                              ),
+                                                    ),
+                                                  ),
+                                                  child: TabBar(
+                                                    labelColor: Colors.black,
+                                                    unselectedLabelColor:
+                                                        Colors.grey,
+                                                    indicatorColor: Colors.blue,
+                                                    labelStyle: TextStyle(
+                                                      fontSize: 11,
+                                                    ),
+                                                    unselectedLabelStyle:
+                                                        TextStyle(
+                                                      fontSize: 11,
+                                                    ),
+                                                    indicatorWeight: 2,
+                                                    isScrollable: false,
+                                                    labelPadding:
+                                                        EdgeInsets.zero,
+                                                    tabs: [
+                                                      Tab(
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .person_search,
+                                                              size: 12,
+                                                              color: Colors.grey
+                                                                  .shade700,
                                                             ),
-                                                            child: Container(
-                                                              height: 40,
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: Colors
-                                                                    .white,
-                                                                border:
-                                                                    Border.all(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade400,
-                                                                  width: 1,
-                                                                ),
+                                                            SizedBox(width: 4),
+                                                            Text('PLAYERS'),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                // Tab content
+                                                Expanded(
+                                                  child: TabBarView(
+                                                    children: [
+                                                      // Player Picker Tab
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                          top: 6,
+                                                          left: 16,
+                                                          right: 16,
+                                                          bottom: 16,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          border: Border.all(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            4,
+                                                          ),
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .start,
+                                                          children: [
+                                                            // Search input
+                                                            Material(
+                                                              elevation: 1.0,
+                                                              color: Colors
+                                                                  .transparent,
+                                                              shape:
+                                                                  RoundedRectangleBorder(
                                                                 borderRadius:
                                                                     BorderRadius
                                                                         .circular(
                                                                   4,
                                                                 ),
                                                               ),
-                                                              child: TextField(
-                                                                controller:
-                                                                    _playerPickerSearchController,
+                                                              child: Container(
+                                                                height: 40,
                                                                 decoration:
-                                                                    InputDecoration(
-                                                                  hintText:
-                                                                      'Type player name or number...',
-                                                                  prefixIcon:
-                                                                      const Icon(
-                                                                    Icons
-                                                                        .search,
-                                                                    size: 16,
+                                                                    BoxDecoration(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  border: Border
+                                                                      .all(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade400,
+                                                                    width: 1,
                                                                   ),
-                                                                  isDense: true,
-                                                                  contentPadding:
-                                                                      const EdgeInsets
-                                                                          .symmetric(
-                                                                    horizontal:
-                                                                        12,
-                                                                    vertical:
-                                                                        12,
-                                                                  ),
-                                                                  filled: true,
-                                                                  fillColor:
-                                                                      Colors
-                                                                          .white,
-                                                                  enabledBorder:
-                                                                      OutlineInputBorder(
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                      4,
-                                                                    ),
-                                                                    borderSide:
-                                                                        BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade400,
-                                                                      width:
-                                                                          1.0,
-                                                                    ),
-                                                                  ),
-                                                                  focusedBorder:
-                                                                      OutlineInputBorder(
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                      4,
-                                                                    ),
-                                                                    borderSide:
-                                                                        BorderSide(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade500,
-                                                                      width:
-                                                                          2.0,
-                                                                    ),
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    4,
                                                                   ),
                                                                 ),
-                                                                style:
-                                                                    const TextStyle(
-                                                                  fontSize:
-                                                                      kInputTextSize,
-                                                                ),
-                                                                onChanged:
-                                                                    (value) {
-                                                                  setState(() {
-                                                                    _playerPickerSearchText =
-                                                                        value;
-                                                                  });
-                                                                },
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 12),
-                                                          // Divider line under search bar
-                                                          Container(
-                                                            height: 1,
-                                                            width:
-                                                                double.infinity,
-                                                            color: Colors
-                                                                .grey.shade300,
-                                                            margin:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    vertical:
-                                                                        4),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 12),
-                                                          // Selected players chips
-                                                          if (selectedPlayers
-                                                                  .isNotEmpty ||
-                                                              selectedOpponentPlayers
-                                                                  .isNotEmpty) ...[
-                                                            Wrap(
-                                                              spacing: 4,
-                                                              runSpacing: 4,
-                                                              children: [
-                                                                ...selectedPlayers
-                                                                    .map((
-                                                                  code,
-                                                                ) {
-                                                                  final replacement =
-                                                                      codeReplacements[
-                                                                              code] ??
-                                                                          Replacement(
-                                                                            '',
-                                                                            '',
-                                                                            '',
-                                                                          );
-                                                                  final playerName =
-                                                                      replacement
-                                                                          .short;
-                                                                  return Container(
-                                                                    padding:
+                                                                child:
+                                                                    TextField(
+                                                                  controller:
+                                                                      _playerPickerSearchController,
+                                                                  decoration:
+                                                                      InputDecoration(
+                                                                    hintText:
+                                                                        'Type player name or number...',
+                                                                    prefixIcon:
+                                                                        const Icon(
+                                                                      Icons
+                                                                          .search,
+                                                                      size: 16,
+                                                                    ),
+                                                                    isDense:
+                                                                        true,
+                                                                    contentPadding:
                                                                         const EdgeInsets
                                                                             .symmetric(
                                                                       horizontal:
-                                                                          4,
+                                                                          12,
                                                                       vertical:
-                                                                          2,
+                                                                          12,
                                                                     ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade700,
+                                                                    filled:
+                                                                        true,
+                                                                    fillColor:
+                                                                        Colors
+                                                                            .white,
+                                                                    enabledBorder:
+                                                                        OutlineInputBorder(
                                                                       borderRadius:
                                                                           BorderRadius
                                                                               .circular(
-                                                                        3,
+                                                                        4,
                                                                       ),
-                                                                      border:
-                                                                          Border
-                                                                              .all(
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade600,
-                                                                      ),
-                                                                    ),
-                                                                    child: Row(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .min,
-                                                                      children: [
-                                                                        Icon(
-                                                                          Icons
-                                                                              .home,
-                                                                          size:
-                                                                              10,
-                                                                          color:
-                                                                              Colors.white,
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              2,
-                                                                        ),
-                                                                        Text(
-                                                                          playerName,
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                10,
-                                                                            color:
-                                                                                Colors.white,
-                                                                            fontWeight:
-                                                                                FontWeight.w500,
-                                                                          ),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              3,
-                                                                        ),
-                                                                        GestureDetector(
-                                                                          onTap:
-                                                                              () {
-                                                                            setState(() {
-                                                                              selectedPlayers.remove(
-                                                                                code,
-                                                                              );
-                                                                              _updateCaption();
-                                                                            });
-                                                                          },
-                                                                          child:
-                                                                              Container(
-                                                                            width:
-                                                                                11,
-                                                                            height:
-                                                                                11,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.grey.shade500,
-                                                                              borderRadius: BorderRadius.circular(
-                                                                                2,
-                                                                              ),
-                                                                            ),
-                                                                            child:
-                                                                                const Icon(
-                                                                              Icons.close,
-                                                                              size: 6,
-                                                                              color: Colors.white,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  );
-                                                                }).toList(),
-                                                                ...selectedOpponentPlayers
-                                                                    .map((
-                                                                  code,
-                                                                ) {
-                                                                  final replacement =
-                                                                      codeReplacements[
-                                                                              code] ??
-                                                                          Replacement(
-                                                                            '',
-                                                                            '',
-                                                                            '',
-                                                                          );
-                                                                  final playerName =
-                                                                      replacement
-                                                                          .short;
-                                                                  return Container(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          4,
-                                                                      vertical:
-                                                                          2,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .white,
-                                                                      borderRadius:
-                                                                          BorderRadius
-                                                                              .circular(
-                                                                        3,
-                                                                      ),
-                                                                      border:
-                                                                          Border
-                                                                              .all(
+                                                                      borderSide:
+                                                                          BorderSide(
                                                                         color: Colors
                                                                             .grey
                                                                             .shade400,
+                                                                        width:
+                                                                            1.0,
                                                                       ),
                                                                     ),
-                                                                    child: Row(
-                                                                      mainAxisSize:
-                                                                          MainAxisSize
-                                                                              .min,
-                                                                      children: [
-                                                                        Icon(
-                                                                          Icons
-                                                                              .flight_takeoff,
-                                                                          size:
-                                                                              10,
-                                                                          color:
-                                                                              Colors.black,
+                                                                    focusedBorder:
+                                                                        OutlineInputBorder(
+                                                                      borderRadius:
+                                                                          BorderRadius
+                                                                              .circular(
+                                                                        4,
+                                                                      ),
+                                                                      borderSide:
+                                                                          BorderSide(
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade500,
+                                                                        width:
+                                                                            2.0,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  style:
+                                                                      const TextStyle(
+                                                                    fontSize:
+                                                                        kInputTextSize,
+                                                                  ),
+                                                                  onChanged:
+                                                                      (value) {
+                                                                    setState(
+                                                                        () {
+                                                                      _playerPickerSearchText =
+                                                                          value;
+                                                                    });
+                                                                  },
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                                height: 12),
+                                                            // Divider line under search bar
+                                                            Container(
+                                                              height: 1,
+                                                              width: double
+                                                                  .infinity,
+                                                              color: Colors.grey
+                                                                  .shade300,
+                                                              margin:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      vertical:
+                                                                          4),
+                                                            ),
+                                                            const SizedBox(
+                                                                height: 12),
+                                                            // Selected players chips
+                                                            if (selectedPlayers
+                                                                    .isNotEmpty ||
+                                                                selectedOpponentPlayers
+                                                                    .isNotEmpty) ...[
+                                                              Wrap(
+                                                                spacing: 4,
+                                                                runSpacing: 4,
+                                                                children: [
+                                                                  ...selectedPlayers
+                                                                      .map((
+                                                                    code,
+                                                                  ) {
+                                                                    final replacement =
+                                                                        codeReplacements[code] ??
+                                                                            Replacement(
+                                                                              '',
+                                                                              '',
+                                                                              '',
+                                                                            );
+                                                                    final playerName =
+                                                                        replacement
+                                                                            .short;
+                                                                    return Container(
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            4,
+                                                                        vertical:
+                                                                            2,
+                                                                      ),
+                                                                      decoration:
+                                                                          BoxDecoration(
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade700,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(
+                                                                          3,
                                                                         ),
-                                                                        const SizedBox(
-                                                                          width:
-                                                                              2,
+                                                                        border:
+                                                                            Border.all(
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade600,
                                                                         ),
-                                                                        Text(
-                                                                          playerName,
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
+                                                                      ),
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        children: [
+                                                                          Icon(
+                                                                            Icons.home,
+                                                                            size:
+                                                                                10,
+                                                                            color:
+                                                                                Colors.white,
+                                                                          ),
+                                                                          const SizedBox(
+                                                                            width:
+                                                                                2,
+                                                                          ),
+                                                                          Text(
+                                                                            playerName,
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 10,
+                                                                              color: Colors.white,
+                                                                              fontWeight: FontWeight.w500,
+                                                                            ),
+                                                                          ),
+                                                                          const SizedBox(
+                                                                            width:
+                                                                                3,
+                                                                          ),
+                                                                          GestureDetector(
+                                                                            onTap:
+                                                                                () {
+                                                                              setState(() {
+                                                                                selectedPlayers.remove(
+                                                                                  code,
+                                                                                );
+                                                                                _updateCaption();
+                                                                              });
+                                                                            },
+                                                                            child:
+                                                                                Container(
+                                                                              width: 11,
+                                                                              height: 11,
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.grey.shade500,
+                                                                                borderRadius: BorderRadius.circular(
+                                                                                  2,
+                                                                                ),
+                                                                              ),
+                                                                              child: const Icon(
+                                                                                Icons.close,
+                                                                                size: 6,
+                                                                                color: Colors.white,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    );
+                                                                  }).toList(),
+                                                                  ...selectedOpponentPlayers
+                                                                      .map((
+                                                                    code,
+                                                                  ) {
+                                                                    final replacement =
+                                                                        codeReplacements[code] ??
+                                                                            Replacement(
+                                                                              '',
+                                                                              '',
+                                                                              '',
+                                                                            );
+                                                                    final playerName =
+                                                                        replacement
+                                                                            .short;
+                                                                    return Container(
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            4,
+                                                                        vertical:
+                                                                            2,
+                                                                      ),
+                                                                      decoration:
+                                                                          BoxDecoration(
+                                                                        color: Colors
+                                                                            .white,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(
+                                                                          3,
+                                                                        ),
+                                                                        border:
+                                                                            Border.all(
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade400,
+                                                                        ),
+                                                                      ),
+                                                                      child:
+                                                                          Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        children: [
+                                                                          Icon(
+                                                                            Icons.flight_takeoff,
+                                                                            size:
                                                                                 10,
                                                                             color:
                                                                                 Colors.black,
-                                                                            fontWeight:
-                                                                                FontWeight.w500,
+                                                                          ),
+                                                                          const SizedBox(
+                                                                            width:
+                                                                                2,
+                                                                          ),
+                                                                          Text(
+                                                                            playerName,
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 10,
+                                                                              color: Colors.black,
+                                                                              fontWeight: FontWeight.w500,
+                                                                            ),
+                                                                          ),
+                                                                          const SizedBox(
+                                                                            width:
+                                                                                3,
+                                                                          ),
+                                                                          GestureDetector(
+                                                                            onTap:
+                                                                                () {
+                                                                              setState(() {
+                                                                                selectedOpponentPlayers.remove(
+                                                                                  code,
+                                                                                );
+                                                                                _updateCaption();
+                                                                              });
+                                                                            },
+                                                                            child:
+                                                                                Container(
+                                                                              width: 11,
+                                                                              height: 11,
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.grey.shade600,
+                                                                                borderRadius: BorderRadius.circular(
+                                                                                  2,
+                                                                                ),
+                                                                              ),
+                                                                              child: const Icon(
+                                                                                Icons.close,
+                                                                                size: 6,
+                                                                                color: Colors.white,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    );
+                                                                  }).toList(),
+                                                                ],
+                                                              ),
+                                                              const SizedBox(
+                                                                height: 8,
+                                                              ),
+                                                            ],
+                                                            // Results - Search results or team containers
+                                                            Expanded(
+                                                              child: _playerPickerSearchText
+                                                                      .isNotEmpty
+                                                                  ? _buildPlayerPickerResults()
+                                                                  : Row(
+                                                                      children: [
+                                                                        // Away Team Column
+                                                                        Expanded(
+                                                                          child:
+                                                                              _buildPlayerContainer(
+                                                                            title: selectedAwayTeam != null
+                                                                                ? _getTeamShortName(selectedAwayTeam!)
+                                                                                : 'Away',
+                                                                            titleIcon:
+                                                                                Icons.flight_takeoff,
+                                                                            codes:
+                                                                                awayPlayers,
+                                                                            isHomeList:
+                                                                                false,
+                                                                            toggle:
+                                                                                false,
                                                                           ),
                                                                         ),
                                                                         const SizedBox(
                                                                           width:
-                                                                              3,
+                                                                              8,
                                                                         ),
-                                                                        GestureDetector(
-                                                                          onTap:
-                                                                              () {
-                                                                            setState(() {
-                                                                              selectedOpponentPlayers.remove(
-                                                                                code,
-                                                                              );
-                                                                              _updateCaption();
-                                                                            });
-                                                                          },
+                                                                        // Verb chips in the middle between teams
+                                                                        Container(
+                                                                          width:
+                                                                              280,
                                                                           child:
+                                                                              Column(
+                                                                            children: [
+                                                                              // App bar style header
                                                                               Container(
-                                                                            width:
-                                                                                11,
-                                                                            height:
-                                                                                11,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.grey.shade600,
-                                                                              borderRadius: BorderRadius.circular(
-                                                                                2,
-                                                                              ),
-                                                                            ),
-                                                                            child:
-                                                                                const Icon(
-                                                                              Icons.close,
-                                                                              size: 6,
-                                                                              color: Colors.white,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  );
-                                                                }).toList(),
-                                                              ],
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                          ],
-                                                          // Results - Search results or team containers
-                                                          Expanded(
-                                                            child: _playerPickerSearchText
-                                                                    .isNotEmpty
-                                                                ? _buildPlayerPickerResults()
-                                                                : Row(
-                                                                    children: [
-                                                                      // Away Team Column
-                                                                      Expanded(
-                                                                        child:
-                                                                            _buildPlayerContainer(
-                                                                          title: selectedAwayTeam != null
-                                                                              ? _getTeamShortName(selectedAwayTeam!)
-                                                                              : 'Away',
-                                                                          titleIcon:
-                                                                              Icons.flight_takeoff,
-                                                                          codes:
-                                                                              awayPlayers,
-                                                                          isHomeList:
-                                                                              false,
-                                                                          toggle:
-                                                                              false,
-                                                                        ),
-                                                                      ),
-                                                                      const SizedBox(
-                                                                        width:
-                                                                            8,
-                                                                      ),
-                                                                      // Verb chips in the middle between teams
-                                                                      Container(
-                                                                        width:
-                                                                            280,
-                                                                        child:
-                                                                            Column(
-                                                                          children: [
-                                                                            // App bar style header
-                                                                            Container(
-                                                                              width: 280,
-                                                                              height: 28,
-                                                                              decoration: BoxDecoration(
-                                                                                color: Colors.grey.shade200,
-                                                                                borderRadius: const BorderRadius.only(
-                                                                                  topLeft: Radius.circular(
-                                                                                    4,
-                                                                                  ),
-                                                                                  topRight: Radius.circular(
-                                                                                    4,
+                                                                                width: 280,
+                                                                                height: 28,
+                                                                                decoration: BoxDecoration(
+                                                                                  color: Colors.grey.shade200,
+                                                                                  borderRadius: const BorderRadius.only(
+                                                                                    topLeft: Radius.circular(
+                                                                                      4,
+                                                                                    ),
+                                                                                    topRight: Radius.circular(
+                                                                                      4,
+                                                                                    ),
                                                                                   ),
                                                                                 ),
-                                                                              ),
-                                                                              child: Padding(
-                                                                                padding: const EdgeInsets.symmetric(
-                                                                                  horizontal: 16.0,
-                                                                                ),
-                                                                                child: Row(
-                                                                                  children: [
-                                                                                    if (_selectedVerb == 'hit') ...[
-                                                                                      // Breadcrumb menu
-                                                                                      Expanded(
-                                                                                        child: Row(
-                                                                                          children: [
-                                                                                            GestureDetector(
-                                                                                              onTap: () {
-                                                                                                setState(() {
-                                                                                                  _selectedVerb = null;
-                                                                                                  _selectedHitType = null;
-                                                                                                  _selectedHomeRunType = null;
-                                                                                                  _rbiCount = null;
-                                                                                                  _selectedRbiInning = null;
-                                                                                                  _isBatterRunning = false;
-                                                                                                  _updateCaption();
-                                                                                                });
-                                                                                              },
-                                                                                              child: Text(
-                                                                                                'HIT',
-                                                                                                style: TextStyle(
-                                                                                                  fontSize: 10,
-                                                                                                  fontWeight: FontWeight.bold,
-                                                                                                  color: Colors.black,
-                                                                                                ),
-                                                                                              ),
-                                                                                            ),
-                                                                                            if (_selectedHitType != null) ...[
-                                                                                              Padding(
-                                                                                                padding: const EdgeInsets.symmetric(
-                                                                                                  horizontal: 3.0,
-                                                                                                ),
-                                                                                                child: Text(
-                                                                                                  '→',
-                                                                                                  style: TextStyle(
-                                                                                                    fontSize: 8,
-                                                                                                    fontWeight: FontWeight.bold,
-                                                                                                    color: Colors.black,
-                                                                                                  ),
-                                                                                                ),
-                                                                                              ),
+                                                                                child: Padding(
+                                                                                  padding: const EdgeInsets.symmetric(
+                                                                                    horizontal: 16.0,
+                                                                                  ),
+                                                                                  child: Row(
+                                                                                    children: [
+                                                                                      if (_selectedVerb == 'hit') ...[
+                                                                                        // Breadcrumb menu
+                                                                                        Expanded(
+                                                                                          child: Row(
+                                                                                            children: [
                                                                                               GestureDetector(
                                                                                                 onTap: () {
                                                                                                   setState(() {
+                                                                                                    _selectedVerb = null;
                                                                                                     _selectedHitType = null;
                                                                                                     _selectedHomeRunType = null;
                                                                                                     _rbiCount = null;
@@ -11700,7 +11656,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                                   });
                                                                                                 },
                                                                                                 child: Text(
-                                                                                                  _selectedHitType!.toUpperCase(),
+                                                                                                  'HIT',
                                                                                                   style: TextStyle(
                                                                                                     fontSize: 10,
                                                                                                     fontWeight: FontWeight.bold,
@@ -11708,304 +11664,285 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                                   ),
                                                                                                 ),
                                                                                               ),
-                                                                                            ],
-                                                                                            if (_selectedHitType == 'single' && _rbiCount != null) ...[
-                                                                                              Padding(
-                                                                                                padding: const EdgeInsets.symmetric(
-                                                                                                  horizontal: 3.0,
+                                                                                              if (_selectedHitType != null) ...[
+                                                                                                Padding(
+                                                                                                  padding: const EdgeInsets.symmetric(
+                                                                                                    horizontal: 3.0,
+                                                                                                  ),
+                                                                                                  child: Text(
+                                                                                                    '→',
+                                                                                                    style: TextStyle(
+                                                                                                      fontSize: 8,
+                                                                                                      fontWeight: FontWeight.bold,
+                                                                                                      color: Colors.black,
+                                                                                                    ),
+                                                                                                  ),
                                                                                                 ),
-                                                                                                child: Text(
-                                                                                                  '→',
+                                                                                                GestureDetector(
+                                                                                                  onTap: () {
+                                                                                                    setState(() {
+                                                                                                      _selectedHitType = null;
+                                                                                                      _selectedHomeRunType = null;
+                                                                                                      _rbiCount = null;
+                                                                                                      _selectedRbiInning = null;
+                                                                                                      _isBatterRunning = false;
+                                                                                                      _updateCaption();
+                                                                                                    });
+                                                                                                  },
+                                                                                                  child: Text(
+                                                                                                    _selectedHitType!.toUpperCase(),
+                                                                                                    style: TextStyle(
+                                                                                                      fontSize: 10,
+                                                                                                      fontWeight: FontWeight.bold,
+                                                                                                      color: Colors.black,
+                                                                                                    ),
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ],
+                                                                                              if (_selectedHitType == 'single' && _rbiCount != null) ...[
+                                                                                                Padding(
+                                                                                                  padding: const EdgeInsets.symmetric(
+                                                                                                    horizontal: 3.0,
+                                                                                                  ),
+                                                                                                  child: Text(
+                                                                                                    '→',
+                                                                                                    style: TextStyle(
+                                                                                                      fontSize: 8,
+                                                                                                      fontWeight: FontWeight.bold,
+                                                                                                      color: Colors.black,
+                                                                                                    ),
+                                                                                                  ),
+                                                                                                ),
+                                                                                                Text(
+                                                                                                  _rbiCount == 1
+                                                                                                      ? 'RBI SINGLE'
+                                                                                                      : _rbiCount == 2
+                                                                                                          ? 'TWO RBI SINGLE'
+                                                                                                          : _rbiCount == 3
+                                                                                                              ? 'THREE RBI SINGLE'
+                                                                                                              : '',
                                                                                                   style: TextStyle(
-                                                                                                    fontSize: 8,
+                                                                                                    fontSize: 10,
                                                                                                     fontWeight: FontWeight.bold,
                                                                                                     color: Colors.black,
                                                                                                   ),
                                                                                                 ),
+                                                                                              ],
+                                                                                            ],
+                                                                                          ),
+                                                                                        ),
+                                                                                      ] else ...[
+                                                                                        Text(
+                                                                                          'Action',
+                                                                                          style: TextStyle(
+                                                                                            color: Colors.black,
+                                                                                            fontSize: 11,
+                                                                                            fontWeight: FontWeight.w600,
+                                                                                          ),
+                                                                                        ),
+                                                                                      ],
+                                                                                    ],
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                              // Verb box content
+                                                                              Container(
+                                                                                padding: const EdgeInsets.all(
+                                                                                  5.0,
+                                                                                ),
+                                                                                decoration: BoxDecoration(
+                                                                                  border: Border.all(
+                                                                                    color: Colors.grey.shade400,
+                                                                                  ),
+                                                                                  borderRadius: const BorderRadius.only(
+                                                                                    bottomLeft: Radius.circular(
+                                                                                      4,
+                                                                                    ),
+                                                                                    bottomRight: Radius.circular(
+                                                                                      4,
+                                                                                    ),
+                                                                                  ),
+                                                                                ),
+                                                                                child: ConstrainedBox(
+                                                                                  constraints: const BoxConstraints(
+                                                                                    minWidth: 280,
+                                                                                    minHeight: 509,
+                                                                                  ),
+                                                                                  child: Column(
+                                                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                    children: [
+                                                                                      ..._buildAllVerbsList(),
+                                                                                      // Add the permanent Back button at the bottom
+                                                                                      Padding(
+                                                                                        padding: const EdgeInsets.only(
+                                                                                          top: 8.0,
+                                                                                        ),
+                                                                                        child: ConstrainedBox(
+                                                                                          constraints: BoxConstraints(
+                                                                                            maxWidth: _fixedChipWidth / 2,
+                                                                                          ),
+                                                                                          child: Container(
+                                                                                            decoration: BoxDecoration(
+                                                                                              color: Colors.lightBlue.shade100,
+                                                                                              borderRadius: BorderRadius.circular(
+                                                                                                4,
                                                                                               ),
-                                                                                              Text(
-                                                                                                _rbiCount == 1
-                                                                                                    ? 'RBI SINGLE'
-                                                                                                    : _rbiCount == 2
-                                                                                                        ? 'TWO RBI SINGLE'
-                                                                                                        : _rbiCount == 3
-                                                                                                            ? 'THREE RBI SINGLE'
-                                                                                                            : '',
-                                                                                                style: TextStyle(
-                                                                                                  fontSize: 10,
-                                                                                                  fontWeight: FontWeight.bold,
-                                                                                                  color: Colors.black,
+                                                                                            ),
+                                                                                            child: FlashingFilterChip(
+                                                                                              label: SizedBox(
+                                                                                                width: _fixedChipWidth / 2,
+                                                                                                child: Align(
+                                                                                                  alignment: Alignment.centerLeft,
+                                                                                                  child: Row(
+                                                                                                    mainAxisSize: MainAxisSize.min,
+                                                                                                    children: [
+                                                                                                      const Icon(
+                                                                                                        Icons.arrow_back,
+                                                                                                        size: 14,
+                                                                                                        color: Colors.grey,
+                                                                                                      ),
+                                                                                                      const SizedBox(
+                                                                                                        width: 4,
+                                                                                                      ),
+                                                                                                      const Text(
+                                                                                                        'Back',
+                                                                                                        style: TextStyle(
+                                                                                                          fontSize: 12,
+                                                                                                          fontWeight: FontWeight.normal,
+                                                                                                        ),
+                                                                                                        overflow: TextOverflow.ellipsis,
+                                                                                                      ),
+                                                                                                    ],
+                                                                                                  ),
                                                                                                 ),
                                                                                               ),
-                                                                                            ],
-                                                                                          ],
-                                                                                        ),
-                                                                                      ),
-                                                                                    ] else ...[
-                                                                                      Text(
-                                                                                        'Action',
-                                                                                        style: TextStyle(
-                                                                                          color: Colors.black,
-                                                                                          fontSize: 11,
-                                                                                          fontWeight: FontWeight.w600,
+                                                                                              selected: false,
+                                                                                              onSelected: (isSelected) {
+                                                                                                setState(() {
+                                                                                                  _selectedVerb = null;
+                                                                                                  _selectedHitType = null;
+                                                                                                  _selectedHomeRunType = null;
+                                                                                                  _rbiCount = null;
+                                                                                                  _selectedRbiInning = null;
+                                                                                                  _isBatterRunning = false;
+                                                                                                  _selectedFieldingAction = null;
+                                                                                                  _selectedBaseRunningAction = null;
+                                                                                                  _selectedAtBatAction = null;
+                                                                                                  _selectedBattingAction = null;
+                                                                                                  _selectedPriorAction = null;
+                                                                                                  _customPriorAction = '';
+                                                                                                  _customPriorActionController.clear();
+                                                                                                  _stealsClicked = false;
+                                                                                                  _updateCaption();
+                                                                                                });
+                                                                                              },
+                                                                                              visualDensity: VisualDensity.compact,
+                                                                                              padding: EdgeInsets.zero,
+                                                                                            ),
+                                                                                          ),
                                                                                         ),
                                                                                       ),
                                                                                     ],
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            // Verb box content
-                                                                            Container(
-                                                                              padding: const EdgeInsets.all(
-                                                                                5.0,
-                                                                              ),
-                                                                              decoration: BoxDecoration(
-                                                                                border: Border.all(
-                                                                                  color: Colors.grey.shade400,
-                                                                                ),
-                                                                                borderRadius: const BorderRadius.only(
-                                                                                  bottomLeft: Radius.circular(
-                                                                                    4,
-                                                                                  ),
-                                                                                  bottomRight: Radius.circular(
-                                                                                    4,
                                                                                   ),
                                                                                 ),
                                                                               ),
-                                                                              child: ConstrainedBox(
-                                                                                constraints: const BoxConstraints(
-                                                                                  minWidth: 280,
-                                                                                  minHeight: 509,
-                                                                                ),
-                                                                                child: Column(
-                                                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                  children: [
-                                                                                    ..._buildAllVerbsList(),
-                                                                                    // Add the permanent Back button at the bottom
-                                                                                    Padding(
-                                                                                      padding: const EdgeInsets.only(
-                                                                                        top: 8.0,
-                                                                                      ),
-                                                                                      child: ConstrainedBox(
-                                                                                        constraints: BoxConstraints(
-                                                                                          maxWidth: _fixedChipWidth / 2,
-                                                                                        ),
-                                                                                        child: Container(
-                                                                                          decoration: BoxDecoration(
-                                                                                            color: Colors.lightBlue.shade100,
-                                                                                            borderRadius: BorderRadius.circular(
-                                                                                              4,
-                                                                                            ),
-                                                                                          ),
-                                                                                          child: FlashingFilterChip(
-                                                                                            label: SizedBox(
-                                                                                              width: _fixedChipWidth / 2,
-                                                                                              child: Align(
-                                                                                                alignment: Alignment.centerLeft,
-                                                                                                child: Row(
-                                                                                                  mainAxisSize: MainAxisSize.min,
-                                                                                                  children: [
-                                                                                                    const Icon(
-                                                                                                      Icons.arrow_back,
-                                                                                                      size: 14,
-                                                                                                      color: Colors.grey,
-                                                                                                    ),
-                                                                                                    const SizedBox(
-                                                                                                      width: 4,
-                                                                                                    ),
-                                                                                                    const Text(
-                                                                                                      'Back',
-                                                                                                      style: TextStyle(
-                                                                                                        fontSize: 12,
-                                                                                                        fontWeight: FontWeight.normal,
-                                                                                                      ),
-                                                                                                      overflow: TextOverflow.ellipsis,
-                                                                                                    ),
-                                                                                                  ],
-                                                                                                ),
-                                                                                              ),
-                                                                                            ),
-                                                                                            selected: false,
-                                                                                            onSelected: (isSelected) {
-                                                                                              setState(() {
-                                                                                                _selectedVerb = null;
-                                                                                                _selectedHitType = null;
-                                                                                                _selectedHomeRunType = null;
-                                                                                                _rbiCount = null;
-                                                                                                _selectedRbiInning = null;
-                                                                                                _isBatterRunning = false;
-                                                                                                _selectedFieldingAction = null;
-                                                                                                _selectedBaseRunningAction = null;
-                                                                                                _selectedAtBatAction = null;
-                                                                                                _selectedBattingAction = null;
-                                                                                                _selectedPriorAction = null;
-                                                                                                _customPriorAction = '';
-                                                                                                _customPriorActionController.clear();
-                                                                                                _stealsClicked = false;
-                                                                                                _updateCaption();
-                                                                                              });
-                                                                                            },
-                                                                                            visualDensity: VisualDensity.compact,
-                                                                                            padding: EdgeInsets.zero,
-                                                                                          ),
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                      const SizedBox(
-                                                                        width:
-                                                                            8,
-                                                                      ),
-                                                                      // Home Team Column
-                                                                      Expanded(
-                                                                        child:
-                                                                            _buildPlayerContainer(
-                                                                          title: selectedHomeTeam != null
-                                                                              ? _getTeamShortName(selectedHomeTeam!)
-                                                                              : 'Home Team',
-                                                                          titleIcon:
-                                                                              Icons.home,
-                                                                          codes:
-                                                                              homePlayers,
-                                                                          isHomeList:
-                                                                              true,
-                                                                          toggle:
-                                                                              false,
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Old verb chips hidden
-                                      SizedBox(
-                                        width: 0,
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 0.0,
-                                            left: 0.0,
-                                            right: 0.0,
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Container(
-                                                width: 280,
-                                                child: Column(
-                                                  children: [
-                                                    // App bar style header
-                                                    Container(
-                                                      width: 280,
-                                                      height: 28,
-                                                      decoration: BoxDecoration(
-                                                        color: Colors
-                                                            .grey.shade200,
-                                                        borderRadius:
-                                                            const BorderRadius
-                                                                .only(
-                                                          topLeft:
-                                                              Radius.circular(
-                                                            4,
-                                                          ),
-                                                          topRight:
-                                                              Radius.circular(
-                                                            4,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 16.0,
-                                                        ),
-                                                        child: Row(
-                                                          children: [
-                                                            if (_selectedVerb ==
-                                                                'hit') ...[
-                                                              // Breadcrumb menu
-                                                              Expanded(
-                                                                child: Row(
-                                                                  children: [
-                                                                    GestureDetector(
-                                                                      onTap:
-                                                                          () {
-                                                                        setState(
-                                                                            () {
-                                                                          _selectedVerb =
-                                                                              null;
-                                                                          _selectedHitType =
-                                                                              null;
-                                                                          _selectedHomeRunType =
-                                                                              null;
-                                                                          _rbiCount =
-                                                                              null;
-                                                                          _selectedRbiInning =
-                                                                              null;
-                                                                          _isBatterRunning =
-                                                                              false;
-                                                                          _updateCaption();
-                                                                        });
-                                                                      },
-                                                                      child:
-                                                                          Text(
-                                                                        'HIT',
-                                                                        style:
-                                                                            TextStyle(
-                                                                          fontSize:
-                                                                              10,
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          color:
-                                                                              Colors.black,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                    if (_selectedHitType !=
-                                                                        null) ...[
-                                                                      Padding(
-                                                                        padding:
-                                                                            const EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              3.0,
-                                                                        ),
-                                                                        child:
-                                                                            Text(
-                                                                          '→',
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                8,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            color:
-                                                                                Colors.black,
+                                                                            ],
                                                                           ),
                                                                         ),
-                                                                      ),
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              8,
+                                                                        ),
+                                                                        // Home Team Column
+                                                                        Expanded(
+                                                                          child:
+                                                                              _buildPlayerContainer(
+                                                                            title: selectedHomeTeam != null
+                                                                                ? _getTeamShortName(selectedHomeTeam!)
+                                                                                : 'Home Team',
+                                                                            titleIcon:
+                                                                                Icons.home,
+                                                                            codes:
+                                                                                homePlayers,
+                                                                            isHomeList:
+                                                                                true,
+                                                                            toggle:
+                                                                                false,
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // Old verb chips hidden
+                                        SizedBox(
+                                          width: 0,
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 0.0,
+                                              left: 0.0,
+                                              right: 0.0,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Container(
+                                                  width: 280,
+                                                  child: Column(
+                                                    children: [
+                                                      // App bar style header
+                                                      Container(
+                                                        width: 280,
+                                                        height: 28,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors
+                                                              .grey.shade200,
+                                                          borderRadius:
+                                                              const BorderRadius
+                                                                  .only(
+                                                            topLeft:
+                                                                Radius.circular(
+                                                              4,
+                                                            ),
+                                                            topRight:
+                                                                Radius.circular(
+                                                              4,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 16.0,
+                                                          ),
+                                                          child: Row(
+                                                            children: [
+                                                              if (_selectedVerb ==
+                                                                  'hit') ...[
+                                                                // Breadcrumb menu
+                                                                Expanded(
+                                                                  child: Row(
+                                                                    children: [
                                                                       GestureDetector(
                                                                         onTap:
                                                                             () {
                                                                           setState(
                                                                               () {
+                                                                            _selectedVerb =
+                                                                                null;
                                                                             _selectedHitType =
                                                                                 null;
                                                                             _selectedHomeRunType =
@@ -12021,8 +11958,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         },
                                                                         child:
                                                                             Text(
-                                                                          _selectedHitType!
-                                                                              .toUpperCase(),
+                                                                          'HIT',
                                                                           style:
                                                                               TextStyle(
                                                                             fontSize:
@@ -12034,284 +11970,315 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           ),
                                                                         ),
                                                                       ),
-                                                                    ],
-                                                                    if (_selectedHitType ==
-                                                                            'Home Run' &&
-                                                                        _selectedHomeRunType !=
-                                                                            null) ...[
-                                                                      Padding(
-                                                                        padding:
-                                                                            const EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              3.0,
-                                                                        ),
-                                                                        child:
-                                                                            Text(
-                                                                          '→',
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                8,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            color:
-                                                                                Colors.black,
+                                                                      if (_selectedHitType !=
+                                                                          null) ...[
+                                                                        Padding(
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                3.0,
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            '→',
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 8,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
                                                                           ),
                                                                         ),
-                                                                      ),
-                                                                      GestureDetector(
-                                                                        onTap:
-                                                                            () {
-                                                                          setState(
+                                                                        GestureDetector(
+                                                                          onTap:
                                                                               () {
-                                                                            _selectedHomeRunType =
-                                                                                null;
-                                                                            _updateCaption();
-                                                                          });
-                                                                        },
-                                                                        child:
-                                                                            Text(
-                                                                          _selectedHomeRunType == 'solo'
-                                                                              ? 'SOLO'
-                                                                              : _selectedHomeRunType == 'two-run'
-                                                                                  ? '2 RUN'
-                                                                                  : _selectedHomeRunType == 'three-run'
-                                                                                      ? '3 RUN'
-                                                                                      : _selectedHomeRunType == 'grand slam'
-                                                                                          ? 'GRAND SLAM'
-                                                                                          : '',
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                10,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            color:
-                                                                                Colors.black,
+                                                                            setState(() {
+                                                                              _selectedHitType = null;
+                                                                              _selectedHomeRunType = null;
+                                                                              _rbiCount = null;
+                                                                              _selectedRbiInning = null;
+                                                                              _isBatterRunning = false;
+                                                                              _updateCaption();
+                                                                            });
+                                                                          },
+                                                                          child:
+                                                                              Text(
+                                                                            _selectedHitType!.toUpperCase(),
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 10,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
                                                                           ),
                                                                         ),
-                                                                      ),
-                                                                    ],
-                                                                    if (_selectedHitType != null &&
-                                                                        _selectedHitType !=
-                                                                            'Home Run' &&
-                                                                        _rbiCount !=
-                                                                            null &&
-                                                                        _rbiCount! >
-                                                                            0) ...[
-                                                                      Padding(
-                                                                        padding:
-                                                                            const EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              3.0,
-                                                                        ),
-                                                                        child:
-                                                                            Text(
-                                                                          '→',
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                8,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            color:
-                                                                                Colors.black,
+                                                                      ],
+                                                                      if (_selectedHitType ==
+                                                                              'Home Run' &&
+                                                                          _selectedHomeRunType !=
+                                                                              null) ...[
+                                                                        Padding(
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                3.0,
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            '→',
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 8,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
                                                                           ),
                                                                         ),
-                                                                      ),
-                                                                      GestureDetector(
-                                                                        onTap:
-                                                                            () {
-                                                                          setState(
+                                                                        GestureDetector(
+                                                                          onTap:
                                                                               () {
-                                                                            _rbiCount =
-                                                                                null;
-                                                                            _rbiCountByHit.remove(
-                                                                              _selectedHitType!,
-                                                                            );
-                                                                            _updateCaption();
-                                                                          });
-                                                                        },
-                                                                        child:
-                                                                            Text(
-                                                                          _rbiCount == 1
-                                                                              ? 'RBI SINGLE'
-                                                                              : _rbiCount == 2
-                                                                                  ? 'TWO RBI SINGLE'
-                                                                                  : _rbiCount == 3
-                                                                                      ? 'THREE RBI SINGLE'
-                                                                                      : '',
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                10,
-                                                                            fontWeight:
-                                                                                FontWeight.bold,
-                                                                            color:
-                                                                                Colors.black,
+                                                                            setState(() {
+                                                                              _selectedHomeRunType = null;
+                                                                              _updateCaption();
+                                                                            });
+                                                                          },
+                                                                          child:
+                                                                              Text(
+                                                                            _selectedHomeRunType == 'solo'
+                                                                                ? 'SOLO'
+                                                                                : _selectedHomeRunType == 'two-run'
+                                                                                    ? '2 RUN'
+                                                                                    : _selectedHomeRunType == 'three-run'
+                                                                                        ? '3 RUN'
+                                                                                        : _selectedHomeRunType == 'grand slam'
+                                                                                            ? 'GRAND SLAM'
+                                                                                            : '',
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 10,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
                                                                           ),
                                                                         ),
-                                                                      ),
+                                                                      ],
+                                                                      if (_selectedHitType != null &&
+                                                                          _selectedHitType !=
+                                                                              'Home Run' &&
+                                                                          _rbiCount !=
+                                                                              null &&
+                                                                          _rbiCount! >
+                                                                              0) ...[
+                                                                        Padding(
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                3.0,
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            '→',
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 8,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        GestureDetector(
+                                                                          onTap:
+                                                                              () {
+                                                                            setState(() {
+                                                                              _rbiCount = null;
+                                                                              _rbiCountByHit.remove(
+                                                                                _selectedHitType!,
+                                                                              );
+                                                                              _updateCaption();
+                                                                            });
+                                                                          },
+                                                                          child:
+                                                                              Text(
+                                                                            _rbiCount == 1
+                                                                                ? 'RBI SINGLE'
+                                                                                : _rbiCount == 2
+                                                                                    ? 'TWO RBI SINGLE'
+                                                                                    : _rbiCount == 3
+                                                                                        ? 'THREE RBI SINGLE'
+                                                                                        : '',
+                                                                            style:
+                                                                                TextStyle(
+                                                                              fontSize: 10,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
                                                                     ],
-                                                                  ],
+                                                                  ),
                                                                 ),
-                                                              ),
-                                                            ] else ...[
-                                                              Text(
-                                                                'Action',
-                                                                style:
-                                                                    TextStyle(
-                                                                  color: Colors
-                                                                      .black,
-                                                                  fontSize: 11,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
+                                                              ] else ...[
+                                                                Text(
+                                                                  'Action',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: Colors
+                                                                        .black,
+                                                                    fontSize:
+                                                                        11,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      // Verb box content
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(
+                                                          5.0,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          border: Border.all(
+                                                            color: Colors
+                                                                .grey.shade400,
+                                                          ),
+                                                          borderRadius:
+                                                              const BorderRadius
+                                                                  .only(
+                                                            bottomLeft:
+                                                                Radius.circular(
+                                                              4,
+                                                            ),
+                                                            bottomRight:
+                                                                Radius.circular(
+                                                              4,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: ConstrainedBox(
+                                                          constraints:
+                                                              const BoxConstraints(
+                                                            minWidth: 280,
+                                                            minHeight: 509,
+                                                          ),
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              ..._buildAllVerbsList(),
+                                                              // Add the permanent Back button at the bottom
+                                                              Padding(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .only(
+                                                                  top: 8.0,
+                                                                ),
+                                                                child:
+                                                                    ConstrainedBox(
+                                                                  constraints:
+                                                                      BoxConstraints(
+                                                                    maxWidth:
+                                                                        _fixedChipWidth /
+                                                                            2,
+                                                                  ),
+                                                                  child:
+                                                                      Container(
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: Colors
+                                                                          .lightBlue
+                                                                          .shade100,
+                                                                      borderRadius:
+                                                                          BorderRadius
+                                                                              .circular(
+                                                                        4,
+                                                                      ),
+                                                                    ),
+                                                                    child:
+                                                                        FlashingFilterChip(
+                                                                      label:
+                                                                          SizedBox(
+                                                                        width:
+                                                                            _fixedChipWidth /
+                                                                                2,
+                                                                        child:
+                                                                            Align(
+                                                                          alignment:
+                                                                              Alignment.centerLeft,
+                                                                          child:
+                                                                              Row(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.min,
+                                                                            children: [
+                                                                              const Icon(
+                                                                                Icons.arrow_back,
+                                                                                size: 14,
+                                                                                color: Colors.grey,
+                                                                              ),
+                                                                              const SizedBox(
+                                                                                width: 4,
+                                                                              ),
+                                                                              const Text(
+                                                                                'Back',
+                                                                                style: TextStyle(
+                                                                                  fontSize: 12,
+                                                                                  fontWeight: FontWeight.normal,
+                                                                                ),
+                                                                                overflow: TextOverflow.ellipsis,
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      selected:
+                                                                          false,
+                                                                      onSelected:
+                                                                          (_) =>
+                                                                              _handleBack(),
+                                                                      visualDensity:
+                                                                          VisualDensity
+                                                                              .compact,
+                                                                      padding:
+                                                                          EdgeInsets
+                                                                              .zero,
+                                                                      key:
+                                                                          UniqueKey(),
+                                                                    ),
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ],
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    // Verb box content
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                        5.0,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400,
-                                                        ),
-                                                        borderRadius:
-                                                            const BorderRadius
-                                                                .only(
-                                                          bottomLeft:
-                                                              Radius.circular(
-                                                            4,
-                                                          ),
-                                                          bottomRight:
-                                                              Radius.circular(
-                                                            4,
                                                           ),
                                                         ),
                                                       ),
-                                                      child: ConstrainedBox(
-                                                        constraints:
-                                                            const BoxConstraints(
-                                                          minWidth: 280,
-                                                          minHeight: 509,
-                                                        ),
-                                                        child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            ..._buildAllVerbsList(),
-                                                            // Add the permanent Back button at the bottom
-                                                            Padding(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .only(
-                                                                top: 8.0,
-                                                              ),
-                                                              child:
-                                                                  ConstrainedBox(
-                                                                constraints:
-                                                                    BoxConstraints(
-                                                                  maxWidth:
-                                                                      _fixedChipWidth /
-                                                                          2,
-                                                                ),
-                                                                child:
-                                                                    Container(
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: Colors
-                                                                        .lightBlue
-                                                                        .shade100,
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                      4,
-                                                                    ),
-                                                                  ),
-                                                                  child:
-                                                                      FlashingFilterChip(
-                                                                    label:
-                                                                        SizedBox(
-                                                                      width:
-                                                                          _fixedChipWidth /
-                                                                              2,
-                                                                      child:
-                                                                          Align(
-                                                                        alignment:
-                                                                            Alignment.centerLeft,
-                                                                        child:
-                                                                            Row(
-                                                                          mainAxisSize:
-                                                                              MainAxisSize.min,
-                                                                          children: [
-                                                                            const Icon(
-                                                                              Icons.arrow_back,
-                                                                              size: 14,
-                                                                              color: Colors.grey,
-                                                                            ),
-                                                                            const SizedBox(
-                                                                              width: 4,
-                                                                            ),
-                                                                            const Text(
-                                                                              'Back',
-                                                                              style: TextStyle(
-                                                                                fontSize: 12,
-                                                                                fontWeight: FontWeight.normal,
-                                                                              ),
-                                                                              overflow: TextOverflow.ellipsis,
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                    selected:
-                                                                        false,
-                                                                    onSelected:
-                                                                        (_) =>
-                                                                            _handleBack(),
-                                                                    visualDensity:
-                                                                        VisualDensity
-                                                                            .compact,
-                                                                    padding:
-                                                                        EdgeInsets
-                                                                            .zero,
-                                                                    key:
-                                                                        UniqueKey(),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                flex: 1,
-                                                child: _buildHitInningSelector(
-                                                  showWalkOffOption: true,
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  flex: 1,
+                                                  child:
+                                                      _buildHitInningSelector(
+                                                    showWalkOffOption: true,
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                            ],
+                                                const SizedBox(width: 8),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  ), // Close Visibility widget
 
                                   // Filmstrip removed - thumbnails now on the right side
                                 ],
@@ -12333,7 +12300,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // Grid View Section
                             Transform.translate(
                               offset: const Offset(
-                                  0, -222), // Move GridView up 222px
+                                  0, -170), // Move GridView up 170px
                               child: Container(
                                 height: 500, // Same height as left column
                                 decoration: BoxDecoration(
@@ -12406,7 +12373,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // Metadata Section
                             Transform.translate(
                               offset: const Offset(
-                                  0, -223), // Move metadata up 223px
+                                  0, -170), // Move metadata up 170px
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
