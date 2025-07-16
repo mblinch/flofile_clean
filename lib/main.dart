@@ -3105,22 +3105,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Portrait',
-                                      style: TextStyle(fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            label: const Text(
+                              'Portrait',
+                              style: TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
@@ -3402,22 +3390,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           if (_selectedVerb != 'Base Running') ...[
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Base Running',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              label: const Text(
+                                'Base Running',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               selected: _selectedVerb == 'Base Running',
                               onSelected: (_showHomeFirst
@@ -3690,25 +3666,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           FlashingFilterChip(
-                            label: SizedBox(
-                              width: _fixedChipWidth,
-                              child: const Align(
-                                alignment: Alignment.center,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.max,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Batting',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
+                            label: const Text(
+                              'Batting',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.normal,
                               ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             selected: _selectedVerb == 'Batting',
                             onSelected: (isSelected) => setState(() {
@@ -3926,22 +3890,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           if (_selectedVerb != 'Celebrate') ...[
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Celebrate',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              label: const Text(
+                                'Celebrate',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               selected: _selectedVerb == 'Celebrate',
                               onSelected: (isSelected) => setState(() {
