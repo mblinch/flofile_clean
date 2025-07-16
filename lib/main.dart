@@ -10892,7 +10892,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         child:
                                                                             Container(
                                                                           height:
-                                                                              16,
+                                                                              22,
                                                                           decoration:
                                                                               BoxDecoration(
                                                                             color:
@@ -10900,14 +10900,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             border:
                                                                                 Border.all(color: Colors.grey.shade400),
                                                                             borderRadius:
-                                                                                BorderRadius.circular(2),
+                                                                                BorderRadius.circular(3),
                                                                           ),
                                                                           child:
                                                                               Row(
                                                                             children: [
                                                                               const Padding(
-                                                                                padding: EdgeInsets.only(left: 2.0),
-                                                                                child: Icon(Icons.search, size: 8, color: Colors.grey),
+                                                                                padding: EdgeInsets.only(left: 4.0),
+                                                                                child: Icon(Icons.search, size: 10, color: Colors.grey),
                                                                               ),
                                                                               Expanded(
                                                                                 child: TextField(
@@ -10916,19 +10916,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     setState(() {}); // Rebuild to filter list
                                                                                   },
                                                                                   style: const TextStyle(
-                                                                                    fontSize: 8,
+                                                                                    fontSize: 10,
                                                                                     color: Colors.black,
                                                                                     height: 1.0,
                                                                                   ),
                                                                                   decoration: const InputDecoration(
                                                                                     hintText: 'Search...',
                                                                                     hintStyle: TextStyle(
-                                                                                      fontSize: 8,
+                                                                                      fontSize: 10,
                                                                                       color: Colors.grey,
                                                                                     ),
                                                                                     border: InputBorder.none,
                                                                                     contentPadding: EdgeInsets.symmetric(
-                                                                                      horizontal: 1.0,
+                                                                                      horizontal: 2.0,
                                                                                       vertical: 0.0,
                                                                                     ),
                                                                                     isDense: true,
@@ -11057,7 +11057,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 Text(
                                                                               replacement.short,
                                                                               style: TextStyle(
-                                                                                fontSize: 9,
+                                                                                fontSize: 11,
                                                                                 color: isSelected ? Colors.red.shade800 : Colors.black87,
                                                                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                               ),
@@ -11150,7 +11150,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         child:
                                                                             Container(
                                                                           height:
-                                                                              16,
+                                                                              22,
                                                                           decoration:
                                                                               BoxDecoration(
                                                                             color:
@@ -11158,14 +11158,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             border:
                                                                                 Border.all(color: Colors.grey.shade400),
                                                                             borderRadius:
-                                                                                BorderRadius.circular(2),
+                                                                                BorderRadius.circular(3),
                                                                           ),
                                                                           child:
                                                                               Row(
                                                                             children: [
                                                                               const Padding(
-                                                                                padding: EdgeInsets.only(left: 2.0),
-                                                                                child: Icon(Icons.search, size: 8, color: Colors.grey),
+                                                                                padding: EdgeInsets.only(left: 4.0),
+                                                                                child: Icon(Icons.search, size: 10, color: Colors.grey),
                                                                               ),
                                                                               Expanded(
                                                                                 child: TextField(
@@ -11174,19 +11174,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     setState(() {}); // Rebuild to filter list
                                                                                   },
                                                                                   style: const TextStyle(
-                                                                                    fontSize: 8,
+                                                                                    fontSize: 10,
                                                                                     color: Colors.black,
                                                                                     height: 1.0,
                                                                                   ),
                                                                                   decoration: const InputDecoration(
                                                                                     hintText: 'Search...',
                                                                                     hintStyle: TextStyle(
-                                                                                      fontSize: 8,
+                                                                                      fontSize: 10,
                                                                                       color: Colors.grey,
                                                                                     ),
                                                                                     border: InputBorder.none,
                                                                                     contentPadding: EdgeInsets.symmetric(
-                                                                                      horizontal: 1.0,
+                                                                                      horizontal: 2.0,
                                                                                       vertical: 0.0,
                                                                                     ),
                                                                                     isDense: true,
@@ -11315,7 +11315,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 Text(
                                                                               replacement.short,
                                                                               style: TextStyle(
-                                                                                fontSize: 9,
+                                                                                fontSize: 11,
                                                                                 color: isSelected ? Colors.blue.shade800 : Colors.black87,
                                                                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                               ),
