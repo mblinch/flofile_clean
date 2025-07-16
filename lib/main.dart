@@ -11309,12 +11309,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       _getPlayerDisplayText(
                                                                           replacement),
                                                                       style:
-                                                                          TextStyle(
+                                                                          const TextStyle(
                                                                         fontSize:
                                                                             10,
-                                                                        color: isMain
-                                                                            ? Colors.white
-                                                                            : Colors.black87,
+                                                                        color: Colors
+                                                                            .black87,
                                                                         fontWeight:
                                                                             FontWeight.w500,
                                                                       ),
@@ -11334,14 +11333,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           _updateCaption();
                                                                         });
                                                                       },
-                                                                      child: Icon(
+                                                                      child: const Icon(
                                                                           Icons
                                                                               .close,
                                                                           size:
                                                                               12,
-                                                                          color: isMain
-                                                                              ? Colors.white
-                                                                              : Colors.black54),
+                                                                          color:
+                                                                              Colors.black54),
                                                                     ),
                                                                   ],
                                                                 ),
