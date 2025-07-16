@@ -10938,8 +10938,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                             color: Colors
                                                                 .grey.shade700,
                                                           ),
-                                                          SizedBox(width: 4),
-                                                          Text('PLAYERS'),
                                                           SizedBox(width: 8),
                                                           // Team switch button
                                                           MouseRegion(
