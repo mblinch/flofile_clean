@@ -2370,33 +2370,51 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                               GestureDetector(
                                                             onTap: () {
                                                               setState(() {
-                                                                _rbiCount = rbi;
-                                                                _rbiCountByHit[
-                                                                        'Single'] =
-                                                                    rbi;
+                                                                // Toggle RBI selection - if already selected, clear it
+                                                                if (_rbiCount ==
+                                                                    rbi) {
+                                                                  _rbiCount =
+                                                                      null;
+                                                                  _rbiCountByHit
+                                                                      .remove(
+                                                                          'Single');
+                                                                } else {
+                                                                  _rbiCount =
+                                                                      rbi;
+                                                                  _rbiCountByHit[
+                                                                          'Single'] =
+                                                                      rbi;
+                                                                }
                                                                 _updateCaption();
                                                               });
                                                             },
-                                                            child: Text(
-                                                              '$rbi RBI',
-                                                              style: TextStyle(
-                                                                fontSize: 10,
-                                                                fontWeight: _rbiCount ==
-                                                                        rbi
-                                                                    ? FontWeight
-                                                                        .bold
-                                                                    : FontWeight
-                                                                        .normal,
-                                                                color: _rbiCount == rbi
-                                                                    ? Colors
-                                                                        .grey
-                                                                        .shade800
-                                                                    : Colors
-                                                                        .grey
-                                                                        .shade600,
-                                                                decoration:
-                                                                    TextDecoration
-                                                                        .none,
+                                                            child: Container(
+                                                              height:
+                                                                  14, // Fixed height to prevent layout shift
+                                                              child: Center(
+                                                                child: Text(
+                                                                  '$rbi RBI',
+                                                                  style:
+                                                                      TextStyle(
+                                                                    fontSize:
+                                                                        10,
+                                                                    fontWeight: _rbiCount == rbi
+                                                                        ? FontWeight
+                                                                            .bold
+                                                                        : FontWeight
+                                                                            .normal,
+                                                                    color: _rbiCount == rbi
+                                                                        ? Colors
+                                                                            .grey
+                                                                            .shade800
+                                                                        : Colors
+                                                                            .grey
+                                                                            .shade600,
+                                                                    decoration:
+                                                                        TextDecoration
+                                                                            .none,
+                                                                  ),
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
@@ -2410,10 +2428,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       .toList(),
                                   // Add RBI options for all hit types when selected
                                   if ((_selectedHitType == 'Single' ||
-                                          _selectedHitType == 'Double' ||
-                                          _selectedHitType == 'Triple' ||
-                                          _selectedHitType == 'Home Run') &&
-                                      _rbiCount != null) ...[
+                                      _selectedHitType == 'Double' ||
+                                      _selectedHitType == 'Triple' ||
+                                      _selectedHitType == 'Home Run')) ...[
                                     const SizedBox(height: 4),
                                     // Add sliding checkbox (not for singles)
                                     if (_selectedHitType != 'Single') ...[
@@ -2561,7 +2578,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                       ),
                     ),
                     // Optional section - always show when verb is selected
-                    if (_selectedVerb != null) ...[
+                    if (_selectedVerb != null && _selectedHitType != null) ...[
                       const SizedBox(height: 4),
                       // Line separator above Optional
                       Container(
