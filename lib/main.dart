@@ -2231,12 +2231,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Hit',
                                         style: TextStyle(
@@ -2293,12 +2287,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    const SizedBox(width: 4),
                                                     Text(
                                                       label,
                                                       style: const TextStyle(
@@ -2835,12 +2823,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Prior to Game',
                                         style: TextStyle(fontSize: 12),
@@ -3003,12 +2985,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Post Game',
                                         style: TextStyle(fontSize: 12),
@@ -3166,12 +3142,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
                                     Text(
                                       'Portrait',
                                       style: TextStyle(fontSize: 12),
@@ -3275,12 +3245,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Fielding',
                                         style: TextStyle(fontSize: 12),
@@ -3319,12 +3283,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(
-                                                  Icons.chevron_right,
-                                                  size: 14,
-                                                  color: Colors.grey,
-                                                ),
-                                                const SizedBox(width: 4),
                                                 const Text(
                                                   'Turns a double play',
                                                   style: TextStyle(
@@ -3382,12 +3340,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
                                                   Text(
                                                     label,
                                                     style: const TextStyle(
@@ -3496,12 +3448,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Base Running',
                                         style: TextStyle(fontSize: 12),
@@ -3548,12 +3494,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    const Icon(
-                                                      Icons.chevron_right,
-                                                      size: 14,
-                                                      color: Colors.grey,
-                                                    ),
-                                                    const SizedBox(width: 4),
                                                     Text(
                                                       base,
                                                       style: const TextStyle(
@@ -3618,12 +3558,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
                                                   Text(
                                                     label,
                                                     style: const TextStyle(
@@ -3686,12 +3620,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              const Icon(
-                                                Icons.chevron_right,
-                                                size: 14,
-                                                color: Colors.grey,
-                                              ),
-                                              const SizedBox(width: 4),
                                               Text(
                                                 _getBaseRunningActionLabel(
                                                   _selectedBaseRunningAction!,
@@ -3803,12 +3731,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
                                     Text(
                                       'Batting',
                                       style: TextStyle(
@@ -3934,12 +3856,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
                                     Text(
                                       'At Bat',
                                       style: TextStyle(
@@ -3991,12 +3907,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.chevron_right,
-                                      size: 14,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(width: 4),
                                     Text(
                                       'Bunt',
                                       style: TextStyle(
@@ -4054,12 +3964,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
-                                        Icons.chevron_right,
-                                        size: 14,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(width: 4),
                                       Text(
                                         'Celebrate',
                                         style: TextStyle(fontSize: 12),
@@ -4104,12 +4008,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(
-                                                    Icons.chevron_right,
-                                                    size: 14,
-                                                    color: Colors.grey,
-                                                  ),
-                                                  const SizedBox(width: 4),
                                                   Text(
                                                     label,
                                                     style: const TextStyle(
@@ -4227,12 +4125,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.chevron_right,
-                                  size: 14,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
                                 Text(
                                   _capitalize(verb),
                                   style: const TextStyle(fontSize: 12),
@@ -4306,12 +4198,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 14,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 4),
                       Text(
                         hrDisplayLabels[type]!,
                         style: const TextStyle(fontSize: 12),
@@ -4344,12 +4230,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 14,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 4),
                     Text(
                       hrDisplayLabels[_selectedHomeRunType!]!,
                       style: const TextStyle(fontSize: 12),
@@ -15456,12 +15336,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.chevron_right,
-                                    size: 14,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 4),
                                   Text(
                                     '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
                                     style: const TextStyle(
