@@ -11038,7 +11038,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                 ),
                                                               ),
                                                             ),
-                                                            // Center - PLAYERS title, icon, and switch button
+                                                            // Center - Switch button only
                                                             Expanded(
                                                               flex: 4,
                                                               child: Row(
@@ -11046,29 +11046,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     MainAxisAlignment
                                                                         .center,
                                                                 children: [
-                                                                  Icon(
-                                                                    Icons
-                                                                        .person_search,
-                                                                    size: 12,
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade700,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 4),
-                                                                  const Text(
-                                                                    'PLAYERS',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 8),
                                                                   // Team switch button
                                                                   MouseRegion(
                                                                     cursor:
@@ -11281,112 +11258,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           if (_awayTeamFirst) ...[
                                                             // Away Team on the left when _awayTeamFirst is true
                                                             Expanded(
-                                                              flex: 3,
+                                                              flex: 32,
                                                               child: Column(
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
                                                                         .start,
                                                                 children: [
-                                                                  // Away team header with search
-                                                                  Container(
-                                                                    width: double
-                                                                        .infinity,
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      vertical:
-                                                                          4,
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade200,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              4),
-                                                                    ),
-                                                                    child: Row(
-                                                                      children: [
-                                                                        // Team name with icon
-                                                                        Row(
-                                                                          children: [
-                                                                            Icon(
-                                                                              Icons.flight_takeoff,
-                                                                              size: 8,
-                                                                              color: Colors.grey.shade700,
-                                                                            ),
-                                                                            const SizedBox(width: 2),
-                                                                            Text(
-                                                                              selectedAwayTeam ?? 'Away Team',
-                                                                              style: const TextStyle(
-                                                                                fontSize: 9,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: Colors.black,
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                4),
-                                                                        // Search bar
-                                                                        Expanded(
-                                                                          child:
-                                                                              Container(
-                                                                            height:
-                                                                                22,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              border: Border.all(color: Colors.grey.shade400),
-                                                                              borderRadius: BorderRadius.circular(3),
-                                                                            ),
-                                                                            child:
-                                                                                Row(
-                                                                              children: [
-                                                                                const Padding(
-                                                                                  padding: EdgeInsets.only(left: 4.0),
-                                                                                  child: Icon(Icons.search, size: 10, color: Colors.grey),
-                                                                                ),
-                                                                                Expanded(
-                                                                                  child: TextField(
-                                                                                    controller: _awaySearchController,
-                                                                                    onChanged: (value) {
-                                                                                      setState(() {}); // Rebuild to filter list
-                                                                                    },
-                                                                                    style: const TextStyle(
-                                                                                      fontSize: 10,
-                                                                                      color: Colors.black,
-                                                                                      height: 1.0,
-                                                                                    ),
-                                                                                    decoration: const InputDecoration(
-                                                                                      hintText: 'Search...',
-                                                                                      hintStyle: TextStyle(
-                                                                                        fontSize: 10,
-                                                                                        color: Colors.grey,
-                                                                                      ),
-                                                                                      border: InputBorder.none,
-                                                                                      contentPadding: EdgeInsets.symmetric(
-                                                                                        horizontal: 2.0,
-                                                                                        vertical: 0.0,
-                                                                                      ),
-                                                                                      isDense: true,
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      height:
-                                                                          2),
                                                                   // Away team players list
                                                                   Expanded(
                                                                     child: ListView
@@ -11504,112 +11381,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ] else ...[
                                                             // Home Team on the left when _awayTeamFirst is false
                                                             Expanded(
-                                                              flex: 3,
+                                                              flex: 32,
                                                               child: Column(
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
                                                                         .start,
                                                                 children: [
-                                                                  // Home team header with search
-                                                                  Container(
-                                                                    width: double
-                                                                        .infinity,
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      vertical:
-                                                                          4,
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade200,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              4),
-                                                                    ),
-                                                                    child: Row(
-                                                                      children: [
-                                                                        // Team name with icon
-                                                                        Row(
-                                                                          children: [
-                                                                            Icon(
-                                                                              Icons.home,
-                                                                              size: 8,
-                                                                              color: Colors.grey.shade700,
-                                                                            ),
-                                                                            const SizedBox(width: 2),
-                                                                            Text(
-                                                                              selectedHomeTeam ?? 'Home Team',
-                                                                              style: const TextStyle(
-                                                                                fontSize: 9,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: Colors.black,
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                4),
-                                                                        // Search bar
-                                                                        Expanded(
-                                                                          child:
-                                                                              Container(
-                                                                            height:
-                                                                                22,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              border: Border.all(color: Colors.grey.shade400),
-                                                                              borderRadius: BorderRadius.circular(3),
-                                                                            ),
-                                                                            child:
-                                                                                Row(
-                                                                              children: [
-                                                                                const Padding(
-                                                                                  padding: EdgeInsets.only(left: 4.0),
-                                                                                  child: Icon(Icons.search, size: 10, color: Colors.grey),
-                                                                                ),
-                                                                                Expanded(
-                                                                                  child: TextField(
-                                                                                    controller: _homeSearchController,
-                                                                                    onChanged: (value) {
-                                                                                      setState(() {}); // Rebuild to filter list
-                                                                                    },
-                                                                                    style: const TextStyle(
-                                                                                      fontSize: 10,
-                                                                                      color: Colors.black,
-                                                                                      height: 1.0,
-                                                                                    ),
-                                                                                    decoration: const InputDecoration(
-                                                                                      hintText: 'Search...',
-                                                                                      hintStyle: TextStyle(
-                                                                                        fontSize: 10,
-                                                                                        color: Colors.grey,
-                                                                                      ),
-                                                                                      border: InputBorder.none,
-                                                                                      contentPadding: EdgeInsets.symmetric(
-                                                                                        horizontal: 2.0,
-                                                                                        vertical: 0.0,
-                                                                                      ),
-                                                                                      isDense: true,
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      height:
-                                                                          2),
                                                                   // Home team players list
                                                                   Expanded(
                                                                     child: ListView
@@ -11727,77 +11504,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ],
                                                           const SizedBox(
                                                               width: 8),
-                                                          // Verbs section in the middle
+                                                          // Verbs section in the middle (reduced width)
                                                           Expanded(
-                                                            flex: 4,
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                                // Verbs header with team names
-                                                                Container(
-                                                                  width: double
-                                                                      .infinity,
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .symmetric(
-                                                                    vertical: 4,
-                                                                    horizontal:
-                                                                        6,
-                                                                  ),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade200,
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(4),
-                                                                  ),
-                                                                  child: Row(
-                                                                    children: [
-                                                                      // Verbs title with icon
-                                                                      Icon(
-                                                                        Icons
-                                                                            .sports_baseball,
-                                                                        size: 8,
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade700,
-                                                                      ),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              4),
-                                                                      const Text(
-                                                                        'VERBS',
-                                                                        style:
-                                                                            TextStyle(
-                                                                          fontSize:
-                                                                              9,
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          color:
-                                                                              Colors.black,
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(
-                                                                    height: 2),
-                                                                // Verbs content
-                                                                Expanded(
-                                                                  child:
-                                                                      SingleChildScrollView(
+                                                            flex: 36,
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          10),
+                                                              child: Column(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .center,
+                                                                children: [
+                                                                  // Verbs content
+                                                                  Expanded(
                                                                     child:
-                                                                        Column(
-                                                                      children:
-                                                                          _buildAllVerbsList(),
+                                                                        SingleChildScrollView(
+                                                                      child:
+                                                                          Column(
+                                                                        children:
+                                                                            _buildAllVerbsList(),
+                                                                      ),
                                                                     ),
                                                                   ),
-                                                                ),
-                                                              ],
+                                                                ],
+                                                              ),
                                                             ),
                                                           ),
                                                           const SizedBox(
@@ -11806,112 +11539,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           if (_awayTeamFirst) ...[
                                                             // Home Team on the right when _awayTeamFirst is true
                                                             Expanded(
-                                                              flex: 3,
+                                                              flex: 32,
                                                               child: Column(
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
-                                                                        .start,
+                                                                        .end,
                                                                 children: [
-                                                                  // Home team header with search
-                                                                  Container(
-                                                                    width: double
-                                                                        .infinity,
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      vertical:
-                                                                          4,
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade200,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              4),
-                                                                    ),
-                                                                    child: Row(
-                                                                      children: [
-                                                                        // Team name with icon
-                                                                        Row(
-                                                                          children: [
-                                                                            Icon(
-                                                                              Icons.home,
-                                                                              size: 8,
-                                                                              color: Colors.grey.shade700,
-                                                                            ),
-                                                                            const SizedBox(width: 2),
-                                                                            Text(
-                                                                              selectedHomeTeam ?? 'Home Team',
-                                                                              style: const TextStyle(
-                                                                                fontSize: 9,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: Colors.black,
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                4),
-                                                                        // Search bar
-                                                                        Expanded(
-                                                                          child:
-                                                                              Container(
-                                                                            height:
-                                                                                22,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              border: Border.all(color: Colors.grey.shade400),
-                                                                              borderRadius: BorderRadius.circular(3),
-                                                                            ),
-                                                                            child:
-                                                                                Row(
-                                                                              children: [
-                                                                                const Padding(
-                                                                                  padding: EdgeInsets.only(left: 4.0),
-                                                                                  child: Icon(Icons.search, size: 10, color: Colors.grey),
-                                                                                ),
-                                                                                Expanded(
-                                                                                  child: TextField(
-                                                                                    controller: _homeSearchController,
-                                                                                    onChanged: (value) {
-                                                                                      setState(() {}); // Rebuild to filter list
-                                                                                    },
-                                                                                    style: const TextStyle(
-                                                                                      fontSize: 10,
-                                                                                      color: Colors.black,
-                                                                                      height: 1.0,
-                                                                                    ),
-                                                                                    decoration: const InputDecoration(
-                                                                                      hintText: 'Search...',
-                                                                                      hintStyle: TextStyle(
-                                                                                        fontSize: 10,
-                                                                                        color: Colors.grey,
-                                                                                      ),
-                                                                                      border: InputBorder.none,
-                                                                                      contentPadding: EdgeInsets.symmetric(
-                                                                                        horizontal: 2.0,
-                                                                                        vertical: 0.0,
-                                                                                      ),
-                                                                                      isDense: true,
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      height:
-                                                                          2),
                                                                   // Home team players list
                                                                   Expanded(
                                                                     child: ListView
@@ -12009,12 +11642,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 color: isSelected ? Colors.blue.shade100 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
-                                                                              child: Text(
-                                                                                replacement.short,
-                                                                                style: TextStyle(
-                                                                                  fontSize: 11,
-                                                                                  color: isSelected ? Colors.blue.shade800 : Colors.black87,
-                                                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                              child: Align(
+                                                                                alignment: Alignment.centerRight,
+                                                                                child: Text(
+                                                                                  replacement.short,
+                                                                                  style: TextStyle(
+                                                                                    fontSize: 11,
+                                                                                    color: isSelected ? Colors.blue.shade800 : Colors.black87,
+                                                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                  ),
+                                                                                  textAlign: TextAlign.right,
                                                                                 ),
                                                                               ),
                                                                             ),
@@ -12029,112 +11666,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                           ] else ...[
                                                             // Away Team on the right when _awayTeamFirst is false
                                                             Expanded(
-                                                              flex: 3,
+                                                              flex: 32,
                                                               child: Column(
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
-                                                                        .start,
+                                                                        .end,
                                                                 children: [
-                                                                  // Away team header with search
-                                                                  Container(
-                                                                    width: double
-                                                                        .infinity,
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      vertical:
-                                                                          4,
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    decoration:
-                                                                        BoxDecoration(
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade200,
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                              4),
-                                                                    ),
-                                                                    child: Row(
-                                                                      children: [
-                                                                        // Team name with icon
-                                                                        Row(
-                                                                          children: [
-                                                                            Icon(
-                                                                              Icons.flight_takeoff,
-                                                                              size: 8,
-                                                                              color: Colors.grey.shade700,
-                                                                            ),
-                                                                            const SizedBox(width: 2),
-                                                                            Text(
-                                                                              selectedAwayTeam ?? 'Away Team',
-                                                                              style: const TextStyle(
-                                                                                fontSize: 9,
-                                                                                fontWeight: FontWeight.bold,
-                                                                                color: Colors.black,
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                4),
-                                                                        // Search bar
-                                                                        Expanded(
-                                                                          child:
-                                                                              Container(
-                                                                            height:
-                                                                                22,
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              border: Border.all(color: Colors.grey.shade400),
-                                                                              borderRadius: BorderRadius.circular(3),
-                                                                            ),
-                                                                            child:
-                                                                                Row(
-                                                                              children: [
-                                                                                const Padding(
-                                                                                  padding: EdgeInsets.only(left: 4.0),
-                                                                                  child: Icon(Icons.search, size: 10, color: Colors.grey),
-                                                                                ),
-                                                                                Expanded(
-                                                                                  child: TextField(
-                                                                                    controller: _awaySearchController,
-                                                                                    onChanged: (value) {
-                                                                                      setState(() {}); // Rebuild to filter list
-                                                                                    },
-                                                                                    style: const TextStyle(
-                                                                                      fontSize: 10,
-                                                                                      color: Colors.black,
-                                                                                      height: 1.0,
-                                                                                    ),
-                                                                                    decoration: const InputDecoration(
-                                                                                      hintText: 'Search...',
-                                                                                      hintStyle: TextStyle(
-                                                                                        fontSize: 10,
-                                                                                        color: Colors.grey,
-                                                                                      ),
-                                                                                      border: InputBorder.none,
-                                                                                      contentPadding: EdgeInsets.symmetric(
-                                                                                        horizontal: 2.0,
-                                                                                        vertical: 0.0,
-                                                                                      ),
-                                                                                      isDense: true,
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      height:
-                                                                          2),
                                                                   // Away team players list
                                                                   Expanded(
                                                                     child: ListView
@@ -12232,12 +11769,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 color: isSelected ? Colors.red.shade100 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
-                                                                              child: Text(
-                                                                                replacement.short,
-                                                                                style: TextStyle(
-                                                                                  fontSize: 11,
-                                                                                  color: isSelected ? Colors.red.shade800 : Colors.black87,
-                                                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                              child: Align(
+                                                                                alignment: Alignment.centerRight,
+                                                                                child: Text(
+                                                                                  replacement.short,
+                                                                                  style: TextStyle(
+                                                                                    fontSize: 11,
+                                                                                    color: isSelected ? Colors.red.shade800 : Colors.black87,
+                                                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                  ),
+                                                                                  textAlign: TextAlign.right,
                                                                                 ),
                                                                               ),
                                                                             ),
@@ -12738,6 +12279,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 false,
                                                                             toggle:
                                                                                 false,
+                                                                            isRightTeam:
+                                                                                !_awayTeamFirst,
                                                                           ),
                                                                         ),
                                                                         const SizedBox(
@@ -13002,6 +12545,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 true,
                                                                             toggle:
                                                                                 false,
+                                                                            isRightTeam:
+                                                                                _awayTeamFirst,
                                                                           ),
                                                                         ),
                                                                       ],
@@ -14573,6 +14118,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required bool toggle,
     IconData? titleIcon,
     Color? iconColor,
+    bool isRightTeam = false,
   }) {
     // Filter players based on individual team search
     final searchController =
@@ -14614,8 +14160,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               children: [
                 // Team name with icon
                 Row(
+                  mainAxisAlignment: isRightTeam
+                      ? MainAxisAlignment.end
+                      : MainAxisAlignment.start,
                   children: [
-                    if (titleIcon != null) ...[
+                    if (titleIcon != null && !isRightTeam) ...[
                       Icon(
                         titleIcon,
                         size: 14,
@@ -14632,6 +14181,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         fontFamily: 'RobotoCondensed',
                       ),
                     ),
+                    if (titleIcon != null && isRightTeam) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        titleIcon,
+                        size: 14,
+                        color: iconColor ?? Colors.grey.shade700,
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(width: 8),
@@ -14749,13 +14306,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           const SizedBox(height: 2),
           Flexible(
             child: filteredCodes.isEmpty
-                ? const Align(
-                    alignment: Alignment.topLeft,
+                ? Align(
+                    alignment:
+                        isRightTeam ? Alignment.topRight : Alignment.topLeft,
                     child: Padding(
-                      padding: EdgeInsets.only(top: 20.0, left: 15.0),
+                      padding: EdgeInsets.only(
+                        top: 20.0,
+                        left: isRightTeam ? 0.0 : 15.0,
+                        right: isRightTeam ? 15.0 : 0.0,
+                      ),
                       child: Text(
                         'No players',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
                           fontStyle: FontStyle.italic,
@@ -14881,6 +14443,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               horizontal: 8,
                             ),
                             child: Row(
+                              mainAxisAlignment: isRightTeam
+                                  ? MainAxisAlignment.end
+                                  : MainAxisAlignment.start,
                               children: [
                                 Expanded(
                                   child: Tooltip(
@@ -14890,6 +14455,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       style: const TextStyle(fontSize: 10),
                                       overflow: TextOverflow.ellipsis,
                                       maxLines: 1,
+                                      textAlign: isRightTeam
+                                          ? TextAlign.right
+                                          : TextAlign.left,
                                     ),
                                   ),
                                 ),
