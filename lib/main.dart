@@ -1406,11 +1406,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         border: Border.all(color: Colors.grey.shade200, width: 1.0),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
           // Top row: FTP button only
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             children: [
               // FTP button
               _buildCompactButton(
@@ -1436,7 +1436,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     width: 1),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 children: [
                   Icon(
                       _selectedRbiInning == null
@@ -1469,7 +1469,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           const SizedBox(height: 24),
           // Second row: Navigation buttons
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             children: [
               _buildSquareIconButton(
                 icon: Icons.arrow_back,
@@ -1520,7 +1520,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 border: Border.all(color: Colors.orange.shade700, width: 1),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 children: [
                   const Icon(Icons.burst_mode, color: Colors.white, size: 16),
                   const SizedBox(width: 4),
@@ -1547,7 +1547,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 border: Border.all(color: Colors.blue.shade700, width: 1),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 children: [
                   const Icon(Icons.sort, color: Colors.white, size: 16),
                   const SizedBox(width: 4),
@@ -1828,7 +1828,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           width: 80,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
             children: [
               // Gradient header
               Container(
@@ -2229,7 +2229,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Hit',
@@ -2821,7 +2821,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Prior to Game',
@@ -2983,7 +2983,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Post Game',
@@ -3140,7 +3140,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: const Align(
                                 alignment: Alignment.center,
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.max,
                                   children: [
                                     Text(
                                       'Portrait',
@@ -3243,7 +3243,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Fielding',
@@ -3273,7 +3273,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 8.0),
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       FlashingFilterChip(
                                         label: SizedBox(
@@ -3281,7 +3281,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           child: Align(
                                             alignment: Alignment.center,
                                             child: Row(
-                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisSize: MainAxisSize.max,
                                               children: [
                                                 const Text(
                                                   'Turns a double play',
@@ -3338,7 +3338,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Align(
                                               alignment: Alignment.center,
                                               child: Row(
-                                                mainAxisSize: MainAxisSize.min,
+                                                mainAxisSize: MainAxisSize.max,
                                                 children: [
                                                   Text(
                                                     label,
@@ -3446,7 +3446,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Base Running',
@@ -3556,7 +3556,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Align(
                                               alignment: Alignment.center,
                                               child: Row(
-                                                mainAxisSize: MainAxisSize.min,
+                                                mainAxisSize: MainAxisSize.max,
                                                 children: [
                                                   Text(
                                                     label,
@@ -3618,7 +3618,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         child: Align(
                                           alignment: Alignment.center,
                                           child: Row(
-                                            mainAxisSize: MainAxisSize.min,
+                                            mainAxisSize: MainAxisSize.max,
                                             children: [
                                               Text(
                                                 _getBaseRunningActionLabel(
@@ -3729,7 +3729,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: const Align(
                                 alignment: Alignment.center,
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.max,
                                   children: [
                                     Text(
                                       'Batting',
@@ -3854,7 +3854,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: const Align(
                                 alignment: Alignment.center,
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.max,
                                   children: [
                                     Text(
                                       'At Bat',
@@ -3905,7 +3905,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               child: const Align(
                                 alignment: Alignment.center,
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.max,
                                   children: [
                                     Text(
                                       'Bunt',
@@ -3962,7 +3962,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 child: const Align(
                                   alignment: Alignment.center,
                                   child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisSize: MainAxisSize.max,
                                     children: [
                                       Text(
                                         'Celebrate',
@@ -4006,7 +4006,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             child: Align(
                                               alignment: Alignment.center,
                                               child: Row(
-                                                mainAxisSize: MainAxisSize.min,
+                                                mainAxisSize: MainAxisSize.max,
                                                 children: [
                                                   Text(
                                                     label,
@@ -4123,7 +4123,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           child: Align(
                             alignment: Alignment.center,
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisSize: MainAxisSize.max,
                               children: [
                                 Text(
                                   _capitalize(verb),
@@ -4196,7 +4196,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 child: Align(
                   alignment: Alignment.center,
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.max,
                     children: [
                       Text(
                         hrDisplayLabels[type]!,
@@ -4228,7 +4228,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Align(
                 alignment: Alignment.center,
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     Text(
                       hrDisplayLabels[_selectedHomeRunType!]!,
@@ -5548,7 +5548,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 constraints: const BoxConstraints(maxHeight: 200),
                 child: SingleChildScrollView(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.max,
                     children: filteredCodes.take(10).map((code) {
                       final replacement = codeReplacements[code];
                       if (replacement == null) return const SizedBox.shrink();
@@ -6445,7 +6445,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     width: 300,
                     height: MediaQuery.of(ctx).size.height * 0.4,
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.max,
                       children: [
                         // 1. Search Field
                         TextField(
@@ -6629,7 +6629,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     width: 300,
                     height: MediaQuery.of(ctx).size.height * 0.4,
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.max,
                       children: [
                         // 1. Search Field (unchanged)
                         TextField(
@@ -6817,7 +6817,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     width: 500,
                     height: MediaQuery.of(ctx).size.height * 0.6,
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.max,
                       children: [
                         // Search Field
                         TextField(
@@ -7400,7 +7400,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.min, // Prevent overflow
+                  mainAxisSize: MainAxisSize.max, // Prevent overflow
                   children: [
                     Expanded(
                       // Wrap Text in Expanded
@@ -7574,7 +7574,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           width: 1),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxisSize.max,
                       children: [
                         Icon(
                             _selectedRbiInning == null
@@ -9756,7 +9756,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           ),
                                         ),
                                         content: Column(
-                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisSize: MainAxisSize.max,
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
@@ -9833,7 +9833,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ), // Reduced to 4px for closer spacing
                               // Manage Favorites Button
                               Row(
-                                mainAxisSize: MainAxisSize.min,
+                                mainAxisSize: MainAxisSize.max,
                                 children: [
                                   MouseRegion(
                                     cursor: SystemMouseCursors.click,
@@ -9884,7 +9884,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               border: Border.all(color: Colors.grey[300]!),
                             ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisSize: MainAxisSize.max,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 const Icon(
@@ -12351,7 +12351,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                                 child: Align(
                                                                                                   alignment: Alignment.center,
                                                                                                   child: Row(
-                                                                                                    mainAxisSize: MainAxisSize.min,
+                                                                                                    mainAxisSize: MainAxisSize.max,
                                                                                                     children: [
                                                                                                       const Icon(
                                                                                                         Icons.arrow_back,
@@ -15185,7 +15185,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     Expanded(
                       child: Text(
@@ -15299,7 +15299,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Widget _buildHorizontalRbiSelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 16.0, bottom: 2.0),
@@ -15314,7 +15314,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             const SizedBox(width: 16),
             Padding(
@@ -15322,7 +15322,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     // RBI options 1-3
                     ...List.generate(3, (i) => i + 1).map((rbi) {
@@ -15334,7 +15334,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             child: Align(
                               alignment: Alignment.center,
                               child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                                mainAxisSize: MainAxisSize.max,
                                 children: [
                                   Text(
                                     '${rbi == 1 ? 'One' : rbi == 2 ? 'Two' : 'Three'} RBI',
