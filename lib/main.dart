@@ -11157,24 +11157,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         2),
                                                                 decoration:
                                                                     BoxDecoration(
-                                                                  color: isMain
-                                                                      ? Colors
-                                                                          .blue
-                                                                      : Colors
-                                                                          .grey
-                                                                          .shade700,
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade700,
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
                                                                               3),
                                                                   border: Border.all(
-                                                                      color: isMain
-                                                                          ? Colors
-                                                                              .blue
-                                                                              .shade700
-                                                                          : Colors
-                                                                              .grey
-                                                                              .shade600,
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade600,
                                                                       width: 1),
                                                                 ),
                                                                 child: Row(
@@ -11182,6 +11175,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       MainAxisSize
                                                                           .min,
                                                                   children: [
+                                                                    const Icon(
+                                                                        Icons
+                                                                            .home,
+                                                                        size:
+                                                                            10,
+                                                                        color: Colors
+                                                                            .white),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
                                                                     if (isMain) ...[
                                                                       const Icon(
                                                                           Icons
@@ -11189,21 +11192,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           size:
                                                                               12,
                                                                           color:
-                                                                              Colors.white),
+                                                                              Colors.yellow),
                                                                       const SizedBox(
                                                                           width:
                                                                               2),
-                                                                    ] else ...[
-                                                                      const Icon(
-                                                                          Icons
-                                                                              .home,
-                                                                          size:
-                                                                              10,
-                                                                          color:
-                                                                              Colors.white),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              4),
                                                                     ],
                                                                     Text(
                                                                       _getPlayerDisplayText(
@@ -11274,23 +11266,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                         2),
                                                                 decoration:
                                                                     BoxDecoration(
-                                                                  color: isMain
-                                                                      ? Colors
-                                                                          .blue
-                                                                      : Colors
-                                                                          .white,
+                                                                  color: Colors
+                                                                      .white,
                                                                   borderRadius:
                                                                       BorderRadius
                                                                           .circular(
                                                                               3),
                                                                   border: Border.all(
-                                                                      color: isMain
-                                                                          ? Colors
-                                                                              .blue
-                                                                              .shade700
-                                                                          : Colors
-                                                                              .grey
-                                                                              .shade400,
+                                                                      color: Colors
+                                                                          .grey
+                                                                          .shade400,
                                                                       width: 1),
                                                                 ),
                                                                 child: Row(
@@ -11298,6 +11283,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                       MainAxisSize
                                                                           .min,
                                                                   children: [
+                                                                    const Icon(
+                                                                        Icons
+                                                                            .flight_takeoff,
+                                                                        size:
+                                                                            10,
+                                                                        color: Colors
+                                                                            .black87),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
                                                                     if (isMain) ...[
                                                                       const Icon(
                                                                           Icons
@@ -11305,21 +11300,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           size:
                                                                               12,
                                                                           color:
-                                                                              Colors.white),
+                                                                              Colors.yellow),
                                                                       const SizedBox(
                                                                           width:
                                                                               2),
-                                                                    ] else ...[
-                                                                      const Icon(
-                                                                          Icons
-                                                                              .flight_takeoff,
-                                                                          size:
-                                                                              10,
-                                                                          color:
-                                                                              Colors.black87),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              4),
                                                                     ],
                                                                     Text(
                                                                       _getPlayerDisplayText(
