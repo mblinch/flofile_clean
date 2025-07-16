@@ -2145,6 +2145,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       'At Bat',
       'Batting',
       'Base Running',
+      'Bunt',
+      'Swing',
     ];
 
     // Iterate through categories and their verbs
@@ -2164,7 +2166,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'Bunt' ||
             _selectedVerb == 'celebrate';
 
         // Show verb if:
@@ -2216,7 +2217,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // For one-click verbs, always show them in their original position
         bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
             _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'Bunt' ||
             _selectedVerb == 'celebrate';
 
         // Show verb if:
@@ -5540,6 +5540,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'At Bat',
                                   'Batting',
                                   'Base Running',
+                                  'Bunt',
+                                  'Swing',
                                 ];
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
@@ -5565,6 +5567,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'At Bat',
                                   'Batting',
                                   'Base Running',
+                                  'Bunt',
+                                  'Swing',
                                 ];
                                 if (_selectedVerb != null &&
                                     soloOnlyVerbs.contains(_selectedVerb) &&
@@ -14565,6 +14569,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     'At Bat',
                                     'Batting',
                                     'Base Running',
+                                    'Bunt',
+                                    'Swing',
                                   ];
 
                                   if (_selectedVerb != null &&
@@ -14594,6 +14600,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     'At Bat',
                                     'Batting',
                                     'Base Running',
+                                    'Bunt',
+                                    'Swing',
                                   ];
 
                                   if (_selectedVerb != null &&
