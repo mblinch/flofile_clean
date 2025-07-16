@@ -2231,25 +2231,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           if (_selectedVerb != 'hit') ...[
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Hit',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.normal,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
+                              label: const Text(
+                                'Hit',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               selected: _selectedVerb == 'hit',
                               onSelected: (isSelected) => setState(() {
@@ -2824,22 +2812,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Prior to Game',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              label: const Text(
+                                'Prior to Game',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
@@ -3229,22 +3205,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         children: [
                           if (_selectedVerb != 'Fielding') ...[
                             FlashingFilterChip(
-                              label: SizedBox(
-                                width: _fixedChipWidth,
-                                child: const Align(
-                                  alignment: Alignment.center,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.max,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Fielding',
-                                        style: TextStyle(fontSize: 12),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              label: const Text(
+                                'Fielding',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               selected: _selectedVerb == 'Fielding',
                               onSelected: (isSelected) => setState(() {
