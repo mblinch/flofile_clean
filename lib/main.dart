@@ -1608,7 +1608,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         color: iconColor,
         tooltip: tooltip,
         onPressed: onPressed,
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         splashRadius: 20,
       ),
     );
@@ -2183,12 +2183,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Add category heading if there are visible verbs
       if (hasVisibleVerbs) {
         widgets.add(
-          Text(
-            categoryName.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCCCCCC), // Medium-light grey background
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              categoryName.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Colors.black, // Black text for light background
+              ),
             ),
           ),
         );
@@ -2255,7 +2265,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 _updateCaption();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show hit type options when hit is selected
@@ -2323,7 +2333,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             },
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             key: UniqueKey(),
                                           ),
                                         ),
@@ -2691,8 +2701,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                               ),
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              labelPadding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              labelPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               selected: _selectedVerb == 'Prior to Game',
@@ -2760,7 +2772,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     });
                                   },
                                   visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   key: UniqueKey(),
                                 ),
                               ),
@@ -2842,8 +2855,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 ),
                               ),
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              labelPadding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                               selected: _selectedVerb == 'Post Game',
@@ -2906,7 +2919,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     }
                                   },
                                   visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   key: UniqueKey(),
                                 ),
                               ),
@@ -2988,8 +3001,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               ),
                             ),
                             visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            labelPadding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            labelPadding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             selected: _selectedVerb == 'Portrait',
@@ -3043,8 +3058,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 });
                               },
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              labelPadding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                             ),
@@ -3088,7 +3103,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 _updateCaption();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show fielding sub-options when Fielding is selected
@@ -3128,7 +3143,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           _updateCaption();
                                         }),
                                         visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       ),
                                     ],
                                   ),
@@ -3218,7 +3233,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             _updateCaption();
                                           }),
                                           visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3271,7 +3286,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       })
                                   : null,
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show base running action options when Base Running is selected
@@ -3319,7 +3334,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             },
                                             visualDensity:
                                                 VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             key: UniqueKey(),
                                           ),
                                         ),
@@ -3380,7 +3395,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             });
                                           },
                                           visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3419,7 +3434,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                         _updateCaption();
                                       }),
                                       visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       key: UniqueKey(),
                                     ),
                                   ),
@@ -3468,7 +3483,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           });
                                         },
                                         visualDensity: VisualDensity.compact,
-                                        padding: EdgeInsets.zero,
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         key: UniqueKey(),
                                       ),
                                     ),
@@ -3518,7 +3533,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           ),
                           if (_selectedVerb == 'Batting') ...[
                             const SizedBox(width: 16.0),
@@ -3587,7 +3602,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     });
                                   },
                                   visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   key: UniqueKey(),
                                 ),
                               );
@@ -3635,7 +3650,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           ),
                         ],
                       ),
@@ -3683,7 +3698,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               _updateCaption();
                             }),
                             visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           ),
                         ],
                       ),
@@ -3726,7 +3741,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 celebrateAgainst.clear();
                               }),
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             ),
                           ] else ...[
                             // Show celebration options when Celebrate is selected
@@ -3794,7 +3809,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                             _updateCaption();
                                           },
                                           visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           key: UniqueKey(),
                                         ),
                                       ),
@@ -3948,8 +3963,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 _updateCaption();
               }),
               visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              labelPadding: EdgeInsets.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           );
@@ -3974,8 +3989,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               _updateCaption();
             }),
             visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            labelPadding: EdgeInsets.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
@@ -4017,8 +4032,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           });
         },
         visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-        labelPadding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
@@ -6221,7 +6236,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         // 3. Player List
                         Expanded(
                           child: ListView.builder(
-                            padding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             itemCount: filtered.length,
                             itemBuilder: (ctx, idx) {
                               final code = filtered[idx];
@@ -6407,7 +6422,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         // 3. Thumbnail List
                         Expanded(
                           child: ListView.builder(
-                            padding: EdgeInsets.zero,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             itemCount: filtered.length,
                             itemBuilder: (ctx, idx) {
                               final code = filtered[idx];
@@ -6688,7 +6703,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 2),
                                     Expanded(
                                       child: ListView.builder(
-                                        padding: EdgeInsets.zero,
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         itemCount: filteredAway.length,
                                         itemBuilder: (ctx, idx) {
                                           final code = filteredAway[idx];
@@ -6785,7 +6800,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     const SizedBox(height: 2),
                                     Expanded(
                                       child: ListView.builder(
-                                        padding: EdgeInsets.zero,
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         itemCount: filteredHome.length,
                                         itemBuilder: (ctx, idx) {
                                           final code = filteredHome[idx];
@@ -10501,7 +10516,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                   unselectedLabelStyle:
                                                       TextStyle(fontSize: 11),
                                                   isScrollable: false,
-                                                  labelPadding: EdgeInsets.zero,
+                                                  labelPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                                   tabs: [
                                                     Tab(
                                                       child: SizedBox(
@@ -11999,7 +12014,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               ),
                                                                               // Verb box content
                                                                               Container(
-                                                                                padding: EdgeInsets.zero,
+                                                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                                 decoration: BoxDecoration(
                                                                                   border: Border.all(
                                                                                     color: Colors.grey.shade400,
@@ -12088,7 +12103,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                                 });
                                                                                               },
                                                                                               visualDensity: VisualDensity.compact,
-                                                                                              padding: EdgeInsets.zero,
+                                                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                                             ),
                                                                                           ),
                                                                                         ),
@@ -13024,7 +13039,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 (item) => PopupMenuItem<String>(
                   value: item,
                   height: 18,
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   child: Container(
                     height: 18,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -13480,7 +13495,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                     ),
                     Expanded(
                       child: ListView(
-                        padding: EdgeInsets.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         children: filtered.map((code) {
                           final replacement =
                               codeReplacements[code] ?? Replacement('', '', '');
@@ -15053,7 +15068,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             });
                           },
                           visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         ),
                       );
                     }),
