@@ -10837,7 +10837,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   CrossAxisAlignment
                                                                       .start,
                                                               children: [
-                                                                // Away team header
+                                                                // Away team header with search
                                                                 Container(
                                                                   width: double
                                                                       .infinity,
@@ -10851,29 +10851,95 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   decoration:
                                                                       BoxDecoration(
                                                                     color: Colors
-                                                                        .red
-                                                                        .shade50,
+                                                                        .grey
+                                                                        .shade200,
                                                                     borderRadius:
                                                                         BorderRadius
                                                                             .circular(4),
                                                                   ),
-                                                                  child: Text(
-                                                                    selectedAwayTeam ??
-                                                                        'Away Team',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                      color: Colors
-                                                                          .red
-                                                                          .shade700,
-                                                                    ),
-                                                                    textAlign:
-                                                                        TextAlign
-                                                                            .center,
+                                                                  child: Row(
+                                                                    children: [
+                                                                      // Team name with icon
+                                                                      Row(
+                                                                        children: [
+                                                                          Icon(
+                                                                            Icons.flight_takeoff,
+                                                                            size:
+                                                                                8,
+                                                                            color:
+                                                                                Colors.grey.shade700,
+                                                                          ),
+                                                                          const SizedBox(
+                                                                              width: 2),
+                                                                          Text(
+                                                                            selectedAwayTeam != null
+                                                                                ? _getTeamShortName(selectedAwayTeam!)
+                                                                                : 'Away',
+                                                                            style:
+                                                                                const TextStyle(
+                                                                              fontSize: 9,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              4),
+                                                                      // Search bar
+                                                                      Expanded(
+                                                                        child:
+                                                                            Container(
+                                                                          height:
+                                                                              16,
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color:
+                                                                                Colors.white,
+                                                                            border:
+                                                                                Border.all(color: Colors.grey.shade400),
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(2),
+                                                                          ),
+                                                                          child:
+                                                                              Row(
+                                                                            children: [
+                                                                              const Padding(
+                                                                                padding: EdgeInsets.only(left: 2.0),
+                                                                                child: Icon(Icons.search, size: 8, color: Colors.grey),
+                                                                              ),
+                                                                              Expanded(
+                                                                                child: TextField(
+                                                                                  controller: _awaySearchController,
+                                                                                  onChanged: (value) {
+                                                                                    setState(() {}); // Rebuild to filter list
+                                                                                  },
+                                                                                  style: const TextStyle(
+                                                                                    fontSize: 8,
+                                                                                    color: Colors.black,
+                                                                                    height: 1.0,
+                                                                                  ),
+                                                                                  decoration: const InputDecoration(
+                                                                                    hintText: 'Search...',
+                                                                                    hintStyle: TextStyle(
+                                                                                      fontSize: 8,
+                                                                                      color: Colors.grey,
+                                                                                    ),
+                                                                                    border: InputBorder.none,
+                                                                                    contentPadding: EdgeInsets.symmetric(
+                                                                                      horizontal: 1.0,
+                                                                                      vertical: 0.0,
+                                                                                    ),
+                                                                                    isDense: true,
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
                                                                 const SizedBox(
@@ -10885,19 +10951,64 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     padding:
                                                                         EdgeInsets
                                                                             .zero,
-                                                                    itemCount: codeReplacements
-                                                                        .keys
-                                                                        .where((k) =>
-                                                                            k.startsWith('v'))
-                                                                        .length,
-                                                                    itemBuilder:
-                                                                        (ctx,
-                                                                            idx) {
-                                                                      final awayCodes = codeReplacements
+                                                                    itemCount:
+                                                                        () {
+                                                                      final searchText = _awaySearchController
+                                                                          .text
+                                                                          .toLowerCase();
+                                                                      final allAwayCodes = codeReplacements
                                                                           .keys
                                                                           .where((k) =>
                                                                               k.startsWith('v'))
                                                                           .toList();
+                                                                      if (searchText
+                                                                          .isEmpty) {
+                                                                        return allAwayCodes
+                                                                            .length;
+                                                                      }
+                                                                      final filteredCodes =
+                                                                          allAwayCodes
+                                                                              .where((code) {
+                                                                        final replacement =
+                                                                            codeReplacements[code];
+                                                                        if (replacement ==
+                                                                            null)
+                                                                          return false;
+                                                                        final playerName = replacement
+                                                                            .short
+                                                                            .toLowerCase();
+                                                                        final jerseyNumber =
+                                                                            replacement.jerseyNumber?.toLowerCase() ??
+                                                                                '';
+                                                                        return playerName.contains(searchText) ||
+                                                                            jerseyNumber.contains(searchText);
+                                                                      }).toList();
+                                                                      return filteredCodes
+                                                                          .length;
+                                                                    }(),
+                                                                    itemBuilder:
+                                                                        (ctx,
+                                                                            idx) {
+                                                                      final searchText = _awaySearchController
+                                                                          .text
+                                                                          .toLowerCase();
+                                                                      final allAwayCodes = codeReplacements
+                                                                          .keys
+                                                                          .where((k) =>
+                                                                              k.startsWith('v'))
+                                                                          .toList();
+                                                                      final awayCodes = searchText
+                                                                              .isEmpty
+                                                                          ? allAwayCodes
+                                                                          : allAwayCodes
+                                                                              .where((code) {
+                                                                              final replacement = codeReplacements[code];
+                                                                              if (replacement == null)
+                                                                                return false;
+                                                                              final playerName = replacement.short.toLowerCase();
+                                                                              final jerseyNumber = replacement.jerseyNumber?.toLowerCase() ?? '';
+                                                                              return playerName.contains(searchText) || jerseyNumber.contains(searchText);
+                                                                            }).toList();
                                                                       if (idx >=
                                                                           awayCodes
                                                                               .length)
@@ -10984,7 +11095,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   CrossAxisAlignment
                                                                       .start,
                                                               children: [
-                                                                // Home team header
+                                                                // Home team header with search
                                                                 Container(
                                                                   width: double
                                                                       .infinity,
@@ -10998,29 +11109,95 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                   decoration:
                                                                       BoxDecoration(
                                                                     color: Colors
-                                                                        .blue
-                                                                        .shade50,
+                                                                        .grey
+                                                                        .shade200,
                                                                     borderRadius:
                                                                         BorderRadius
                                                                             .circular(4),
                                                                   ),
-                                                                  child: Text(
-                                                                    selectedHomeTeam ??
-                                                                        'Home Team',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                      color: Colors
-                                                                          .blue
-                                                                          .shade700,
-                                                                    ),
-                                                                    textAlign:
-                                                                        TextAlign
-                                                                            .center,
+                                                                  child: Row(
+                                                                    children: [
+                                                                      // Team name with icon
+                                                                      Row(
+                                                                        children: [
+                                                                          Icon(
+                                                                            Icons.home,
+                                                                            size:
+                                                                                8,
+                                                                            color:
+                                                                                Colors.grey.shade700,
+                                                                          ),
+                                                                          const SizedBox(
+                                                                              width: 2),
+                                                                          Text(
+                                                                            selectedHomeTeam != null
+                                                                                ? _getTeamShortName(selectedHomeTeam!)
+                                                                                : 'Home',
+                                                                            style:
+                                                                                const TextStyle(
+                                                                              fontSize: 9,
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.black,
+                                                                            ),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              4),
+                                                                      // Search bar
+                                                                      Expanded(
+                                                                        child:
+                                                                            Container(
+                                                                          height:
+                                                                              16,
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color:
+                                                                                Colors.white,
+                                                                            border:
+                                                                                Border.all(color: Colors.grey.shade400),
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(2),
+                                                                          ),
+                                                                          child:
+                                                                              Row(
+                                                                            children: [
+                                                                              const Padding(
+                                                                                padding: EdgeInsets.only(left: 2.0),
+                                                                                child: Icon(Icons.search, size: 8, color: Colors.grey),
+                                                                              ),
+                                                                              Expanded(
+                                                                                child: TextField(
+                                                                                  controller: _homeSearchController,
+                                                                                  onChanged: (value) {
+                                                                                    setState(() {}); // Rebuild to filter list
+                                                                                  },
+                                                                                  style: const TextStyle(
+                                                                                    fontSize: 8,
+                                                                                    color: Colors.black,
+                                                                                    height: 1.0,
+                                                                                  ),
+                                                                                  decoration: const InputDecoration(
+                                                                                    hintText: 'Search...',
+                                                                                    hintStyle: TextStyle(
+                                                                                      fontSize: 8,
+                                                                                      color: Colors.grey,
+                                                                                    ),
+                                                                                    border: InputBorder.none,
+                                                                                    contentPadding: EdgeInsets.symmetric(
+                                                                                      horizontal: 1.0,
+                                                                                      vertical: 0.0,
+                                                                                    ),
+                                                                                    isDense: true,
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                            ],
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 ),
                                                                 const SizedBox(
@@ -11032,19 +11209,64 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     padding:
                                                                         EdgeInsets
                                                                             .zero,
-                                                                    itemCount: codeReplacements
-                                                                        .keys
-                                                                        .where((k) =>
-                                                                            k.startsWith('h'))
-                                                                        .length,
-                                                                    itemBuilder:
-                                                                        (ctx,
-                                                                            idx) {
-                                                                      final homeCodes = codeReplacements
+                                                                    itemCount:
+                                                                        () {
+                                                                      final searchText = _homeSearchController
+                                                                          .text
+                                                                          .toLowerCase();
+                                                                      final allHomeCodes = codeReplacements
                                                                           .keys
                                                                           .where((k) =>
                                                                               k.startsWith('h'))
                                                                           .toList();
+                                                                      if (searchText
+                                                                          .isEmpty) {
+                                                                        return allHomeCodes
+                                                                            .length;
+                                                                      }
+                                                                      final filteredCodes =
+                                                                          allHomeCodes
+                                                                              .where((code) {
+                                                                        final replacement =
+                                                                            codeReplacements[code];
+                                                                        if (replacement ==
+                                                                            null)
+                                                                          return false;
+                                                                        final playerName = replacement
+                                                                            .short
+                                                                            .toLowerCase();
+                                                                        final jerseyNumber =
+                                                                            replacement.jerseyNumber?.toLowerCase() ??
+                                                                                '';
+                                                                        return playerName.contains(searchText) ||
+                                                                            jerseyNumber.contains(searchText);
+                                                                      }).toList();
+                                                                      return filteredCodes
+                                                                          .length;
+                                                                    }(),
+                                                                    itemBuilder:
+                                                                        (ctx,
+                                                                            idx) {
+                                                                      final searchText = _homeSearchController
+                                                                          .text
+                                                                          .toLowerCase();
+                                                                      final allHomeCodes = codeReplacements
+                                                                          .keys
+                                                                          .where((k) =>
+                                                                              k.startsWith('h'))
+                                                                          .toList();
+                                                                      final homeCodes = searchText
+                                                                              .isEmpty
+                                                                          ? allHomeCodes
+                                                                          : allHomeCodes
+                                                                              .where((code) {
+                                                                              final replacement = codeReplacements[code];
+                                                                              if (replacement == null)
+                                                                                return false;
+                                                                              final playerName = replacement.short.toLowerCase();
+                                                                              final jerseyNumber = replacement.jerseyNumber?.toLowerCase() ?? '';
+                                                                              return playerName.contains(searchText) || jerseyNumber.contains(searchText);
+                                                                            }).toList();
                                                                       if (idx >=
                                                                           homeCodes
                                                                               .length)
@@ -13431,64 +13653,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     IconData? titleIcon,
     Color? iconColor,
   }) {
+    // Filter players based on individual team search
     final searchController =
         isHomeList ? _homeSearchController : _awaySearchController;
     final searchText = searchController.text.toLowerCase();
 
-    // Separate lists for different match types to apply priority sorting
-    final List<String> exactNumberMatches = [];
-    final List<String> startsWithNumberMatches = [];
-    final List<String> containsNumberMatches = [];
-    final List<String> nameMatches = [];
+    final filteredCodes = searchText.isEmpty
+        ? codes
+        : codes.where((code) {
+            final replacement = codeReplacements[code];
+            if (replacement == null) return false;
 
-    final int? searchNumber = int.tryParse(searchText);
+            final playerName = replacement.short.toLowerCase();
+            final jerseyNumber = replacement.jerseyNumber?.toLowerCase() ?? '';
 
-    for (final code in codes) {
-      final replacement = codeReplacements[code];
-      if (replacement == null) continue;
-
-      final playerJerseyNumber = replacement.jerseyNumber;
-      final playerName =
-          replacement.short.toLowerCase(); // e.g., "player name #10"
-
-      // Priority 1: Exact number match (e.g., search "10" matches jersey "10")
-      if (searchNumber != null &&
-          playerJerseyNumber != null &&
-          playerJerseyNumber == searchText) {
-        exactNumberMatches.add(code);
-      }
-      // Priority 2: Player number starts with search text (e.g., search "1" matches "10", "11", "12")
-      else if (playerJerseyNumber != null &&
-          playerJerseyNumber.startsWith(searchText)) {
-        startsWithNumberMatches.add(code);
-      }
-      // Priority 3: Player number contains search text (e.g., search "0" matches "10", "20", "30")
-      else if (playerJerseyNumber != null &&
-          playerJerseyNumber.contains(searchText)) {
-        containsNumberMatches.add(code);
-      }
-      // Priority 4: Search text is a number and matches any part of player name that contains numbers
-      else if (searchNumber != null && playerName.contains(searchText)) {
-        containsNumberMatches.add(code);
-      }
-      // Priority 5: Player name contains search text
-      // Use 'if' not 'else if' to allow name matches even if number matches
-      // This ensures names are always considered for search
-      if (playerName.contains(searchText)) {
-        nameMatches.add(code);
-      }
-    }
-
-    // Combine and sort the lists, removing duplicates while preserving order
-    final List<String> finalFilteredCodes = [];
-    finalFilteredCodes.addAll(exactNumberMatches);
-    finalFilteredCodes.addAll(startsWithNumberMatches);
-    finalFilteredCodes.addAll(containsNumberMatches);
-    finalFilteredCodes.addAll(nameMatches);
-
-    final filteredCodes = LinkedHashSet<String>.from(
-      finalFilteredCodes,
-    ).toList();
+            return playerName.contains(searchText) ||
+                jerseyNumber.contains(searchText);
+          }).toList();
 
     return Container(
       height: 500,
@@ -13498,99 +13679,91 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Team name and search bar in same row
-          Row(
-            children: [
-              // Team name
-              Row(
-                children: [
-                  if (titleIcon != null) ...[
-                    Icon(
-                      titleIcon,
-                      size: 14,
-                      color: iconColor ?? Colors.grey.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      color: Colors.black,
-                      fontFamily: 'RobotoCondensed',
-                    ),
-                  ),
-                ],
+          // Team name header with search bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(4),
               ),
-              const SizedBox(width: 4),
-              // Smaller search bar beside team name
-              Expanded(
-                child: Container(
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6.0),
-                        child: Icon(Icons.search, size: 12, color: Colors.grey),
+            ),
+            child: Row(
+              children: [
+                // Team name with icon
+                Row(
+                  children: [
+                    if (titleIcon != null) ...[
+                      Icon(
+                        titleIcon,
+                        size: 14,
+                        color: iconColor ?? Colors.grey.shade700,
                       ),
-                      Expanded(
-                        child: TextField(
-                          controller: searchController,
-                          onChanged: (value) {
-                            setState(() {}); // Rebuild to filter list
-                          },
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.black,
-                            height: 1.0,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: 'Search...',
-                            hintStyle: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey,
-                            ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            errorBorder: InputBorder.none,
-                            focusedErrorBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 4.0,
-                              vertical: 0.0,
-                            ),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      if (searchText.isNotEmpty)
-                        GestureDetector(
-                          onTap: () {
-                            searchController.clear();
-                            setState(() {}); // Rebuild
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.only(right: 6.0),
-                            child: Icon(
-                              Icons.clear,
-                              size: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
+                      const SizedBox(width: 4),
                     ],
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.black,
+                        fontFamily: 'RobotoCondensed',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                // Search bar beside team name
+                Expanded(
+                  child: Container(
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Row(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4.0),
+                          child:
+                              Icon(Icons.search, size: 10, color: Colors.grey),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: isHomeList
+                                ? _homeSearchController
+                                : _awaySearchController,
+                            onChanged: (value) {
+                              setState(() {}); // Rebuild to filter list
+                            },
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: Colors.black,
+                              height: 1.0,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Search...',
+                              hintStyle: TextStyle(
+                                fontSize: 9,
+                                color: Colors.grey,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 2.0,
+                                vertical: 0.0,
+                              ),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           // Switch Team button below the row
           if (toggle)
@@ -13654,13 +13827,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           const SizedBox(height: 2),
           Flexible(
-            child: (filteredCodes.isEmpty && searchText.isNotEmpty)
+            child: filteredCodes.isEmpty
                 ? const Align(
                     alignment: Alignment.topLeft,
                     child: Padding(
                       padding: EdgeInsets.only(top: 20.0, left: 15.0),
                       child: Text(
-                        'No results',
+                        'No players',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
