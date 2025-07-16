@@ -11494,16 +11494,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.red.shade100 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
-                                                                              child: Text(
-                                                                                replacement.short,
-                                                                                style: TextStyle(
-                                                                                  fontSize: 11,
-                                                                                  color: isSelected ? Colors.red.shade800 : Colors.black87,
-                                                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                ),
+                                                                              child: Row(
+                                                                                mainAxisSize: MainAxisSize.min,
+                                                                                children: [
+                                                                                  if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                    const Icon(
+                                                                                      Icons.star,
+                                                                                      size: 10,
+                                                                                      color: Colors.orange,
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                  ],
+                                                                                  Text(
+                                                                                    replacement.short,
+                                                                                    style: TextStyle(
+                                                                                      fontSize: 11,
+                                                                                      color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
                                                                               ),
                                                                             ),
                                                                           ),
@@ -11619,16 +11632,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.blue.shade100 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
-                                                                              child: Text(
-                                                                                replacement.short,
-                                                                                style: TextStyle(
-                                                                                  fontSize: 11,
-                                                                                  color: isSelected ? Colors.blue.shade800 : Colors.black87,
-                                                                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                ),
+                                                                              child: Row(
+                                                                                mainAxisSize: MainAxisSize.min,
+                                                                                children: [
+                                                                                  if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                    const Icon(
+                                                                                      Icons.star,
+                                                                                      size: 10,
+                                                                                      color: Colors.orange,
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                  ],
+                                                                                  Text(
+                                                                                    replacement.short,
+                                                                                    style: TextStyle(
+                                                                                      fontSize: 11,
+                                                                                      color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
                                                                               ),
                                                                             ),
                                                                           ),
@@ -11779,19 +11805,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.blue.shade100 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Align(
                                                                                 alignment: Alignment.centerRight,
-                                                                                child: Text(
-                                                                                  replacement.short,
-                                                                                  style: TextStyle(
-                                                                                    fontSize: 11,
-                                                                                    color: isSelected ? Colors.blue.shade800 : Colors.black87,
-                                                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                  ),
-                                                                                  textAlign: TextAlign.right,
+                                                                                child: Row(
+                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                                                  children: [
+                                                                                    if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                      const Icon(
+                                                                                        Icons.star,
+                                                                                        size: 10,
+                                                                                        color: Colors.orange,
+                                                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                    ],
+                                                                                    Text(
+                                                                                      replacement.short,
+                                                                                      style: TextStyle(
+                                                                                        fontSize: 11,
+                                                                                        color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                      ),
+                                                                                      textAlign: TextAlign.right,
+                                                                                    ),
+                                                                                  ],
                                                                                 ),
                                                                               ),
                                                                             ),
@@ -11908,19 +11948,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.red.shade100 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Align(
                                                                                 alignment: Alignment.centerRight,
-                                                                                child: Text(
-                                                                                  replacement.short,
-                                                                                  style: TextStyle(
-                                                                                    fontSize: 11,
-                                                                                    color: isSelected ? Colors.red.shade800 : Colors.black87,
-                                                                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                  ),
-                                                                                  textAlign: TextAlign.right,
+                                                                                child: Row(
+                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                                                  children: [
+                                                                                    if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                      const Icon(
+                                                                                        Icons.star,
+                                                                                        size: 10,
+                                                                                        color: Colors.orange,
+                                                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                    ],
+                                                                                    Text(
+                                                                                      replacement.short,
+                                                                                      style: TextStyle(
+                                                                                        fontSize: 11,
+                                                                                        color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                                                      ),
+                                                                                      textAlign: TextAlign.right,
+                                                                                    ),
+                                                                                  ],
                                                                                 ),
                                                                               ),
                                                                             ),
@@ -13978,7 +14032,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        color: isSelected ? Colors.blue.shade100 : Colors.transparent,
+        color: isSelected ? Colors.grey.shade200 : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Text(
           label,
