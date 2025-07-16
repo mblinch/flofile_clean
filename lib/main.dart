@@ -2290,53 +2290,120 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           padding: const EdgeInsets.only(
                                             bottom: 8.0,
                                           ),
-                                          child: FlashingFilterChip(
-                                            label: SizedBox(
-                                              width: _fixedChipWidth,
-                                              child: Text(
-                                                label,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.normal,
+                                          child: Row(
+                                            mainAxisAlignment: label ==
+                                                        'Single' &&
+                                                    _selectedHitType == 'Single'
+                                                ? MainAxisAlignment.start
+                                                : MainAxisAlignment.center,
+                                            children: [
+                                              FlashingFilterChip(
+                                                label: SizedBox(
+                                                  width: label == 'Single' &&
+                                                          _selectedHitType ==
+                                                              'Single'
+                                                      ? 80.0
+                                                      : _fixedChipWidth,
+                                                  child: Text(
+                                                    label,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.normal,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    textAlign: TextAlign.center,
+                                                  ),
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
-                                                textAlign: TextAlign.center,
-                                              ),
-                                            ),
-                                            selected: _selectedHitType == label,
-                                            disableColorChange:
-                                                _selectedHitType == label,
-                                            onSelected: (isSelected) {
-                                              setState(() {
-                                                if (isSelected) {
-                                                  _selectedHitType = label;
-                                                  if (label != 'Home Run') {
-                                                    // For Single, don't override RBI if already selected
-                                                    if (label == 'Single' &&
-                                                        _rbiCount != null) {
-                                                      // Keep existing RBI selection
+                                                selected:
+                                                    _selectedHitType == label,
+                                                disableColorChange:
+                                                    _selectedHitType == label,
+                                                onSelected: (isSelected) {
+                                                  setState(() {
+                                                    if (isSelected) {
+                                                      _selectedHitType = label;
+                                                      if (label != 'Home Run') {
+                                                        // For Single, don't override RBI if already selected
+                                                        if (label == 'Single' &&
+                                                            _rbiCount != null) {
+                                                          // Keep existing RBI selection
+                                                        } else {
+                                                          // Pre-select "No RBI" for non-HR hits
+                                                          _rbiCount = 0;
+                                                          _rbiCountByHit[
+                                                              label] = 0;
+                                                        }
+                                                      } else {
+                                                        // For home runs, RBI is determined by HR type, so clear general count
+                                                        _rbiCount = null;
+                                                      }
                                                     } else {
-                                                      // Pre-select "No RBI" for non-HR hits
-                                                      _rbiCount = 0;
-                                                      _rbiCountByHit[label] = 0;
+                                                      // Deselecting - clear the hit type and RBI
+                                                      _selectedHitType = null;
+                                                      _rbiCount = null;
                                                     }
-                                                  } else {
-                                                    // For home runs, RBI is determined by HR type, so clear general count
-                                                    _rbiCount = null;
-                                                  }
-                                                } else {
-                                                  // Deselecting - clear the hit type and RBI
-                                                  _selectedHitType = null;
-                                                  _rbiCount = null;
-                                                }
-                                                _updateCaption();
-                                              });
-                                            },
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 2),
-                                            key: UniqueKey(),
+                                                    _updateCaption();
+                                                  });
+                                                },
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                key: UniqueKey(),
+                                              ),
+                                              // Show RBI options inline for Single only
+                                              if (label == 'Single' &&
+                                                  _selectedHitType ==
+                                                      'Single') ...[
+                                                const SizedBox(width: 8),
+                                                ...([1, 2, 3])
+                                                    .map((rbi) => Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                                  right: 8.0),
+                                                          child:
+                                                              GestureDetector(
+                                                            onTap: () {
+                                                              setState(() {
+                                                                _rbiCount = rbi;
+                                                                _rbiCountByHit[
+                                                                        'Single'] =
+                                                                    rbi;
+                                                                _updateCaption();
+                                                              });
+                                                            },
+                                                            child: Text(
+                                                              '$rbi RBI',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight: _rbiCount ==
+                                                                        rbi
+                                                                    ? FontWeight
+                                                                        .bold
+                                                                    : FontWeight
+                                                                        .normal,
+                                                                color: _rbiCount == rbi
+                                                                    ? Colors
+                                                                        .grey
+                                                                        .shade800
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade600,
+                                                                decoration:
+                                                                    TextDecoration
+                                                                        .none,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ))
+                                                    .toList(),
+                                              ],
+                                            ],
                                           ),
                                         ),
                                       )
@@ -2347,188 +2414,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                           _selectedHitType == 'Triple' ||
                                           _selectedHitType == 'Home Run') &&
                                       _rbiCount != null) ...[
-                                    const SizedBox(height: 8),
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          Transform.scale(
-                                            scale: 0.6,
-                                            child: Checkbox(
-                                              value: _isSoloCelebration,
-                                              onChanged: (bool? value) {
-                                                setState(() {
-                                                  _isSoloCelebration =
-                                                      value ?? false;
-                                                  // Uncheck other options when this one is selected
-                                                  if (_isSoloCelebration) {
-                                                    _isBatterRunning = false;
-                                                    _isSliding = false;
-                                                  }
-                                                  _updateCaption();
-                                                });
-                                              },
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ),
-                                          ),
-                                          Transform.translate(
-                                            offset: const Offset(-4, 0),
-                                            child: const Text(
-                                              'Celebrates',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                            ),
-                                          ),
-                                          // Show players in frame option when Celebrates is checked
-                                          if (_isSoloCelebration) ...[
-                                            const SizedBox(width: 8),
-                                            MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () =>
-                                                    _showPlayersInFrameDialog(),
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: (celebrateWith
-                                                                .isNotEmpty ||
-                                                            celebrateAgainst
-                                                                .isNotEmpty)
-                                                        ? Colors.blue.shade50
-                                                        : Colors.grey.shade100,
-                                                    border: Border.all(
-                                                      color: (celebrateWith
-                                                                  .isNotEmpty ||
-                                                              celebrateAgainst
-                                                                  .isNotEmpty)
-                                                          ? Colors.blue.shade300
-                                                          : Colors
-                                                              .grey.shade300,
-                                                      width: 1,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            2),
-                                                  ),
-                                                  child: Text(
-                                                    'Players in frame',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: (celebrateWith
-                                                                  .isNotEmpty ||
-                                                              celebrateAgainst
-                                                                  .isNotEmpty)
-                                                          ? Colors.blue.shade700
-                                                          : Colors
-                                                              .grey.shade600,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    // Add runs the bases checkbox
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 8.0),
-                                      child: Row(
-                                        children: [
-                                          Transform.scale(
-                                            scale: 0.6,
-                                            child: Checkbox(
-                                              value: _isBatterRunning,
-                                              onChanged: (bool? value) {
-                                                setState(() {
-                                                  _isBatterRunning =
-                                                      value ?? false;
-                                                  // Uncheck other options when this one is selected
-                                                  if (_isBatterRunning) {
-                                                    _isSoloCelebration = false;
-                                                    _isSliding = false;
-                                                  }
-                                                  _updateCaption();
-                                                });
-                                              },
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ),
-                                          ),
-                                          Transform.translate(
-                                            offset: const Offset(-4, 0),
-                                            child: const Text(
-                                              'Runs the bases',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.normal,
-                                              ),
-                                            ),
-                                          ),
-                                          // Show players in frame option when Runs the bases is checked
-                                          if (_isBatterRunning == true) ...[
-                                            const SizedBox(width: 8),
-                                            MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () =>
-                                                    _showPlayersInFrameDialog(),
-                                                child: Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: celebrateWith
-                                                            .isNotEmpty
-                                                        ? Colors.green.shade50
-                                                        : Colors.grey.shade100,
-                                                    border: Border.all(
-                                                      color: celebrateWith
-                                                              .isNotEmpty
-                                                          ? Colors
-                                                              .green.shade300
-                                                          : Colors
-                                                              .grey.shade300,
-                                                      width: 1,
-                                                    ),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            2),
-                                                  ),
-                                                  child: Text(
-                                                    'Players in frame',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: celebrateWith
-                                                              .isNotEmpty
-                                                          ? Colors
-                                                              .green.shade700
-                                                          : Colors
-                                                              .grey.shade600,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
+                                    const SizedBox(height: 4),
                                     // Add sliding checkbox (not for singles)
                                     if (_selectedHitType != 'Single') ...[
                                       Padding(
@@ -2674,6 +2560,201 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                         ],
                       ),
                     ),
+                    // Optional section - always show when verb is selected
+                    if (_selectedVerb != null) ...[
+                      const SizedBox(height: 4),
+                      // Line separator above Optional
+                      Container(
+                        height: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 4),
+                      // Optional title
+                      const Text(
+                        'Optional:',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4), // Small spacing after title
+                      // Celebrates button
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isSoloCelebration = !_isSoloCelebration;
+                                  // Uncheck other options when this one is selected
+                                  if (_isSoloCelebration) {
+                                    _isBatterRunning = false;
+                                    _isSliding = false;
+                                  }
+                                  _updateCaption();
+                                });
+                              },
+                              child: Container(
+                                width: 80, // Fixed width for consistency
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _isSoloCelebration
+                                      ? Colors.grey.shade200
+                                      : Colors.grey.shade100,
+                                  border: Border.all(
+                                    color: _isSoloCelebration
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade300,
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Celebrates',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.normal,
+                                    color: _isSoloCelebration
+                                        ? Colors.grey.shade800
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Show players in frame option when Celebrates is checked
+                            if (_isSoloCelebration) ...[
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _showPlayersInFrameDialog(),
+                                child: Container(
+                                  width: 100, // Fixed width for consistency
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (celebrateWith.isNotEmpty ||
+                                            celebrateAgainst.isNotEmpty)
+                                        ? Colors.grey.shade200
+                                        : Colors.grey.shade100,
+                                    border: Border.all(
+                                      color: (celebrateWith.isNotEmpty ||
+                                              celebrateAgainst.isNotEmpty)
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade300,
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Players in frame',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.normal,
+                                      color: (celebrateWith.isNotEmpty ||
+                                              celebrateAgainst.isNotEmpty)
+                                          ? Colors.grey.shade800
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      // Running button
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _isBatterRunning = !_isBatterRunning;
+                                  // Uncheck other options when this one is selected
+                                  if (_isBatterRunning) {
+                                    _isSoloCelebration = false;
+                                    _isSliding = false;
+                                  }
+                                  _updateCaption();
+                                });
+                              },
+                              child: Container(
+                                width: 80, // Fixed width for consistency
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _isBatterRunning
+                                      ? Colors.grey.shade200
+                                      : Colors.grey.shade100,
+                                  border: Border.all(
+                                    color: _isBatterRunning
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade300,
+                                    width: 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Running',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.normal,
+                                    color: _isBatterRunning
+                                        ? Colors.grey.shade800
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Show players in frame option when Running is checked
+                            if (_isBatterRunning == true) ...[
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _showPlayersInFrameDialog(),
+                                child: Container(
+                                  width: 100, // Fixed width for consistency
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: celebrateWith.isNotEmpty
+                                        ? Colors.grey.shade200
+                                        : Colors.grey.shade100,
+                                    border: Border.all(
+                                      color: celebrateWith.isNotEmpty
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade300,
+                                      width: 1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Players in frame',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.normal,
+                                      color: celebrateWith.isNotEmpty
+                                          ? Colors.grey.shade800
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
