@@ -3220,9 +3220,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               },
                               visualDensity: VisualDensity.compact,
                               padding: EdgeInsets.zero,
-                              labelPadding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
+                              labelPadding: EdgeInsets.zero,
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
                             ),
@@ -4244,7 +4242,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               }),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+              labelPadding: EdgeInsets.zero,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           );
@@ -4277,7 +4275,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             }),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+            labelPadding: EdgeInsets.zero,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
@@ -4321,7 +4319,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         },
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+        labelPadding: EdgeInsets.zero,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
