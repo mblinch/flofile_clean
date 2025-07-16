@@ -8412,20 +8412,30 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
 
       // Determine which team the selected players belong to
+      // Prioritize away team players when both teams are selected (since away team appears first in UI)
       Set<String> activePlayers;
       String? opponentTeamName;
 
-      if (selectedPlayers.isNotEmpty) {
-        // Home team players are selected
-        activePlayers = selectedPlayers;
-        opponentTeamName = selectedAwayTeam;
-        print('DEBUG: Home team players selected for hit: $activePlayers');
-        print('DEBUG: Opponent team for hit: $opponentTeamName');
-      } else if (selectedOpponentPlayers.isNotEmpty) {
-        // Away team players are selected
+      if (selectedOpponentPlayers.isNotEmpty && selectedPlayers.isEmpty) {
+        // Only away team players are selected
         activePlayers = selectedOpponentPlayers;
         opponentTeamName = selectedHomeTeam;
-        print('DEBUG: Away team players selected for hit: $activePlayers');
+        print('DEBUG: Only away team players selected for hit: $activePlayers');
+        print('DEBUG: Opponent team for hit: $opponentTeamName');
+      } else if (selectedPlayers.isNotEmpty &&
+          selectedOpponentPlayers.isEmpty) {
+        // Only home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print('DEBUG: Only home team players selected for hit: $activePlayers');
+        print('DEBUG: Opponent team for hit: $opponentTeamName');
+      } else if (selectedPlayers.isNotEmpty &&
+          selectedOpponentPlayers.isNotEmpty) {
+        // Both teams have players selected - prioritize away team (appears first in UI)
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print(
+            'DEBUG: Both teams selected for hit - prioritizing away team: $activePlayers');
         print('DEBUG: Opponent team for hit: $opponentTeamName');
       } else {
         print('DEBUG: No players selected for hit');
@@ -9176,20 +9186,34 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       print('DEBUG: selectedAwayTeam: $selectedAwayTeam');
 
       // Determine which team the selected players belong to
+      // Prioritize the first player selected regardless of team
       Set<String> activePlayers;
       String? opponentTeamName;
 
-      if (selectedPlayers.isNotEmpty) {
-        // Home team players are selected
-        activePlayers = selectedPlayers;
-        opponentTeamName = selectedAwayTeam;
-        print('DEBUG: Home team players selected: $activePlayers');
-        print('DEBUG: Opponent team: $opponentTeamName');
-      } else if (selectedOpponentPlayers.isNotEmpty) {
-        // Away team players are selected
+      // Determine which team has players selected first
+      // Check if away team players are selected first (they appear first in the UI)
+
+      if (selectedOpponentPlayers.isNotEmpty && selectedPlayers.isEmpty) {
+        // Only away team players are selected
         activePlayers = selectedOpponentPlayers;
         opponentTeamName = selectedHomeTeam;
-        print('DEBUG: Away team players selected: $activePlayers');
+        print('DEBUG: Only away team players selected: $activePlayers');
+        print('DEBUG: Opponent team: $opponentTeamName');
+      } else if (selectedPlayers.isNotEmpty &&
+          selectedOpponentPlayers.isEmpty) {
+        // Only home team players are selected
+        activePlayers = selectedPlayers;
+        opponentTeamName = selectedAwayTeam;
+        print('DEBUG: Only home team players selected: $activePlayers');
+        print('DEBUG: Opponent team: $opponentTeamName');
+      } else if (selectedPlayers.isNotEmpty &&
+          selectedOpponentPlayers.isNotEmpty) {
+        // Both teams have players selected - prioritize the team that was selected first
+        // Since away team appears first in the UI, assume away team was selected first
+        activePlayers = selectedOpponentPlayers;
+        opponentTeamName = selectedHomeTeam;
+        print(
+            'DEBUG: Both teams selected - prioritizing away team: $activePlayers');
         print('DEBUG: Opponent team: $opponentTeamName');
       } else {
         print('DEBUG: No players selected');
@@ -9358,6 +9382,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 
+  // Track the order of player selection
+  List<String> _playerSelectionOrder = [];
+
   // Helper to switch team column order
   void _switchTeamOrder() {
     setState(() {
@@ -9366,6 +9393,51 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _homeSearchController.clear();
       _awaySearchController.clear();
     });
+  }
+
+  // Helper to add player to selection order
+  void _addToSelectionOrder(String playerCode) {
+    if (!_playerSelectionOrder.contains(playerCode)) {
+      _playerSelectionOrder.add(playerCode);
+    }
+  }
+
+  // Helper to remove player from selection order
+  void _removeFromSelectionOrder(String playerCode) {
+    _playerSelectionOrder.remove(playerCode);
+  }
+
+  // Helper to get the first selected player
+  String? _getFirstSelectedPlayer() {
+    for (final playerCode in _playerSelectionOrder) {
+      if (selectedPlayers.contains(playerCode) ||
+          selectedOpponentPlayers.contains(playerCode)) {
+        return playerCode;
+      }
+    }
+    return null;
+  }
+
+  // Helper to handle player selection with order tracking
+  void _handlePlayerSelection(String code, bool isHomeTeam) {
+    if (isHomeTeam) {
+      if (selectedPlayers.contains(code)) {
+        selectedPlayers.remove(code);
+        _removeFromSelectionOrder(code);
+      } else {
+        selectedPlayers.add(code);
+        _addToSelectionOrder(code);
+      }
+    } else {
+      if (selectedOpponentPlayers.contains(code)) {
+        selectedOpponentPlayers.remove(code);
+        _removeFromSelectionOrder(code);
+      } else {
+        selectedOpponentPlayers.add(code);
+        _addToSelectionOrder(code);
+      }
+    }
+    _updateCaption();
   }
 
   // Helper to determine if the game is in the United States
