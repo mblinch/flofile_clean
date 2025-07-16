@@ -11182,7 +11182,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           size:
                                                                               12,
                                                                           color:
-                                                                              Colors.yellow),
+                                                                              Colors.orange),
                                                                       const SizedBox(
                                                                           width:
                                                                               2),
@@ -11290,7 +11290,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                           size:
                                                                               12,
                                                                           color:
-                                                                              Colors.yellow),
+                                                                              Colors.orange),
                                                                       const SizedBox(
                                                                           width:
                                                                               2),
