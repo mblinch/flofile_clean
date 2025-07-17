@@ -2189,12 +2189,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. "At Bat", "Bunt", or "Swing" is selected (keep all verbs visible)
+        // 3. "At Bat", "Bunt", "Swing", or "pitches" is selected (keep all verbs visible)
         bool shouldShowVerb = _selectedVerb == null ||
             _selectedVerb == verb ||
             _selectedVerb == 'At Bat' ||
             _selectedVerb == 'Bunt' ||
-            _selectedVerb == 'Swing';
+            _selectedVerb == 'Swing' ||
+            _selectedVerb == 'pitches';
 
         if (shouldShowVerb) {
           hasVisibleVerbs = true;
@@ -2244,12 +2245,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. "At Bat", "Bunt", or "Swing" is selected (keep all verbs visible)
+        // 3. "At Bat", "Bunt", "Swing", or "pitches" is selected (keep all verbs visible)
         bool shouldShowVerb = _selectedVerb == null ||
             _selectedVerb == verb ||
             _selectedVerb == 'At Bat' ||
             _selectedVerb == 'Bunt' ||
-            _selectedVerb == 'Swing';
+            _selectedVerb == 'Swing' ||
+            _selectedVerb == 'pitches';
 
         if (shouldShowVerb) {
           if (verb == 'hit') {
@@ -3972,6 +3974,57 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               if (isSelected) {
                                 codeReplacements['Swing'] = Replacement(
                                     'swings against the', 'Swing', '');
+                              }
+                              _updateCaption();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'pitches') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Text(
+                                'Pitches',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            selected: _selectedVerb == 'pitches',
+                            selectedColor: Colors.grey.shade300,
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'pitches' : null;
+                              _selectedRbiInning = null;
+                              // Create code replacement for pitches
+                              if (isSelected) {
+                                codeReplacements['pitches'] = Replacement(
+                                    'delivers a pitch against the',
+                                    'pitches',
+                                    '');
                               }
                               _updateCaption();
                             }),
@@ -9721,6 +9774,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper to determine if a specific team should be disabled
   bool _isTeamDisabled(bool isHomeTeam) {
+    // Check if current verb is a solo verb that disables opponent selection
+    if (_selectedVerb != null && soloVerbs.contains(_selectedVerb)) {
+      // For solo verbs, disable the team that doesn't have selected players
+      if (isHomeTeam) {
+        // Disable home team if away team has players selected
+        return selectedOpponentPlayers.isNotEmpty;
+      } else {
+        // Disable away team if home team has players selected
+        return selectedPlayers.isNotEmpty;
+      }
+    }
+
     if (!_shouldDisableOppositeTeam()) return false;
 
     // Allow opposite team selection in celebration mode
@@ -9742,9 +9807,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   // Helper to get player display text (full name and number)
-  Widget _getPlayerDisplayText(Replacement replacement) {
+  Widget _getPlayerDisplayText(Replacement replacement,
+      {bool isDisabled = false}) {
     final fullName = replacement.short;
     final number = replacement.jerseyNumber ?? '';
+    final textColor = isDisabled ? Colors.grey.shade400 : Colors.black87;
 
     // If the short name contains a number (like "John Smith #23"), extract name and number
     if (fullName.contains('#')) {
@@ -9754,7 +9821,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final spacing = numberPart.length == 1 ? '   ' : '  ';
       return RichText(
         text: TextSpan(
-          style: const TextStyle(fontSize: 11, color: Colors.black87),
+          style: TextStyle(fontSize: 11, color: textColor),
           children: [
             TextSpan(
               text: '$namePart$spacing',
@@ -9774,7 +9841,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         final spacing = number.length == 1 ? '   ' : '  ';
         return RichText(
           text: TextSpan(
-            style: const TextStyle(fontSize: 11, color: Colors.black87),
+            style: TextStyle(fontSize: 11, color: textColor),
             children: [
               TextSpan(
                 text: '$fullName$spacing',
@@ -9790,10 +9857,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       } else {
         return Text(
           fullName,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.normal,
-            color: Colors.black87,
+            color: textColor,
           ),
         );
       }
@@ -10288,23 +10355,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               child: Scaffold(
                 backgroundColor: Color(0xFFF5F5F5),
                 appBar: AdaptiveAppBar(
-                  toolbarHeight: 90,
-                  titleSpacing: 8,
+                  toolbarHeight: 60,
+                  titleSpacing: 4,
                   title: Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      // Logo (bigger, no title text)
+                      // Logo (smaller, no title text)
                       Container(
-                        width: 64,
-                        height: 64,
+                        width: 40,
+                        height: 40,
                         child: Image.asset(
                           'assets/images/flo_file_logo.png',
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
                             // Fallback if logo not found
                             return Container(
-                              width: 64,
-                              height: 64,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: Colors.blue,
                                 borderRadius: BorderRadius.circular(6),
@@ -10323,7 +10390,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           },
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
                       // API Connection Indicator
                       Tooltip(
                         message: _isConnectedToApi
@@ -10337,7 +10404,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           size: 18,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
 
                       // Team Selection Row
                       Row(
@@ -10346,10 +10413,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           // Away Team Dropdown
                           Column(
                             children: [
-                              const SizedBox(
-                                  height: 20), // Reduced from 32 to 20
+                              const SizedBox(height: 8), // Reduced from 32 to 8
                               SizedBox(
-                                width: 240,
+                                width: 200,
                                 child: _buildTeamDropdown(
                                   label: 'Away Team',
                                   value: selectedAwayTeam,
@@ -10372,10 +10438,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(
-                                  height: 20), // Reduced from 32 to 20
+                              const SizedBox(height: 8), // Reduced from 32 to 8
                               SizedBox(
-                                width: 240,
+                                width: 200,
                                 child: _buildTeamDropdown(
                                   label: 'Home Team',
                                   value: selectedHomeTeam,
@@ -10514,7 +10579,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       child: const Text(
                                         'Manage Favorites',
                                         style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 9,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -12024,7 +12089,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                           ],
                                                                                           Align(
                                                                                             alignment: Alignment.centerRight,
-                                                                                            child: _getPlayerDisplayText(replacement),
+                                                                                            child: _getPlayerDisplayText(replacement, isDisabled: isDisabled),
                                                                                           ),
                                                                                         ],
                                                                                       ),
@@ -12169,7 +12234,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                           ],
                                                                                           Align(
                                                                                             alignment: Alignment.centerRight,
-                                                                                            child: _getPlayerDisplayText(replacement),
+                                                                                            child: _getPlayerDisplayText(replacement, isDisabled: isDisabled),
                                                                                           ),
                                                                                         ],
                                                                                       ),
@@ -13760,12 +13825,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               .map(
                 (item) => PopupMenuItem<String>(
                   value: item,
-                  height: 18,
+                  height: 16,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   child: Container(
-                    height: 18,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    height: 16,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Row(
                       children: [
                         // Home/Away symbol
@@ -13795,14 +13860,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               )
               .toList(),
           child: Container(
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             child: Row(
               children: [
                 // Label
                 Text(
                   '${label.replaceAll(' Team', '')}: ',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 // Home/Away symbol for selected item
                 if (value != null) ...[
@@ -13815,7 +13880,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   Expanded(
                     child: Text(
                       value ?? 'Select Team',
-                      style: const TextStyle(fontSize: 13, color: Colors.black),
+                      style: const TextStyle(fontSize: 11, color: Colors.black),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -13823,11 +13888,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   const Expanded(
                     child: Text(
                       'Select Team',
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ),
                 ],
-                const Icon(Icons.arrow_drop_down, size: 16),
+                const Icon(Icons.arrow_drop_down, size: 14),
               ],
             ),
           ),
