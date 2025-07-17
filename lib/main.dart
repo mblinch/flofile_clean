@@ -2198,17 +2198,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             margin: const EdgeInsets.only(bottom: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFCCCCCC), // Medium-light grey background
-              borderRadius: BorderRadius.circular(4),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey,
+                  width: 1.0,
+                ),
+              ),
             ),
             child: Text(
               categoryName.toUpperCase(),
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.left,
               style: const TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.bold,
-                color: Colors.black, // Black text for light background
+                color: Colors.black,
+                letterSpacing: 1.5, // Spread out the lettering
               ),
             ),
           ),
