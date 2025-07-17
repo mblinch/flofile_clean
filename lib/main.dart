@@ -6395,14 +6395,18 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   Future<void> _showPostGameTeammatesDialog() async {
     // For post-game celebrations, determine the celebrating team based on context
-    // If we have players selected, use their team; otherwise use the current view team
+    // Check which team the active players belong to by their player codes
     bool celebratingTeamIsHome;
-    if (selectedPlayers.isNotEmpty) {
-      celebratingTeamIsHome = true;
-    } else if (selectedOpponentPlayers.isNotEmpty) {
-      celebratingTeamIsHome = false;
+
+    // Get the active players (those who are doing the celebrating)
+    final activePlayers =
+        _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+    if (activePlayers.isNotEmpty) {
+      // Determine team based on player code prefix (h = home, v = away)
+      celebratingTeamIsHome = activePlayers.first.startsWith('h');
     } else {
-      // No players selected, use the current team view
+      // No players selected, use the current team view as fallback
       celebratingTeamIsHome = _showHomeFirst;
     }
 
@@ -6602,14 +6606,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     required VoidCallback onClear,
     bool showOpposingTeam = false,
   }) async {
+    // Determine which team the celebrating player belongs to based on actually selected players
+    // For celebration, we need to determine which team the main player is from
+    bool celebratingPlayerIsHome;
+
+    // First check if we have any selected players
+    if (selectedPlayers.isNotEmpty) {
+      celebratingPlayerIsHome = selectedPlayers.first.startsWith('h');
+    } else {
+      // If no players in celebration list yet, determine from the active players
+      final activePlayers =
+          _showHomeFirst ? this.selectedPlayers : selectedOpponentPlayers;
+      if (activePlayers.isNotEmpty) {
+        celebratingPlayerIsHome = activePlayers.first.startsWith('h');
+      } else {
+        // Fallback to UI layout if no players selected
+        celebratingPlayerIsHome = _showHomeFirst;
+      }
+    }
+
     // Determine which roster to show
     final roster = (showOpposingTeam
-            ? (isHome
+            ? (celebratingPlayerIsHome
                 ? codeReplacements.keys.where((k) => k.startsWith(
                     'v')) // Show away players if celebrating player is home
                 : codeReplacements.keys.where((k) => k.startsWith(
                     'h'))) // Show home players if celebrating player is away
-            : (isHome
+            : (celebratingPlayerIsHome
                 ? codeReplacements.keys.where((k) => k.startsWith('h'))
                 : codeReplacements.keys.where((k) => k.startsWith('v'))))
         .toList()
@@ -6776,12 +6799,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Future<void> _showPlayersInFrameDialog() async {
-    // Determine which team the selected player belongs to
+    // Determine which team the selected player belongs to based on their player code
     bool selectedPlayerIsHome;
-    if (selectedPlayers.isNotEmpty) {
-      selectedPlayerIsHome = true;
-    } else if (selectedOpponentPlayers.isNotEmpty) {
-      selectedPlayerIsHome = false;
+
+    // Get the active players (main celebrators)
+    final activePlayers =
+        _showHomeFirst ? selectedPlayers : selectedOpponentPlayers;
+
+    if (activePlayers.isNotEmpty) {
+      // Determine team based on player code prefix (h = home, v = away)
+      selectedPlayerIsHome = activePlayers.first.startsWith('h');
     } else {
       // Fallback: use the current team view if no players are selected
       selectedPlayerIsHome = _showHomeFirst;
@@ -9442,7 +9469,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   // Helper function to format player name with jersey number first (for left team)
-  String _getPlayerDisplayTextWithNumberFirst(Replacement replacement) {
+  Widget _getPlayerDisplayTextWithNumberFirst(Replacement replacement) {
     final jerseyNumber = replacement.jerseyNumber;
     final fullName = replacement.short;
 
@@ -9450,10 +9477,33 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Extract name without jersey number
       final nameWithoutNumber =
           fullName.replaceFirst('#$jerseyNumber', '').trim();
-      return '#$jerseyNumber $nameWithoutNumber';
+      // Add spacing based on jersey number length
+      final spacing = jerseyNumber.length == 1 ? '   ' : '  ';
+      return RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 11, color: Colors.black87),
+          children: [
+            TextSpan(
+              text: '#$jerseyNumber$spacing',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextSpan(
+              text: nameWithoutNumber,
+              style: const TextStyle(fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
+      );
     }
 
-    return fullName;
+    return Text(
+      fullName,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.normal,
+        color: Colors.black87,
+      ),
+    );
   }
 
   // Helper to determine if a specific team should be disabled
@@ -9478,8 +9528,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return false;
   }
 
-  // Helper to get player display text (last name and number)
-  String _getPlayerDisplayText(Replacement replacement) {
+  // Helper to get player display text (full name and number)
+  Widget _getPlayerDisplayText(Replacement replacement) {
     final fullName = replacement.short;
     final number = replacement.jerseyNumber ?? '';
 
@@ -9487,14 +9537,122 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (fullName.contains('#')) {
       final namePart = fullName.split('#')[0].trim();
       final numberPart = fullName.split('#')[1].trim();
-      final parts = namePart.split(' ');
-      final lastName = parts.length > 1 ? parts.last : namePart;
-      return '$lastName #$numberPart';
+      // Add spacing based on jersey number length
+      final spacing = numberPart.length == 1 ? '   ' : '  ';
+      return RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 11, color: Colors.black87),
+          children: [
+            TextSpan(
+              text: '$namePart$spacing',
+              style: const TextStyle(fontWeight: FontWeight.normal),
+            ),
+            TextSpan(
+              text: '#$numberPart',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
     } else {
       // If no number in short name, use the number from jerseyNumber field
-      final parts = fullName.split(' ');
-      final lastName = parts.length > 1 ? parts.last : fullName;
-      return number.isNotEmpty ? '$lastName #$number' : lastName;
+      if (number.isNotEmpty) {
+        // Add spacing based on jersey number length
+        final spacing = number.length == 1 ? '   ' : '  ';
+        return RichText(
+          text: TextSpan(
+            style: const TextStyle(fontSize: 11, color: Colors.black87),
+            children: [
+              TextSpan(
+                text: '$fullName$spacing',
+                style: const TextStyle(fontWeight: FontWeight.normal),
+              ),
+              TextSpan(
+                text: '#$number',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        );
+      } else {
+        return Text(
+          fullName,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.normal,
+            color: Colors.black87,
+          ),
+        );
+      }
+    }
+  }
+
+  // Helper to get player display text for chips with custom color
+  Widget _getPlayerDisplayTextForChips(
+      Replacement replacement, Color textColor) {
+    final fullName = replacement.short;
+    final number = replacement.jerseyNumber ?? '';
+
+    // Extract last name only for chips
+    String getLastName(String name) {
+      final parts = name.trim().split(' ');
+      return parts.isNotEmpty ? parts.last : name;
+    }
+
+    // If the short name contains a number (like "John Smith #23"), extract name and number
+    if (fullName.contains('#')) {
+      final namePart = fullName.split('#')[0].trim();
+      final lastName = getLastName(namePart);
+      final numberPart = fullName.split('#')[1].trim();
+      // Add spacing based on jersey number length
+      final spacing = numberPart.length == 1 ? '   ' : '  ';
+      return RichText(
+        text: TextSpan(
+          style: TextStyle(fontSize: 10, color: textColor),
+          children: [
+            TextSpan(
+              text: '$lastName$spacing',
+              style: const TextStyle(fontWeight: FontWeight.normal),
+            ),
+            TextSpan(
+              text: '#$numberPart',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // If no number in short name, use the number from jerseyNumber field
+      if (number.isNotEmpty) {
+        final lastName = getLastName(fullName);
+        // Add spacing based on jersey number length
+        final spacing = number.length == 1 ? '   ' : '  ';
+        return RichText(
+          text: TextSpan(
+            style: TextStyle(fontSize: 10, color: textColor),
+            children: [
+              TextSpan(
+                text: '$lastName$spacing',
+                style: const TextStyle(fontWeight: FontWeight.normal),
+              ),
+              TextSpan(
+                text: '#$number',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        );
+      } else {
+        final lastName = getLastName(fullName);
+        return Text(
+          lastName,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.normal,
+            color: textColor,
+          ),
+        );
+      }
     }
   }
 
@@ -9516,9 +9674,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             (_selectedVerb == 'hit' && _selectedHitType != null)) {
           selectedPlayers.add(code);
           _addToSelectionOrder(code);
-          // Same team player selected -> celebrates with
-          _selectedCelebrationType = 'with';
-          celebrateWith.add(code);
+
+          // Determine if this player is a teammate or opponent of the main celebrating player
+          final mainPlayer = _getFirstSelectedPlayer();
+          if (mainPlayer != null) {
+            final mainPlayerIsHome = mainPlayer.startsWith('h');
+            final currentPlayerIsHome = code.startsWith('h');
+
+            if (mainPlayerIsHome == currentPlayerIsHome) {
+              // Same team -> celebrates with (teammates)
+              _selectedCelebrationType = 'with';
+              celebrateWith.add(code);
+            } else {
+              // Different team -> celebrates against (opponents)
+              _selectedCelebrationType = 'against';
+              celebrateAgainst.add(code);
+            }
+          } else {
+            // Fallback to old logic if no main player found
+            _selectedCelebrationType = 'with';
+            celebrateWith.add(code);
+          }
         } else {
           // Normal verb replacement logic for non-celebration verbs
           if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
@@ -9548,9 +9724,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             (_selectedVerb == 'hit' && _selectedHitType != null)) {
           selectedOpponentPlayers.add(code);
           _addToSelectionOrder(code);
-          // Opponent player selected -> celebrates against
-          _selectedCelebrationType = 'against';
-          celebrateAgainst.add(code);
+
+          // Determine if this player is a teammate or opponent of the main celebrating player
+          final mainPlayer = _getFirstSelectedPlayer();
+          if (mainPlayer != null) {
+            final mainPlayerIsHome = mainPlayer.startsWith('h');
+            final currentPlayerIsHome = code.startsWith('h');
+
+            if (mainPlayerIsHome == currentPlayerIsHome) {
+              // Same team -> celebrates with (teammates)
+              _selectedCelebrationType = 'with';
+              celebrateWith.add(code);
+            } else {
+              // Different team -> celebrates against (opponents)
+              _selectedCelebrationType = 'against';
+              celebrateAgainst.add(code);
+            }
+          } else {
+            // Fallback to old logic if no main player found
+            _selectedCelebrationType = 'against';
+            celebrateAgainst.add(code);
+          }
         } else {
           // Normal verb replacement logic for non-celebration verbs
           if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
@@ -11383,19 +11577,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     const SizedBox(
                                                                         width:
                                                                             4),
-                                                                    Text(
-                                                                      _getPlayerDisplayText(
-                                                                          replacement),
-                                                                      style:
-                                                                          const TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontWeight:
-                                                                            FontWeight.w500,
-                                                                      ),
-                                                                    ),
+                                                                    _getPlayerDisplayTextForChips(
+                                                                        replacement,
+                                                                        Colors
+                                                                            .white),
                                                                     const SizedBox(
                                                                         width:
                                                                             4),
@@ -11497,19 +11682,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                     const SizedBox(
                                                                         width:
                                                                             4),
-                                                                    Text(
-                                                                      _getPlayerDisplayText(
-                                                                          replacement),
-                                                                      style:
-                                                                          const TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        color: Colors
-                                                                            .black87,
-                                                                        fontWeight:
-                                                                            FontWeight.w500,
-                                                                      ),
-                                                                    ),
+                                                                    _getPlayerDisplayTextForChips(
+                                                                        replacement,
+                                                                        Colors
+                                                                            .black),
                                                                     const SizedBox(
                                                                         width:
                                                                             4),
@@ -11718,22 +11894,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               child: Row(
                                                                                 mainAxisSize: MainAxisSize.min,
                                                                                 children: [
+                                                                                  _getPlayerDisplayTextWithNumberFirst(replacement),
                                                                                   if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                    const SizedBox(width: 2),
                                                                                     const Icon(
                                                                                       Icons.star,
                                                                                       size: 12,
                                                                                       color: Colors.orange,
                                                                                     ),
-                                                                                    const SizedBox(width: 2),
                                                                                   ],
-                                                                                  Text(
-                                                                                    _getPlayerDisplayTextWithNumberFirst(replacement),
-                                                                                    style: TextStyle(
-                                                                                      fontSize: 11,
-                                                                                      color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
-                                                                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                    ),
-                                                                                  ),
                                                                                 ],
                                                                               ),
                                                                             ),
@@ -11876,22 +12045,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               child: Row(
                                                                                 mainAxisSize: MainAxisSize.min,
                                                                                 children: [
+                                                                                  _getPlayerDisplayTextWithNumberFirst(replacement),
                                                                                   if (isSelected && code == _getFirstSelectedPlayer()) ...[
+                                                                                    const SizedBox(width: 2),
                                                                                     const Icon(
                                                                                       Icons.star,
                                                                                       size: 12,
                                                                                       color: Colors.orange,
                                                                                     ),
-                                                                                    const SizedBox(width: 2),
                                                                                   ],
-                                                                                  Text(
-                                                                                    _getPlayerDisplayTextWithNumberFirst(replacement),
-                                                                                    style: TextStyle(
-                                                                                      fontSize: 11,
-                                                                                      color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
-                                                                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                    ),
-                                                                                  ),
                                                                                 ],
                                                                               ),
                                                                             ),
@@ -12080,14 +12242,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                       ),
                                                                                       const SizedBox(width: 2),
                                                                                     ],
-                                                                                    Text(
-                                                                                      replacement.short,
-                                                                                      style: TextStyle(
-                                                                                        fontSize: 11,
-                                                                                        color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
-                                                                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                      ),
-                                                                                      textAlign: TextAlign.right,
+                                                                                    Align(
+                                                                                      alignment: Alignment.centerRight,
+                                                                                      child: _getPlayerDisplayText(replacement),
                                                                                     ),
                                                                                   ],
                                                                                 ),
@@ -12243,14 +12400,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                       ),
                                                                                       const SizedBox(width: 2),
                                                                                     ],
-                                                                                    Text(
-                                                                                      replacement.short,
-                                                                                      style: TextStyle(
-                                                                                        fontSize: 11,
-                                                                                        color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
-                                                                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                                                                      ),
-                                                                                      textAlign: TextAlign.right,
+                                                                                    Align(
+                                                                                      alignment: Alignment.centerRight,
+                                                                                      child: _getPlayerDisplayText(replacement),
                                                                                     ),
                                                                                   ],
                                                                                 ),
