@@ -8748,10 +8748,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (isCelebrationActive) {
         // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
-        print('DEBUG: Caption generation - isCelebrationActive = true');
-        print('DEBUG: Caption generation - celebrateWith: $celebrateWith');
-        print(
-            'DEBUG: Caption generation - celebrateAgainst: $celebrateAgainst');
+
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
 
         if (celebrateWith.isNotEmpty) {
@@ -9474,7 +9471,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       } else {
         // In celebration mode, don't clear existing players - just add to celebration lists
-        if (_selectedVerb == 'Celebrate') {
+        if (_selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null)) {
           selectedPlayers.add(code);
           _addToSelectionOrder(code);
           // Same team player selected -> celebrates with
@@ -9498,20 +9496,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         _removeFromSelectionOrder(code);
 
         // Remove from celebration lists if deselecting
-        if (_selectedVerb == 'Celebrate') {
+        if (_selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null)) {
           celebrateWith.remove(code);
           celebrateAgainst.remove(code);
         }
       } else {
         // In celebration mode, don't clear existing players - just add to celebration lists
-        if (_selectedVerb == 'Celebrate') {
+        if (_selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null)) {
           selectedOpponentPlayers.add(code);
           _addToSelectionOrder(code);
           // Opponent player selected -> celebrates against
           _selectedCelebrationType = 'against';
           celebrateAgainst.add(code);
-          print('DEBUG: Added opponent player to celebrateAgainst: $code');
-          print('DEBUG: celebrateAgainst list: $celebrateAgainst');
         } else {
           // Normal verb replacement logic for non-celebration verbs
           if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
@@ -11632,7 +11630,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
                                                                                         // In celebration mode, don't clear existing players - just add to celebration lists
-                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                        if (_selectedVerb == 'Celebrate' || (_selectedVerb == 'hit' && _selectedHitType != null)) {
                                                                                           selectedOpponentPlayers.add(code);
                                                                                           _addToSelectionOrder(code);
                                                                                           // Opponent player selected -> celebrates against
@@ -11790,7 +11788,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
                                                                                         // In celebration mode, don't clear existing players - just add to celebration lists
-                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                        if (_selectedVerb == 'Celebrate' || (_selectedVerb == 'hit' && _selectedHitType != null)) {
                                                                                           selectedPlayers.add(code);
                                                                                           _addToSelectionOrder(code);
                                                                                           // Same team player selected -> celebrates with
@@ -11983,7 +11981,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
                                                                                         // In celebration mode, don't clear existing players - just add to celebration lists
-                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                        if (_selectedVerb == 'Celebrate' || (_selectedVerb == 'hit' && _selectedHitType != null)) {
                                                                                           selectedPlayers.add(code);
                                                                                           _addToSelectionOrder(code);
                                                                                           // Same team player selected -> celebrates with
@@ -12146,7 +12144,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
                                                                                         // In celebration mode, don't clear existing players - just add to celebration lists
-                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                        if (_selectedVerb == 'Celebrate' || (_selectedVerb == 'hit' && _selectedHitType != null)) {
                                                                                           selectedOpponentPlayers.add(code);
                                                                                           _addToSelectionOrder(code);
                                                                                           // Opponent player selected -> celebrates against
