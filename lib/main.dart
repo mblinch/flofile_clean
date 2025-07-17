@@ -9421,21 +9421,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           celebrateAgainst.remove(code);
         }
       } else {
-        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
-          for (final playerCode in selectedPlayers) {
-            _removeFromSelectionOrder(playerCode);
-          }
-          selectedPlayers.clear();
-        }
-        selectedPlayers.add(code);
-        _addToSelectionOrder(code);
-
-        // Automatic celebration mode: if Celebrate verb is selected
+        // In celebration mode, don't clear existing players - just add to celebration lists
         if (_selectedVerb == 'Celebrate') {
+          selectedPlayers.add(code);
+          _addToSelectionOrder(code);
           // Same team player selected -> celebrates with
           _selectedCelebrationType = 'with';
-          celebrateAgainst.clear();
           celebrateWith.add(code);
+        } else {
+          // Normal verb replacement logic for non-celebration verbs
+          if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+            for (final playerCode in selectedPlayers) {
+              _removeFromSelectionOrder(playerCode);
+            }
+            selectedPlayers.clear();
+          }
+          selectedPlayers.add(code);
+          _addToSelectionOrder(code);
         }
       }
     } else {
@@ -9449,21 +9451,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           celebrateAgainst.remove(code);
         }
       } else {
-        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
-          for (final playerCode in selectedOpponentPlayers) {
-            _removeFromSelectionOrder(playerCode);
-          }
-          selectedOpponentPlayers.clear();
-        }
-        selectedOpponentPlayers.add(code);
-        _addToSelectionOrder(code);
-
-        // Automatic celebration mode: if Celebrate verb is selected
+        // In celebration mode, don't clear existing players - just add to celebration lists
         if (_selectedVerb == 'Celebrate') {
+          selectedOpponentPlayers.add(code);
+          _addToSelectionOrder(code);
           // Opponent player selected -> celebrates against
           _selectedCelebrationType = 'against';
-          celebrateWith.clear();
           celebrateAgainst.add(code);
+        } else {
+          // Normal verb replacement logic for non-celebration verbs
+          if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+            for (final playerCode in selectedOpponentPlayers) {
+              _removeFromSelectionOrder(playerCode);
+            }
+            selectedOpponentPlayers.clear();
+          }
+          selectedOpponentPlayers.add(code);
+          _addToSelectionOrder(code);
         }
       }
     }
@@ -11573,21 +11577,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         selectedOpponentPlayers.remove(code);
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
-                                                                                        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
-                                                                                          for (final playerCode in selectedOpponentPlayers) {
-                                                                                            _removeFromSelectionOrder(playerCode);
-                                                                                          }
-                                                                                          selectedOpponentPlayers.clear();
-                                                                                        }
-                                                                                        selectedOpponentPlayers.add(code);
-                                                                                        _addToSelectionOrder(code);
-
-                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        // In celebration mode, don't clear existing players - just add to celebration lists
                                                                                         if (_selectedVerb == 'Celebrate') {
+                                                                                          selectedOpponentPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                           // Opponent player selected -> celebrates against
                                                                                           _selectedCelebrationType = 'against';
-                                                                                          celebrateWith.clear();
                                                                                           celebrateAgainst.add(code);
+                                                                                        } else {
+                                                                                          // Normal verb replacement logic for non-celebration verbs
+                                                                                          if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+                                                                                            for (final playerCode in selectedOpponentPlayers) {
+                                                                                              _removeFromSelectionOrder(playerCode);
+                                                                                            }
+                                                                                            selectedOpponentPlayers.clear();
+                                                                                          }
+                                                                                          selectedOpponentPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                         }
                                                                                       }
                                                                                       _updateCaption();
@@ -11729,21 +11735,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         selectedPlayers.remove(code);
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
-                                                                                        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
-                                                                                          for (final playerCode in selectedPlayers) {
-                                                                                            _removeFromSelectionOrder(playerCode);
-                                                                                          }
-                                                                                          selectedPlayers.clear();
-                                                                                        }
-                                                                                        selectedPlayers.add(code);
-                                                                                        _addToSelectionOrder(code);
-
-                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        // In celebration mode, don't clear existing players - just add to celebration lists
                                                                                         if (_selectedVerb == 'Celebrate') {
+                                                                                          selectedPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                           // Same team player selected -> celebrates with
                                                                                           _selectedCelebrationType = 'with';
-                                                                                          celebrateAgainst.clear();
                                                                                           celebrateWith.add(code);
+                                                                                        } else {
+                                                                                          // Normal verb replacement logic for non-celebration verbs
+                                                                                          if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+                                                                                            for (final playerCode in selectedPlayers) {
+                                                                                              _removeFromSelectionOrder(playerCode);
+                                                                                            }
+                                                                                            selectedPlayers.clear();
+                                                                                          }
+                                                                                          selectedPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                         }
                                                                                       }
                                                                                       _updateCaption();
@@ -11920,21 +11928,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         selectedPlayers.remove(code);
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
-                                                                                        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
-                                                                                          for (final playerCode in selectedPlayers) {
-                                                                                            _removeFromSelectionOrder(playerCode);
-                                                                                          }
-                                                                                          selectedPlayers.clear();
-                                                                                        }
-                                                                                        selectedPlayers.add(code);
-                                                                                        _addToSelectionOrder(code);
-
-                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        // In celebration mode, don't clear existing players - just add to celebration lists
                                                                                         if (_selectedVerb == 'Celebrate') {
+                                                                                          selectedPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                           // Same team player selected -> celebrates with
                                                                                           _selectedCelebrationType = 'with';
-                                                                                          celebrateAgainst.clear();
                                                                                           celebrateWith.add(code);
+                                                                                        } else {
+                                                                                          // Normal verb replacement logic for non-celebration verbs
+                                                                                          if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+                                                                                            for (final playerCode in selectedPlayers) {
+                                                                                              _removeFromSelectionOrder(playerCode);
+                                                                                            }
+                                                                                            selectedPlayers.clear();
+                                                                                          }
+                                                                                          selectedPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                         }
                                                                                       }
                                                                                       _updateCaption();
@@ -12081,21 +12091,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         selectedOpponentPlayers.remove(code);
                                                                                         _removeFromSelectionOrder(code);
                                                                                       } else {
-                                                                                        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
-                                                                                          for (final playerCode in selectedOpponentPlayers) {
-                                                                                            _removeFromSelectionOrder(playerCode);
-                                                                                          }
-                                                                                          selectedOpponentPlayers.clear();
-                                                                                        }
-                                                                                        selectedOpponentPlayers.add(code);
-                                                                                        _addToSelectionOrder(code);
-
-                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        // In celebration mode, don't clear existing players - just add to celebration lists
                                                                                         if (_selectedVerb == 'Celebrate') {
+                                                                                          selectedOpponentPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                           // Opponent player selected -> celebrates against
                                                                                           _selectedCelebrationType = 'against';
-                                                                                          celebrateWith.clear();
                                                                                           celebrateAgainst.add(code);
+                                                                                        } else {
+                                                                                          // Normal verb replacement logic for non-celebration verbs
+                                                                                          if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+                                                                                            for (final playerCode in selectedOpponentPlayers) {
+                                                                                              _removeFromSelectionOrder(playerCode);
+                                                                                            }
+                                                                                            selectedOpponentPlayers.clear();
+                                                                                          }
+                                                                                          selectedOpponentPlayers.add(code);
+                                                                                          _addToSelectionOrder(code);
                                                                                         }
                                                                                       }
                                                                                       _updateCaption();
