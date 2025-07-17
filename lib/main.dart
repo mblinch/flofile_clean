@@ -2132,10 +2132,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final List<Widget> widgets = [];
 
     // Check if multiple players from the same team are selected
+    // In celebration mode, opponent players are just targets, not main subjects
+    final isCelebrationMode = _selectedVerb == 'Celebrate' ||
+        (_selectedVerb == 'hit' && _selectedHitType != null) ||
+        celebrateWith.isNotEmpty ||
+        celebrateAgainst.isNotEmpty;
+
     final multipleHomeSelected = selectedPlayers.length > 1;
     final multipleAwaySelected = selectedOpponentPlayers.length > 1;
-    final multiplePlayersSelected =
-        multipleHomeSelected || multipleAwaySelected;
+
+    // Don't count opponent players as "multiple players" when in celebration mode
+    final multiplePlayersSelected = isCelebrationMode
+        ? multipleHomeSelected // Only count home team multiples in celebration mode
+        : (multipleHomeSelected || multipleAwaySelected);
 
     // Define verbs to hide when multiple players are selected
     final soloOnlyVerbs = [
@@ -2157,10 +2166,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Check if any verbs in this category should be shown
       bool hasVisibleVerbs = false;
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected AND no verb is currently selected
-        if (multiplePlayersSelected &&
-            soloOnlyVerbs.contains(verb) &&
-            _selectedVerb == null) {
+        // Skip solo-only verbs if multiple players are selected
+        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
           continue;
         }
 
@@ -2199,10 +2206,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Add verbs for this category
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected AND no verb is currently selected
-        if (multiplePlayersSelected &&
-            soloOnlyVerbs.contains(verb) &&
-            _selectedVerb == null) {
+        // Skip solo-only verbs if multiple players are selected
+        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
           continue;
         }
 
