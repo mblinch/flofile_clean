@@ -8710,7 +8710,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
       }
 
-      if (_isSoloCelebration) {
+      // Check if celebration is active (either old method or new automatic celebration mode)
+      final isCelebrationActive = _isSoloCelebration ||
+          _selectedCelebrationType != null ||
+          celebrateWith.isNotEmpty ||
+          celebrateAgainst.isNotEmpty;
+
+      if (isCelebrationActive) {
         // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
 
@@ -8724,7 +8730,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           String opponentPart;
           if (celebrateAgainst.isNotEmpty) {
             final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
-            opponentPart = "beside $opponentStr of the $opponentTeamName";
+            opponentPart = "against $opponentStr";
           } else {
             opponentPart = "against the $opponentTeamName";
           }
@@ -8734,25 +8740,29 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 "$playersString $celebrationPart $opponentPart to defeat the $opponentTeamName";
           } else {
             mainCaptionPart = "$playersString $celebrationPart $opponentPart";
+          }
+        } else if (celebrateAgainst.isNotEmpty) {
+          // Celebrating against specific opponent players
+          final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
+          final celebrationPart =
+              "celebrates a $formattedHitPhrase against $opponentStr";
+
+          if (_walkOff == true) {
+            mainCaptionPart =
+                "$playersString $celebrationPart to defeat the $opponentTeamName";
+          } else {
+            mainCaptionPart = "$playersString $celebrationPart";
           }
         } else {
-          // Solo celebration (no teammates selected)
+          // Solo celebration (no teammates or opponents selected)
           final celebrationPart = "celebrates a $formattedHitPhrase";
-
-          // Check if opposing players are selected
-          String opponentPart;
-          if (celebrateAgainst.isNotEmpty) {
-            final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
-            opponentPart = "beside $opponentStr of the $opponentTeamName";
-          } else {
-            opponentPart = "against the $opponentTeamName";
-          }
 
           if (_walkOff == true) {
             mainCaptionPart =
-                "$playersString $celebrationPart $opponentPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart to defeat the $opponentTeamName";
           } else {
-            mainCaptionPart = "$playersString $celebrationPart $opponentPart";
+            mainCaptionPart =
+                "$playersString $celebrationPart against the $opponentTeamName";
           }
         }
       } else {
