@@ -8340,6 +8340,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       String playersString;
       bool hasMultiplePlayers = false;
+      String? celebrationOpponentTeam;
 
       if (isCelebrationActive) {
         // In celebration mode, ONLY use the main player (first selected) as the subject
@@ -8347,8 +8348,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         if (mainPlayerCode != null) {
           playersString = _combinePlayersWithSingleTeam([mainPlayerCode]);
           hasMultiplePlayers = false;
+
+          // Determine opponent team based on main player's team
+          if (mainPlayerCode.startsWith('h')) {
+            // Main player is home team, opponent is away team
+            celebrationOpponentTeam = selectedAwayTeam;
+          } else {
+            // Main player is away team, opponent is home team
+            celebrationOpponentTeam = selectedHomeTeam;
+          }
+
           print(
               'DEBUG: Celebration mode - Using main player only: $playersString');
+          print(
+              'DEBUG: Celebration mode - Opponent team: $celebrationOpponentTeam');
         } else {
           // Fallback if no main player found
           playersString = _combinePlayersWithSingleTeam(activePlayers.toList());
@@ -8749,12 +8762,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
             opponentPart = "against $opponentStr";
           } else {
-            opponentPart = "against the $opponentTeamName";
+            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
+            opponentPart = "against the $teamToUse";
           }
 
           if (_walkOff == true) {
+            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
             mainCaptionPart =
-                "$playersString $celebrationPart $opponentPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart $opponentPart to defeat the $teamToUse";
           } else {
             mainCaptionPart = "$playersString $celebrationPart $opponentPart";
           }
@@ -8765,8 +8780,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
               "celebrates a $formattedHitPhrase against $opponentStr";
 
           if (_walkOff == true) {
+            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
             mainCaptionPart =
-                "$playersString $celebrationPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart to defeat the $teamToUse";
           } else {
             mainCaptionPart = "$playersString $celebrationPart";
           }
@@ -8775,11 +8791,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           final celebrationPart = "celebrates a $formattedHitPhrase";
 
           if (_walkOff == true) {
+            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
             mainCaptionPart =
-                "$playersString $celebrationPart to defeat the $opponentTeamName";
+                "$playersString $celebrationPart to defeat the $teamToUse";
           } else {
+            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
             mainCaptionPart =
-                "$playersString $celebrationPart against the $opponentTeamName";
+                "$playersString $celebrationPart against the $teamToUse";
           }
         }
       } else {
