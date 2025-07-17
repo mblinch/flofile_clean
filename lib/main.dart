@@ -7199,6 +7199,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       return '${shorts.first} of the $prefixTeam';
     }
 
+    if (shorts.length == 2) {
+      // Two players: "Player1 and Player2 of the team"
+      return '${shorts[0]} and ${shorts[1]} of the $prefixTeam';
+    }
+
+    // Three or more players: "Player1, Player2, and Player3 of the team"
     final last = shorts.removeLast();
     return '${shorts.join(', ')}, and $last of the $prefixTeam';
   }
@@ -7337,6 +7343,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       final allShorts = [...homeShorts, ...oppShorts];
       if (allShorts.isEmpty) return '';
       if (allShorts.length == 1) return allShorts.first;
+      if (allShorts.length == 2) return '${allShorts[0]} and ${allShorts[1]}';
       final last = allShorts.removeLast();
       return '${allShorts.join(', ')}, and $last';
     }
@@ -7350,17 +7357,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (homeShorts.isNotEmpty) {
       if (homeShorts.length == 1) {
         homeStr = '${homeShorts.first} of the $teamA';
+      } else if (homeShorts.length == 2) {
+        homeStr = '${homeShorts[0]} and ${homeShorts[1]} of the $teamA';
       } else {
         final last = homeShorts.removeLast();
-        homeStr = '${homeShorts.join(', ')} and $last of the $teamA';
+        homeStr = '${homeShorts.join(', ')}, and $last of the $teamA';
       }
     }
     if (oppShorts.isNotEmpty) {
       if (oppShorts.length == 1) {
         oppStr = '${oppShorts.first} of the $teamB';
+      } else if (oppShorts.length == 2) {
+        oppStr = '${oppShorts[0]} and ${oppShorts[1]} of the $teamB';
       } else {
         final last = oppShorts.removeLast();
-        oppStr = '${oppShorts.join(', ')} and $last of the $teamB';
+        oppStr = '${oppShorts.join(', ')}, and $last of the $teamB';
       }
     }
     if (homeStr.isNotEmpty && oppStr.isNotEmpty) {
