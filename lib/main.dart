@@ -2196,7 +2196,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         widgets.add(
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding:
+                const EdgeInsets.only(left: 6, right: 6, top: 3, bottom: 2),
             margin: const EdgeInsets.only(bottom: 4),
             decoration: const BoxDecoration(
               border: Border(
