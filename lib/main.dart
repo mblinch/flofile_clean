@@ -2138,6 +2138,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         celebrateWith.isNotEmpty ||
         celebrateAgainst.isNotEmpty;
 
+    print('DEBUG: _buildAllVerbsList called');
+    print('DEBUG: _selectedVerb: $_selectedVerb');
+    print('DEBUG: _selectedHitType: $_selectedHitType');
+    print('DEBUG: celebrateWith: $celebrateWith');
+    print('DEBUG: celebrateAgainst: $celebrateAgainst');
+    print('DEBUG: isCelebrationMode: $isCelebrationMode');
+
     final multipleHomeSelected = selectedPlayers.length > 1;
     final multipleAwaySelected = selectedOpponentPlayers.length > 1;
 
@@ -2145,6 +2152,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     final multiplePlayersSelected = isCelebrationMode
         ? multipleHomeSelected // Only count home team multiples in celebration mode
         : (multipleHomeSelected || multipleAwaySelected);
+
+    print(
+        'DEBUG: multipleHomeSelected: $multipleHomeSelected (selectedPlayers.length: ${selectedPlayers.length})');
+    print(
+        'DEBUG: multipleAwaySelected: $multipleAwaySelected (selectedOpponentPlayers.length: ${selectedOpponentPlayers.length})');
+    print('DEBUG: multiplePlayersSelected: $multiplePlayersSelected');
 
     // Define verbs to hide when multiple players are selected
     final soloOnlyVerbs = [
@@ -2166,24 +2179,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Check if any verbs in this category should be shown
       bool hasVisibleVerbs = false;
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected
-        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        // Skip solo-only verbs if multiple players are selected (but not in celebration mode)
+        if (multiplePlayersSelected &&
+            soloOnlyVerbs.contains(verb) &&
+            !isCelebrationMode) {
           continue;
         }
-
-        // Show all verbs when none selected, or show only the selected verb and its sub-options
-        // For one-click verbs, always show them in their original position
-        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'celebrate';
 
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
-        bool shouldShowVerb = _selectedVerb == null ||
-            _selectedVerb == verb ||
-            (_selectedVerb != null && isSelectedVerbOneClick);
+        bool shouldShowVerb = _selectedVerb == null || _selectedVerb == verb;
 
         if (shouldShowVerb) {
           hasVisibleVerbs = true;
@@ -2223,24 +2229,17 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Add verbs for this category
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected
-        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        // Skip solo-only verbs if multiple players are selected (but not in celebration mode)
+        if (multiplePlayersSelected &&
+            soloOnlyVerbs.contains(verb) &&
+            !isCelebrationMode) {
           continue;
         }
-
-        // Show all verbs when none selected, or show only the selected verb and its sub-options
-        // For one-click verbs, always show them in their original position
-        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'celebrate';
 
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
-        bool shouldShowVerb = _selectedVerb == null ||
-            _selectedVerb == verb ||
-            (_selectedVerb != null && isSelectedVerbOneClick);
+        bool shouldShowVerb = _selectedVerb == null || _selectedVerb == verb;
 
         if (shouldShowVerb) {
           if (verb == 'hit') {
@@ -3216,9 +3215,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             selected: _selectedVerb == 'Portrait',
-                            onSelected: (_showHomeFirst
-                                    ? selectedPlayers.isNotEmpty
-                                    : selectedOpponentPlayers.isNotEmpty)
+                            onSelected: (selectedPlayers.isNotEmpty ||
+                                    selectedOpponentPlayers.isNotEmpty)
                                 ? (isSelected) {
                                     setState(() {
                                       if (isSelected) {
