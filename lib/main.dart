@@ -8748,6 +8748,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (isCelebrationActive) {
         // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
+        print('DEBUG: Caption generation - isCelebrationActive = true');
+        print('DEBUG: Caption generation - celebrateWith: $celebrateWith');
+        print(
+            'DEBUG: Caption generation - celebrateAgainst: $celebrateAgainst');
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
 
         if (celebrateWith.isNotEmpty) {
@@ -8775,7 +8779,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         } else if (celebrateAgainst.isNotEmpty) {
           // Celebrating against specific opponent players
+          print(
+              'DEBUG: Caption generation - celebrateAgainst not empty: $celebrateAgainst');
           final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
+          print('DEBUG: Caption generation - opponentStr: $opponentStr');
           final celebrationPart =
               "celebrates a $formattedHitPhrase against $opponentStr";
 
@@ -9503,6 +9510,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           // Opponent player selected -> celebrates against
           _selectedCelebrationType = 'against';
           celebrateAgainst.add(code);
+          print('DEBUG: Added opponent player to celebrateAgainst: $code');
+          print('DEBUG: celebrateAgainst list: $celebrateAgainst');
         } else {
           // Normal verb replacement logic for non-celebration verbs
           if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
