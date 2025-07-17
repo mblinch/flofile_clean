@@ -5386,14 +5386,22 @@ class _CaptionBuilderState extends State<CaptionBuilder>
             ),
           );
         } else {
-          // Loading state - show placeholder
+          // Loading state - show placeholder with consistent sizing
           return Container(
             decoration: BoxDecoration(
               color: Colors.grey.shade100, // Light grey background
               borderRadius: BorderRadius.circular(4), // Rounded corners
             ),
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
+            padding: const EdgeInsets.all(8), // Same padding as loaded state
+            child: ClipRRect(
+              borderRadius:
+                  BorderRadius.circular(2.5), // Same inner border radius
+              child: Container(
+                color: Colors.grey.shade200,
+                child: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             ),
           );
         }
@@ -10322,9 +10330,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                   children: [
                     // Picture preview section right under AppBar
                     Container(
-                      height: 400, // Height for picture preview
-                      padding: const EdgeInsets.all(8),
+                      height:
+                          570, // Height for picture preview (increased by 200px, then decreased by 30px)
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Picture preview - 48% width, aligned left
                           SizedBox(
@@ -10433,6 +10442,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                           // GridView section - 48% width, aligned right
                           SizedBox(
                             width: MediaQuery.of(context).size.width * 0.48,
+                            height:
+                                570.0, // Same height as picture preview container
                             child: Container(
                               decoration: BoxDecoration(
                                 border: Border.all(
@@ -13208,60 +13219,60 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     const int rows = 4;
     const int columns = 7;
     // Use a fixed larger height to ensure all rows are visible
-    const double filmstripHeight = 320.0;
+    const double filmstripHeight =
+        570.0; // Same height as picture preview container
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
-      child: Container(
-        height: filmstripHeight,
-        color: const Color(0x0D000000),
-        padding: const EdgeInsets.all(8.0),
-        child: imagePaths.isEmpty
-            ? Center(
-                child: Text(
-                  'No images loaded. Select a folder to begin.',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+    return Container(
+      height: filmstripHeight,
+      color: const Color(0x0D000000),
+      padding: const EdgeInsets.all(8.0),
+      child: imagePaths.isEmpty
+          ? Center(
+              child: Text(
+                'No images loaded. Select a folder to begin.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-              )
-            : GridView.builder(
-                controller: _filmstripController,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
-                  mainAxisSpacing: thumbSpacing,
-                  crossAxisSpacing: thumbSpacing,
-                  childAspectRatio: 1.0,
-                ),
-                itemCount: imagePaths.length,
-                itemBuilder: (context, index) {
-                  final imagePath = imagePaths[index];
-                  return GestureDetector(
-                    onTap: () => _selectImage(index),
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxWidth: thumbSize,
-                        maxHeight: thumbSize,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: index == currentIndex
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.transparent,
-                          width: index == currentIndex ? 3.0 : 0.0,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: _buildProportionalThumbnail(imagePath),
+              ),
+            )
+          : GridView.builder(
+              controller: _filmstripController,
+              shrinkWrap: false,
+              physics: const ClampingScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: thumbSpacing,
+                crossAxisSpacing: thumbSpacing,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: imagePaths.length,
+              itemBuilder: (context, index) {
+                final imagePath = imagePaths[index];
+                return GestureDetector(
+                  onTap: () => _selectImage(index),
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: thumbSize,
+                      maxHeight: thumbSize,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: index == currentIndex
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.transparent,
+                        width: index == currentIndex ? 3.0 : 0.0,
                       ),
                     ),
-                  );
-                },
-              ),
-      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: _buildProportionalThumbnail(imagePath),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 
