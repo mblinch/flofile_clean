@@ -9366,6 +9366,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   bool _isTeamDisabled(bool isHomeTeam) {
     if (!_shouldDisableOppositeTeam()) return false;
 
+    // Allow opposite team selection in celebration mode (when _selectedCelebrationType is set)
+    if (_selectedCelebrationType != null) {
+      return false; // Enable both teams when in celebration mode
+    }
+
     // If home team has players selected, disable away team
     if (isHomeTeam && selectedPlayers.isNotEmpty) return false;
     if (!isHomeTeam && selectedOpponentPlayers.isNotEmpty) return false;
