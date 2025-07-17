@@ -8820,35 +8820,58 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       }
 
       if (isCelebrationActive) {
+        // Auto-categorize players when both teams have players selected
+        if (selectedPlayers.isNotEmpty && selectedOpponentPlayers.isNotEmpty) {
+          print(
+              'DEBUG: Auto-categorizing players - both teams have selections');
+
+          // Clear existing celebration lists to avoid conflicts
+          celebrateWith.clear();
+          celebrateAgainst.clear();
+
+          // Get the main celebrating player (first selected)
+          final mainPlayer = _getFirstSelectedPlayer();
+          print('DEBUG: Auto-categorization - mainPlayer: $mainPlayer');
+
+          if (mainPlayer != null) {
+            final mainPlayerIsHome = mainPlayer.startsWith('h');
+            print(
+                'DEBUG: Auto-categorization - mainPlayerIsHome: $mainPlayerIsHome');
+
+            // Categorize all other selected players
+            final allOtherPlayers = [
+              ...selectedPlayers.where((p) => p != mainPlayer),
+              ...selectedOpponentPlayers.where((p) => p != mainPlayer),
+            ];
+
+            for (final playerCode in allOtherPlayers) {
+              final playerIsHome = playerCode.startsWith('h');
+              if (mainPlayerIsHome == playerIsHome) {
+                // Same team -> teammate
+                celebrateWith.add(playerCode);
+                print(
+                    'DEBUG: Auto-categorization - Added $playerCode to celebrateWith (teammate)');
+              } else {
+                // Different team -> opponent
+                celebrateAgainst.add(playerCode);
+                print(
+                    'DEBUG: Auto-categorization - Added $playerCode to celebrateAgainst (opponent)');
+              }
+            }
+          }
+        }
+
         // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
 
         final formattedHitPhrase = _formatHitPhraseForCaption(hitPhrase);
 
-        if (celebrateWith.isNotEmpty) {
-          // With teammates selected
-          final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
-          final celebrationPart =
-              "celebrates a $formattedHitPhrase with $teammatesStr";
+        // Add debug prints to see what's in the celebration lists
+        print('DEBUG: Celebration caption generation:');
+        print('  celebrateWith: $celebrateWith');
+        print('  celebrateAgainst: $celebrateAgainst');
 
-          // Check if opposing players are selected
-          String opponentPart;
-          if (celebrateAgainst.isNotEmpty) {
-            final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
-            opponentPart = "against $opponentStr";
-          } else {
-            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
-            opponentPart = "against the $teamToUse";
-          }
-
-          if (_walkOff == true) {
-            final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
-            mainCaptionPart =
-                "$playersString $celebrationPart $opponentPart to defeat the $teamToUse";
-          } else {
-            mainCaptionPart = "$playersString $celebrationPart $opponentPart";
-          }
-        } else if (celebrateAgainst.isNotEmpty) {
-          // Celebrating against specific opponent players
+        if (celebrateAgainst.isNotEmpty) {
+          // Celebrating against specific opponent players - prioritize this case
           print(
               'DEBUG: Caption generation - celebrateAgainst not empty: $celebrateAgainst');
           final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
@@ -8862,6 +8885,23 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 "$playersString $celebrationPart to defeat the $teamToUse";
           } else {
             mainCaptionPart = "$playersString $celebrationPart";
+          }
+        } else if (celebrateWith.isNotEmpty) {
+          // With teammates selected
+          final teammatesStr = _combinePlayersWithoutTeam(celebrateWith);
+          final celebrationPart =
+              "celebrates a $formattedHitPhrase with $teammatesStr";
+
+          // Check if opposing players are selected
+          String opponentPart;
+          final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
+          opponentPart = "against the $teamToUse";
+
+          if (_walkOff == true) {
+            mainCaptionPart =
+                "$playersString $celebrationPart $opponentPart to defeat the $teamToUse";
+          } else {
+            mainCaptionPart = "$playersString $celebrationPart $opponentPart";
           }
         } else {
           // Solo celebration (no teammates or opponents selected)
@@ -9473,12 +9513,19 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper to get the first selected player
   String? _getFirstSelectedPlayer() {
+    print('DEBUG: _getFirstSelectedPlayer called');
+    print('DEBUG: _playerSelectionOrder: $_playerSelectionOrder');
+    print('DEBUG: selectedPlayers: $selectedPlayers');
+    print('DEBUG: selectedOpponentPlayers: $selectedOpponentPlayers');
+
     for (final playerCode in _playerSelectionOrder) {
       if (selectedPlayers.contains(playerCode) ||
           selectedOpponentPlayers.contains(playerCode)) {
+        print('DEBUG: _getFirstSelectedPlayer returning: $playerCode');
         return playerCode;
       }
     }
+    print('DEBUG: _getFirstSelectedPlayer returning null');
     return null;
   }
 
@@ -9678,42 +9725,76 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
   // Helper to handle player selection with order tracking
   void _handlePlayerSelection(String code, bool isHomeTeam) {
+    print(
+        'DEBUG: _handlePlayerSelection called with code: $code, isHomeTeam: $isHomeTeam');
+    print(
+        'DEBUG: Current state - selectedPlayers: $selectedPlayers, selectedOpponentPlayers: $selectedOpponentPlayers');
+
     if (isHomeTeam) {
       if (selectedPlayers.contains(code)) {
         selectedPlayers.remove(code);
         _removeFromSelectionOrder(code);
 
         // Remove from celebration lists if deselecting
-        if (_selectedVerb == 'Celebrate') {
+        if (_selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null) ||
+            _isSoloCelebration) {
           celebrateWith.remove(code);
           celebrateAgainst.remove(code);
         }
       } else {
-        // In celebration mode, don't clear existing players - just add to celebration lists
-        if (_selectedVerb == 'Celebrate' ||
-            (_selectedVerb == 'hit' && _selectedHitType != null)) {
+        // Check if we should enter celebration mode
+        bool shouldEnterCelebrationMode = _selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null) ||
+            _isSoloCelebration;
+
+        // Auto-enter celebration mode if both teams will have players after this selection
+        if (!shouldEnterCelebrationMode &&
+            _selectedVerb == 'hit' &&
+            _selectedHitType != null &&
+            selectedOpponentPlayers.isNotEmpty) {
+          shouldEnterCelebrationMode = true;
+          _isSoloCelebration = true;
+          print(
+              'DEBUG: Auto-entering celebration mode - both teams will have players');
+        }
+
+        if (shouldEnterCelebrationMode) {
           selectedPlayers.add(code);
           _addToSelectionOrder(code);
 
           // Determine if this player is a teammate or opponent of the main celebrating player
           final mainPlayer = _getFirstSelectedPlayer();
+          print('DEBUG: Player selection - mainPlayer determined: $mainPlayer');
+
           if (mainPlayer != null) {
             final mainPlayerIsHome = mainPlayer.startsWith('h');
             final currentPlayerIsHome = code.startsWith('h');
+
+            print(
+                'DEBUG: Player selection - mainPlayer: $mainPlayer, mainPlayerIsHome: $mainPlayerIsHome');
+            print(
+                'DEBUG: Player selection - currentPlayer: $code, currentPlayerIsHome: $currentPlayerIsHome');
 
             if (mainPlayerIsHome == currentPlayerIsHome) {
               // Same team -> celebrates with (teammates)
               _selectedCelebrationType = 'with';
               celebrateWith.add(code);
+              print(
+                  'DEBUG: Player selection - Added to celebrateWith: $code (same team)');
             } else {
               // Different team -> celebrates against (opponents)
               _selectedCelebrationType = 'against';
               celebrateAgainst.add(code);
+              print(
+                  'DEBUG: Player selection - Added to celebrateAgainst: $code (different team)');
             }
           } else {
             // Fallback to old logic if no main player found
             _selectedCelebrationType = 'with';
             celebrateWith.add(code);
+            print(
+                'DEBUG: Player selection - Fallback: Added to celebrateWith: $code');
           }
         } else {
           // Normal verb replacement logic for non-celebration verbs
@@ -9734,36 +9815,65 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
         // Remove from celebration lists if deselecting
         if (_selectedVerb == 'Celebrate' ||
-            (_selectedVerb == 'hit' && _selectedHitType != null)) {
+            (_selectedVerb == 'hit' && _selectedHitType != null) ||
+            _isSoloCelebration) {
           celebrateWith.remove(code);
           celebrateAgainst.remove(code);
         }
       } else {
-        // In celebration mode, don't clear existing players - just add to celebration lists
-        if (_selectedVerb == 'Celebrate' ||
-            (_selectedVerb == 'hit' && _selectedHitType != null)) {
+        // Check if we should enter celebration mode
+        bool shouldEnterCelebrationMode = _selectedVerb == 'Celebrate' ||
+            (_selectedVerb == 'hit' && _selectedHitType != null) ||
+            _isSoloCelebration;
+
+        // Auto-enter celebration mode if both teams will have players after this selection
+        if (!shouldEnterCelebrationMode &&
+            _selectedVerb == 'hit' &&
+            _selectedHitType != null &&
+            selectedPlayers.isNotEmpty) {
+          shouldEnterCelebrationMode = true;
+          _isSoloCelebration = true;
+          print(
+              'DEBUG: Auto-entering celebration mode - both teams will have players');
+        }
+
+        if (shouldEnterCelebrationMode) {
           selectedOpponentPlayers.add(code);
           _addToSelectionOrder(code);
 
           // Determine if this player is a teammate or opponent of the main celebrating player
           final mainPlayer = _getFirstSelectedPlayer();
+          print(
+              'DEBUG: Opponent player selection - mainPlayer determined: $mainPlayer');
+
           if (mainPlayer != null) {
             final mainPlayerIsHome = mainPlayer.startsWith('h');
             final currentPlayerIsHome = code.startsWith('h');
+
+            print(
+                'DEBUG: Opponent player selection - mainPlayer: $mainPlayer, mainPlayerIsHome: $mainPlayerIsHome');
+            print(
+                'DEBUG: Opponent player selection - currentPlayer: $code, currentPlayerIsHome: $currentPlayerIsHome');
 
             if (mainPlayerIsHome == currentPlayerIsHome) {
               // Same team -> celebrates with (teammates)
               _selectedCelebrationType = 'with';
               celebrateWith.add(code);
+              print(
+                  'DEBUG: Opponent player selection - Added to celebrateWith: $code (same team)');
             } else {
               // Different team -> celebrates against (opponents)
               _selectedCelebrationType = 'against';
               celebrateAgainst.add(code);
+              print(
+                  'DEBUG: Opponent player selection - Added to celebrateAgainst: $code (different team)');
             }
           } else {
             // Fallback to old logic if no main player found
             _selectedCelebrationType = 'against';
             celebrateAgainst.add(code);
+            print(
+                'DEBUG: Opponent player selection - Fallback: Added to celebrateAgainst: $code');
           }
         } else {
           // Normal verb replacement logic for non-celebration verbs
@@ -13213,10 +13323,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   }
 
   Widget _buildFilmstrip() {
-    // 4 rows of 40px thumbnails + 16px vertical spacing (8px top/bottom per thumb)
-    const double thumbSize = 40.0;
+    // Calculate optimal size for exactly 3 rows in 570px container
+    // Container height: 570px
+    // Container padding: 8px top + 8px bottom = 16px
+    // Spacing between 3 rows: 2 gaps × 8px = 16px
+    // Available space for thumbnails: 570 - 16 - 16 = 538px
+    // Thumbnail size per row: 538px ÷ 3 = 179.33px, rounded down to 179px
+    const double thumbSize = 179.0;
     const double thumbSpacing = 8.0;
-    const int rows = 4;
+    const int rows = 3;
     const int columns = 7;
     // Use a fixed larger height to ensure all rows are visible
     const double filmstripHeight =
