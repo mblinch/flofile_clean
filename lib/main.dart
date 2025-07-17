@@ -3946,6 +3946,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                 _selectedCelebrationType = null;
                                 celebrateWith.clear();
                                 celebrateAgainst.clear();
+                                // When Celebrate is selected, enable automatic celebration mode
+                                if (isSelected) {
+                                  print('DEBUG: Entering Celebrate section');
+                                }
                               }),
                               visualDensity: VisualDensity.compact,
                               padding: const EdgeInsets.symmetric(
@@ -9410,6 +9414,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       if (selectedPlayers.contains(code)) {
         selectedPlayers.remove(code);
         _removeFromSelectionOrder(code);
+
+        // Remove from celebration lists if deselecting
+        if (_selectedVerb == 'Celebrate') {
+          celebrateWith.remove(code);
+          celebrateAgainst.remove(code);
+        }
       } else {
         if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
           for (final playerCode in selectedPlayers) {
@@ -9419,11 +9429,25 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
         selectedPlayers.add(code);
         _addToSelectionOrder(code);
+
+        // Automatic celebration mode: if Celebrate verb is selected
+        if (_selectedVerb == 'Celebrate') {
+          // Same team player selected -> celebrates with
+          _selectedCelebrationType = 'with';
+          celebrateAgainst.clear();
+          celebrateWith.add(code);
+        }
       }
     } else {
       if (selectedOpponentPlayers.contains(code)) {
         selectedOpponentPlayers.remove(code);
         _removeFromSelectionOrder(code);
+
+        // Remove from celebration lists if deselecting
+        if (_selectedVerb == 'Celebrate') {
+          celebrateWith.remove(code);
+          celebrateAgainst.remove(code);
+        }
       } else {
         if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
           for (final playerCode in selectedOpponentPlayers) {
@@ -9433,6 +9457,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         }
         selectedOpponentPlayers.add(code);
         _addToSelectionOrder(code);
+
+        // Automatic celebration mode: if Celebrate verb is selected
+        if (_selectedVerb == 'Celebrate') {
+          // Opponent player selected -> celebrates against
+          _selectedCelebrationType = 'against';
+          celebrateWith.clear();
+          celebrateAgainst.add(code);
+        }
       }
     }
     _updateCaption();
@@ -11549,6 +11581,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         }
                                                                                         selectedOpponentPlayers.add(code);
                                                                                         _addToSelectionOrder(code);
+
+                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                          // Opponent player selected -> celebrates against
+                                                                                          _selectedCelebrationType = 'against';
+                                                                                          celebrateWith.clear();
+                                                                                          celebrateAgainst.add(code);
+                                                                                        }
                                                                                       }
                                                                                       _updateCaption();
                                                                                     });
@@ -11697,6 +11737,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         }
                                                                                         selectedPlayers.add(code);
                                                                                         _addToSelectionOrder(code);
+
+                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                          // Same team player selected -> celebrates with
+                                                                                          _selectedCelebrationType = 'with';
+                                                                                          celebrateAgainst.clear();
+                                                                                          celebrateWith.add(code);
+                                                                                        }
                                                                                       }
                                                                                       _updateCaption();
                                                                                     });
@@ -11880,6 +11928,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         }
                                                                                         selectedPlayers.add(code);
                                                                                         _addToSelectionOrder(code);
+
+                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                          // Same team player selected -> celebrates with
+                                                                                          _selectedCelebrationType = 'with';
+                                                                                          celebrateAgainst.clear();
+                                                                                          celebrateWith.add(code);
+                                                                                        }
                                                                                       }
                                                                                       _updateCaption();
                                                                                     });
@@ -12033,6 +12089,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                         }
                                                                                         selectedOpponentPlayers.add(code);
                                                                                         _addToSelectionOrder(code);
+
+                                                                                        // Automatic celebration mode: if Celebrate verb is selected
+                                                                                        if (_selectedVerb == 'Celebrate') {
+                                                                                          // Opponent player selected -> celebrates against
+                                                                                          _selectedCelebrationType = 'against';
+                                                                                          celebrateWith.clear();
+                                                                                          celebrateAgainst.add(code);
+                                                                                        }
                                                                                       }
                                                                                       _updateCaption();
                                                                                     });
