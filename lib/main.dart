@@ -5551,7 +5551,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   }
                                   selectedPlayers.clear();
                                 }
-                                if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
+                                if (_selectedVerb != null &&
+                                    selectedPlayers.isNotEmpty) {
+                                  for (final playerCode in selectedPlayers) {
+                                    _removeFromSelectionOrder(playerCode);
+                                  }
+                                  selectedPlayers.clear();
+                                }
+                                selectedPlayers.add(code);
                                 isHome = true;
                               }
                             } else {
@@ -5578,7 +5585,15 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   }
                                   selectedOpponentPlayers.clear();
                                 }
-                                if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
+                                if (_selectedVerb != null &&
+                                    selectedOpponentPlayers.isNotEmpty) {
+                                  for (final playerCode
+                                      in selectedOpponentPlayers) {
+                                    _removeFromSelectionOrder(playerCode);
+                                  }
+                                  selectedOpponentPlayers.clear();
+                                }
+                                selectedOpponentPlayers.add(code);
                                 isHome = false;
                               }
                             }
@@ -9341,6 +9356,27 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return null;
   }
 
+  // Helper to determine if the opposite team should be disabled
+  bool _shouldDisableOppositeTeam() {
+    // If any player is selected from either team, disable the opposite team
+    return selectedPlayers.isNotEmpty || selectedOpponentPlayers.isNotEmpty;
+  }
+
+  // Helper to determine if a specific team should be disabled
+  bool _isTeamDisabled(bool isHomeTeam) {
+    if (!_shouldDisableOppositeTeam()) return false;
+
+    // If home team has players selected, disable away team
+    if (isHomeTeam && selectedPlayers.isNotEmpty) return false;
+    if (!isHomeTeam && selectedOpponentPlayers.isNotEmpty) return false;
+
+    // If the opposite team has players selected, disable this team
+    if (isHomeTeam && selectedOpponentPlayers.isNotEmpty) return true;
+    if (!isHomeTeam && selectedPlayers.isNotEmpty) return true;
+
+    return false;
+  }
+
   // Helper to get player display text (last name and number)
   String _getPlayerDisplayText(Replacement replacement) {
     final fullName = replacement.short;
@@ -9368,7 +9404,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         selectedPlayers.remove(code);
         _removeFromSelectionOrder(code);
       } else {
-        if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
+        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+          for (final playerCode in selectedPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
+          selectedPlayers.clear();
+        }
+        selectedPlayers.add(code);
         _addToSelectionOrder(code);
       }
     } else {
@@ -9376,7 +9418,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         selectedOpponentPlayers.remove(code);
         _removeFromSelectionOrder(code);
       } else {
-        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
+        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+          for (final playerCode in selectedOpponentPlayers) {
+            _removeFromSelectionOrder(playerCode);
+          }
+          selectedOpponentPlayers.clear();
+        }
+        selectedOpponentPlayers.add(code);
         _addToSelectionOrder(code);
       }
     }
@@ -10976,13 +11024,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             children: [
                                                                               Icon(
                                                                                 Icons.arrow_back,
-                                                                                size: 12,
+                                                                                size: 10,
                                                                                 color: Colors.black,
                                                                               ),
                                                                               const SizedBox(height: 1),
                                                                               Icon(
                                                                                 Icons.arrow_forward,
-                                                                                size: 12,
+                                                                                size: 10,
                                                                                 color: Colors.black,
                                                                               ),
                                                                             ],
@@ -11469,25 +11517,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             codeReplacements[code]!;
                                                                         final isSelected =
                                                                             selectedOpponentPlayers.contains(code);
+                                                                        final isDisabled =
+                                                                            _isTeamDisabled(false); // Away team
 
                                                                         return MouseRegion(
-                                                                          cursor:
-                                                                              SystemMouseCursors.click,
+                                                                          cursor: isDisabled
+                                                                              ? SystemMouseCursors.forbidden
+                                                                              : SystemMouseCursors.click,
                                                                           child:
                                                                               GestureDetector(
-                                                                            onTap:
-                                                                                () {
-                                                                              setState(() {
-                                                                                if (isSelected) {
-                                                                                  selectedOpponentPlayers.remove(code);
-                                                                                  _removeFromSelectionOrder(code);
-                                                                                } else {
-                                                                                  if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
-                                                                                  _addToSelectionOrder(code);
-                                                                                }
-                                                                                _updateCaption();
-                                                                              });
-                                                                            },
+                                                                            onTap: isDisabled
+                                                                                ? null
+                                                                                : () {
+                                                                                    setState(() {
+                                                                                      if (isSelected) {
+                                                                                        selectedOpponentPlayers.remove(code);
+                                                                                        _removeFromSelectionOrder(code);
+                                                                                      } else {
+                                                                                        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+                                                                                          for (final playerCode in selectedOpponentPlayers) {
+                                                                                            _removeFromSelectionOrder(playerCode);
+                                                                                          }
+                                                                                          selectedOpponentPlayers.clear();
+                                                                                        }
+                                                                                        selectedOpponentPlayers.add(code);
+                                                                                        _addToSelectionOrder(code);
+                                                                                      }
+                                                                                      _updateCaption();
+                                                                                    });
+                                                                                  },
                                                                             child:
                                                                                 Container(
                                                                               margin: const EdgeInsets.only(bottom: 1),
@@ -11496,7 +11554,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : (isDisabled ? Colors.grey.shade100 : Colors.transparent),
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Row(
@@ -11514,7 +11572,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     replacement.short,
                                                                                     style: TextStyle(
                                                                                       fontSize: 11,
-                                                                                      color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                      color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
                                                                                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                                     ),
                                                                                   ),
@@ -11607,25 +11665,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             codeReplacements[code]!;
                                                                         final isSelected =
                                                                             selectedPlayers.contains(code);
+                                                                        final isDisabled =
+                                                                            _isTeamDisabled(true); // Home team
 
                                                                         return MouseRegion(
-                                                                          cursor:
-                                                                              SystemMouseCursors.click,
+                                                                          cursor: isDisabled
+                                                                              ? SystemMouseCursors.forbidden
+                                                                              : SystemMouseCursors.click,
                                                                           child:
                                                                               GestureDetector(
-                                                                            onTap:
-                                                                                () {
-                                                                              setState(() {
-                                                                                if (isSelected) {
-                                                                                  selectedPlayers.remove(code);
-                                                                                  _removeFromSelectionOrder(code);
-                                                                                } else {
-                                                                                  if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
-                                                                                  _addToSelectionOrder(code);
-                                                                                }
-                                                                                _updateCaption();
-                                                                              });
-                                                                            },
+                                                                            onTap: isDisabled
+                                                                                ? null
+                                                                                : () {
+                                                                                    setState(() {
+                                                                                      if (isSelected) {
+                                                                                        selectedPlayers.remove(code);
+                                                                                        _removeFromSelectionOrder(code);
+                                                                                      } else {
+                                                                                        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+                                                                                          for (final playerCode in selectedPlayers) {
+                                                                                            _removeFromSelectionOrder(playerCode);
+                                                                                          }
+                                                                                          selectedPlayers.clear();
+                                                                                        }
+                                                                                        selectedPlayers.add(code);
+                                                                                        _addToSelectionOrder(code);
+                                                                                      }
+                                                                                      _updateCaption();
+                                                                                    });
+                                                                                  },
                                                                             child:
                                                                                 Container(
                                                                               margin: const EdgeInsets.only(bottom: 1),
@@ -11634,7 +11702,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : (isDisabled ? Colors.grey.shade100 : Colors.transparent),
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Row(
@@ -11652,7 +11720,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     replacement.short,
                                                                                     style: TextStyle(
                                                                                       fontSize: 11,
-                                                                                      color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                      color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
                                                                                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                                     ),
                                                                                   ),
@@ -11780,25 +11848,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             codeReplacements[code]!;
                                                                         final isSelected =
                                                                             selectedPlayers.contains(code);
+                                                                        final isDisabled =
+                                                                            _isTeamDisabled(true); // Home team
 
                                                                         return MouseRegion(
-                                                                          cursor:
-                                                                              SystemMouseCursors.click,
+                                                                          cursor: isDisabled
+                                                                              ? SystemMouseCursors.forbidden
+                                                                              : SystemMouseCursors.click,
                                                                           child:
                                                                               GestureDetector(
-                                                                            onTap:
-                                                                                () {
-                                                                              setState(() {
-                                                                                if (isSelected) {
-                                                                                  selectedPlayers.remove(code);
-                                                                                  _removeFromSelectionOrder(code);
-                                                                                } else {
-                                                                                  if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
-                                                                                  _addToSelectionOrder(code);
-                                                                                }
-                                                                                _updateCaption();
-                                                                              });
-                                                                            },
+                                                                            onTap: isDisabled
+                                                                                ? null
+                                                                                : () {
+                                                                                    setState(() {
+                                                                                      if (isSelected) {
+                                                                                        selectedPlayers.remove(code);
+                                                                                        _removeFromSelectionOrder(code);
+                                                                                      } else {
+                                                                                        if (_selectedVerb != null && selectedPlayers.isNotEmpty) {
+                                                                                          for (final playerCode in selectedPlayers) {
+                                                                                            _removeFromSelectionOrder(playerCode);
+                                                                                          }
+                                                                                          selectedPlayers.clear();
+                                                                                        }
+                                                                                        selectedPlayers.add(code);
+                                                                                        _addToSelectionOrder(code);
+                                                                                      }
+                                                                                      _updateCaption();
+                                                                                    });
+                                                                                  },
                                                                             child:
                                                                                 Container(
                                                                               margin: const EdgeInsets.only(bottom: 1),
@@ -11807,7 +11885,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : (isDisabled ? Colors.grey.shade100 : Colors.transparent),
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Align(
@@ -11828,7 +11906,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                       replacement.short,
                                                                                       style: TextStyle(
                                                                                         fontSize: 11,
-                                                                                        color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                        color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
                                                                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                                       ),
                                                                                       textAlign: TextAlign.right,
@@ -11923,25 +12001,35 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                             codeReplacements[code]!;
                                                                         final isSelected =
                                                                             selectedOpponentPlayers.contains(code);
+                                                                        final isDisabled =
+                                                                            _isTeamDisabled(false); // Away team
 
                                                                         return MouseRegion(
-                                                                          cursor:
-                                                                              SystemMouseCursors.click,
+                                                                          cursor: isDisabled
+                                                                              ? SystemMouseCursors.forbidden
+                                                                              : SystemMouseCursors.click,
                                                                           child:
                                                                               GestureDetector(
-                                                                            onTap:
-                                                                                () {
-                                                                              setState(() {
-                                                                                if (isSelected) {
-                                                                                  selectedOpponentPlayers.remove(code);
-                                                                                  _removeFromSelectionOrder(code);
-                                                                                } else {
-                                                                                  if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
-                                                                                  _addToSelectionOrder(code);
-                                                                                }
-                                                                                _updateCaption();
-                                                                              });
-                                                                            },
+                                                                            onTap: isDisabled
+                                                                                ? null
+                                                                                : () {
+                                                                                    setState(() {
+                                                                                      if (isSelected) {
+                                                                                        selectedOpponentPlayers.remove(code);
+                                                                                        _removeFromSelectionOrder(code);
+                                                                                      } else {
+                                                                                        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) {
+                                                                                          for (final playerCode in selectedOpponentPlayers) {
+                                                                                            _removeFromSelectionOrder(playerCode);
+                                                                                          }
+                                                                                          selectedOpponentPlayers.clear();
+                                                                                        }
+                                                                                        selectedOpponentPlayers.add(code);
+                                                                                        _addToSelectionOrder(code);
+                                                                                      }
+                                                                                      _updateCaption();
+                                                                                    });
+                                                                                  },
                                                                             child:
                                                                                 Container(
                                                                               margin: const EdgeInsets.only(bottom: 1),
@@ -11950,7 +12038,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                 vertical: 2,
                                                                               ),
                                                                               decoration: BoxDecoration(
-                                                                                color: isSelected ? Colors.grey.shade200 : Colors.transparent,
+                                                                                color: isSelected ? Colors.grey.shade200 : (isDisabled ? Colors.grey.shade100 : Colors.transparent),
                                                                                 borderRadius: BorderRadius.circular(2),
                                                                               ),
                                                                               child: Align(
@@ -11971,7 +12059,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                       replacement.short,
                                                                                       style: TextStyle(
                                                                                         fontSize: 11,
-                                                                                        color: isSelected ? Colors.grey.shade700 : Colors.black87,
+                                                                                        color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
                                                                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                                                                       ),
                                                                                       textAlign: TextAlign.right,
@@ -14578,10 +14666,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                     // For any verb, replace the existing player instead of adding
                                     // But allow multiple players for double play
                                     selectedPlayers.clear();
-                                    if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
+                                    if (_selectedVerb != null &&
+                                        selectedPlayers.isNotEmpty) {
+                                      for (final playerCode
+                                          in selectedPlayers) {
+                                        _removeFromSelectionOrder(playerCode);
+                                      }
+                                      selectedPlayers.clear();
+                                    }
+                                    selectedPlayers.add(code);
                                     // Force caption update for player replacement
                                   } else {
-                                    if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
+                                    if (_selectedVerb != null &&
+                                        selectedPlayers.isNotEmpty) {
+                                      for (final playerCode
+                                          in selectedPlayers) {
+                                        _removeFromSelectionOrder(playerCode);
+                                      }
+                                      selectedPlayers.clear();
+                                    }
+                                    selectedPlayers.add(code);
                                   }
                                   isHome = true;
                                 }
@@ -14613,10 +14717,26 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       _removeFromSelectionOrder(playerCode);
                                     }
                                     selectedOpponentPlayers.clear();
-                                    if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
+                                    if (_selectedVerb != null &&
+                                        selectedOpponentPlayers.isNotEmpty) {
+                                      for (final playerCode
+                                          in selectedOpponentPlayers) {
+                                        _removeFromSelectionOrder(playerCode);
+                                      }
+                                      selectedOpponentPlayers.clear();
+                                    }
+                                    selectedOpponentPlayers.add(code);
                                     // Force caption update for player replacement
                                   } else {
-                                    if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
+                                    if (_selectedVerb != null &&
+                                        selectedOpponentPlayers.isNotEmpty) {
+                                      for (final playerCode
+                                          in selectedOpponentPlayers) {
+                                        _removeFromSelectionOrder(playerCode);
+                                      }
+                                      selectedOpponentPlayers.clear();
+                                    }
+                                    selectedOpponentPlayers.add(code);
                                   }
                                   isHome = false;
                                 }
