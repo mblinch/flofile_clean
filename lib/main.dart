@@ -2162,19 +2162,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           continue;
         }
 
-        // Show all verbs when none selected, or show only the selected verb and its sub-options
-        // For one-click verbs, always show them in their original position
-        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'celebrate';
-
-        // Show verb if:
-        // 1. No verb is selected (show all)
-        // 2. This is the selected verb (show the selected one)
-        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
-        bool shouldShowVerb = _selectedVerb == null ||
-            _selectedVerb == verb ||
-            (_selectedVerb != null && isSelectedVerbOneClick);
+        // Always show all verbs - users should be able to switch between verbs at any time
+        bool shouldShowVerb = true;
 
         if (shouldShowVerb) {
           hasVisibleVerbs = true;
@@ -2213,19 +2202,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           continue;
         }
 
-        // Show all verbs when none selected, or show only the selected verb and its sub-options
-        // For one-click verbs, always show them in their original position
-        bool isSelectedVerbOneClick = _selectedVerb == 'pitches' ||
-            _selectedVerb == 'At Bat' ||
-            _selectedVerb == 'celebrate';
-
-        // Show verb if:
-        // 1. No verb is selected (show all)
-        // 2. This is the selected verb (show the selected one)
-        // 3. A one-click verb is selected and this is any verb (keep all visible when one-click selected)
-        bool shouldShowVerb = _selectedVerb == null ||
-            _selectedVerb == verb ||
-            (_selectedVerb != null && isSelectedVerbOneClick);
+        // Always show all verbs - users should be able to switch between verbs at any time
+        bool shouldShowVerb = true;
 
         if (shouldShowVerb) {
           if (verb == 'hit') {
