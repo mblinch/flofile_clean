@@ -8332,32 +8332,55 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       if (activePlayers.isEmpty) return; // Should not happen if UI is correct
 
-      // Check if there are players from the other team to include
-      final otherTeamPlayers = activePlayers == selectedPlayers
-          ? selectedOpponentPlayers
-          : selectedPlayers;
+      // Check if celebration is active to determine player string logic
+      final isCelebrationActive = _isSoloCelebration ||
+          _selectedCelebrationType != null ||
+          celebrateWith.isNotEmpty ||
+          celebrateAgainst.isNotEmpty;
 
       String playersString;
       bool hasMultiplePlayers = false;
-      if (otherTeamPlayers.isNotEmpty) {
-        // Both teams have players - combine them
-        final otherTeamString = _combinePlayersWithSingleTeam(
-          otherTeamPlayers.toList(),
-        );
-        final mainTeamString = _combinePlayersWithSingleTeam(
-          activePlayers.toList(),
-        );
-        playersString = "$mainTeamString and $otherTeamString";
-        hasMultiplePlayers = true;
-        print(
-            'DEBUG: Hit - Both teams included - main: $mainTeamString, other: $otherTeamString');
+
+      if (isCelebrationActive) {
+        // In celebration mode, ONLY use the main player (first selected) as the subject
+        final mainPlayerCode = _getFirstSelectedPlayer();
+        if (mainPlayerCode != null) {
+          playersString = _combinePlayersWithSingleTeam([mainPlayerCode]);
+          hasMultiplePlayers = false;
+          print(
+              'DEBUG: Celebration mode - Using main player only: $playersString');
+        } else {
+          // Fallback if no main player found
+          playersString = _combinePlayersWithSingleTeam(activePlayers.toList());
+          hasMultiplePlayers = activePlayers.length > 1;
+          print('DEBUG: Celebration mode fallback: $playersString');
+        }
       } else {
-        // Only one team has players
-        playersString = _combinePlayersWithSingleTeam(
-          activePlayers.toList(),
-        );
-        hasMultiplePlayers = activePlayers.length > 1;
-        print('DEBUG: Hit - Single team only: $playersString');
+        // Standard mode - check if there are players from the other team to include
+        final otherTeamPlayers = activePlayers == selectedPlayers
+            ? selectedOpponentPlayers
+            : selectedPlayers;
+
+        if (otherTeamPlayers.isNotEmpty) {
+          // Both teams have players - combine them
+          final otherTeamString = _combinePlayersWithSingleTeam(
+            otherTeamPlayers.toList(),
+          );
+          final mainTeamString = _combinePlayersWithSingleTeam(
+            activePlayers.toList(),
+          );
+          playersString = "$mainTeamString and $otherTeamString";
+          hasMultiplePlayers = true;
+          print(
+              'DEBUG: Hit - Both teams included - main: $mainTeamString, other: $otherTeamString');
+        } else {
+          // Only one team has players
+          playersString = _combinePlayersWithSingleTeam(
+            activePlayers.toList(),
+          );
+          hasMultiplePlayers = activePlayers.length > 1;
+          print('DEBUG: Hit - Single team only: $playersString');
+        }
       }
 
       // 1. Determine the detailed hit phrase.
@@ -8709,12 +8732,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         }
       }
-
-      // Check if celebration is active (either old method or new automatic celebration mode)
-      final isCelebrationActive = _isSoloCelebration ||
-          _selectedCelebrationType != null ||
-          celebrateWith.isNotEmpty ||
-          celebrateAgainst.isNotEmpty;
 
       if (isCelebrationActive) {
         // New celebration format: [Player] celebrates a [hit type] with [teammates] against the [opponent team]
