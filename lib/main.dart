@@ -2189,10 +2189,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. "At Bat" is selected (keep all verbs visible)
+        // 3. "At Bat", "Bunt", or "Swing" is selected (keep all verbs visible)
         bool shouldShowVerb = _selectedVerb == null ||
             _selectedVerb == verb ||
-            _selectedVerb == 'At Bat';
+            _selectedVerb == 'At Bat' ||
+            _selectedVerb == 'Bunt' ||
+            _selectedVerb == 'Swing';
 
         if (shouldShowVerb) {
           hasVisibleVerbs = true;
@@ -2242,10 +2244,12 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         // Show verb if:
         // 1. No verb is selected (show all)
         // 2. This is the selected verb (show the selected one)
-        // 3. "At Bat" is selected (keep all verbs visible)
+        // 3. "At Bat", "Bunt", or "Swing" is selected (keep all verbs visible)
         bool shouldShowVerb = _selectedVerb == null ||
             _selectedVerb == verb ||
-            _selectedVerb == 'At Bat';
+            _selectedVerb == 'At Bat' ||
+            _selectedVerb == 'Bunt' ||
+            _selectedVerb == 'Swing';
 
         if (shouldShowVerb) {
           if (verb == 'hit') {
@@ -3919,6 +3923,55 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                               if (isSelected) {
                                 codeReplacements['Bunt'] = Replacement(
                                     'bunts against the', 'Bunt', '');
+                              }
+                              _updateCaption();
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else if (verb == 'Swing') {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        key: UniqueKey(),
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Text(
+                                'Swing',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            selected: _selectedVerb == 'Swing',
+                            selectedColor: Colors.grey.shade300,
+                            onSelected: (isSelected) => setState(() {
+                              _selectedVerb = isSelected ? 'Swing' : null;
+                              _selectedRbiInning = null;
+                              // Create code replacement for Swing
+                              if (isSelected) {
+                                codeReplacements['Swing'] = Replacement(
+                                    'swings against the', 'Swing', '');
                               }
                               _updateCaption();
                             }),
