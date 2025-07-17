@@ -5544,7 +5544,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'Swing',
                                 ];
                                 if (_selectedVerb != null &&
-                                    soloOnlyVerbs.contains(_selectedVerb) &&
                                     selectedPlayers.isNotEmpty) {
                                   // Remove home players from selection order
                                   for (final playerCode in selectedPlayers) {
@@ -5552,7 +5551,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   }
                                   selectedPlayers.clear();
                                 }
-                                selectedPlayers.add(code);
+                                if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
                                 isHome = true;
                               }
                             } else {
@@ -5571,7 +5570,6 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   'Swing',
                                 ];
                                 if (_selectedVerb != null &&
-                                    soloOnlyVerbs.contains(_selectedVerb) &&
                                     selectedOpponentPlayers.isNotEmpty) {
                                   // Remove opponent players from selection order
                                   for (final playerCode
@@ -5580,7 +5578,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   }
                                   selectedOpponentPlayers.clear();
                                 }
-                                selectedOpponentPlayers.add(code);
+                                if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
                                 isHome = false;
                               }
                             }
@@ -9370,7 +9368,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         selectedPlayers.remove(code);
         _removeFromSelectionOrder(code);
       } else {
-        selectedPlayers.add(code);
+        if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
         _addToSelectionOrder(code);
       }
     } else {
@@ -9378,7 +9376,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         selectedOpponentPlayers.remove(code);
         _removeFromSelectionOrder(code);
       } else {
-        selectedOpponentPlayers.add(code);
+        if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
         _addToSelectionOrder(code);
       }
     }
@@ -11484,7 +11482,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   selectedOpponentPlayers.remove(code);
                                                                                   _removeFromSelectionOrder(code);
                                                                                 } else {
-                                                                                  selectedOpponentPlayers.add(code);
+                                                                                  if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
                                                                                   _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
@@ -11622,7 +11620,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   selectedPlayers.remove(code);
                                                                                   _removeFromSelectionOrder(code);
                                                                                 } else {
-                                                                                  selectedPlayers.add(code);
+                                                                                  if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
                                                                                   _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
@@ -11795,7 +11793,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   selectedPlayers.remove(code);
                                                                                   _removeFromSelectionOrder(code);
                                                                                 } else {
-                                                                                  selectedPlayers.add(code);
+                                                                                  if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
                                                                                   _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
@@ -11938,7 +11936,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                   selectedOpponentPlayers.remove(code);
                                                                                   _removeFromSelectionOrder(code);
                                                                                 } else {
-                                                                                  selectedOpponentPlayers.add(code);
+                                                                                  if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
                                                                                   _addToSelectionOrder(code);
                                                                                 }
                                                                                 _updateCaption();
@@ -14574,17 +14572,16 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   ];
 
                                   if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
                                       selectedPlayers.isNotEmpty &&
                                       _selectedFieldingAction !=
                                           'turns a double play') {
-                                    // For solo verbs, replace the existing player instead of adding
+                                    // For any verb, replace the existing player instead of adding
                                     // But allow multiple players for double play
                                     selectedPlayers.clear();
-                                    selectedPlayers.add(code);
+                                    if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
                                     // Force caption update for player replacement
                                   } else {
-                                    selectedPlayers.add(code);
+                                    if (_selectedVerb != null && selectedPlayers.isNotEmpty) { for (final playerCode in selectedPlayers) { _removeFromSelectionOrder(playerCode); } selectedPlayers.clear(); } selectedPlayers.add(code);
                                   }
                                   isHome = true;
                                 }
@@ -14605,11 +14602,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                   ];
 
                                   if (_selectedVerb != null &&
-                                      soloOnlyVerbs.contains(_selectedVerb) &&
                                       selectedOpponentPlayers.isNotEmpty &&
                                       _selectedFieldingAction !=
                                           'turns a double play') {
-                                    // For solo verbs, replace the existing player instead of adding
+                                    // For any verb, replace the existing player instead of adding
                                     // But allow multiple players for double play
                                     // Remove opponent players from selection order
                                     for (final playerCode
@@ -14617,10 +14613,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                       _removeFromSelectionOrder(playerCode);
                                     }
                                     selectedOpponentPlayers.clear();
-                                    selectedOpponentPlayers.add(code);
+                                    if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
                                     // Force caption update for player replacement
                                   } else {
-                                    selectedOpponentPlayers.add(code);
+                                    if (_selectedVerb != null && selectedOpponentPlayers.isNotEmpty) { for (final playerCode in selectedOpponentPlayers) { _removeFromSelectionOrder(playerCode); } selectedOpponentPlayers.clear(); } selectedOpponentPlayers.add(code);
                                   }
                                   isHome = false;
                                 }
