@@ -9450,7 +9450,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Extract name without jersey number
       final nameWithoutNumber =
           fullName.replaceFirst('#$jerseyNumber', '').trim();
-      return '$jerseyNumber $nameWithoutNumber';
+      return '#$jerseyNumber $nameWithoutNumber';
     }
 
     return fullName;
