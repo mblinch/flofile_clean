@@ -8759,7 +8759,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           // Check if opposing players are selected
           String opponentPart;
           if (celebrateAgainst.isNotEmpty) {
-            final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
+            final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
             opponentPart = "against $opponentStr";
           } else {
             final teamToUse = celebrationOpponentTeam ?? opponentTeamName;
@@ -8775,7 +8775,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
           }
         } else if (celebrateAgainst.isNotEmpty) {
           // Celebrating against specific opponent players
-          final opponentStr = _combinePlayersWithoutTeam(celebrateAgainst);
+          final opponentStr = _combinePlayersWithSingleTeam(celebrateAgainst);
           final celebrationPart =
               "celebrates a $formattedHitPhrase against $opponentStr";
 
