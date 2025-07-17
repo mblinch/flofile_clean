@@ -11367,7 +11367,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .remove(code);
                                                                           _removeFromSelectionOrder(
                                                                               code);
+                                                                          // Remove from celebration lists
+                                                                          celebrateWith
+                                                                              .remove(code);
+                                                                          celebrateAgainst
+                                                                              .remove(code);
                                                                           _updateCaption();
+                                                                          _updatePersonality();
                                                                         });
                                                                       },
                                                                       child: const Icon(
@@ -11475,7 +11481,13 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                               .remove(code);
                                                                           _removeFromSelectionOrder(
                                                                               code);
+                                                                          // Remove from celebration lists
+                                                                          celebrateWith
+                                                                              .remove(code);
+                                                                          celebrateAgainst
+                                                                              .remove(code);
                                                                           _updateCaption();
+                                                                          _updatePersonality();
                                                                         });
                                                                       },
                                                                       child: const Icon(
