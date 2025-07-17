@@ -9441,6 +9441,21 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     return selectedPlayers.isNotEmpty || selectedOpponentPlayers.isNotEmpty;
   }
 
+  // Helper function to format player name with jersey number first (for left team)
+  String _getPlayerDisplayTextWithNumberFirst(Replacement replacement) {
+    final jerseyNumber = replacement.jerseyNumber;
+    final fullName = replacement.short;
+
+    if (jerseyNumber != null) {
+      // Extract name without jersey number
+      final nameWithoutNumber =
+          fullName.replaceFirst('#$jerseyNumber', '').trim();
+      return '$jerseyNumber $nameWithoutNumber';
+    }
+
+    return fullName;
+  }
+
   // Helper to determine if a specific team should be disabled
   bool _isTeamDisabled(bool isHomeTeam) {
     if (!_shouldDisableOppositeTeam()) return false;
@@ -11712,7 +11727,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     const SizedBox(width: 2),
                                                                                   ],
                                                                                   Text(
-                                                                                    replacement.short,
+                                                                                    _getPlayerDisplayTextWithNumberFirst(replacement),
                                                                                     style: TextStyle(
                                                                                       fontSize: 11,
                                                                                       color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
@@ -11870,7 +11885,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                                                                                     const SizedBox(width: 2),
                                                                                   ],
                                                                                   Text(
-                                                                                    replacement.short,
+                                                                                    _getPlayerDisplayTextWithNumberFirst(replacement),
                                                                                     style: TextStyle(
                                                                                       fontSize: 11,
                                                                                       color: isSelected ? Colors.grey.shade700 : (isDisabled ? Colors.grey.shade400 : Colors.black87),
