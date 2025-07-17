@@ -2157,8 +2157,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       // Check if any verbs in this category should be shown
       bool hasVisibleVerbs = false;
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected
-        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        // Skip solo-only verbs if multiple players are selected AND no verb is currently selected
+        if (multiplePlayersSelected &&
+            soloOnlyVerbs.contains(verb) &&
+            _selectedVerb == null) {
           continue;
         }
 
@@ -2197,8 +2199,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
 
       // Add verbs for this category
       for (final verb in categoryVerbs) {
-        // Skip solo-only verbs if multiple players are selected
-        if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        // Skip solo-only verbs if multiple players are selected AND no verb is currently selected
+        if (multiplePlayersSelected &&
+            soloOnlyVerbs.contains(verb) &&
+            _selectedVerb == null) {
           continue;
         }
 
