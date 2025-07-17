@@ -5863,6 +5863,9 @@ class _CaptionBuilderState extends State<CaptionBuilder>
   Future<void> _loadMetadata() async {
     if (imagePaths.isEmpty) return;
 
+    print(
+        '🔍 _loadMetadata called for image: ${imagePaths[currentIndex].split('/').last}');
+
     // Extract metadata via exiftool in JSON format for efficiency.
     final proc = await Process.run('exiftool', [
       '-j', // JSON output
@@ -5926,6 +5929,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
         : (extractedPersonality as String? ?? '');
 
     // 3. Update the UI with the loaded data.
+    print(
+        '🔍 Extracted caption: "$extractedCaption", personality: "$personInImageText"');
     setState(() {
       // Reset manual typing flag when loading new metadata
       _isManuallyTyping = false;
@@ -6174,17 +6179,20 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     if (currentIndex < imagePaths.length - 1) {
       final nextIndex = currentIndex + 1;
 
+      print('🔄 nextImage: Moving from index $currentIndex to $nextIndex');
       await _saveCaptionToFile(imagePaths[currentIndex]);
       setState(() => currentIndex = nextIndex);
       _scrollToSelectedImage();
 
       // Reset caption builder state
+      print('🔄 nextImage: Calling _resetCaption');
       _resetCaption(showSnackBar: false);
 
       // Preload adjacent images for instant navigation
       _preloadCurrentAndAdjacentImages();
 
       // Load metadata and detect burst in parallel
+      print('🔄 nextImage: Calling _loadMetadata');
       await Future.wait([_loadMetadata(), _detectBurst(currentIndex)]);
     } else {
       // Show feedback when at the last image
@@ -6225,6 +6233,8 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       return;
     }
 
+    print('🖱️ _selectImage: Clicked on index $index (current: $currentIndex)');
+
     // Save the current caption before switching
     if (imagePaths.isNotEmpty) {
       await _saveCaptionToFile(imagePaths[currentIndex]);
@@ -6234,12 +6244,14 @@ class _CaptionBuilderState extends State<CaptionBuilder>
     _scrollToSelectedImage();
 
     // Reset caption builder state
+    print('🖱️ _selectImage: Calling _resetCaption');
     _resetCaption(showSnackBar: false);
 
     // Preload adjacent images for instant navigation
     _preloadCurrentAndAdjacentImages();
 
     // Load metadata and detect burst in parallel
+    print('🖱️ _selectImage: Calling _loadMetadata');
     await Future.wait([_loadMetadata(), _detectBurst(currentIndex)]);
   }
 
@@ -13605,7 +13617,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // Grid View Section
                             Transform.translate(
                               offset: const Offset(
-                                  0, -170), // Move GridView up 170px
+                                  0, 0), // No offset - GridView stays in place
                               child: Container(
                                 height: 500, // Same height as left column
                                 decoration: BoxDecoration(
@@ -13678,7 +13690,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             // Metadata Section
                             Transform.translate(
                               offset: const Offset(
-                                  0, -170), // Move metadata up 170px
+                                  0, 0), // No offset - metadata stays in place
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
@@ -13958,11 +13970,7 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                 itemBuilder: (context, index) {
                   final imagePath = imagePaths[index];
                   return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        currentIndex = index;
-                      });
-                    },
+                    onTap: () => _selectImage(index),
                     child: Container(
                       constraints: BoxConstraints(
                         maxWidth: thumbSize,
