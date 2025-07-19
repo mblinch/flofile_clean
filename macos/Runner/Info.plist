@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>This app needs access to documents folder to select image folders.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>This app needs access to desktop folder to select image folders.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>This app needs access to downloads folder to select image folders.</string>
 </dict>
 </plist>

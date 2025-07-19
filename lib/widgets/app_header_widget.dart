@@ -200,7 +200,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
                   // Folder Picker Button
                   GestureDetector(
-                    onTap: _pickFolder,
+                    onTap: () {
+                      print('Folder picker button tapped');
+                      _pickFolder();
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -469,8 +472,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   // Folder picking functionality
   Future<void> _pickFolder() async {
+    print('Starting folder picker...');
     final dirPath = await FilePicker.platform.getDirectoryPath();
-    if (dirPath == null) return;
+    if (dirPath == null) {
+      print('No folder selected');
+      return;
+    }
+
+    print('Selected folder: $dirPath');
 
     // Store the selected folder path
     setState(() {
@@ -523,6 +532,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       });
 
       // Notify parent about loaded images
+      print('Notifying parent with ${files.length} images');
       widget.onImagesLoaded(files);
 
       // Show success message
@@ -537,15 +547,46 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   // Helper method to list image files
   Future<List<String>> _listImageFiles(String dirPath) async {
-    final directory = Directory(dirPath);
-    final files = directory.listSync();
+    try {
+      final directory = Directory(dirPath);
+      final files = directory.listSync();
 
-    return files
-        .where((file) =>
-            file is File &&
-            ['.jpg', '.jpeg', '.png', '.tiff', '.bmp']
-                .contains(file.path.split('.').last.toLowerCase()))
-        .map((file) => file.path)
-        .toList();
+      final imageExtensions = [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.tiff',
+        '.bmp',
+        '.JPG',
+        '.JPEG',
+        '.PNG',
+        '.TIFF',
+        '.BMP'
+      ];
+
+      final imageFiles = files
+          .where((file) {
+            if (file is! File) return false;
+
+            final path = file.path;
+            final extension = path.split('.').last.toLowerCase();
+
+            print('Checking file: $path with extension: $extension');
+
+            return imageExtensions.contains('.$extension');
+          })
+          .map((file) => file.path)
+          .toList();
+
+      print('Found ${imageFiles.length} image files in $dirPath');
+      if (imageFiles.isNotEmpty) {
+        print('First few files: ${imageFiles.take(3).toList()}');
+      }
+
+      return imageFiles;
+    } catch (e) {
+      print('Error listing image files: $e');
+      return [];
+    }
   }
 }

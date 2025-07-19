@@ -22,10 +22,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return Scaffold(
       appBar: AppHeaderWidget(
         onImagesLoaded: (images) {
+          print('CaptionBuilderScreen received ${images.length} images');
           setState(() {
             imagePaths = images;
             currentIndex = 0;
           });
+          print(
+              'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
         },
       ),
       body: Padding(
@@ -64,8 +67,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   ),
 
                   // TOP RIGHT BOX - Thumbnail Grid
-                  const Expanded(
-                    child: ThumbnailGridWidget(),
+                  Expanded(
+                    child: ThumbnailGridWidget(
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: (index) {
+                        setState(() {
+                          currentIndex = index;
+                        });
+                      },
+                    ),
                   ),
                 ],
               ),
