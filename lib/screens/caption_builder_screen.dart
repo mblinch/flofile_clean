@@ -64,6 +64,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Urgency',
         '-Country',
         '-CountryCode',
+        '-DateTimeOriginal',
+        '-CreateDate',
+        '-ModifyDate',
+        '-FileModifyDate',
         imagePath,
       ]);
 

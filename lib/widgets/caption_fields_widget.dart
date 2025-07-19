@@ -29,17 +29,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController personalityController = TextEditingController();
   TextEditingController _homeSearchController = TextEditingController();
   TextEditingController _awaySearchController = TextEditingController();
+  final TextEditingController cityController = TextEditingController();
+  final TextEditingController provinceController = TextEditingController();
+  final TextEditingController stadiumController = TextEditingController();
+  final TextEditingController creatorController = TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
 
+  // Date
+  DateTime selectedDate = DateTime.now();
+
   // Verb selection
   String? _selectedVerb;
-  String? _selectedHitType;
+  String? _selectedHittingAction;
+  bool _showExtraInnings = false;
+  int _extraInningsPage = 0;
+
   String? _selectedHomeRunType;
   int? _rbiCount;
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
+  bool _removeAccent = true; // Default to true
+  int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
   String? _selectedFieldingAction;
   String? _selectedBaseRunningAction;
   String? _selectedStealBase;
@@ -53,6 +65,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Team data
   bool _isConnectedToApi = false;
+  String? homeTeamStadium;
+  String? awayTeamStadium;
 
   // Caption building data
   String? selectedHomeTeam;
@@ -83,19 +97,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Verb categories
   final Map<String, List<String>> verbCategories = {
-    'Hitting': [
-      'hit',
-      'hits',
-      'singles',
-      'doubles',
-      'triples',
-      'home run',
-      'grand slam'
-    ],
-    'Fielding': ['catches', 'throws', 'tags', 'dives', 'slides'],
-    'Running': ['steals', 'slides', 'runs', 'rounds'],
-    'Celebrating': ['celebrates', 'celebrates with', 'celebrates against'],
-    'Other': ['looks on', 'warms up', 'stretches', 'talks'],
+    'Hitting': ['Single', 'Double', 'Triple', 'Home Run', 'Grand Slam'],
+    'Fielding': ['Catches', 'Throws', 'Tags', 'Dives', 'Slides'],
+    'Running': ['Steals', 'Slides', 'Runs', 'Rounds'],
+    'Celebrating': ['Celebrates', 'Celebrates With', 'Celebrates Against'],
+    'Other': ['Looks On', 'Warms Up', 'Stretches', 'Talks'],
   };
 
   @override
@@ -126,6 +132,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     selectedHomeTeam = widget.homeTeam ?? 'New York Yankees';
     selectedAwayTeam = widget.awayTeam ?? 'Boston Red Sox';
 
+    // Initialize controllers with default values
+    cityController.text = 'New York';
+    provinceController.text = 'New York';
+    stadiumController.text = ''; // Will be populated from API
+    creatorController.text = 'Mark Blinch';
+
     // Load rosters from MLB API
     _loadTeamRosters();
   }
@@ -138,15 +150,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     });
 
     try {
-      // Load both team rosters in parallel
+      // Load both team rosters and team info in parallel
       final futures = await Future.wait([
         _mlbApiService.fetchRosterByTeamName(selectedHomeTeam!),
         _mlbApiService.fetchRosterByTeamName(selectedAwayTeam!),
+        _mlbApiService.findTeamByName(selectedHomeTeam!),
+        _mlbApiService.findTeamByName(selectedAwayTeam!),
       ]);
 
       setState(() {
-        _homeRoster = futures[0];
-        _awayRoster = futures[1];
+        _homeRoster = futures[0] as List<Player>;
+        _awayRoster = futures[1] as List<Player>;
+        final homeTeamInfo = futures[2] as TeamInfo?;
+        final awayTeamInfo = futures[3] as TeamInfo?;
+
+        // Set stadium names from API
+        homeTeamStadium = homeTeamInfo?.venueName;
+        awayTeamStadium = awayTeamInfo?.venueName;
+
         _isLoadingRosters = false;
 
         // Clear any existing selections since rosters have changed
@@ -156,6 +177,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       print(
           'Successfully loaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players');
+      print('Home team stadium: $homeTeamStadium');
+      print('Away team stadium: $awayTeamStadium');
     } catch (e) {
       print('Error loading team rosters: $e');
       setState(() {
@@ -262,11 +285,298 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
           ),
 
-          // Main content - Full height
+          // Caption Builder Section
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: _buildCaptionBuildingSection(),
+              child: Row(
+                children: [
+                  // Left side: Caption, Personality, and Player/Verb area (70%)
+                  Expanded(
+                    flex: 8,
+                    child: Column(
+                      children: [
+                        // Caption Preview and Personality Box (Side by Side)
+                        Row(
+                          children: [
+                            // Caption Preview (Full width)
+                            Expanded(
+                              child: TextField(
+                                controller: captionController,
+                                maxLines: 3,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  labelText: 'Caption',
+                                  floatingLabelBehavior:
+                                      FloatingLabelBehavior.always,
+                                  hintText:
+                                      'Generated caption will appear here...',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade400),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade400),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide(
+                                        color: Colors.blue.shade400, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.all(8),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  labelStyle: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Player and Verb Selection Area
+                        Expanded(
+                          child: _buildCaptionBuildingSection(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Action buttons on the side (30% width)
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        // Personality Box
+                        TextField(
+                          controller: personalityController,
+                          maxLines: 3,
+                          style: const TextStyle(fontSize: 12),
+                          decoration: InputDecoration(
+                            labelText: 'Personality',
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            hintText: 'Personality tags...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade400),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade400),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(
+                                  color: Colors.blue.shade400, width: 2),
+                            ),
+                            contentPadding: const EdgeInsets.all(8),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            labelStyle: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // FTP button
+                        GestureDetector(
+                          onTap: _onFtpPressed,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0052CC),
+                              borderRadius: BorderRadius.circular(6),
+                              border:
+                                  Border.all(color: const Color(0xFF0052CC)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.cloud_upload,
+                                    size: 14, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'FTP',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Copy button
+                        GestureDetector(
+                          onTap: () {
+                            if (captionController.text.isNotEmpty) {
+                              Clipboard.setData(
+                                  ClipboardData(text: captionController.text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Caption copied!'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.blue.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.copy,
+                                    size: 14, color: Colors.blue.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Copy',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Paste button
+                        GestureDetector(
+                          onTap: _onPastePressed,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.paste,
+                                    size: 14, color: Colors.green.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Paste',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Reset button
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              selectedHomePlayers.clear();
+                              selectedAwayPlayers.clear();
+                              _selectedVerb = null;
+
+                              _selectedHomeRunType = null;
+                              _rbiCount = null;
+                              _selectedRbiInning = null;
+                              captionController.clear();
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.refresh,
+                                    size: 14, color: Colors.grey.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Reset Caption',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Remove Accent checkbox
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _removeAccent,
+                              onChanged: (value) {
+                                setState(() {
+                                  _removeAccent = value ?? true;
+                                });
+                                // Update caption and personality when checkbox is toggled
+                                _updateCaption();
+                              },
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Remove Diacritics',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -275,137 +585,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildCaptionBuildingSection() {
-    return Row(
-      children: [
-        // Caption Builder (full height)
-        Expanded(
-          flex: 3,
-          child: Container(
-            height: double.infinity,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade400, width: 1),
-              borderRadius: BorderRadius.circular(8),
-              color: Colors.white,
-            ),
-            child: Row(
-              children: [
-                // Home Team Players (Left)
-                Expanded(
-                  flex: 2,
-                  child: _buildCompactTeamColumn(true),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Verbs (Center)
-                Expanded(
-                  flex: 1,
-                  child: _buildCompactVerbColumn(),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Away Team Players (Right)
-                Expanded(
-                  flex: 2,
-                  child: _buildCompactTeamColumn(false),
-                ),
-              ],
-            ),
+    return Container(
+      height: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400, width: 1),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: Row(
+        children: [
+          // Home Team Players (Left)
+          Expanded(
+            flex: 1,
+            child: _buildCompactTeamColumn(true),
           ),
-        ),
 
-        const SizedBox(width: 12),
+          const SizedBox(width: 6),
 
-        // Action buttons on the side
-        Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            // Copy button
-            GestureDetector(
-              onTap: () {
-                if (captionController.text.isNotEmpty) {
-                  Clipboard.setData(
-                      ClipboardData(text: captionController.text));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Caption copied!'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.blue.shade300),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Copy',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          // Verbs (Center)
+          Expanded(
+            flex: 1,
+            child: _buildCompactVerbColumn(),
+          ),
 
-            const SizedBox(height: 8),
+          const SizedBox(width: 6),
 
-            // Reset button
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  selectedHomePlayers.clear();
-                  selectedAwayPlayers.clear();
-                  _selectedVerb = null;
-                  _selectedHitType = null;
-                  _selectedHomeRunType = null;
-                  _rbiCount = null;
-                  _selectedRbiInning = null;
-                  captionController.clear();
-                });
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.refresh, size: 14, color: Colors.grey.shade700),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Reset',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+          // Away Team Players (Right)
+          Expanded(
+            flex: 1,
+            child: _buildCompactTeamColumn(false),
+          ),
+        ],
+      ),
     );
   }
 
@@ -565,21 +777,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               _buildMainVerbSelector(),
 
               // Hit type options (when "hit" is selected)
-              if (_selectedVerb == 'hit') ...[
+              if (_selectedVerb == 'Single' ||
+                  _selectedVerb == 'Double' ||
+                  _selectedVerb == 'Triple' ||
+                  _selectedVerb == 'Home Run' ||
+                  _selectedVerb == 'Grand Slam') ...[
                 const SizedBox(height: 8),
-                _buildHitTypeOptions(),
-              ],
-
-              // Home run options (when "home run" is selected)
-              if (_selectedHitType == 'home run') ...[
-                const SizedBox(height: 8),
-                _buildHomeRunOptions(),
-              ],
-
-              // RBI and inning options
-              if (_selectedHitType != null) ...[
-                const SizedBox(height: 8),
-                _buildRbiAndInningOptions(),
               ],
             ],
           ),
@@ -919,120 +1122,250 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
           ),
 
-          // Compact verb options
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Main verbs
-                Wrap(
-                  spacing: 2,
-                  runSpacing: 2,
-                  children: [
-                    _buildCompactVerbChip('hit', 'Hit'),
-                    _buildCompactVerbChip('swing', 'Swing'),
-                    _buildCompactVerbChip('pitch', 'Pitch'),
-                    _buildCompactVerbChip('field', 'Field'),
-                    _buildCompactVerbChip('run', 'Run'),
-                    _buildCompactVerbChip('celebrate', 'Celebrate'),
-                  ],
-                ),
-
-                // Hit types (when hit is selected)
-                if (_selectedVerb == 'hit') ...[
-                  const SizedBox(height: 4),
-                  const Divider(height: 1),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 2,
-                    runSpacing: 2,
-                    children: [
-                      _buildCompactHitTypeChip('single', 'Single'),
-                      _buildCompactHitTypeChip('double', 'Double'),
-                      _buildCompactHitTypeChip('triple', 'Triple'),
-                      _buildCompactHitTypeChip('home run', 'HR'),
-                    ],
-                  ),
-                ],
-
-                // Home run types (when home run is selected)
-                if (_selectedHitType == 'home run') ...[
-                  const SizedBox(height: 4),
-                  const Divider(height: 1),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 2,
-                    runSpacing: 2,
-                    children: [
-                      _buildCompactHomeRunTypeChip('solo', 'Solo'),
-                      _buildCompactHomeRunTypeChip('two-run', '2-Run'),
-                      _buildCompactHomeRunTypeChip('three-run', '3-Run'),
-                      _buildCompactHomeRunTypeChip('grand slam', 'GS'),
-                    ],
-                  ),
-                ],
-
-                // RBI & Inning (when any hit type is selected)
-                if (_selectedHitType != null) ...[
-                  const SizedBox(height: 4),
-                  const Divider(height: 1),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          value: _rbiCount,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                            labelText: 'RBI',
-                            labelStyle: TextStyle(fontSize: 8),
-                          ),
-                          items: [0, 1, 2, 3, 4].map((rbi) {
-                            return DropdownMenuItem(
-                              value: rbi,
-                              child: Text(rbi == 0 ? '0' : '$rbi',
-                                  style: const TextStyle(fontSize: 8)),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _rbiCount = value;
-                            });
-                            _updateCaption();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _showCompactInningSelector,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _selectedRbiInning != null
-                                  ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
-                                  : 'Inn',
-                              style: const TextStyle(fontSize: 8),
-                              textAlign: TextAlign.center,
-                            ),
+          // Verb categories with compact layout
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(1),
+              child: _selectedVerb == 'Single' ||
+                      _selectedVerb == 'Double' ||
+                      _selectedVerb == 'Triple'
+                  ? _buildHittingSubOptions()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Top row: Hitting and Fielding
+                        Expanded(
+                          flex: 1,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildVerbCategory('Hitting', [
+                                  'Single',
+                                  'Double',
+                                  'Triple',
+                                  'Home Run',
+                                  'Grand Slam'
+                                ]),
+                              ),
+                              const SizedBox(width: 1),
+                              Expanded(
+                                child: _buildVerbCategory('Fielding', [
+                                  'Catches',
+                                  'Throws',
+                                  'Tags',
+                                  'Dives',
+                                  'Slides'
+                                ]),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
+
+                        const SizedBox(height: 1),
+
+                        // Middle row: Running and Celebrating
+                        Expanded(
+                          flex: 1,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildVerbCategory('Running',
+                                    ['Steals', 'Slides', 'Runs', 'Rounds']),
+                              ),
+                              const SizedBox(width: 1),
+                              Expanded(
+                                child: _buildVerbCategory('Celebrating', [
+                                  'Celebrates',
+                                  'Celebrates With',
+                                  'Celebrates Against'
+                                ]),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 1),
+
+                        // Bottom row: Other and dynamic content
+                        Expanded(
+                          flex: 1,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildVerbCategory('Other', [
+                                  'Looks On',
+                                  'Warms Up',
+                                  'Stretches',
+                                  'Talks'
+                                ]),
+                              ),
+                              const SizedBox(width: 1),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Home run types (when home run is selected)
+                                    if (_selectedVerb == 'Home Run')
+                                      _buildVerbCategory('Home Run Types', [
+                                        'Solo',
+                                        'Two-Run',
+                                        'Three-Run',
+                                        'Grand Slam'
+                                      ]),
+
+                                    // RBI & Inning (when any hitting verb is selected)
+                                    if (_selectedVerb == 'Single' ||
+                                        _selectedVerb == 'Double' ||
+                                        _selectedVerb == 'Triple' ||
+                                        _selectedVerb == 'Home Run' ||
+                                        _selectedVerb == 'Grand Slam') ...[
+                                      const SizedBox(height: 1),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: DropdownButtonFormField<int>(
+                                              value: _rbiCount,
+                                              decoration: const InputDecoration(
+                                                isDense: true,
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                        horizontal: 2,
+                                                        vertical: 1),
+                                                labelText: 'RBI',
+                                                labelStyle:
+                                                    TextStyle(fontSize: 8),
+                                              ),
+                                              items: [0, 1, 2, 3, 4].map((rbi) {
+                                                return DropdownMenuItem(
+                                                  value: rbi,
+                                                  child: Text(
+                                                      rbi == 0 ? '0' : '$rbi',
+                                                      style: const TextStyle(
+                                                          fontSize: 8)),
+                                                );
+                                              }).toList(),
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  _rbiCount = value;
+                                                });
+                                                _updateCaption();
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 1),
+                                          Expanded(
+                                            child: GestureDetector(
+                                              onTap: _showCompactInningSelector,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 2,
+                                                        vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                      color:
+                                                          Colors.grey.shade400),
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
+                                                ),
+                                                child: Text(
+                                                  _selectedRbiInning != null
+                                                      ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
+                                                      : 'Inn',
+                                                  style: const TextStyle(
+                                                      fontSize: 8),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildVerbCategory(String title, List<String> verbs) {
+    return Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title with background span
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          // Verb options
+          ...verbs.map((verb) => _buildVerbOption(verb)).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerbOption(String verb) {
+    final isSelected = _selectedVerb == verb;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedVerb = null;
+            _selectedHomeRunType = null;
+            _rbiCount = null;
+            _selectedRbiInning = null;
+          } else {
+            _selectedVerb = verb;
+            _selectedHomeRunType = null;
+            _rbiCount = null;
+            _selectedRbiInning = null;
+          }
+        });
+        _updateCaption();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        margin: const EdgeInsets.only(bottom: 1),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.shade100 : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(2),
+          border: Border.all(
+            color: isSelected ? Colors.blue.shade300 : Colors.grey.shade300,
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          verb,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+          ),
+        ),
       ),
     );
   }
@@ -1044,14 +1377,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         setState(() {
           if (isSelected) {
             _selectedVerb = null;
-            _selectedHitType = null;
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
             _isBatterRunning = false;
           } else {
             _selectedVerb = verb;
-            _selectedHitType = null;
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
@@ -1073,51 +1404,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 8,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCompactHitTypeChip(String hitType, String label) {
-    final isSelected = _selectedHitType == hitType;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            _selectedHitType = null;
-            _rbiCount = null;
-            _selectedRbiInning = null;
-          } else {
-            _selectedHitType = hitType;
-            if (hitType != 'home run') {
-              _rbiCount = 0;
-            } else {
-              _rbiCount = null;
-            }
-          }
-        });
-        _updateCaption();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade100 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? Colors.green.shade300 : Colors.grey.shade300,
-            width: 0.5,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 8,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.green.shade700 : Colors.grey.shade700,
           ),
         ),
       ),
@@ -1134,16 +1423,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           } else {
             _selectedHomeRunType = hrType;
             switch (hrType) {
-              case 'solo':
+              case 'Solo':
                 _rbiCount = 1;
                 break;
-              case 'two-run':
+              case 'Two-Run':
                 _rbiCount = 2;
                 break;
-              case 'three-run':
+              case 'Three-Run':
                 _rbiCount = 3;
                 break;
-              case 'grand slam':
+              case 'Grand Slam':
                 _rbiCount = 4;
                 break;
             }
@@ -1164,7 +1453,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 8,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.orange.shade700 : Colors.grey.shade700,
           ),
@@ -1365,7 +1654,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         setState(() {
           if (isSelected) {
             _selectedVerb = null;
-            _selectedHitType = null;
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
@@ -1373,7 +1661,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           } else {
             _selectedVerb = verb;
             // Reset other states when selecting a new verb
-            _selectedHitType = null;
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
@@ -1394,75 +1681,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHitTypeOptions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Hit Type:',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            _buildHitTypeChip('single', 'Single'),
-            _buildHitTypeChip('double', 'Double'),
-            _buildHitTypeChip('triple', 'Triple'),
-            _buildHitTypeChip('home run', 'Home Run'),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHitTypeChip(String hitType, String label) {
-    final isSelected = _selectedHitType == hitType;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            _selectedHitType = null;
-            _rbiCount = null;
-            _selectedRbiInning = null;
-          } else {
-            _selectedHitType = hitType;
-            if (hitType != 'home run') {
-              // Pre-select "No RBI" for non-HR hits
-              _rbiCount = 0;
-            } else {
-              // For home runs, RBI is determined by HR type
-              _rbiCount = null;
-            }
-          }
-          _updateCaption();
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade100 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Colors.green.shade300 : Colors.grey.shade300,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.green.shade700 : Colors.grey.shade700,
           ),
         ),
       ),
@@ -1482,10 +1703,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           spacing: 4,
           runSpacing: 4,
           children: [
-            _buildHomeRunTypeChip('solo', 'Solo HR'),
-            _buildHomeRunTypeChip('two-run', '2-Run HR'),
-            _buildHomeRunTypeChip('three-run', '3-Run HR'),
-            _buildHomeRunTypeChip('grand slam', 'Grand Slam'),
+            _buildHomeRunTypeChip('Solo', 'Solo HR'),
+            _buildHomeRunTypeChip('Two-Run', '2-Run HR'),
+            _buildHomeRunTypeChip('Three-Run', '3-Run HR'),
+            _buildHomeRunTypeChip('Grand Slam', 'Grand Slam'),
           ],
         ),
       ],
@@ -1503,16 +1724,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedHomeRunType = hrType;
             // Set RBI count based on HR type
             switch (hrType) {
-              case 'solo':
+              case 'Solo':
                 _rbiCount = 1;
                 break;
-              case 'two-run':
+              case 'Two-Run':
                 _rbiCount = 2;
                 break;
-              case 'three-run':
+              case 'Three-Run':
                 _rbiCount = 3;
                 break;
-              case 'grand slam':
+              case 'Grand Slam':
                 _rbiCount = 4;
                 break;
             }
@@ -1532,7 +1753,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.orange.shade700 : Colors.grey.shade700,
           ),
@@ -1692,127 +1913,304 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _getOrdinalSuffix(int number) {
-    if (number >= 11 && number <= 13) {
-      return '${number}th';
-    }
-    switch (number % 10) {
+    switch (number) {
       case 1:
-        return '${number}st';
+        return 'first';
       case 2:
-        return '${number}nd';
+        return 'second';
       case 3:
-        return '${number}rd';
+        return 'third';
+      case 4:
+        return 'fourth';
+      case 5:
+        return 'fifth';
+      case 6:
+        return 'sixth';
+      case 7:
+        return 'seventh';
+      case 8:
+        return 'eighth';
+      case 9:
+        return 'ninth';
+      case 10:
+        return 'tenth';
+      case 11:
+        return 'eleventh';
+      case 12:
+        return 'twelfth';
+      case 13:
+        return 'thirteenth';
+      case 14:
+        return 'fourteenth';
+      case 15:
+        return 'fifteenth';
+      case 16:
+        return 'sixteenth';
+      case 17:
+        return 'seventeenth';
+      case 18:
+        return 'eighteenth';
+      case 19:
+        return 'nineteenth';
+      case 20:
+        return 'twentieth';
+      case 21:
+        return 'twenty-first';
+      case 22:
+        return 'twenty-second';
+      case 23:
+        return 'twenty-third';
+      case 24:
+        return 'twenty-fourth';
+      case 25:
+        return 'twenty-fifth';
+      case 26:
+        return 'twenty-sixth';
+      case 27:
+        return 'twenty-seventh';
+      case 28:
+        return 'twenty-eighth';
+      case 29:
+        return 'twenty-ninth';
+      case 30:
+        return 'thirtieth';
       default:
         return '${number}th';
     }
   }
 
   void _updateCaption() {
-    if (_selectedVerb == null) {
+    // Safety check: if either team is not selected, don't try to generate captions
+    if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
       return;
     }
 
-    final List<String> parts = [];
+    // Get photo date from metadata, fallback to current date
+    DateTime photoDate = DateTime.now();
+    if (widget.metadata != null) {
+      final dateTimeOriginal = widget.metadata!['DateTimeOriginal']?.toString();
+      final createDate = widget.metadata!['CreateDate']?.toString();
+      final modifyDate = widget.metadata!['ModifyDate']?.toString();
 
-    // Add players
-    if (selectedHomePlayers.isNotEmpty) {
-      parts.add(_formatPlayerList(selectedHomePlayers.toList(), true));
-    }
-    if (selectedAwayPlayers.isNotEmpty) {
-      parts.add(_formatPlayerList(selectedAwayPlayers.toList(), false));
+      // Try to parse the date from EXIF data
+      final dateString = dateTimeOriginal ?? createDate ?? modifyDate;
+      if (dateString != null && dateString.isNotEmpty) {
+        try {
+          // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
+          final parts = dateString.split(' ');
+          if (parts.length >= 1) {
+            final datePart = parts[0];
+            final dateComponents = datePart.split(':');
+            if (dateComponents.length >= 3) {
+              final year = int.parse(dateComponents[0]);
+              final month = int.parse(dateComponents[1]);
+              final day = int.parse(dateComponents[2]);
+              photoDate = DateTime(year, month, day);
+            }
+          }
+        } catch (e) {
+          print('Error parsing photo date: $e');
+          // Fallback to current date
+        }
+      }
     }
 
-    if (parts.isEmpty) {
+    // Get date components
+    final city = cityController.text;
+    final prov = provinceController.text;
+    final monLC = _month(photoDate.month);
+    final day = photoDate.day;
+    final year = photoDate.year;
+    final monthUpper = monLC.toUpperCase();
+    final formattedDate = '$monLC $day, $year';
+    final dateline = _formatDateline(city, prov, monthUpper, day);
+    final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+
+    // Determine which team the selected players belong to
+    // First player selected = Main focus, opposite team players = always "against"
+    Set<String> activePlayers;
+    Set<String> opponentPlayers;
+    String? opponentTeamName;
+
+    if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+      // Only away team players are selected
+      activePlayers = selectedAwayPlayers;
+      opponentPlayers = <String>{};
+      opponentTeamName = selectedHomeTeam;
+    } else if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+      // Only home team players are selected
+      activePlayers = selectedHomePlayers;
+      opponentPlayers = <String>{};
+      opponentTeamName = selectedAwayTeam;
+    } else if (selectedHomePlayers.isNotEmpty &&
+        selectedAwayPlayers.isNotEmpty) {
+      // Both teams have players - first selected team is main focus, other team is opponent
+      if (selectedHomePlayers.length > selectedAwayPlayers.length) {
+        // Home team has more players, so they're the main focus
+        activePlayers = selectedHomePlayers;
+        opponentPlayers = selectedAwayPlayers;
+        opponentTeamName = selectedAwayTeam;
+      } else {
+        // Away team has more players or equal, so they're the main focus
+        activePlayers = selectedAwayPlayers;
+        opponentPlayers = selectedHomePlayers;
+        opponentTeamName = selectedHomeTeam;
+      }
+    } else {
+      // No players selected
       captionController.clear();
       return;
     }
 
-    // Add verb and action
-    final verbPart = _buildVerbPhrase();
-    if (verbPart.isNotEmpty) {
-      parts.add(verbPart);
+    if (activePlayers.isEmpty) {
+      captionController.clear();
+      return;
+    }
+
+    // Format the main player(s)
+    final playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+
+    // Build the action phrase based on selected verb
+    String actionPhrase = '';
+
+    if (_selectedVerb != null) {
+      actionPhrase = _buildActionPhrase();
+    }
+
+    // Handle opponent players if selected
+    String opponentPart = '';
+    if (opponentPlayers.isNotEmpty) {
+      final opponentNames =
+          _combinePlayersWithSingleTeam(opponentPlayers.toList());
+      opponentPart = ' against $opponentNames and the $opponentTeamName';
+    } else if (opponentTeamName != null) {
+      opponentPart = ' against the $opponentTeamName';
     }
 
     // Add inning if specified
+    String inningPart = '';
     if (_selectedRbiInning != null) {
-      parts.add('during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning');
+      inningPart =
+          ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
     }
 
-    // Build final caption
-    final caption = parts.join(' ');
-    captionController.text = caption;
+    // Use home team stadium from API, fallback to controller if not available
+    final stadium = homeTeamStadium ?? stadiumController.text;
+    final photoBy = creatorController.text;
+
+    // Build the final caption
+    final caption = '$dateline '
+        '$playerName $actionPhrase$opponentPart$inningPart '
+        'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+
+    // Apply diacritic removal if enabled
+    final processedCaption = _removeDiacritics(caption);
+    captionController.text = processedCaption;
+
+    // Update personality field with all selected players
+    _updatePersonalityField();
   }
 
-  String _formatPlayerList(List<String> players, bool isHome) {
-    if (players.isEmpty) return '';
-
-    final teamName = isHome ? selectedHomeTeam : selectedAwayTeam;
-    if (teamName == null) return players.join(' and ');
-
-    if (players.length == 1) {
-      return '${players.first} of the $teamName';
-    } else if (players.length == 2) {
-      return '${players[0]} and ${players[1]} of the $teamName';
-    } else {
-      final last = players.removeLast();
-      return '${players.join(', ')}, and $last of the $teamName';
-    }
+  void _onFtpPressed() {
+    // ... your FTP logic here ...
+    setState(() {
+      _ftpPictureNumber++;
+    });
   }
 
-  String _buildVerbPhrase() {
-    if (_selectedVerb == null) return '';
+  void _updatePersonalityField() {
+    // Combine all selected players from both teams
+    final allSelectedPlayers = <String>[];
+    allSelectedPlayers.addAll(selectedHomePlayers);
+    allSelectedPlayers.addAll(selectedAwayPlayers);
 
-    switch (_selectedVerb!) {
-      case 'hit':
-        return _buildHitPhrase();
-      case 'swing':
-        return 'swings against the';
-      case 'pitch':
-        return 'delivers a pitch against the';
-      case 'field':
-        return 'fields against the';
-      case 'run':
-        return 'runs against the';
-      case 'celebrate':
-        return 'celebrates against the';
-      default:
-        return '${_selectedVerb!}s against the';
-    }
+    // Remove jersey numbers and # symbols from player names
+    final cleanPlayerNames = allSelectedPlayers.map((playerName) {
+      // Remove numbers, # symbols, and extra spaces, keep only the name
+      return playerName.replaceAll(RegExp(r'\s*[#\d]+\s*'), '').trim();
+    }).toList();
+
+    // Join players with semicolons, no semicolon after the last player
+    final personalityText = cleanPlayerNames.join(';');
+
+    // Apply diacritic removal if enabled
+    final processedPersonalityText = _removeDiacritics(personalityText);
+
+    // Update the personality field
+    personalityController.text = processedPersonalityText;
   }
 
-  String _buildHitPhrase() {
-    if (_selectedHitType == null) return 'hits against the';
+  String _removeDiacritics(String text) {
+    if (!_removeAccent) return text;
 
-    switch (_selectedHitType!) {
-      case 'single':
-        return 'hits a single against the';
-      case 'double':
-        return 'hits a double against the';
-      case 'triple':
-        return 'hits a triple against the';
-      case 'home run':
-        return _buildHomeRunPhrase();
-      default:
-        return 'hits against the';
-    }
-  }
+    // Map of accented characters to their non-accented equivalents
+    const Map<String, String> diacriticMap = {
+      'à': 'a',
+      'á': 'a',
+      'â': 'a',
+      'ã': 'a',
+      'ä': 'a',
+      'å': 'a',
+      'æ': 'ae',
+      'è': 'e',
+      'é': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'ò': 'o',
+      'ó': 'o',
+      'ô': 'o',
+      'õ': 'o',
+      'ö': 'o',
+      'ø': 'o',
+      'ù': 'u',
+      'ú': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'ý': 'y',
+      'ÿ': 'y',
+      'ñ': 'n',
+      'ç': 'c',
+      'À': 'A',
+      'Á': 'A',
+      'Â': 'A',
+      'Ã': 'A',
+      'Ä': 'A',
+      'Å': 'A',
+      'Æ': 'AE',
+      'È': 'E',
+      'É': 'E',
+      'Ê': 'E',
+      'Ë': 'E',
+      'Ì': 'I',
+      'Í': 'I',
+      'Î': 'I',
+      'Ï': 'I',
+      'Ò': 'O',
+      'Ó': 'O',
+      'Ô': 'O',
+      'Õ': 'O',
+      'Ö': 'O',
+      'Ø': 'O',
+      'Ù': 'U',
+      'Ú': 'U',
+      'Û': 'U',
+      'Ü': 'U',
+      'Ý': 'Y',
+      'Ñ': 'N',
+      'Ç': 'C',
+    };
 
-  String _buildHomeRunPhrase() {
-    if (_selectedHomeRunType == null) return 'hits a home run against the';
+    String result = text;
+    diacriticMap.forEach((accented, plain) {
+      result = result.replaceAll(accented, plain);
+    });
 
-    switch (_selectedHomeRunType!) {
-      case 'solo':
-        return 'hits a solo home run against the';
-      case 'two-run':
-        return 'hits a two-run home run against the';
-      case 'three-run':
-        return 'hits a three-run home run against the';
-      case 'grand slam':
-        return 'hits a grand slam against the';
-      default:
-        return 'hits a home run against the';
-    }
+    return result;
   }
 
   Widget _buildPlayerChip(String playerName, bool isHome) {
@@ -2120,7 +2518,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _clearVerbSubSelections() {
-    _selectedHitType = null;
     _selectedHomeRunType = null;
     _rbiCount = null;
     _isBatterRunning = false;
@@ -2195,5 +2592,540 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  // Helper methods for caption building
+  String _month(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return months[month - 1];
+  }
+
+  String _formatDateline(
+      String city, String stateOrProvince, String monthUpper, int day) {
+    if (_isGameInUnitedStates()) {
+      // US format: CITY, STATE - DATE
+      return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
+    } else {
+      // Canadian format: CITY, PROVINCE_ABBREVIATION - DATE
+      final provAbbr = _abbr(stateOrProvince);
+      return '${city.toUpperCase()}, $provAbbr - $monthUpper $day:';
+    }
+  }
+
+  String _formatLocationSuffix(
+      String city, String stateOrProvince, String formattedDate) {
+    if (_isGameInUnitedStates()) {
+      // US format: in City, State (no country needed)
+      // Special case for Washington DC - keep DC capitalized
+      final formattedState =
+          stateOrProvince == 'DC' ? 'DC' : _capitalize(stateOrProvince);
+      return 'in ${_capitalize(city)}, $formattedState';
+    } else {
+      // Canadian format: in City, Province, Canada
+      return 'in ${_capitalize(city)}, ${_capitalize(stateOrProvince)}, Canada';
+    }
+  }
+
+  bool _isGameInUnitedStates() {
+    // If the state is not 'Ontario' (Canada), then it's in the US
+    return provinceController.text != 'Ontario';
+  }
+
+  String _abbr(String province) {
+    const abbreviations = {
+      'Ontario': 'ON',
+      'Quebec': 'QC',
+      'British Columbia': 'BC',
+      'Alberta': 'AB',
+      'Manitoba': 'MB',
+      'Saskatchewan': 'SK',
+      'Nova Scotia': 'NS',
+      'New Brunswick': 'NB',
+      'Newfoundland and Labrador': 'NL',
+      'Prince Edward Island': 'PE',
+      'Northwest Territories': 'NT',
+      'Nunavut': 'NU',
+      'Yukon': 'YT',
+    };
+    return abbreviations[province] ?? province;
+  }
+
+  String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1).toLowerCase();
+  }
+
+  String _combinePlayersWithSingleTeam(List<String> players) {
+    if (players.isEmpty) return '';
+
+    // Get full player names
+    final playerNames = players.toList();
+
+    // Determine the team from the first player's selection context
+    final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
+    final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
+
+    if (teamName == null) {
+      // Fallback to just player names if team is not available
+      if (playerNames.length == 1) {
+        return playerNames.first;
+      } else if (playerNames.length == 2) {
+        return '${playerNames[0]} and ${playerNames[1]}';
+      } else {
+        final last = playerNames.removeLast();
+        return '${playerNames.join(', ')}, and $last';
+      }
+    }
+
+    if (playerNames.length == 1) {
+      return '${playerNames.first} of the $teamName';
+    } else if (playerNames.length == 2) {
+      // Two players: "Player1 and Player2 of the team"
+      return '${playerNames[0]} and ${playerNames[1]} of the $teamName';
+    } else {
+      // Three or more players: "Player1, Player2, and Player3 of the team"
+      final last = playerNames.removeLast();
+      return '${playerNames.join(', ')}, and $last of the $teamName';
+    }
+  }
+
+  String _buildActionPhrase() {
+    String baseAction = '';
+    switch (_selectedVerb!) {
+      case 'Single':
+        baseAction = 'single';
+        break;
+      case 'Double':
+        baseAction = 'double';
+        break;
+      case 'Triple':
+        baseAction = 'triple';
+        break;
+      case 'Home Run':
+        baseAction = _buildHomeRunPhrase();
+        break;
+      case 'Grand Slam':
+        baseAction = 'grand slam';
+        break;
+      default:
+        baseAction = _selectedVerb!.toLowerCase();
+    }
+
+    // Add RBI information if specified
+    if (_rbiCount != null && _rbiCount! > 0) {
+      final rbiWord = _numberToWord(_rbiCount!);
+      return 'hits a $rbiWord-RBI $baseAction';
+    }
+
+    return 'hits a $baseAction';
+  }
+
+  String _numberToWord(int number) {
+    switch (number) {
+      case 1:
+        return 'one';
+      case 2:
+        return 'two';
+      case 3:
+        return 'three';
+      case 4:
+        return 'four';
+      case 5:
+        return 'five';
+      case 6:
+        return 'six';
+      case 7:
+        return 'seven';
+      case 8:
+        return 'eight';
+      case 9:
+        return 'nine';
+      case 10:
+        return 'ten';
+      default:
+        return number.toString();
+    }
+  }
+
+  String _buildHomeRunPhrase() {
+    if (_selectedHomeRunType == null) return 'home run';
+
+    switch (_selectedHomeRunType!) {
+      case 'Solo':
+        return 'solo home run';
+      case 'Two-Run':
+        return 'two-run home run';
+      case 'Three-Run':
+        return 'three-run home run';
+      case 'Grand Slam':
+        return 'grand slam';
+      default:
+        return 'home run';
+    }
+  }
+
+  Widget _buildHittingSubOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected hit type indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Action options
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // RBI section with buttons
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'RBI',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 2,
+                        runSpacing: 2,
+                        children: [1, 2, 3].map((rbi) {
+                          final isSelected = _rbiCount == rbi;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _rbiCount = rbi;
+                              });
+                              _updateCaption();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.grey.shade300
+                                    : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                '$rbi',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Inning section with buttons
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'INN',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 2,
+                        runSpacing: 2,
+                        children: [
+                          // Back arrow for extra innings
+                          if (_showExtraInnings)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_extraInningsPage > 0) {
+                                    _extraInningsPage--;
+                                  } else {
+                                    // Go back to regular innings
+                                    _showExtraInnings = false;
+                                    _extraInningsPage = 0;
+                                    _selectedRbiInning = null;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  '←',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          // Innings (regular or extra based on state)
+                          ...(_showExtraInnings
+                                  ? _getExtraInningsForPage()
+                                  : List.generate(9, (index) => index + 1))
+                              .map((inning) {
+                            final isSelected = _selectedRbiInning == inning;
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedRbiInning = inning;
+                                });
+                                _updateCaption();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.grey.shade300
+                                      : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  '$inning',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                          // EXT button that cycles through extra innings
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (_showExtraInnings) {
+                                  // If already showing extra innings, go to next page
+                                  if (_extraInningsPage < 3) {
+                                    _extraInningsPage++;
+                                  } else {
+                                    // Reset to regular innings
+                                    _showExtraInnings = false;
+                                    _extraInningsPage = 0;
+                                    _selectedRbiInning = null;
+                                  }
+                                } else {
+                                  // Start showing extra innings
+                                  _showExtraInnings = true;
+                                  _extraInningsPage = 0;
+                                }
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _showExtraInnings
+                                    ? Colors.grey.shade100
+                                    : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                _showExtraInnings
+                                    ? (_extraInningsPage == 0
+                                        ? '→'
+                                        : (_extraInningsPage == 1 ? '→' : '→'))
+                                    : 'EXT',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Celebrates option
+              _buildSubOption('Celebrates', 'celebrates'),
+
+              // Runs the base paths option
+              _buildSubOption('Runs the Base Paths', 'runs_base_paths'),
+
+              // Slides into base option (not for Single)
+              if (_selectedVerb != 'Single')
+                _buildSubOption('Slides into Base', 'slides_into_base'),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedVerb = null;
+                    _selectedHittingAction = null;
+                    _rbiCount = null;
+                    _selectedRbiInning = null;
+                    _showExtraInnings = false;
+                    _extraInningsPage = 0;
+                  });
+                  _updateCaption();
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.arrow_back,
+                          size: 12, color: Colors.grey.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Back to Verbs',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubOption(String label, String action) {
+    final isSelected = _selectedHittingAction == action;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedHittingAction = null;
+          } else {
+            _selectedHittingAction = action;
+          }
+        });
+        _updateCaption();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        margin: const EdgeInsets.only(bottom: 2),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: Colors.grey.shade300,
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<int> _getExtraInningsForPage() {
+    if (_extraInningsPage == 0) {
+      return [10, 11, 12, 13, 14, 15, 16];
+    } else if (_extraInningsPage == 1) {
+      return [17, 18, 19, 20, 21, 22, 23];
+    } else if (_extraInningsPage == 2) {
+      return [24, 25, 26, 27, 28, 29, 30];
+    } else {
+      return [24, 25, 26, 27, 28, 29, 30];
+    }
   }
 }
