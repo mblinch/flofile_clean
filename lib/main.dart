@@ -10943,14 +10943,11 @@ class _CaptionBuilderState extends State<CaptionBuilder>
                             ),
                           ),
                           const Spacer(),
-                          // RIGHT COLUMN: GridView + Metadata
+                          // RIGHT COLUMN: GridView only
                           SizedBox(
                             width: MediaQuery.of(context).size.width * 0.48,
-                            child: Column(
-                              children: [
-                                // GridView section
-                                Container(
-                                  height: 570.0,
+                            height: 570.0,
+                            child: Container(
                                   decoration: BoxDecoration(
                                     border: Border.all(
                                       color: _isThumbnailGridFocused

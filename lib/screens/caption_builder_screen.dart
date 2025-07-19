@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import '../widgets/app_header_widget.dart';
+import '../widgets/picture_preview_widget.dart';
+import '../widgets/thumbnail_grid_widget.dart';
+import '../widgets/caption_fields_widget.dart';
+import '../widgets/metadata_widget.dart';
+
+class CaptionBuilderScreen extends StatefulWidget {
+  const CaptionBuilderScreen({super.key});
+
+  @override
+  _CaptionBuilderScreenState createState() => _CaptionBuilderScreenState();
+}
+
+class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
+  // Image state management
+  List<String> imagePaths = [];
+  int currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppHeaderWidget(
+        onImagesLoaded: (images) {
+          setState(() {
+            imagePaths = images;
+            currentIndex = 0;
+          });
+        },
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // TOP ROW
+            Expanded(
+              child: Row(
+                children: [
+                  // TOP LEFT BOX - Picture Preview
+                  Expanded(
+                    child: PicturePreviewWidget(
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: (index) {
+                        setState(() {
+                          currentIndex = index;
+                        });
+                      },
+                      onNextImage: () {
+                        if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            currentIndex++;
+                          });
+                        }
+                      },
+                      onPreviousImage: () {
+                        if (currentIndex > 0) {
+                          setState(() {
+                            currentIndex--;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+
+                  // TOP RIGHT BOX - Thumbnail Grid
+                  const Expanded(
+                    child: ThumbnailGridWidget(),
+                  ),
+                ],
+              ),
+            ),
+
+            // BOTTOM ROW
+            Expanded(
+              child: Row(
+                children: [
+                  // BOTTOM LEFT BOX - Caption Fields
+                  const Expanded(
+                    child: CaptionFieldsWidget(),
+                  ),
+
+                  // BOTTOM RIGHT BOX - Metadata
+                  const Expanded(
+                    child: MetadataWidget(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
