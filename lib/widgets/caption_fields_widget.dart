@@ -2724,13 +2724,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         baseAction = _selectedVerb!.toLowerCase();
     }
 
-    // Add RBI information if specified
+    // Build the hit phrase
+    String hitPhrase = '';
     if (_rbiCount != null && _rbiCount! > 0) {
       final rbiWord = _numberToWord(_rbiCount!);
-      return 'hits a $rbiWord-RBI $baseAction';
+      hitPhrase = 'hits a $rbiWord-RBI $baseAction';
+    } else {
+      hitPhrase = 'hits a $baseAction';
     }
 
-    return 'hits a $baseAction';
+    // Add celebration action if specified
+    if (_selectedHittingAction != null) {
+      switch (_selectedHittingAction!) {
+        case 'celebrates':
+          if (_rbiCount != null && _rbiCount! > 0) {
+            final rbiWord = _numberToWord(_rbiCount!);
+            return 'celebrates a $rbiWord-RBI $baseAction';
+          } else {
+            return 'celebrates a $baseAction';
+          }
+        case 'runs_base_paths':
+          return '$hitPhrase and runs the base paths';
+        case 'slides_into_base':
+          return '$hitPhrase and slides into base';
+        default:
+          return hitPhrase;
+      }
+    }
+
+    return hitPhrase;
   }
 
   String _numberToWord(int number) {
