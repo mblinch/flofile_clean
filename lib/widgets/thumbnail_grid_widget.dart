@@ -273,7 +273,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         border: Border.all(
                           color: index == widget.currentIndex
                               ? Theme.of(context).colorScheme.primary
-                              : Colors.grey.shade300,
+                              : Colors.grey.shade500,
                           width: index == widget.currentIndex ? 1.5 : 0.5,
                         ),
                         boxShadow: [

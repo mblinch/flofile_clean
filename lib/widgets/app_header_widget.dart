@@ -7,10 +7,14 @@ import 'dart:async';
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(List<String>) onImagesLoaded;
+  final Function(String?)? onHomeTeamChanged;
+  final Function(String?)? onAwayTeamChanged;
 
   const AppHeaderWidget({
     super.key,
     required this.onImagesLoaded,
+    this.onHomeTeamChanged,
+    this.onAwayTeamChanged,
   });
 
   @override
@@ -135,6 +139,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                   onChanged: (v) {
                     if (v == null) return;
                     setState(() => selectedAwayTeam = v);
+
+                    // Notify parent screen of team change
+                    if (widget.onAwayTeamChanged != null) {
+                      widget.onAwayTeamChanged!(v);
+                    }
+
                     // Here you would call _loadTeam(v, isHomeTeam: false);
                   },
                 ),
@@ -155,6 +165,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       onChanged: (v) async {
                         if (v == null) return;
                         setState(() => selectedHomeTeam = v);
+
+                        // Notify parent screen of team change
+                        if (widget.onHomeTeamChanged != null) {
+                          widget.onHomeTeamChanged!(v);
+                        }
+
                         // Here you would call _loadTeam(v, isHomeTeam: true);
 
                         // Auto-fill metadata dialog logic would go here

@@ -22,6 +22,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Metadata state
   Map<String, dynamic>? currentMetadata;
 
+  // Team selection
+  String? selectedHomeTeam;
+  String? selectedAwayTeam;
+
   @override
   void initState() {
     super.initState();
@@ -104,6 +108,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             _loadMetadata();
           }
         },
+        onHomeTeamChanged: (team) {
+          setState(() {
+            selectedHomeTeam = team;
+          });
+        },
+        onAwayTeamChanged: (team) {
+          setState(() {
+            selectedAwayTeam = team;
+          });
+        },
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -157,6 +171,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           currentMetadata = metadata;
                         });
                       },
+                      homeTeam: selectedHomeTeam,
+                      awayTeam: selectedAwayTeam,
                     ),
                   ),
 

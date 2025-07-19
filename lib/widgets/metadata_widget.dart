@@ -227,36 +227,35 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     int? maxLines = 1,
     bool expands = false,
   }) {
-    return Material(
-      elevation: 2.0,
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      child: TextField(
-        controller: controller,
-        maxLines: maxLines,
-        expands: expands,
-        cursorHeight: 10.0,
-        decoration: InputDecoration(
-          labelText: label,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 12,
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          labelStyle: const TextStyle(fontSize: 10),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400, width: 1.0),
-          ),
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      expands: expands,
+      style: const TextStyle(fontSize: 12),
+      decoration: InputDecoration(
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        hintText: 'Enter $label...',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade400),
         ),
-        style: const TextStyle(fontSize: 11),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade400),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
+        ),
+        contentPadding: const EdgeInsets.all(8),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        labelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
       ),
     );
   }
@@ -267,63 +266,75 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     List<Map<String, String>> items,
     ValueChanged<String?> onChanged,
   ) {
-    return Material(
-      elevation: 2.0,
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.circular(4),
-          color: Colors.white,
-        ),
-        child: PopupMenuButton<String>(
-          initialValue: value,
-          onSelected: onChanged,
-          constraints: const BoxConstraints(maxHeight: 300),
-          itemBuilder: (context) => items
-              .map(
-                (item) => PopupMenuItem<String>(
-                  value: item['code'],
-                  height: 16,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  child: Container(
-                    height: 16,
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Floating label
+          Padding(
+            padding: const EdgeInsets.only(left: 8, top: 4),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          // Dropdown content
+          PopupMenuButton<String>(
+            initialValue: value,
+            onSelected: onChanged,
+            constraints: const BoxConstraints(maxHeight: 300),
+            itemBuilder: (context) => items
+                .map(
+                  (item) => PopupMenuItem<String>(
+                    value: item['code'],
+                    height: 32,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Text(
                       item['name']!,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: Colors.black,
                         fontWeight: FontWeight.normal,
                       ),
                     ),
                   ),
-                ),
-              )
-              .toList(),
-          child: Container(
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Row(
-              children: [
-                Text(
-                  '$label: ',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-                Expanded(
-                  child: Text(
-                    value ?? 'Select',
-                    style: const TextStyle(fontSize: 11, color: Colors.black),
-                    overflow: TextOverflow.ellipsis,
+                )
+                .toList(),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value != null
+                          ? items.firstWhere((item) => item['code'] == value,
+                              orElse: () => {'name': 'Select'})['name']!
+                          : 'Select $label',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            value != null ? Colors.black : Colors.grey.shade600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                const Icon(Icons.arrow_drop_down, size: 14),
-              ],
+                  const Icon(Icons.arrow_drop_down, size: 16),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -333,48 +344,42 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     return Container(
       margin: const EdgeInsets.all(8.0),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400, width: 1.0),
-        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.shade300, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
         color: Colors.white,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Metadata Title
+          // Header
           Container(
-            width: double.infinity,
-            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: Colors.grey.shade100,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
-              ),
-              border: Border.all(
-                color: Colors.grey.shade400,
-                width: 1.0,
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: const Row(
-                children: [
-                  Text(
-                    'Metadata',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: Colors.black87),
+                const SizedBox(width: 8),
+                const Text(
+                  'Metadata',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          // Metadata content
+
+          // Main content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
