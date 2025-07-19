@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
@@ -17,6 +19,74 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   List<String> imagePaths = [];
   int currentIndex = 0;
 
+  // Metadata state
+  Map<String, dynamic>? currentMetadata;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  // Load metadata from the current image
+  Future<void> _loadMetadata() async {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+
+    final imagePath = imagePaths[currentIndex];
+    print('Loading metadata from: $imagePath');
+
+    try {
+      // Extract metadata via exiftool in JSON format
+      final proc = await Process.run('exiftool', [
+        '-j', // JSON output
+        '-Caption-Abstract',
+        '-ImageDescription',
+        '-XMP-getty:Personality',
+        '-TransmissionReference',
+        '-DescriptionWriter',
+        '-Headline',
+        '-Keywords',
+        '-Creator',
+        '-CreatorJobTitle',
+        '-Credit',
+        '-Copyright',
+        '-Source',
+        '-ObjectName',
+        '-Category',
+        '-SupplementalCategories',
+        '-XMP-photoshop:Instructions',
+        '-Sub-location',
+        '-City',
+        '-Province-State',
+        '-Urgency',
+        '-Country',
+        '-CountryCode',
+        imagePath,
+      ]);
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
+        if (data.isNotEmpty) {
+          setState(() {
+            currentMetadata = data.first as Map<String, dynamic>;
+          });
+          print('Metadata loaded successfully');
+        }
+      } else {
+        print('Exiftool error: ${proc.stderr}');
+      }
+    } catch (e) {
+      print('Error loading metadata: $e');
+    }
+  }
+
+  // Handle image selection
+  void _onImageSelected(int index) {
+    setState(() {
+      currentIndex = index;
+    });
+    _loadMetadata();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,6 +99,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           });
           print(
               'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
+          // Load metadata for the first image
+          if (images.isNotEmpty) {
+            _loadMetadata();
+          }
         },
       ),
       body: Padding(
@@ -44,23 +118,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     child: PicturePreviewWidget(
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
-                      onImageSelected: (index) {
-                        setState(() {
-                          currentIndex = index;
-                        });
-                      },
+                      onImageSelected: _onImageSelected,
                       onNextImage: () {
                         if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            currentIndex++;
-                          });
+                          _onImageSelected(currentIndex + 1);
                         }
                       },
                       onPreviousImage: () {
                         if (currentIndex > 0) {
-                          setState(() {
-                            currentIndex--;
-                          });
+                          _onImageSelected(currentIndex - 1);
                         }
                       },
                     ),
@@ -71,11 +137,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     child: ThumbnailGridWidget(
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
-                      onImageSelected: (index) {
-                        setState(() {
-                          currentIndex = index;
-                        });
-                      },
+                      onImageSelected: _onImageSelected,
                     ),
                   ),
                 ],
@@ -87,13 +149,27 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               child: Row(
                 children: [
                   // BOTTOM LEFT BOX - Caption Fields
-                  const Expanded(
-                    child: CaptionFieldsWidget(),
+                  Expanded(
+                    child: CaptionFieldsWidget(
+                      metadata: currentMetadata,
+                      onMetadataUpdated: (metadata) {
+                        setState(() {
+                          currentMetadata = metadata;
+                        });
+                      },
+                    ),
                   ),
 
                   // BOTTOM RIGHT BOX - Metadata
-                  const Expanded(
-                    child: MetadataWidget(),
+                  Expanded(
+                    child: MetadataWidget(
+                      metadata: currentMetadata,
+                      onMetadataUpdated: (metadata) {
+                        setState(() {
+                          currentMetadata = metadata;
+                        });
+                      },
+                    ),
                   ),
                 ],
               ),
