@@ -1349,7 +1349,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ? _buildHittingSubOptions()
                   : _selectedVerb == 'Home Run'
                       ? _buildHomeRunSubOptions()
-                      : _selectedVerb == 'At Bat'
+                      : (_selectedVerb == 'At Bat' ||
+                              _selectedVerb == 'Pitching' ||
+                              _selectedVerb == 'Swings')
                           ? _buildAtBatInterface()
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1372,12 +1374,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       const SizedBox(width: 1),
                                       Expanded(
                                         child: _buildVerbCategory('Defense', [
+                                          'Pitching',
                                           'Catches',
                                           'Throws',
                                           'Tags',
                                           'Dives',
-                                          'Slides',
-                                          'Pitching'
+                                          'Slides'
                                         ]),
                                       ),
                                       const SizedBox(width: 1),
@@ -1433,8 +1435,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 'Grand Slam'
                                               ]),
 
-                                            // Inning only (when At Bat is selected)
-                                            if (_selectedVerb == 'At Bat') ...[
+                                            // Inning only (when At Bat, Pitching, or Swings is selected)
+                                            if (_selectedVerb == 'At Bat' ||
+                                                _selectedVerb == 'Pitching' ||
+                                                _selectedVerb == 'Swings') ...[
                                               const SizedBox(height: 1),
                                               Container(
                                                 decoration: BoxDecoration(
@@ -2476,7 +2480,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String opponentPart = '';
     if (_selectedHittingAction == 'celebrates' ||
         _selectedHittingAction == 'celebrates_in_dugout' ||
-        _selectedHittingAction == 'trots_the_bases') {
+        _selectedHittingAction == 'trots_the_bases' ||
+        _selectedVerb == 'At Bat' ||
+        _selectedVerb == 'Pitching' ||
+        _selectedVerb == 'Swings') {
       // For these actions, don't add opponent part here - it's handled in the action phrase
       opponentPart = '';
     } else {
@@ -3240,7 +3247,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         baseAction = 'grand slam';
         break;
       case 'At Bat':
-        return 'takes an at bat in his batting stance';
+        return 'takes an at bat in his batting stance against the ${_getOpposingTeamName()}';
+      case 'Pitching':
+        return 'delivers a pitch against the ${_getOpposingTeamName()}';
+      case 'Swings':
+        return 'swings against the ${_getOpposingTeamName()}';
       default:
         baseAction = _selectedVerb!.toLowerCase();
     }
@@ -4079,12 +4090,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Opacity(
                         opacity: 0.3,
                         child: _buildVerbCategory('Defense', [
+                          'Pitching',
                           'Catches',
                           'Throws',
                           'Tags',
                           'Dives',
-                          'Slides',
-                          'Pitching'
+                          'Slides'
                         ]),
                       ),
                     ),
