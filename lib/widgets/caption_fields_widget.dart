@@ -12,6 +12,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final String? awayTeam;
   final VoidCallback? onNextImage;
   final VoidCallback? onPreviousImage;
+  final VoidCallback? onReset;
+  final String? personalityOverride;
 
   const CaptionFieldsWidget({
     super.key,
@@ -21,6 +23,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.awayTeam,
     this.onNextImage,
     this.onPreviousImage,
+    this.onReset,
+    this.personalityOverride,
   });
 
   @override
@@ -79,6 +83,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Set<String> selectedAwayPlayers = {};
   String? selectedCaptionVerb;
 
+  // Track which team was selected first (for determining main subject)
+  bool? _firstTeamSelected;
+
+  // Track the first player selected (for star indicator)
+  String? _firstPlayerSelected;
+
   // MLB API service and roster data
   final MlbApiService _mlbApiService = MlbApiService();
   List<Player> _homeRoster = [];
@@ -108,6 +118,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     'Other': ['Looks On', 'Warms Up', 'Stretches', 'Talks'],
   };
 
+  bool _isResetting = false;
+
+  // Add a flag to track if the user has manually reset the fields.
+  bool _hasBeenReset = false;
+
   @override
   void initState() {
     super.initState();
@@ -122,6 +137,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       });
     });
     _initializeSampleData();
+    if (widget.personalityOverride != null) {
+      personalityController.text = widget.personalityOverride!;
+      print('DEBUG: personalityController.text set to: "' +
+          personalityController.text +
+          '" (override logic)');
+    }
   }
 
   @override
@@ -132,9 +153,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _initializeSampleData() {
-    // Initialize with teams from app bar, or use defaults
-    selectedHomeTeam = widget.homeTeam ?? 'New York Yankees';
-    selectedAwayTeam = widget.awayTeam ?? 'Boston Red Sox';
+    // Initialize with teams from app bar, or null if not provided
+    selectedHomeTeam = widget.homeTeam;
+    selectedAwayTeam = widget.awayTeam;
 
     // Initialize controllers with default values
     cityController.text = 'New York';
@@ -142,8 +163,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     stadiumController.text = ''; // Will be populated from API
     creatorController.text = 'Mark Blinch';
 
-    // Load rosters from MLB API
-    _loadTeamRosters();
+    // Load rosters from MLB API only if both teams are provided
+    if (selectedHomeTeam != null && selectedAwayTeam != null) {
+      _loadTeamRosters();
+    }
   }
 
   Future<void> _loadTeamRosters() async {
@@ -172,11 +195,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         homeTeamStadium = homeTeamInfo?.venueName;
         awayTeamStadium = awayTeamInfo?.venueName;
 
+        // Update stadium controller with home team stadium
+        if (homeTeamStadium != null) {
+          stadiumController.text = homeTeamStadium!;
+        }
+
         _isLoadingRosters = false;
 
         // Clear any existing selections since rosters have changed
         selectedHomePlayers.clear();
         selectedAwayPlayers.clear();
+        _firstTeamSelected = null; // Reset first team selection
+        _firstPlayerSelected = null; // Reset first player selection
+        print('DEBUG: Reset _firstTeamSelected to null (roster change)');
+        print('DEBUG: Reset _firstPlayerSelected to null (roster change)');
       });
 
       print(
@@ -204,6 +236,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void didUpdateWidget(CaptionFieldsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.personalityOverride != null &&
+        widget.personalityOverride != oldWidget.personalityOverride) {
+      personalityController.text = widget.personalityOverride!;
+      print('DEBUG: personalityController.text set to: "' +
+          personalityController.text +
+          '" (override logic)');
+    }
     if (widget.metadata != oldWidget.metadata) {
       _loadMetadata();
     }
@@ -218,6 +257,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Clear existing selections and rosters
         selectedHomePlayers.clear();
         selectedAwayPlayers.clear();
+        _firstTeamSelected = null; // Reset first team selection
+        _firstPlayerSelected = null; // Reset first player selection
+        print('DEBUG: Reset _firstTeamSelected to null (team change)');
+        print('DEBUG: Reset _firstPlayerSelected to null (team change)');
         _homeRoster.clear();
         _awayRoster.clear();
       });
@@ -230,8 +273,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _loadMetadata() {
-    if (widget.metadata == null) return;
+    // If a reset has been performed, do not load metadata again.
+    if (_hasBeenReset) return;
 
+    if (widget.metadata == null) return;
     final meta = widget.metadata!;
 
     // Load Caption: Prefer IPTC "Caption-Abstract", fallback to EXIF "ImageDescription"
@@ -248,6 +293,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
+      print('DEBUG: personalityController.text set to: "' +
+          personalityController.text +
+          '" (metadata loading)');
+
+      // Only set personality from metadata if the user hasn't manually reset.
+      if (!_hasBeenReset) {
+        personalityController.text = personInImageText;
+        print('DEBUG: personalityController.text set to: "' +
+            personalityController.text +
+            '" (_updatePersonalityField)');
+      }
     });
   }
 
@@ -600,18 +656,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         // Reset button
                         GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              selectedHomePlayers.clear();
-                              selectedAwayPlayers.clear();
-                              _selectedVerb = null;
-
-                              _selectedHomeRunType = null;
-                              _rbiCount = null;
-                              _selectedRbiInning = null;
-                              captionController.clear();
-                            });
-                          },
+                          onTap: _resetCaption,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
@@ -1148,6 +1193,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 if (isSelected) {
                                   selectedPlayers.remove(player.displayName);
                                 } else {
+                                  // Track which team was selected first
+                                  if (_firstTeamSelected == null) {
+                                    _firstTeamSelected = isHome;
+                                    _firstPlayerSelected = player.displayName;
+                                    print(
+                                        'DEBUG: First team selected: ${isHome ? "HOME" : "AWAY"}');
+                                    print(
+                                        'DEBUG: First player selected: ${player.displayName}');
+                                    print(
+                                        'DEBUG: _firstTeamSelected set to: $_firstTeamSelected');
+                                  } else {
+                                    print(
+                                        'DEBUG: _firstTeamSelected already set to: $_firstTeamSelected');
+                                  }
                                   selectedPlayers.add(player.displayName);
                                 }
                               });
@@ -1214,7 +1273,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Verb header
+          // Player chips header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -1225,15 +1284,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 topRight: Radius.circular(6),
               ),
             ),
-            child: const Text(
-              'VERBS',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            child: _buildPlayerChipsHeader(),
           ),
 
           // Verb categories with compact layout
@@ -1329,59 +1380,120 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Row(
                                         children: [
                                           Expanded(
-                                            child: DropdownButtonFormField<int>(
-                                              value: _rbiCount,
-                                              decoration: const InputDecoration(
-                                                isDense: true,
-                                                contentPadding:
-                                                    EdgeInsets.symmetric(
-                                                        horizontal: 2,
-                                                        vertical: 1),
-                                                labelText: 'RBI',
-                                                labelStyle:
-                                                    TextStyle(fontSize: 8),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade400),
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
                                               ),
-                                              items: [0, 1, 2, 3, 4].map((rbi) {
-                                                return DropdownMenuItem(
-                                                  value: rbi,
-                                                  child: Text(
-                                                      rbi == 0 ? '0' : '$rbi',
-                                                      style: const TextStyle(
-                                                          fontSize: 8)),
-                                                );
-                                              }).toList(),
-                                              onChanged: (value) {
-                                                setState(() {
-                                                  _rbiCount = value;
-                                                });
-                                                _updateCaption();
-                                              },
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 1),
+                                                    child: const Text(
+                                                      'RBI',
+                                                      style: TextStyle(
+                                                        fontSize: 8,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  DropdownButtonFormField<int>(
+                                                    value: _rbiCount,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                      isDense: true,
+                                                      contentPadding:
+                                                          EdgeInsets.symmetric(
+                                                              horizontal: 2,
+                                                              vertical: 1),
+                                                      border: InputBorder.none,
+                                                      labelText: null,
+                                                    ),
+                                                    items: [0, 1, 2, 3, 4]
+                                                        .map((rbi) {
+                                                      return DropdownMenuItem(
+                                                        value: rbi,
+                                                        child: Text(
+                                                            rbi == 0
+                                                                ? '0'
+                                                                : '$rbi',
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        8)),
+                                                      );
+                                                    }).toList(),
+                                                    onChanged: (value) {
+                                                      setState(() {
+                                                        _rbiCount = value;
+                                                      });
+                                                      _updateCaption();
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 1),
                                           Expanded(
-                                            child: GestureDetector(
-                                              onTap: _showCompactInningSelector,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 2,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                    color:
+                                                        Colors.grey.shade400),
+                                                borderRadius:
+                                                    BorderRadius.circular(2),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 4,
                                                         vertical: 1),
-                                                decoration: BoxDecoration(
-                                                  border: Border.all(
-                                                      color:
-                                                          Colors.grey.shade400),
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                child: Text(
-                                                  _selectedRbiInning != null
-                                                      ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
-                                                      : 'Inn',
-                                                  style: const TextStyle(
-                                                      fontSize: 8),
-                                                  textAlign: TextAlign.center,
-                                                ),
+                                                    child: const Text(
+                                                      'INN',
+                                                      style: TextStyle(
+                                                        fontSize: 8,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  GestureDetector(
+                                                    onTap:
+                                                        _showCompactInningSelector,
+                                                    child: Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 2,
+                                                          vertical: 1),
+                                                      child: Text(
+                                                        _selectedRbiInning !=
+                                                                null
+                                                            ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
+                                                            : '',
+                                                        style: const TextStyle(
+                                                            fontSize: 8),
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
@@ -2151,17 +2263,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       opponentTeamName = selectedAwayTeam;
     } else if (selectedHomePlayers.isNotEmpty &&
         selectedAwayPlayers.isNotEmpty) {
-      // Both teams have players - first selected team is main focus, other team is opponent
-      if (selectedHomePlayers.length > selectedAwayPlayers.length) {
-        // Home team has more players, so they're the main focus
+      // Both teams have players - use the first team selected as main focus
+      print('DEBUG: _firstTeamSelected = $_firstTeamSelected');
+      print('DEBUG: _firstPlayerSelected = $_firstPlayerSelected');
+      print('DEBUG: selectedHomePlayers count = ${selectedHomePlayers.length}');
+      print('DEBUG: selectedAwayPlayers count = ${selectedAwayPlayers.length}');
+
+      if (_firstTeamSelected == true) {
+        // Home team was selected first, so they're the main focus
+        print('DEBUG: Using home team as main focus');
         activePlayers = selectedHomePlayers;
         opponentPlayers = selectedAwayPlayers;
         opponentTeamName = selectedAwayTeam;
-      } else {
-        // Away team has more players or equal, so they're the main focus
+      } else if (_firstTeamSelected == false) {
+        // Away team was selected first, so they're the main focus
+        print('DEBUG: Using away team as main focus');
         activePlayers = selectedAwayPlayers;
         opponentPlayers = selectedHomePlayers;
         opponentTeamName = selectedHomeTeam;
+      } else {
+        // Fallback: if _firstTeamSelected is null, use home team as default
+        print('DEBUG: _firstTeamSelected is null, using home team as default');
+        activePlayers = selectedHomePlayers;
+        opponentPlayers = selectedAwayPlayers;
+        opponentTeamName = selectedAwayTeam;
       }
     } else {
       // No players selected
@@ -2186,16 +2311,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Handle opponent players if selected
     String opponentPart = '';
-    if (opponentPlayers.isNotEmpty) {
-      final opponentNames =
-          _combinePlayersWithSingleTeam(opponentPlayers.toList());
-      print('DEBUG: opponentTeamName: "$opponentTeamName"');
-      final opponentTeamAbbr = _getTeamAbbreviation(opponentTeamName!);
-      opponentPart = ' against $opponentNames and the $opponentTeamAbbr';
-    } else if (opponentTeamName != null) {
-      print('DEBUG: opponentTeamName: "$opponentTeamName"');
-      final opponentTeamAbbr = _getTeamAbbreviation(opponentTeamName!);
-      opponentPart = ' against the $opponentTeamAbbr';
+    if (_selectedHittingAction == 'celebrates') {
+      // For celebrates, only include "against the team" if no opposing players are selected
+      if (opponentPlayers.isEmpty && opponentTeamName != null) {
+        print(
+            'DEBUG: opponentTeamName for celebrates (no players): "$opponentTeamName"');
+        opponentPart = ' against the $opponentTeamName';
+      }
+    } else {
+      // For other actions, include specific players if selected
+      if (opponentPlayers.isNotEmpty) {
+        final opponentNames =
+            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        print('DEBUG: opponentTeamName: "$opponentTeamName"');
+        opponentPart = ' against $opponentNames and the $opponentTeamName';
+      } else if (opponentTeamName != null) {
+        print('DEBUG: opponentTeamName: "$opponentTeamName"');
+        opponentPart = ' against the $opponentTeamName';
+      }
     }
 
     // Add inning if specified
@@ -2211,15 +2344,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Build the final caption
     final caption = '$dateline '
-        '$playerName $actionPhrase$opponentPart$inningPart '
+        '$playerName${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPart$inningPart '
         'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
     // Apply diacritic removal if enabled
     final processedCaption = _removeDiacritics(caption);
     captionController.text = processedCaption;
 
-    // Update personality field with all selected players
-    _updatePersonalityField();
+    // Update personality field with all selected players (only if there are players)
+    if (selectedHomePlayers.isNotEmpty || selectedAwayPlayers.isNotEmpty) {
+      _updatePersonalityField();
+    }
   }
 
   void _onFtpPressed() {
@@ -2247,8 +2382,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Apply diacritic removal if enabled
     final processedPersonalityText = _removeDiacritics(personalityText);
 
+    print(
+        'DEBUG: _updatePersonalityField called - setting personality to: "$processedPersonalityText"');
+    print(
+        'DEBUG: _updatePersonalityField - allSelectedPlayers: $allSelectedPlayers');
+
     // Update the personality field
     personalityController.text = processedPersonalityText;
+    print('DEBUG: personalityController.text set to: "' +
+        personalityController.text +
+        '" (_updatePersonalityField)');
   }
 
   String _getTeamAbbreviation(String teamName) {
@@ -2488,6 +2631,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       onChanged: (bool? value) {
                         setState(() {
                           if (value == true) {
+                            // Track which team was selected first
+                            if (_firstTeamSelected == null) {
+                              _firstTeamSelected = isHome;
+                              _firstPlayerSelected = player.displayName;
+                              print(
+                                  'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
+                              print(
+                                  'DEBUG: First player selected (dialog): ${player.displayName}');
+                              print(
+                                  'DEBUG: _firstTeamSelected set to: $_firstTeamSelected');
+                            } else {
+                              print(
+                                  'DEBUG: _firstTeamSelected already set to: $_firstTeamSelected');
+                            }
                             selectedPlayers.add(player.displayName);
                           } else {
                             selectedPlayers.remove(player.displayName);
@@ -2709,6 +2866,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         captionController.text = parts[0].trim();
         if (parts.length > 1) {
           personalityController.text = parts[1].trim();
+          print('DEBUG: personalityController.text set to: "' +
+              personalityController.text +
+              '" (paste logic)');
         }
       } else {
         captionController.text = text;
@@ -2729,7 +2889,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.clear();
       _selectedVerb = null;
       _clearVerbSubSelections();
+      _firstTeamSelected = null;
+      _firstPlayerSelected = null;
+      selectedHomePlayers.clear();
+      selectedAwayPlayers.clear();
+      _updatePersonalityField(); // Ensure personality field is cleared after selections are cleared
     });
+
+    if (widget.onReset != null) widget.onReset!();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -2810,7 +2977,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   String _capitalize(String text) {
     if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1).toLowerCase();
+    // Handle multi-word cities like "New York"
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   String _combinePlayersWithSingleTeam(List<String> players) {
@@ -2872,8 +3043,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Build the hit phrase
     String hitPhrase = '';
     if (_rbiCount != null && _rbiCount! > 0) {
-      final rbiWord = _numberToWord(_rbiCount!);
-      hitPhrase = 'hits a $rbiWord-RBI $baseAction';
+      final rbiText =
+          _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
+      hitPhrase = 'hits a $rbiText $baseAction';
     } else {
       hitPhrase = 'hits a $baseAction';
     }
@@ -2882,16 +3054,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (_selectedHittingAction != null) {
       switch (_selectedHittingAction!) {
         case 'celebrates':
+          final opposingPlayers = _getOpposingPlayers();
+          final playerPhrase = opposingPlayers.isNotEmpty
+              ? ' beside ${_formatPlayersWithTeam(opposingPlayers)}'
+              : '';
+
           if (_rbiCount != null && _rbiCount! > 0) {
-            final rbiWord = _numberToWord(_rbiCount!);
-            return 'celebrates a $rbiWord-RBI $baseAction';
+            final rbiText =
+                _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
+            return 'celebrates a $rbiText $baseAction$playerPhrase';
           } else {
-            return 'celebrates a $baseAction';
+            return 'celebrates a $baseAction$playerPhrase';
           }
         case 'runs_base_paths':
           return 'runs the base path on $baseAction';
         case 'slides_into_base':
-          return '$hitPhrase and slides into base';
+          final baseToSlideInto = _getBaseToSlideInto(baseAction);
+          return 'slides into $baseToSlideInto on a $baseAction';
         default:
           return hitPhrase;
       }
@@ -2925,6 +3104,175 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       default:
         return number.toString();
     }
+  }
+
+  String _getBaseToSlideInto(String hitType) {
+    switch (hitType) {
+      case 'single':
+        return 'first base';
+      case 'double':
+        return 'second base';
+      case 'triple':
+        return 'third base';
+      case 'home run':
+      case 'solo home run':
+      case 'two-run home run':
+      case 'three-run home run':
+      case 'grand slam':
+        return 'home plate';
+      default:
+        return 'base';
+    }
+  }
+
+  List<String> _getOpposingPlayers() {
+    // Get opposing players based on the current caption logic
+    // If home team is the main subject (active players), then away players are opposing
+    // If away team is the main subject (active players), then home players are opposing
+
+    // Determine which team is the main subject based on current logic
+    bool isHomeTeamMainSubject;
+
+    if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+      // Only away team players are selected - away team is main subject
+      isHomeTeamMainSubject = false;
+    } else if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+      // Only home team players are selected - home team is main subject
+      isHomeTeamMainSubject = true;
+    } else if (selectedHomePlayers.isNotEmpty &&
+        selectedAwayPlayers.isNotEmpty) {
+      // Both teams have players - use the first team selected as main subject
+      isHomeTeamMainSubject = _firstTeamSelected == true;
+    } else {
+      // No players selected
+      return [];
+    }
+
+    // Return the opposing team's players
+    return isHomeTeamMainSubject
+        ? selectedAwayPlayers.toList()
+        : selectedHomePlayers.toList();
+  }
+
+  String _formatPlayerNames(List<String> players) {
+    if (players.isEmpty) return '';
+    if (players.length == 1) return players.first;
+    if (players.length == 2) return '${players.first} and ${players.last}';
+
+    // For 3+ players, use commas and "and"
+    final allButLast = players.take(players.length - 1).join(', ');
+    return '$allButLast and ${players.last}';
+  }
+
+  String _formatPlayersWithTeam(List<String> players) {
+    if (players.isEmpty) return '';
+
+    // Determine which team these players belong to
+    final isHomeTeamPlayers = selectedHomePlayers.contains(players.first);
+    final teamName = isHomeTeamPlayers ? selectedHomeTeam : selectedAwayTeam;
+
+    if (teamName == null) {
+      // Fallback to just player names if team is not available
+      return _formatPlayerNames(players);
+    }
+
+    if (players.length == 1) {
+      return '${players.first} of the $teamName';
+    } else if (players.length == 2) {
+      return '${players.first} and ${players.last} of the $teamName';
+    } else {
+      // For 3+ players, use commas and "and"
+      final allButLast = players.take(players.length - 1).join(', ');
+      return '$allButLast and ${players.last} of the $teamName';
+    }
+  }
+
+  Widget _buildPlayerChipsHeader() {
+    final allSelectedPlayers = <String>[];
+    allSelectedPlayers.addAll(selectedHomePlayers);
+    allSelectedPlayers.addAll(selectedAwayPlayers);
+
+    if (allSelectedPlayers.isEmpty) {
+      return const Text(
+        'VERBS',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
+        textAlign: TextAlign.center,
+      );
+    }
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 2,
+      children: allSelectedPlayers.map((playerName) {
+        final isHomePlayer = selectedHomePlayers.contains(playerName);
+        final isFirstSelected = _isFirstSelectedPlayer(playerName);
+        print(
+            'DEBUG: Building chip for "$playerName" - isFirstSelected: $isFirstSelected');
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isHomePlayer ? Colors.grey.shade700 : Colors.grey.shade400,
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Team icon
+              Icon(
+                isHomePlayer ? Icons.home : Icons.flight,
+                size: 10,
+                color: isHomePlayer ? Colors.white : Colors.grey.shade700,
+              ),
+              const SizedBox(width: 2),
+              // Star for first selected player
+              if (isFirstSelected) ...[
+                Container(
+                  padding: const EdgeInsets.all(1),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Icon(
+                    Icons.star,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 2),
+              ],
+              // Player name
+              Text(
+                playerName.replaceAll(RegExp(r'\s*[#\d]+\s*'), '').trim(),
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                  color: isHomePlayer ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  bool _isFirstSelectedPlayer(String playerName) {
+    // Check if this player was the first one selected
+    if (_firstPlayerSelected == null) return false;
+
+    final isFirst = _firstPlayerSelected == playerName;
+    print('DEBUG: _isFirstSelectedPlayer("$playerName") = $isFirst');
+    print('DEBUG: _firstPlayerSelected = "$_firstPlayerSelected"');
+    return isFirst;
   }
 
   String _buildHomeRunPhrase() {
@@ -2973,40 +3321,148 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // RBI section with buttons
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Row(
-                  children: [
-                    Text(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                    child: const Text(
                       'RBI',
                       style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 2,
-                        runSpacing: 2,
-                        children: [1, 2, 3].map((rbi) {
-                          final isSelected = _rbiCount == rbi;
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                    child: Wrap(
+                      spacing: 2,
+                      runSpacing: 2,
+                      children: [1, 2, 3].map((rbi) {
+                        final isSelected = _rbiCount == rbi;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _rbiCount = _rbiCount == rbi ? null : rbi;
+                            });
+                            _updateCaption();
+                          },
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.grey.shade300
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: Text(
+                              '$rbi',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // Inning section with buttons
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                    child: const Text(
+                      'Innings',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                    child: Wrap(
+                      spacing: 2,
+                      runSpacing: 2,
+                      children: [
+                        // Back arrow for extra innings
+                        if (_showExtraInnings)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (_extraInningsPage > 0) {
+                                  _extraInningsPage--;
+                                } else {
+                                  // Go back to regular innings
+                                  _showExtraInnings = false;
+                                  _extraInningsPage = 0;
+                                  _selectedRbiInning = null;
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(3),
+                                border: Border.all(
+                                  color: Colors.grey.shade300,
+                                  width: 0.5,
+                                ),
+                              ),
+                              child: Text(
+                                '←',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // Innings (regular or extra based on state)
+                        ...(_showExtraInnings
+                                ? _getExtraInningsForPage()
+                                : List.generate(9, (index) => index + 1))
+                            .map((inning) {
+                          final isSelected = _selectedRbiInning == inning;
                           return GestureDetector(
                             onTap: () {
                               setState(() {
-                                _rbiCount = rbi;
+                                _selectedRbiInning =
+                                    _selectedRbiInning == inning
+                                        ? null
+                                        : inning;
                               });
                               _updateCaption();
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 3),
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? Colors.grey.shade300
@@ -3018,7 +3474,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                               child: Text(
-                                '$rbi',
+                                '$inning',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,
@@ -3027,168 +3483,76 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                           );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Inning section with buttons
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'INN',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 2,
-                        runSpacing: 2,
-                        children: [
-                          // Back arrow for extra innings
-                          if (_showExtraInnings)
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (_extraInningsPage > 0) {
-                                    _extraInningsPage--;
-                                  } else {
-                                    // Go back to regular innings
-                                    _showExtraInnings = false;
-                                    _extraInningsPage = 0;
-                                    _selectedRbiInning = null;
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  '←',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
+                        }),
+                        // EXT button that cycles through extra innings
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (_showExtraInnings) {
+                                // If already showing extra innings, go to next page
+                                if (_extraInningsPage < 3) {
+                                  _extraInningsPage++;
+                                } else {
+                                  // Reset to regular innings
+                                  _showExtraInnings = false;
+                                  _extraInningsPage = 0;
+                                  _selectedRbiInning = null;
+                                }
+                              } else {
+                                // Start showing extra innings
+                                _showExtraInnings = true;
+                                _extraInningsPage = 0;
+                              }
+                            });
+                          },
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _showExtraInnings
+                                  ? Colors.grey.shade100
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                                width: 0.5,
                               ),
                             ),
-                          // Innings (regular or extra based on state)
-                          ...(_showExtraInnings
-                                  ? _getExtraInningsForPage()
-                                  : List.generate(9, (index) => index + 1))
-                              .map((inning) {
-                            final isSelected = _selectedRbiInning == inning;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedRbiInning = inning;
-                                });
-                                _updateCaption();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Colors.grey.shade300
-                                      : Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  '$inning',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                          // EXT button that cycles through extra innings
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (_showExtraInnings) {
-                                  // If already showing extra innings, go to next page
-                                  if (_extraInningsPage < 3) {
-                                    _extraInningsPage++;
-                                  } else {
-                                    // Reset to regular innings
-                                    _showExtraInnings = false;
-                                    _extraInningsPage = 0;
-                                    _selectedRbiInning = null;
-                                  }
-                                } else {
-                                  // Start showing extra innings
-                                  _showExtraInnings = true;
-                                  _extraInningsPage = 0;
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: _showExtraInnings
-                                    ? Colors.grey.shade100
-                                    : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                _showExtraInnings
-                                    ? (_extraInningsPage == 0
-                                        ? '→'
-                                        : (_extraInningsPage == 1 ? '→' : '→'))
-                                    : 'EXT',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
+                            child: Text(
+                              _showExtraInnings
+                                  ? (_extraInningsPage == 0
+                                      ? '→'
+                                      : (_extraInningsPage == 1 ? '→' : '→'))
+                                  : 'EXT',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade700,
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 8),
+
+              // Options header
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Options',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
 
               // Celebrates option
               _buildSubOption('Celebrates', 'celebrates'),
@@ -3219,23 +3583,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   width: double.infinity,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
                   child: Row(
                     children: [
-                      Icon(Icons.arrow_back,
-                          size: 12, color: Colors.grey.shade700),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Back to Verbs',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                      Expanded(
+                        flex: 1,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.arrow_back,
+                                  size: 12, color: Colors.grey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Back to Verbs',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      const Expanded(flex: 1, child: SizedBox()),
                     ],
                   ),
                 ),
@@ -3265,21 +3641,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         margin: const EdgeInsets.only(bottom: 2),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: Colors.grey.shade300,
-            width: 0.5,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
-          ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              flex: 1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color:
+                      isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: Colors.grey.shade300,
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isSelected
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ),
+            const Expanded(flex: 1, child: SizedBox()),
+          ],
         ),
       ),
     );

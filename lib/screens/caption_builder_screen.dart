@@ -26,6 +26,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   String? selectedHomeTeam;
   String? selectedAwayTeam;
 
+  // Personality override for reset
+  String? _personalityOverride;
+
+  void _handleReset() {
+    setState(() {
+      _personalityOverride = '';
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -187,6 +196,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           _onImageSelected(currentIndex - 1);
                         }
                       },
+                      onReset: _handleReset,
+                      personalityOverride: _personalityOverride,
                     ),
                   ),
 
