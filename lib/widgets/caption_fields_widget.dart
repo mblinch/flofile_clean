@@ -49,6 +49,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Verb selection
   String? _selectedVerb;
+  String? _selectedActionVerb; // Stores the verb for caption generation
   String? _selectedHittingAction;
   bool _showExtraInnings = false;
   int _extraInningsPage = 0;
@@ -1351,7 +1352,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ? _buildHomeRunSubOptions()
                       : (_selectedVerb == 'At Bat' ||
                               _selectedVerb == 'Pitching' ||
-                              _selectedVerb == 'Swings')
+                              _selectedVerb == 'Swings' ||
+                              _selectedVerb == 'Catches' ||
+                              _selectedVerb == 'Throws' ||
+                              _selectedVerb == 'Fields a Ball' ||
+                              _selectedVerb == 'Fielding Position')
                           ? _buildAtBatInterface()
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1379,7 +1384,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           'Throws',
                                           'Tags',
                                           'Dives',
-                                          'Slides'
+                                          'Fields a Ball',
+                                          'Fielding Position'
                                         ]),
                                       ),
                                       const SizedBox(width: 1),
@@ -1435,10 +1441,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 'Grand Slam'
                                               ]),
 
-                                            // Inning only (when At Bat, Pitching, or Swings is selected)
+                                            // Inning only (when simple verbs are selected)
                                             if (_selectedVerb == 'At Bat' ||
                                                 _selectedVerb == 'Pitching' ||
-                                                _selectedVerb == 'Swings') ...[
+                                                _selectedVerb == 'Swings' ||
+                                                _selectedVerb == 'Catches' ||
+                                                _selectedVerb == 'Throws' ||
+                                                _selectedVerb ==
+                                                    'Fields a Ball' ||
+                                                _selectedVerb ==
+                                                    'Fielding Position') ...[
                                               const SizedBox(height: 1),
                                               Container(
                                                 decoration: BoxDecoration(
@@ -1712,6 +1724,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedRbiInning = null;
           } else {
             _selectedVerb = verb;
+            _selectedActionVerb = verb; // Store for caption generation
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
@@ -2478,12 +2491,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Handle opponent players if selected
     String opponentPart = '';
+    final verbToUse = _selectedActionVerb ?? _selectedVerb;
     if (_selectedHittingAction == 'celebrates' ||
         _selectedHittingAction == 'celebrates_in_dugout' ||
         _selectedHittingAction == 'trots_the_bases' ||
-        _selectedVerb == 'At Bat' ||
-        _selectedVerb == 'Pitching' ||
-        _selectedVerb == 'Swings') {
+        verbToUse == 'At Bat' ||
+        verbToUse == 'Pitching' ||
+        verbToUse == 'Swings' ||
+        verbToUse == 'Fielding Position' ||
+        verbToUse == 'Catches' ||
+        verbToUse == 'Throws' ||
+        verbToUse == 'Tags' ||
+        verbToUse == 'Fields a Ball') {
       // For these actions, don't add opponent part here - it's handled in the action phrase
       opponentPart = '';
     } else {
@@ -3230,7 +3249,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   String _buildActionPhrase() {
     String baseAction = '';
-    switch (_selectedVerb!) {
+    final verbToUse = _selectedActionVerb ?? _selectedVerb;
+    if (verbToUse == null) return '';
+
+    switch (verbToUse) {
       case 'Single':
         baseAction = 'single';
         break;
@@ -3252,8 +3274,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return 'delivers a pitch against the ${_getOpposingTeamName()}';
       case 'Swings':
         return 'swings against the ${_getOpposingTeamName()}';
+      case 'Fielding Position':
+        return 'takes fielding position against the ${_getOpposingTeamName()}';
+      case 'Catches':
+        return 'catches a ball against the ${_getOpposingTeamName()}';
+      case 'Throws':
+        return 'throws a ball against the ${_getOpposingTeamName()}';
+      case 'Tags':
+        return 'tags a player out of the ${_getOpposingTeamName()}';
+      case 'Fields a Ball':
+        return 'fields a ball against the ${_getOpposingTeamName()}';
       default:
-        baseAction = _selectedVerb!.toLowerCase();
+        baseAction = verbToUse.toLowerCase();
     }
 
     // Build the hit phrase
@@ -3398,7 +3430,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   String? _getOpposingTeamName() {
     // Get the opposing team name based on the main player's team
-    if (_firstPlayerSelected == null) return null;
+    if (_firstPlayerSelected == null) {
+      // Fallback: if no main player is selected, use the first team logic
+      if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+        return selectedAwayTeam;
+      } else if (selectedAwayPlayers.isNotEmpty &&
+          selectedHomePlayers.isEmpty) {
+        return selectedHomeTeam;
+      } else if (_firstTeamSelected == true) {
+        return selectedAwayTeam;
+      } else if (_firstTeamSelected == false) {
+        return selectedHomeTeam;
+      }
+      return selectedAwayTeam; // Final fallback
+    }
 
     // Determine which team the main player is from
     final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
@@ -4095,7 +4140,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Throws',
                           'Tags',
                           'Dives',
-                          'Slides'
+                          'Fields a Ball',
+                          'Fielding Position'
                         ]),
                       ),
                     ),
