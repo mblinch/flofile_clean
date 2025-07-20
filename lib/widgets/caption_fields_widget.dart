@@ -10,6 +10,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final Function(Map<String, dynamic>?)? onMetadataUpdated;
   final String? homeTeam;
   final String? awayTeam;
+  final VoidCallback? onNextImage;
+  final VoidCallback? onPreviousImage;
 
   const CaptionFieldsWidget({
     super.key,
@@ -17,6 +19,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onMetadataUpdated,
     this.homeTeam,
     this.awayTeam,
+    this.onNextImage,
+    this.onPreviousImage,
   });
 
   @override
@@ -399,8 +403,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         GestureDetector(
                           onTap: _onFtpPressed,
                           child: Container(
+                            width: double.infinity,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                                horizontal: 8, vertical: 6),
                             decoration: BoxDecoration(
                               color: const Color(0xFF0052CC),
                               borderRadius: BorderRadius.circular(6),
@@ -408,15 +413,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   Border.all(color: const Color(0xFF0052CC)),
                             ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.cloud_upload,
-                                    size: 14, color: Colors.white),
+                                    size: 12, color: Colors.white),
                                 const SizedBox(width: 4),
                                 Text(
                                   'FTP',
                                   style: const TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.white,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -428,77 +433,167 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 8),
 
-                        // Copy button
-                        GestureDetector(
-                          onTap: () {
-                            if (captionController.text.isNotEmpty) {
-                              Clipboard.setData(
-                                  ClipboardData(text: captionController.text));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Caption copied!'),
-                                  duration: Duration(seconds: 1),
-                                ),
-                              );
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.blue.shade300),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.copy,
-                                    size: 14, color: Colors.blue.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Copy',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.w500,
+                        // Copy and Paste buttons row
+                        Row(
+                          children: [
+                            // Copy button
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (captionController.text.isNotEmpty) {
+                                    Clipboard.setData(ClipboardData(
+                                        text: captionController.text));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Caption copied!'),
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.blue.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.copy,
+                                          size: 12,
+                                          color: Colors.blue.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Copy',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.blue.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 6),
+                            // Paste button
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: _onPastePressed,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: Colors.green.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.paste,
+                                          size: 12,
+                                          color: Colors.green.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Paste',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.green.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 8),
 
-                        // Paste button
-                        GestureDetector(
-                          onTap: _onPastePressed,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.green.shade300),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.paste,
-                                    size: 14, color: Colors.green.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Paste',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green.shade700,
-                                    fontWeight: FontWeight.w500,
+                        // Navigation buttons row
+                        Row(
+                          children: [
+                            // Previous button
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  widget.onPreviousImage?.call();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.arrow_back,
+                                          size: 12,
+                                          color: Colors.grey.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Prev',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 6),
+                            // Next button
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  widget.onNextImage?.call();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Next',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.arrow_forward,
+                                          size: 12,
+                                          color: Colors.grey.shade700),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 8),
@@ -518,23 +613,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             });
                           },
                           child: Container(
+                            width: double.infinity,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                                horizontal: 8, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: Colors.grey.shade300),
                             ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.refresh,
-                                    size: 14, color: Colors.grey.shade700),
+                                    size: 12, color: Colors.grey.shade700),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Reset Caption',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -605,7 +701,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           // Verbs (Center)
           Expanded(
-            flex: 1,
+            flex: 2,
             child: _buildCompactVerbColumn(),
           ),
 
@@ -933,63 +1029,81 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             child: Row(
               children: [
-                Icon(
-                  isHome ? Icons.home : Icons.airplane_ticket,
-                  size: 12,
-                  color: Colors.grey.shade700,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  isHome ? 'HOME' : 'AWAY',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                if (isHome)
+                  Icon(
+                    Icons.home,
+                    size: 12,
                     color: Colors.grey.shade700,
                   ),
+                const SizedBox(width: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isHome)
+                      Icon(
+                        Icons.flight,
+                        size: 10,
+                        color: Colors.grey.shade700,
+                      ),
+                    if (!isHome) const SizedBox(width: 2),
+                    Text(
+                      isHome
+                          ? _getTeamAbbreviation(selectedHomeTeam ?? 'HOME')
+                          : _getTeamAbbreviation(selectedAwayTeam ?? 'AWAY'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: SizedBox(
-                    height: 24,
-                    child: TextField(
-                      controller: searchController,
-                      style: const TextStyle(fontSize: 10),
-                      onChanged: (value) {
-                        setState(() {
-                          if (isHome) {
-                            _homeSearchText = value;
-                          } else {
-                            _awaySearchText = value;
-                          }
-                        });
-                        print(
-                            'Search text changed: ${isHome ? "HOME" : "AWAY"} = "$value"');
-                        print(
-                            'Filtered roster length: ${filteredRoster.length}');
-                      },
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 0),
-                        hintText: 'Search',
-                        prefixIcon: const Icon(Icons.search, size: 14),
-                        prefixIconConstraints:
-                            BoxConstraints(minWidth: 20, minHeight: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade400),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: SizedBox(
+                      height: 24,
+                      child: TextField(
+                        controller: searchController,
+                        style: const TextStyle(fontSize: 10),
+                        onChanged: (value) {
+                          setState(() {
+                            if (isHome) {
+                              _homeSearchText = value;
+                            } else {
+                              _awaySearchText = value;
+                            }
+                          });
+                          print(
+                              'Search text changed: ${isHome ? "HOME" : "AWAY"} = "$value"');
+                          print(
+                              'Filtered roster length: ${filteredRoster.length}');
+                        },
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 0),
+                          hintText: 'Search',
+                          prefixIcon: const Icon(Icons.search, size: 14),
+                          prefixIconConstraints:
+                              BoxConstraints(minWidth: 20, minHeight: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(
+                                color: Colors.blue.shade400, width: 1),
+                          ),
+                          hintStyle:
+                              const TextStyle(fontSize: 10, color: Colors.grey),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(color: Colors.grey.shade400),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.blue.shade400, width: 1),
-                        ),
-                        hintStyle:
-                            const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
                     ),
                   ),
@@ -1133,46 +1247,48 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Top row: Hitting and Fielding
+                        // Top row: Offense, Defense, Running
                         Expanded(
                           flex: 1,
                           child: Row(
                             children: [
                               Expanded(
-                                child: _buildVerbCategory('Hitting', [
+                                child: _buildVerbCategory('Offense', [
                                   'Single',
                                   'Double',
                                   'Triple',
                                   'Home Run',
-                                  'Grand Slam'
+                                  'At Bat',
+                                  'Swings'
                                 ]),
                               ),
                               const SizedBox(width: 1),
                               Expanded(
-                                child: _buildVerbCategory('Fielding', [
+                                child: _buildVerbCategory('Defense', [
                                   'Catches',
                                   'Throws',
                                   'Tags',
                                   'Dives',
-                                  'Slides'
+                                  'Slides',
+                                  'Pitching'
                                 ]),
+                              ),
+                              const SizedBox(width: 1),
+                              Expanded(
+                                child: _buildVerbCategory('Running',
+                                    ['Steals', 'Slides', 'Runs', 'Rounds']),
                               ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 1),
+                        const SizedBox(height: 4),
 
-                        // Middle row: Running and Celebrating
+                        // Bottom row: Celebrating and Other
                         Expanded(
                           flex: 1,
                           child: Row(
                             children: [
-                              Expanded(
-                                child: _buildVerbCategory('Running',
-                                    ['Steals', 'Slides', 'Runs', 'Rounds']),
-                              ),
-                              const SizedBox(width: 1),
                               Expanded(
                                 child: _buildVerbCategory('Celebrating', [
                                   'Celebrates',
@@ -1180,17 +1296,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   'Celebrates Against'
                                 ]),
                               ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 1),
-
-                        // Bottom row: Other and dynamic content
-                        Expanded(
-                          flex: 1,
-                          child: Row(
-                            children: [
+                              const SizedBox(width: 1),
                               Expanded(
                                 child: _buildVerbCategory('Other', [
                                   'Looks On',
@@ -2083,9 +2189,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (opponentPlayers.isNotEmpty) {
       final opponentNames =
           _combinePlayersWithSingleTeam(opponentPlayers.toList());
-      opponentPart = ' against $opponentNames and the $opponentTeamName';
+      print('DEBUG: opponentTeamName: "$opponentTeamName"');
+      final opponentTeamAbbr = _getTeamAbbreviation(opponentTeamName!);
+      opponentPart = ' against $opponentNames and the $opponentTeamAbbr';
     } else if (opponentTeamName != null) {
-      opponentPart = ' against the $opponentTeamName';
+      print('DEBUG: opponentTeamName: "$opponentTeamName"');
+      final opponentTeamAbbr = _getTeamAbbreviation(opponentTeamName!);
+      opponentPart = ' against the $opponentTeamAbbr';
     }
 
     // Add inning if specified
@@ -2139,6 +2249,47 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update the personality field
     personalityController.text = processedPersonalityText;
+  }
+
+  String _getTeamAbbreviation(String teamName) {
+    // Map of full team names to their abbreviations
+    const Map<String, String> teamAbbreviations = {
+      'Arizona Diamondbacks': 'ARI',
+      'Atlanta Braves': 'ATL',
+      'Baltimore Orioles': 'BAL',
+      'Boston Red Sox': 'BOS',
+      'Chicago Cubs': 'CHC',
+      'Chicago White Sox': 'CWS',
+      'Cincinnati Reds': 'CIN',
+      'Cleveland Guardians': 'CLE',
+      'Colorado Rockies': 'COL',
+      'Detroit Tigers': 'DET',
+      'Houston Astros': 'HOU',
+      'Kansas City Royals': 'KC',
+      'Los Angeles Angels': 'LAA',
+      'Los Angeles Dodgers': 'LAD',
+      'Miami Marlins': 'MIA',
+      'Milwaukee Brewers': 'MIL',
+      'Minnesota Twins': 'MIN',
+      'New York Mets': 'NYM',
+      'New York Yankees': 'NYY',
+      'Oakland Athletics': 'OAK',
+      'Philadelphia Phillies': 'PHI',
+      'Pittsburgh Pirates': 'PIT',
+      'San Diego Padres': 'SD',
+      'San Francisco Giants': 'SF',
+      'Seattle Mariners': 'SEA',
+      'St. Louis Cardinals': 'STL',
+      'Tampa Bay Rays': 'TB',
+      'Texas Rangers': 'TEX',
+      'Toronto Blue Jays': 'TOR',
+      'Washington Nationals': 'WSH',
+    };
+
+    final abbreviation = teamAbbreviations[teamName];
+    print(
+        'DEBUG: Converting team name "$teamName" to abbreviation: "$abbreviation"');
+    return abbreviation ?? teamName;
   }
 
   String _removeDiacritics(String text) {
@@ -2226,12 +2377,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isHome ? Icons.home : Icons.flight_takeoff,
-            size: 12,
-            color: isHome ? Colors.blue.shade700 : Colors.orange.shade700,
-          ),
-          const SizedBox(width: 4),
           Text(
             playerName,
             style: TextStyle(
@@ -2744,7 +2889,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             return 'celebrates a $baseAction';
           }
         case 'runs_base_paths':
-          return '$hitPhrase and runs the base paths';
+          return 'runs the base path on $baseAction';
         case 'slides_into_base':
           return '$hitPhrase and slides into base';
         default:
@@ -3104,6 +3249,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildSubOption(String label, String action) {
     final isSelected = _selectedHittingAction == action;
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -3120,7 +3266,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         margin: const EdgeInsets.only(bottom: 2),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(3),
           border: Border.all(
             color: Colors.grey.shade300,
@@ -3132,7 +3278,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w500,
-            color: Colors.grey.shade700,
+            color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
         ),
       ),

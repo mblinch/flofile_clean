@@ -177,6 +177,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       },
                       homeTeam: selectedHomeTeam,
                       awayTeam: selectedAwayTeam,
+                      onNextImage: () {
+                        if (currentIndex < imagePaths.length - 1) {
+                          _onImageSelected(currentIndex + 1);
+                        }
+                      },
+                      onPreviousImage: () {
+                        if (currentIndex > 0) {
+                          _onImageSelected(currentIndex - 1);
+                        }
+                      },
                     ),
                   ),
 
