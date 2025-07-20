@@ -1006,8 +1006,10 @@ class _CaptionBuilderState extends State<CaptionBuilder>
       _customPostGameActionController.clear();
       _customCelebrationController.clear();
 
-      // Update personality field
-      _updatePersonality();
+      // Update personality field only if there are selected players
+      if (selectedPlayers.isNotEmpty || selectedOpponentPlayers.isNotEmpty) {
+        _updatePersonality();
+      }
     });
     if (showSnackBar) {
       ScaffoldMessenger.of(context).showSnackBar(
