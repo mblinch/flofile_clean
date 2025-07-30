@@ -1207,7 +1207,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               color: isHome
                   ? _getTeamColor(isHome ? selectedHomeTeam : selectedAwayTeam)
                       .withOpacity(0.1)
-                  : Colors.white,
+                  : Colors.grey.shade100,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(6),
                 topRight: Radius.circular(6),
@@ -3782,26 +3782,54 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Left icon (home or plane depending on _homeOnLeft)
-                Icon(
-                  _homeOnLeft ? Icons.home : Icons.flight,
-                  size: 12,
-                  color: Colors.grey.shade700,
-                ),
+                // Left icon (switches based on _homeOnLeft)
+                _homeOnLeft
+                    ? Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color:
+                              _getTeamColor(selectedHomeTeam).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Icon(
+                          Icons.home,
+                          size: 12,
+                          color: _getTeamColor(selectedHomeTeam),
+                        ),
+                      )
+                    : Icon(
+                        Icons.flight,
+                        size: 12,
+                        color: _getTeamColor(selectedAwayTeam),
+                      ),
                 const SizedBox(width: 4),
                 // Arrow in the middle
                 Icon(
                   Icons.swap_horiz,
                   size: 16,
-                  color: Colors.grey.shade700,
+                  color: Colors.black,
                 ),
                 const SizedBox(width: 4),
-                // Right icon (plane or home depending on _homeOnLeft)
-                Icon(
-                  _homeOnLeft ? Icons.flight : Icons.home,
-                  size: 12,
-                  color: Colors.grey.shade700,
-                ),
+                // Right icon (switches based on _homeOnLeft)
+                _homeOnLeft
+                    ? Icon(
+                        Icons.flight,
+                        size: 12,
+                        color: _getTeamColor(selectedAwayTeam),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color:
+                              _getTeamColor(selectedHomeTeam).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Icon(
+                          Icons.home,
+                          size: 12,
+                          color: _getTeamColor(selectedHomeTeam),
+                        ),
+                      ),
               ],
             ),
           ),
