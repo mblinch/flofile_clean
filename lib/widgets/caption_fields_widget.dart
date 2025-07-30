@@ -64,6 +64,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isSliding = false;
   bool _showFieldingOptions = false;
   bool _removeAccent = true; // Default to true
+  bool _disableFtp = false; // Default to false (FTP enabled)
   int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
   String? _selectedFieldingAction;
   String? _selectedBaseRunningAction;
@@ -606,28 +607,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         // FTP button
                         GestureDetector(
-                          onTap: _onFtpPressed,
+                          onTap: _disableFtp ? null : _onFtpPressed,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0052CC),
+                              color: _disableFtp
+                                  ? Colors.grey.shade300
+                                  : const Color(0xFF0052CC),
                               borderRadius: BorderRadius.circular(6),
-                              border:
-                                  Border.all(color: const Color(0xFF0052CC)),
+                              border: Border.all(
+                                  color: _disableFtp
+                                      ? Colors.grey.shade300
+                                      : const Color(0xFF0052CC)),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.cloud_upload,
-                                    size: 12, color: Colors.white),
+                                    size: 12,
+                                    color: _disableFtp
+                                        ? Colors.grey.shade600
+                                        : Colors.white),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'FTP',
-                                  style: const TextStyle(
+                                  _disableFtp ? 'FTP DISABLED' : 'FTP',
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.white,
+                                    color: _disableFtp
+                                        ? Colors.grey.shade600
+                                        : Colors.white,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -836,25 +846,75 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 8),
 
+                        // Options section
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Options:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        // Disable FTP checkbox
+                        Row(
+                          children: [
+                            Transform.scale(
+                              scale: 0.6,
+                              child: Checkbox(
+                                value: _disableFtp,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _disableFtp = value ?? false;
+                                  });
+                                },
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                activeColor: Colors.grey.shade600,
+                                checkColor: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 0),
+                            const Text(
+                              'Disable FTP',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+
                         // Remove Accent checkbox
                         Row(
                           children: [
-                            Checkbox(
-                              value: _removeAccent,
-                              onChanged: (value) {
-                                setState(() {
-                                  _removeAccent = value ?? true;
-                                });
-                                // Update caption and personality when checkbox is toggled
-                                _updateCaption();
-                              },
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
+                            Transform.scale(
+                              scale: 0.6,
+                              child: Checkbox(
+                                value: _removeAccent,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _removeAccent = value ?? true;
+                                  });
+                                  // Update caption and personality when checkbox is toggled
+                                  _updateCaption();
+                                },
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                activeColor: Colors.grey.shade600,
+                                checkColor: Colors.white,
+                              ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 0),
                             const Text(
-                              'Remove Diacritics',
+                              'Remove Diacritics (e.g., é → e)',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.black87,
@@ -1451,6 +1511,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       'Triple Play')
                                               ? _buildBaseSelectionInterface()
                                               : (_selectedVerb ==
+                                                          'Celebration' ||
+                                                      _selectedVerb ==
                                                           'Celebrates' ||
                                                       _selectedVerb ==
                                                           'Celebrates With' ||
@@ -1526,11 +1588,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             children: [
                                                               Expanded(
                                                                 child: _buildVerbCategory(
-                                                                    'Celebrating',
+                                                                    'Reactions',
                                                                     [
-                                                                      'Celebrates',
-                                                                      'Celebrates With',
-                                                                      'Celebrates Against'
+                                                                      'Celebration',
+                                                                      'Dejection'
                                                                     ]),
                                                               ),
                                                               const SizedBox(
@@ -2553,11 +2614,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             verbToUse == 'Celebrates With' ||
             verbToUse == 'Celebrates Against') &&
         _firstPlayerSelected != null) {
-      // For celebration actions, only use the main player (the one with the star)
-      final mainPlayerTeam = selectedHomePlayers.contains(_firstPlayerSelected)
-          ? selectedHomeTeam
-          : selectedAwayTeam;
-      playerName = '$_firstPlayerSelected of the $mainPlayerTeam';
+      // For celebration actions, check if "with teammates" is selected
+      if (_isCelebratingWithTeammates) {
+        // If "with teammates" is selected, only use the main player (the one with the star)
+        final mainPlayerTeam =
+            selectedHomePlayers.contains(_firstPlayerSelected)
+                ? selectedHomeTeam
+                : selectedAwayTeam;
+        playerName = '$_firstPlayerSelected of the $mainPlayerTeam';
+      } else {
+        // If "with teammates" is NOT selected, use all active players
+        playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      }
     } else {
       // For other actions, use all active players
       playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
@@ -3668,6 +3736,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             return 'rounds a base against the ${_getOpposingTeamName()}';
           }
         }
+      case 'Celebration':
       case 'Celebrates':
       case 'Celebrates With':
       case 'Celebrates Against':
@@ -3675,7 +3744,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final opposingTeam = _getOpposingTeamName();
 
         // Build the celebration phrase based on selected options
-        String celebrationPhrase = 'celebrates';
+        // Check if multiple players are involved (use plural "celebrate" vs singular "celebrates")
+        bool multiplePlayersInvolved = false;
+        if (!_isCelebratingWithTeammates) {
+          // When "with teammates" is NOT selected, check if we're using multiple active players
+          // We need to determine the active players (same logic as in _updateCaption)
+          Set<String> activePlayers;
+          if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+            activePlayers = selectedAwayPlayers;
+          } else if (selectedHomePlayers.isNotEmpty &&
+              selectedAwayPlayers.isEmpty) {
+            activePlayers = selectedHomePlayers;
+          } else if (selectedHomePlayers.isNotEmpty &&
+              selectedAwayPlayers.isNotEmpty) {
+            // Use first team selected as main focus
+            activePlayers = (_firstTeamSelected == true)
+                ? selectedHomePlayers
+                : selectedAwayPlayers;
+          } else {
+            activePlayers = <String>{};
+          }
+          multiplePlayersInvolved = activePlayers.length > 1;
+        } else {
+          // When "with teammates" IS selected, only the main player is used, so singular
+          multiplePlayersInvolved = false;
+        }
+
+        String celebrationPhrase =
+            multiplePlayersInvolved ? 'celebrate' : 'celebrates';
 
         // Add scoring if selected
         if (_isCelebratingScoring) {
@@ -3686,8 +3782,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (_isCelebratingWithTeammates) {
           final teammates = _getTeammates();
           if (teammates.isNotEmpty) {
+            final teammateWord =
+                teammates.length == 1 ? 'teammate' : 'teammates';
             celebrationPhrase +=
-                ' with teammates ${_formatPlayerNames(teammates)}';
+                ' with $teammateWord ${_formatPlayerNames(teammates)}';
           }
         }
 
@@ -4361,158 +4459,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
               const SizedBox(height: 8),
 
-              // Inning section with buttons (same as hitting)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                    child: const Text(
-                      'Innings',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                    child: Wrap(
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: [
-                        // Back arrow for extra innings
-                        if (_showExtraInnings)
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (_extraInningsPage > 0) {
-                                  _extraInningsPage--;
-                                } else {
-                                  // Go back to regular innings
-                                  _showExtraInnings = false;
-                                  _extraInningsPage = 0;
-                                  _selectedRbiInning = null;
-                                }
-                              });
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                '←',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        // Innings (regular or extra based on state)
-                        ...(_showExtraInnings
-                                ? _getExtraInningsForPage()
-                                : List.generate(9, (index) => index + 1))
-                            .map((inning) {
-                          final isSelected = _selectedRbiInning == inning;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedRbiInning =
-                                    _selectedRbiInning == inning
-                                        ? null
-                                        : inning;
-                              });
-                              _updateCaption();
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.grey.shade300
-                                    : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                '$inning',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        // EXT button that cycles through extra innings
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (_showExtraInnings) {
-                                // If already showing extra innings, go to next page
-                                if (_extraInningsPage < 3) {
-                                  _extraInningsPage++;
-                                } else {
-                                  // Go back to regular innings
-                                  _showExtraInnings = false;
-                                  _extraInningsPage = 0;
-                                  _selectedRbiInning = null;
-                                }
-                              } else {
-                                // Start showing extra innings
-                                _showExtraInnings = true;
-                                _extraInningsPage = 0;
-                                _selectedRbiInning = null;
-                              }
-                            });
-                          },
-                          child: Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: _showExtraInnings
-                                  ? Colors.grey.shade300
-                                  : Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: Colors.grey.shade300,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Text(
-                              'XTRA',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              // Inning section with reusable widget
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
               ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
@@ -4816,163 +4772,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                 const SizedBox(height: 8),
 
-                // Inning section with buttons
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                      child: const Text(
-                        'Innings',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Container(
-                      width: double.infinity,
-                      margin:
-                          const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                      child: Wrap(
-                        spacing: 2,
-                        runSpacing: 2,
-                        children: [
-                          // Back arrow for extra innings
-                          if (_showExtraInnings)
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (_extraInningsPage > 0) {
-                                    _extraInningsPage--;
-                                  } else {
-                                    // Go back to regular innings
-                                    _showExtraInnings = false;
-                                    _extraInningsPage = 0;
-                                    _selectedRbiInning = null;
-                                  }
-                                });
-                              },
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  '←',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Innings (regular or extra based on state)
-                          ...(_showExtraInnings
-                                  ? _getExtraInningsForPage()
-                                  : List.generate(9, (index) => index + 1))
-                              .map((inning) {
-                            final isSelected = _selectedRbiInning == inning;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _selectedRbiInning =
-                                      _selectedRbiInning == inning
-                                          ? null
-                                          : inning;
-                                });
-                                _updateCaption();
-                              },
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Colors.grey.shade300
-                                      : Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Text(
-                                  '$inning',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                          // EXT button that cycles through extra innings
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (_showExtraInnings) {
-                                  // If already showing extra innings, go to next page
-                                  if (_extraInningsPage < 3) {
-                                    _extraInningsPage++;
-                                  } else {
-                                    // Go back to regular innings
-                                    _showExtraInnings = false;
-                                    _extraInningsPage = 0;
-                                    _selectedRbiInning = null;
-                                  }
-                                } else {
-                                  // Start showing extra innings
-                                  _showExtraInnings = true;
-                                  _extraInningsPage = 0;
-                                  _selectedRbiInning = null;
-                                }
-                              });
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: _showExtraInnings
-                                    ? Colors.grey.shade300
-                                    : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                'XTRA',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
 
                 // Inning selection section using reusable widget
-                Expanded(child: _buildReusableInningSelector()),
+                SizedBox(
+                  height: 80, // Reduced height for compact layout
+                  child: _buildReusableInningSelector(),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Back button
+                _buildBackButton(),
               ],
             ),
           ),
@@ -5334,167 +5145,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header with title
-                  const Text(
-                    'Inning',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Column(
-                    children: [
-                      // Innings grid (3 per row)
-                      SizedBox(
-                        width:
-                            90, // Force 3 buttons per row (28px + 2px spacing) * 3
-                        child: Wrap(
-                          spacing: 2,
-                          runSpacing: 2,
-                          children: [
-                            // Back arrow for extra innings
-                            if (_showExtraInnings)
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (_extraInningsPage > 0) {
-                                      _extraInningsPage--;
-                                    } else {
-                                      // Go back to regular innings
-                                      _showExtraInnings = false;
-                                      _extraInningsPage = 0;
-                                      _selectedRbiInning = null;
-                                    }
-                                  });
-                                },
-                                child: Container(
-                                  width: 28,
-                                  height: 28,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(
-                                      color: Colors.grey.shade300,
-                                      width: 0.5,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '←',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            // Innings (regular or extra based on state)
-                            ...(_showExtraInnings
-                                    ? _getExtraInningsForPage()
-                                    : List.generate(9, (index) => index + 1))
-                                .map((inning) {
-                              final isSelected = _selectedRbiInning == inning;
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedRbiInning =
-                                        _selectedRbiInning == inning
-                                            ? null
-                                            : inning;
-                                    // Close the popup after selecting an inning
-                                    _selectedVerb = null;
-                                  });
-                                  _updateCaption();
-                                },
-                                child: Container(
-                                  width: 28,
-                                  height: 28,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? Colors.grey.shade300
-                                        : Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(3),
-                                    border: Border.all(
-                                      color: Colors.grey.shade300,
-                                      width: 0.5,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '$inning',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 4),
-
-                      // EXT button at the bottom
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (_showExtraInnings) {
-                              // If already showing extra innings, go to next page
-                              if (_extraInningsPage < 3) {
-                                _extraInningsPage++;
-                              } else {
-                                // Go back to regular innings
-                                _showExtraInnings = false;
-                                _extraInningsPage = 0;
-                                _selectedRbiInning = null;
-                              }
-                            } else {
-                              // Start showing extra innings
-                              _showExtraInnings = true;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: _showExtraInnings
-                                ? Colors.grey.shade300
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            'XTRA',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: SizedBox(
+                width: 300, // Adjust width as needed
+                height: 200, // Adjust height as needed
+                child: _buildReusableInningSelector(),
               ),
-            ), // <-- Add this closing parenthesis for the Container
-          ), // <-- Add this closing parenthesis for the GestureDetector
+            ),
+          ),
         ),
       ],
     );
@@ -5608,159 +5265,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
               const SizedBox(height: 8),
 
-              // Inning section with buttons
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                    child: const Text(
-                      'Innings',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                    child: Wrap(
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: [
-                        // Back arrow for extra innings
-                        if (_showExtraInnings)
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (_extraInningsPage > 0) {
-                                  _extraInningsPage--;
-                                } else {
-                                  // Go back to regular innings
-                                  _showExtraInnings = false;
-                                  _extraInningsPage = 0;
-                                  _selectedRbiInning = null;
-                                }
-                              });
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                '←',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        // Innings (regular or extra based on state)
-                        ...(_showExtraInnings
-                                ? _getExtraInningsForPage()
-                                : List.generate(9, (index) => index + 1))
-                            .map((inning) {
-                          final isSelected = _selectedRbiInning == inning;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedRbiInning =
-                                    _selectedRbiInning == inning
-                                        ? null
-                                        : inning;
-                              });
-                              _updateCaption();
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.grey.shade300
-                                    : Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(3),
-                                border: Border.all(
-                                  color: Colors.grey.shade300,
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Text(
-                                '$inning',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        // EXT button that cycles through extra innings
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (_showExtraInnings) {
-                                // If already showing extra innings, go to next page
-                                if (_extraInningsPage < 3) {
-                                  _extraInningsPage++;
-                                } else {
-                                  // Reset to regular innings
-                                  _showExtraInnings = false;
-                                  _extraInningsPage = 0;
-                                }
-                              } else {
-                                // Start showing extra innings
-                                _showExtraInnings = true;
-                                _extraInningsPage = 0;
-                              }
-                            });
-                          },
-                          child: Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: _showExtraInnings
-                                  ? Colors.grey.shade100
-                                  : Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                color: Colors.grey.shade300,
-                                width: 0.5,
-                              ),
-                            ),
-                            child: Text(
-                              _showExtraInnings
-                                  ? (_extraInningsPage == 0
-                                      ? '→'
-                                      : (_extraInningsPage == 1 ? '→' : '→'))
-                                  : 'XTRA',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              // Inning section with reusable widget
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
               ),
 
               const SizedBox(height: 8),
@@ -5791,55 +5299,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               const SizedBox(height: 16),
 
               // Back button
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedVerb = null;
-                    _selectedHittingAction = null;
-                    _rbiCount = null;
-                    _selectedRbiInning = null;
-                    _showExtraInnings = false;
-                    _extraInningsPage = 0;
-                  });
-                  _updateCaption();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.arrow_back,
-                                  size: 12, color: Colors.grey.shade700),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Back to Verbs',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Expanded(flex: 1, child: SizedBox()),
-                    ],
-                  ),
-                ),
-              ),
+              _buildBackButton(),
             ],
           ),
         ),
@@ -5961,8 +5421,75 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return playerName;
   }
 
+  // Reusable back button widget
+  Widget _buildBackButton({VoidCallback? onPressed}) {
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.4, // Half width
+        margin: const EdgeInsets.symmetric(
+            horizontal: 5), // 5px padding from left and right
+        child: GestureDetector(
+          onTap: onPressed ??
+              () {
+                setState(() {
+                  _selectedVerb = null;
+                  _selectedHittingAction = null;
+                  _rbiCount = null;
+                  _selectedRbiInning = null;
+                  _showExtraInnings = false;
+                  _extraInningsPage = 0;
+                });
+                _updateCaption();
+              },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                const SizedBox(width: 15), // 15px padding from the left edge
+                Icon(
+                  Icons.arrow_back,
+                  size: 14,
+                  color: Colors.grey.shade700,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // Reusable inning selector widget
   Widget _buildReusableInningSelector() {
+    // Determine which innings to show based on the current state
+    List<int> inningsToShow;
+    int currentPage =
+        _extraInningsPage; // Use existing _extraInningsPage variable
+
+    if (currentPage == 0) {
+      inningsToShow = List.generate(9, (index) => index + 1); // 1-9
+    } else if (currentPage == 1) {
+      inningsToShow = List.generate(9, (index) => index + 10); // 10-18
+    } else {
+      inningsToShow = List.generate(9, (index) => index + 19); // 19-27
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5978,6 +5505,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         const SizedBox(height: 2),
+
+        // Innings section (changes content based on state)
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
@@ -5985,8 +5514,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             spacing: 2,
             runSpacing: 2,
             children: [
-              // Regular innings
-              ...List.generate(9, (index) => index + 1).map((inning) {
+              // Current set of innings
+              ...inningsToShow.map((inning) {
                 final isSelected = _selectedRbiInning == inning;
                 return GestureDetector(
                   onTap: () {
@@ -6015,48 +5544,84 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade700,
+                        color: isSelected ? Colors.white : Colors.grey.shade700,
                       ),
                     ),
                   ),
                 );
               }),
-              // Extra innings button
+
+              // Minus button (go back to previous set)
               GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (_showExtraInnings) {
-                      // If already showing extra innings, go to next page
-                      if (_extraInningsPage < 3) {
-                        _extraInningsPage++;
-                      } else {
-                        // Reset to regular innings
-                        _showExtraInnings = false;
-                        _extraInningsPage = 0;
-                        _selectedRbiInning = null;
+                onTap: currentPage > 0
+                    ? () {
+                        setState(() {
+                          _extraInningsPage--;
+                          if (_extraInningsPage == 0) {
+                            _showExtraInnings = false;
+                          }
+                          _selectedRbiInning =
+                              null; // Clear selection when switching
+                        });
+                        _updateCaption();
                       }
-                    } else {
-                      // Start showing extra innings
-                      _showExtraInnings = true;
-                      _extraInningsPage = 0;
-                    }
-                  });
-                  _updateCaption();
-                },
+                    : null,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: Colors.orange.shade300),
+                    color: currentPage > 0
+                        ? Colors.grey.shade50
+                        : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.grey.shade300),
                   ),
-                  child: const Text(
-                    '10+',
+                  child: Text(
+                    '-',
                     style: TextStyle(
-                      fontSize: 8,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.orange,
+                      color: currentPage > 0
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade400,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Plus button (go to next set)
+              GestureDetector(
+                onTap: currentPage < 2
+                    ? () {
+                        setState(() {
+                          _extraInningsPage++;
+                          _showExtraInnings = true;
+                          _selectedRbiInning =
+                              null; // Clear selection when switching
+                        });
+                        _updateCaption();
+                      }
+                    : null,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: currentPage < 2
+                        ? Colors.grey.shade50
+                        : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    '+',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: currentPage < 2
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade400,
                     ),
                   ),
                 ),
@@ -6155,7 +5720,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               const SizedBox(height: 4),
 
               // Inning selection section using reusable widget
-              Expanded(child: _buildReusableInningSelector()),
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
@@ -6289,6 +5862,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   runSpacing: 2,
                   children: [
                     _buildCelebrationChip('Scoring', 'Scoring'),
+                    _buildCelebrationChip('Single', 'Single'),
+                    _buildCelebrationChip('Double', 'Double'),
+                    _buildCelebrationChip('Triple', 'Triple'),
+                    _buildCelebrationChip('Home Run', 'Home Run'),
                   ],
                 ),
               ),
@@ -6322,6 +5899,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 8),
+
+              // Inning section
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
@@ -6335,6 +5925,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       isSelected = _isCelebratingScoring;
     } else if (celebration == 'With Teammates') {
       isSelected = _isCelebratingWithTeammates;
+    } else if (celebration == 'Hit') {
+      isSelected = _selectedCelebrationType == celebration;
     } else {
       isSelected = _selectedCelebrationType == celebration;
     }
@@ -6346,6 +5938,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _isCelebratingScoring = !_isCelebratingScoring;
           } else if (celebration == 'With Teammates') {
             _isCelebratingWithTeammates = !_isCelebratingWithTeammates;
+          } else if (celebration == 'Hit') {
+            // Navigate to hit submenu with celebration selected
+            _selectedVerb = 'Hit';
+            _selectedHittingAction = 'celebrates';
+            _selectedCelebrationType = celebration;
+          } else if (celebration == 'Single' ||
+              celebration == 'Double' ||
+              celebration == 'Triple' ||
+              celebration == 'Home Run') {
+            // Navigate to hit submenu with specific hit type and celebration selected
+            _selectedVerb = celebration;
+            _selectedHittingAction = 'celebrates';
+            _selectedCelebrationType = celebration;
           } else {
             if (isSelected) {
               _selectedCelebrationType = null;
@@ -6401,193 +6006,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ),
         const SizedBox(height: 2),
 
-        // Inning section
+        // Inning section with reusable widget
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                child: const Text(
-                  'Innings',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: Wrap(
-                  spacing: 2,
-                  runSpacing: 2,
-                  children: [
-                    // Back arrow for extra innings
-                    if (_showExtraInnings)
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (_extraInningsPage > 0) {
-                              _extraInningsPage--;
-                            } else {
-                              // Go back to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '←',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    // Innings (regular or extra based on state)
-                    ...(_showExtraInnings
-                            ? _getExtraInningsForPage()
-                            : List.generate(9, (index) => index + 1))
-                        .map((inning) {
-                      final isSelected = _selectedRbiInning == inning;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedRbiInning =
-                                _selectedRbiInning == inning ? null : inning;
-                          });
-                          _updateCaption();
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.grey.shade300
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '$inning',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    // EXT button that cycles through extra innings
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (_showExtraInnings) {
-                            // If already showing extra innings, go to next page
-                            if (_extraInningsPage < 3) {
-                              _extraInningsPage++;
-                            } else {
-                              // Reset to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          } else {
-                            // Start showing extra innings
-                            _showExtraInnings = true;
-                            _extraInningsPage = 0;
-                          }
-                        });
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _showExtraInnings
-                              ? Colors.grey.shade100
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                            color: Colors.grey.shade300,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(
-                          _showExtraInnings
-                              ? (_extraInningsPage == 0
-                                  ? '→'
-                                  : (_extraInningsPage == 1 ? '→' : '→'))
-                              : 'XTRA',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
 
-              // Close verb selection
-              Container(
-                margin: const EdgeInsets.only(left: 8, right: 8),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedVerb = null;
-                      _showExtraInnings = false;
-                      _extraInningsPage = 0;
-                    });
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Close',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
@@ -6679,154 +6111,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
               const SizedBox(height: 8),
 
-              // Inning section
-              Container(
-                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                child: const Text(
-                  'Innings',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
+              // Inning section with reusable widget
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
               ),
-              const SizedBox(height: 2),
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: Wrap(
-                  spacing: 2,
-                  runSpacing: 2,
-                  children: [
-                    // Back arrow for extra innings
-                    if (_showExtraInnings)
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (_extraInningsPage > 0) {
-                              _extraInningsPage--;
-                            } else {
-                              // Go back to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '←',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    // Innings (regular or extra based on state)
-                    ...(_showExtraInnings
-                            ? _getExtraInningsForPage()
-                            : List.generate(9, (index) => index + 1))
-                        .map((inning) {
-                      final isSelected = _selectedRbiInning == inning;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedRbiInning =
-                                _selectedRbiInning == inning ? null : inning;
-                          });
-                          _updateCaption();
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.grey.shade300
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '$inning',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    // EXT button that cycles through extra innings
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (_showExtraInnings) {
-                            // If already showing extra innings, go to next page
-                            if (_extraInningsPage < 3) {
-                              _extraInningsPage++;
-                            } else {
-                              // Reset to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          } else {
-                            // Start showing extra innings
-                            _showExtraInnings = true;
-                            _extraInningsPage = 0;
-                          }
-                        });
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _showExtraInnings
-                              ? Colors.grey.shade100
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                            color: Colors.grey.shade300,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(
-                          _showExtraInnings
-                              ? (_extraInningsPage == 0
-                                  ? '→'
-                                  : (_extraInningsPage == 1 ? '→' : '→'))
-                              : 'XTRA',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
@@ -6918,154 +6212,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
               const SizedBox(height: 8),
 
-              // Inning section
-              Container(
-                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                child: const Text(
-                  'Innings',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
-                ),
+              const SizedBox(height: 8),
+
+              // Inning section with reusable widget
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
               ),
-              const SizedBox(height: 2),
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                child: Wrap(
-                  spacing: 2,
-                  runSpacing: 2,
-                  children: [
-                    // Back arrow for extra innings
-                    if (_showExtraInnings)
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (_extraInningsPage > 0) {
-                              _extraInningsPage--;
-                            } else {
-                              // Go back to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '←',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    // Innings (regular or extra based on state)
-                    ...(_showExtraInnings
-                            ? _getExtraInningsForPage()
-                            : List.generate(9, (index) => index + 1))
-                        .map((inning) {
-                      final isSelected = _selectedRbiInning == inning;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedRbiInning =
-                                _selectedRbiInning == inning ? null : inning;
-                          });
-                          _updateCaption();
-                        },
-                        child: Container(
-                          width: 28,
-                          height: 28,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.grey.shade300
-                                : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(3),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Text(
-                            '$inning',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                    // EXT button that cycles through extra innings
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (_showExtraInnings) {
-                            // If already showing extra innings, go to next page
-                            if (_extraInningsPage < 3) {
-                              _extraInningsPage++;
-                            } else {
-                              // Reset to regular innings
-                              _showExtraInnings = false;
-                              _extraInningsPage = 0;
-                              _selectedRbiInning = null;
-                            }
-                          } else {
-                            // Start showing extra innings
-                            _showExtraInnings = true;
-                            _extraInningsPage = 0;
-                          }
-                        });
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _showExtraInnings
-                              ? Colors.grey.shade100
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                            color: Colors.grey.shade300,
-                            width: 0.5,
-                          ),
-                        ),
-                        child: Text(
-                          _showExtraInnings
-                              ? (_extraInningsPage == 0
-                                  ? '→'
-                                  : (_extraInningsPage == 1 ? '→' : '→'))
-                              : 'XTRA',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
             ],
           ),
         ),
