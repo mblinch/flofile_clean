@@ -538,8 +538,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Player chips row
                         Container(
                           width: double.infinity,
+                          constraints: const BoxConstraints(minHeight: 28),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(6),
@@ -3974,7 +3975,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _updateCaption();
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: BorderRadius.circular(4),
@@ -4040,233 +4041,226 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       );
     }
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 40),
-      child: Row(
-        children: [
-          // Left side (Home or Away depending on _homeOnLeft)
-          Expanded(
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              alignment: _homeOnLeft ? WrapAlignment.start : WrapAlignment.end,
-              children:
-                  (_homeOnLeft ? selectedHomePlayers : selectedAwayPlayers)
-                      .map((playerName) {
-                final isFirstSelected = _isFirstSelectedPlayer(playerName);
-                final isHomePlayer = selectedHomePlayers.contains(playerName);
-                print(
-                    'DEBUG: Building ${_homeOnLeft ? 'left' : 'right'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
+    return Row(
+      children: [
+        // Left side (Home or Away depending on _homeOnLeft)
+        Expanded(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            alignment: _homeOnLeft ? WrapAlignment.start : WrapAlignment.end,
+            children: (_homeOnLeft ? selectedHomePlayers : selectedAwayPlayers)
+                .map((playerName) {
+              final isFirstSelected = _isFirstSelectedPlayer(playerName);
+              final isHomePlayer = selectedHomePlayers.contains(playerName);
+              print(
+                  'DEBUG: Building ${_homeOnLeft ? 'left' : 'right'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
 
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isHomePlayer
-                          ? Colors.grey.shade700
-                          : Colors.grey.shade400,
-                      width: 0.5,
-                    ),
+              return Container(
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(
+                    color: isHomePlayer
+                        ? Colors.grey.shade700
+                        : Colors.grey.shade400,
+                    width: 0.5,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Star for first selected player
-                      if (isFirstSelected) ...[
-                        Container(
-                          padding: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                          child: Icon(
-                            Icons.star,
-                            size: 10,
-                            color: Colors.white,
-                          ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Star for first selected player
+                    if (isFirstSelected) ...[
+                      Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        const SizedBox(width: 2),
-                      ],
-                      // Team icon
-                      Icon(
-                        isHomePlayer ? Icons.home : Icons.flight,
-                        size: 10,
-                        color:
-                            isHomePlayer ? Colors.white : Colors.grey.shade700,
+                        child: Icon(
+                          Icons.star,
+                          size: 10,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 2),
-                      // Player name
-                      Text(
-                        _formatChipName(playerName),
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: isHomePlayer ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // X button to remove player
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            // Check if this is the first selected player (main player)
-                            final isMainPlayer =
-                                _isFirstSelectedPlayer(playerName);
-
-                            if (isHomePlayer) {
-                              selectedHomePlayers.remove(playerName);
-                            } else {
-                              selectedAwayPlayers.remove(playerName);
-                            }
-
-                            // If removing the main player, reset everything
-                            if (isMainPlayer) {
-                              _resetCaption();
-                              return;
-                            }
-                          });
-                          _updateCaption();
-                          _updatePersonalityField();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: isHomePlayer
-                                ? Colors.white.withOpacity(0.3)
-                                : Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.close,
-                            size: 8,
-                            color: isHomePlayer
-                                ? Colors.white
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
                     ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          // Right side (Away or Home depending on _homeOnLeft)
-          Expanded(
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              alignment: _homeOnLeft ? WrapAlignment.end : WrapAlignment.start,
-              children:
-                  (_homeOnLeft ? selectedAwayPlayers : selectedHomePlayers)
-                      .map((playerName) {
-                final isFirstSelected = _isFirstSelectedPlayer(playerName);
-                final isHomePlayer = selectedHomePlayers.contains(playerName);
-                print(
-                    'DEBUG: Building ${_homeOnLeft ? 'right' : 'left'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
-
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isHomePlayer
-                          ? Colors.grey.shade700
-                          : Colors.grey.shade400,
-                      width: 0.5,
+                    // Team icon
+                    Icon(
+                      isHomePlayer ? Icons.home : Icons.flight,
+                      size: 10,
+                      color: isHomePlayer ? Colors.white : Colors.grey.shade700,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Star for first selected player
-                      if (isFirstSelected) ...[
-                        Container(
-                          padding: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                          child: Icon(
-                            Icons.star,
-                            size: 10,
-                            color: Colors.white,
-                          ),
+                    const SizedBox(width: 2),
+                    // Player name
+                    Text(
+                      _formatChipName(playerName),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: isHomePlayer ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // X button to remove player
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          // Check if this is the first selected player (main player)
+                          final isMainPlayer =
+                              _isFirstSelectedPlayer(playerName);
+
+                          if (isHomePlayer) {
+                            selectedHomePlayers.remove(playerName);
+                          } else {
+                            selectedAwayPlayers.remove(playerName);
+                          }
+
+                          // If removing the main player, reset everything
+                          if (isMainPlayer) {
+                            _resetCaption();
+                            return;
+                          }
+                        });
+                        _updateCaption();
+                        _updatePersonalityField();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: isHomePlayer
+                              ? Colors.white.withOpacity(0.3)
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        const SizedBox(width: 2),
-                      ],
-                      // Team icon
-                      Icon(
-                        isHomePlayer ? Icons.home : Icons.flight,
-                        size: 10,
-                        color:
-                            isHomePlayer ? Colors.white : Colors.grey.shade700,
+                        child: Icon(
+                          Icons.close,
+                          size: 8,
+                          color: isHomePlayer
+                              ? Colors.white
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // Right side (Away or Home depending on _homeOnLeft)
+        Expanded(
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            alignment: _homeOnLeft ? WrapAlignment.end : WrapAlignment.start,
+            children: (_homeOnLeft ? selectedAwayPlayers : selectedHomePlayers)
+                .map((playerName) {
+              final isFirstSelected = _isFirstSelectedPlayer(playerName);
+              final isHomePlayer = selectedHomePlayers.contains(playerName);
+              print(
+                  'DEBUG: Building ${_homeOnLeft ? 'right' : 'left'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
+
+              return Container(
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(
+                    color: isHomePlayer
+                        ? Colors.grey.shade700
+                        : Colors.grey.shade400,
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Star for first selected player
+                    if (isFirstSelected) ...[
+                      Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Icon(
+                          Icons.star,
+                          size: 10,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 2),
-                      // Player name
-                      Text(
-                        _formatChipName(playerName),
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: isHomePlayer ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // X button to remove player
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            // Check if this is the first selected player (main player)
-                            final isMainPlayer =
-                                _isFirstSelectedPlayer(playerName);
-
-                            if (isHomePlayer) {
-                              selectedHomePlayers.remove(playerName);
-                            } else {
-                              selectedAwayPlayers.remove(playerName);
-                            }
-
-                            // If removing the main player, reset everything
-                            if (isMainPlayer) {
-                              _resetCaption();
-                              return;
-                            }
-                          });
-                          _updateCaption();
-                          _updatePersonalityField();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: isHomePlayer
-                                ? Colors.white.withOpacity(0.3)
-                                : Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.close,
-                            size: 8,
-                            color: isHomePlayer
-                                ? Colors.white
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
                     ],
-                  ),
-                );
-              }).toList(),
-            ),
+                    // Team icon
+                    Icon(
+                      isHomePlayer ? Icons.home : Icons.flight,
+                      size: 10,
+                      color: isHomePlayer ? Colors.white : Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    // Player name
+                    Text(
+                      _formatChipName(playerName),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: isHomePlayer ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // X button to remove player
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          // Check if this is the first selected player (main player)
+                          final isMainPlayer =
+                              _isFirstSelectedPlayer(playerName);
+
+                          if (isHomePlayer) {
+                            selectedHomePlayers.remove(playerName);
+                          } else {
+                            selectedAwayPlayers.remove(playerName);
+                          }
+
+                          // If removing the main player, reset everything
+                          if (isMainPlayer) {
+                            _resetCaption();
+                            return;
+                          }
+                        });
+                        _updateCaption();
+                        _updatePersonalityField();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: isHomePlayer
+                              ? Colors.white.withOpacity(0.3)
+                              : Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          size: 8,
+                          color: isHomePlayer
+                              ? Colors.white
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
