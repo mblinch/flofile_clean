@@ -41,6 +41,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController provinceController = TextEditingController();
   final TextEditingController stadiumController = TextEditingController();
   final TextEditingController creatorController = TextEditingController();
+  final TextEditingController customCelebrationController =
+      TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
 
@@ -1501,7 +1503,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _selectedVerb ==
                                                   'Fielding Position' ||
                                               _selectedVerb == 'Bunts' ||
-                                              _selectedVerb == 'Hit by Pitch')
+                                              _selectedVerb == 'Hit by Pitch' ||
+                                              _selectedVerb == 'Strikeout')
                                           ? _buildInningOnlyInterface()
                                           : (_selectedVerb == 'Steals' ||
                                                   _selectedVerb == 'Slides' ||
@@ -2504,6 +2507,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _updateCaption() {
+    print('DEBUG: _updateCaption() called');
+    print('DEBUG: _selectedVerb = $_selectedVerb');
+    print('DEBUG: _selectedActionVerb = $_selectedActionVerb');
+    print('DEBUG: _isCelebratingScoring = $_isCelebratingScoring');
+
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
@@ -2612,21 +2620,43 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String playerName;
     if ((_selectedHittingAction == 'celebrates' ||
             _selectedHittingAction == 'celebrates_in_dugout' ||
+            verbToUse == 'Celebration' ||
             verbToUse == 'Celebrates' ||
             verbToUse == 'Celebrates With' ||
             verbToUse == 'Celebrates Against') &&
         _firstPlayerSelected != null) {
-      // For celebration actions, check if "with teammates" is selected
-      if (_isCelebratingWithTeammates) {
-        // If "with teammates" is selected, only use the main player (the one with the star)
+      // For celebration actions, check if "with teammates" is selected OR if we're in a hit interface OR celebration interface with multiple players
+      final isHitInterface = (verbToUse == 'Single' ||
+          verbToUse == 'Double' ||
+          verbToUse == 'Triple' ||
+          verbToUse == 'Home Run' ||
+          verbToUse == 'Grand Slam');
+      final isCelebrationInterface = (verbToUse == 'Celebration' ||
+          verbToUse == 'Celebrates' ||
+          verbToUse == 'Celebrates With' ||
+          verbToUse == 'Celebrates Against');
+      final hasMultiplePlayers = activePlayers.length > 1;
+
+      print('DEBUG: verbToUse = $verbToUse');
+      print(
+          'DEBUG: _isCelebratingWithTeammates = $_isCelebratingWithTeammates');
+      print(
+          'DEBUG: isHitInterface = $isHitInterface, isCelebrationInterface = $isCelebrationInterface, hasMultiplePlayers = $hasMultiplePlayers');
+
+      if (_isCelebratingWithTeammates ||
+          (isHitInterface && hasMultiplePlayers) ||
+          (isCelebrationInterface && hasMultiplePlayers)) {
+        // If "with teammates" is selected OR we're in a hit interface with multiple players, only use the main player
         final mainPlayerTeam =
             selectedHomePlayers.contains(_firstPlayerSelected)
                 ? selectedHomeTeam
                 : selectedAwayTeam;
         playerName = '$_firstPlayerSelected of the $mainPlayerTeam';
+        print('DEBUG: Using main player only: $playerName');
       } else {
-        // If "with teammates" is NOT selected, use all active players
+        // If "with teammates" is NOT selected and not a multi-player hit interface, use all active players
         playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+        print('DEBUG: Using all players: $playerName');
       }
     } else {
       // For other actions, use all active players
@@ -2662,7 +2692,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Triple Play' ||
         verbToUse == 'Celebrates' ||
         verbToUse == 'Celebrates With' ||
-        verbToUse == 'Celebrates Against') {
+        verbToUse == 'Celebrates Against' ||
+        customCelebrationController.text.isNotEmpty) {
       // For these actions, don't add opponent part here - it's handled in the action phrase
       opponentPart = '';
     } else {
@@ -3252,6 +3283,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       captionController.clear();
       personalityController.clear();
+      customCelebrationController.clear();
 
       // Reset all verb-related state
       _selectedVerb = null;
@@ -3453,6 +3485,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         break;
       case 'Home Run':
         baseAction = _buildHomeRunPhrase();
+        break;
+      case 'Strikeout':
+        baseAction = 'strikeout';
         break;
       case 'Grand Slam':
         baseAction = 'grand slam';
@@ -3742,15 +3777,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Celebrates':
       case 'Celebrates With':
       case 'Celebrates Against':
-        final opposingPlayers = _getOpposingPlayers();
-        final opposingTeam = _getOpposingTeamName();
+        // Check if custom celebration text is provided
+        if (customCelebrationController.text.isNotEmpty) {
+          final opposingPlayers = _getOpposingPlayers();
+          final opposingTeam = _getOpposingTeamName();
 
-        // Build the celebration phrase based on selected options
-        // Check if multiple players are involved (use plural "celebrate" vs singular "celebrates")
-        bool multiplePlayersInvolved = false;
-        if (!_isCelebratingWithTeammates) {
-          // When "with teammates" is NOT selected, check if we're using multiple active players
-          // We need to determine the active players (same logic as in _updateCaption)
+          // Use custom celebration text
+          String customCelebration = customCelebrationController.text.trim();
+
+          // Add teammates if there are multiple players
           Set<String> activePlayers;
           if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
             activePlayers = selectedAwayPlayers;
@@ -3759,29 +3794,63 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             activePlayers = selectedHomePlayers;
           } else if (selectedHomePlayers.isNotEmpty &&
               selectedAwayPlayers.isNotEmpty) {
-            // Use first team selected as main focus
             activePlayers = (_firstTeamSelected == true)
                 ? selectedHomePlayers
                 : selectedAwayPlayers;
           } else {
             activePlayers = <String>{};
           }
-          multiplePlayersInvolved = activePlayers.length > 1;
-        } else {
-          // When "with teammates" IS selected, only the main player is used, so singular
-          multiplePlayersInvolved = false;
+
+          if (activePlayers.length > 1) {
+            final teammates = _getTeammates();
+            if (teammates.isNotEmpty) {
+              final teammateWord =
+                  teammates.length == 1 ? 'teammate' : 'teammates';
+              customCelebration +=
+                  ' with $teammateWord ${_formatPlayerNames(teammates)}';
+            }
+          }
+
+          // Add opponent
+          if (opposingPlayers.isNotEmpty) {
+            final playerNames = _formatPlayersWithTeam(opposingPlayers);
+            return '$customCelebration against $playerNames';
+          } else {
+            return '$customCelebration against the $opposingTeam';
+          }
         }
 
-        String celebrationPhrase =
-            multiplePlayersInvolved ? 'celebrate' : 'celebrates';
+        final opposingPlayers = _getOpposingPlayers();
+        final opposingTeam = _getOpposingTeamName();
+
+        // Build the celebration phrase - always use main player format when multiple players are selected
+        // Determine the active players (same logic as in _updateCaption)
+        Set<String> activePlayers;
+        if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+          activePlayers = selectedAwayPlayers;
+        } else if (selectedHomePlayers.isNotEmpty &&
+            selectedAwayPlayers.isEmpty) {
+          activePlayers = selectedHomePlayers;
+        } else if (selectedHomePlayers.isNotEmpty &&
+            selectedAwayPlayers.isNotEmpty) {
+          // Use first team selected as main focus
+          activePlayers = (_firstTeamSelected == true)
+              ? selectedHomePlayers
+              : selectedAwayPlayers;
+        } else {
+          activePlayers = <String>{};
+        }
+
+        // Always use singular "celebrates" since we're using main player format
+        String celebrationPhrase = 'celebrates';
 
         // Add scoring if selected
         if (_isCelebratingScoring) {
           celebrationPhrase += ' scoring';
         }
 
-        // Add teammates if selected
-        if (_isCelebratingWithTeammates) {
+        // Add teammates if there are multiple players (always format with teammates)
+        if (activePlayers.length > 1) {
           final teammates = _getTeammates();
           if (teammates.isNotEmpty) {
             final teammateWord =
@@ -3821,18 +3890,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final teammates = _getTeammates();
 
           // For dugout celebration, if no teammates, don't include teammate phrase
-          final teammatePhrase =
-              (_selectedHittingAction == 'celebrates_in_dugout' &&
-                      teammates.isEmpty)
-                  ? ''
-                  : (teammates.isNotEmpty
-                      ? ' with teammates ${_formatPlayerNames(teammates)}'
-                      : '');
+          final teammatePhrase = (_selectedHittingAction ==
+                      'celebrates_in_dugout' &&
+                  teammates.isEmpty)
+              ? ''
+              : (teammates.isNotEmpty
+                  ? ' with ${teammates.length == 1 ? 'teammate' : 'teammates'} ${_formatPlayerNames(teammates)}'
+                  : '');
 
-          // Always include the opposing team
+          // Include opposing players if selected, otherwise use opposing team
+          final opposingPlayers = _getOpposingPlayers();
           final opposingTeam = _getOpposingTeamName();
-          final againstPhrase =
-              opposingTeam != null ? ' against the $opposingTeam' : '';
+          final againstPhrase = opposingPlayers.isNotEmpty
+              ? ' against ${_formatPlayerNames(opposingPlayers)}${opposingTeam != null ? ' of the $opposingTeam' : ''}'
+              : (opposingTeam != null ? ' against the $opposingTeam' : '');
 
           final celebrationType = 'celebrates';
           final dugoutPhrase = _selectedHittingAction == 'celebrates_in_dugout'
@@ -5454,6 +5525,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   } else {
                     // Return to main verb menu
                     _selectedVerb = null;
+                    _selectedActionVerb =
+                        null; // Reset action verb to clear caption
                     _selectedHittingAction = null;
                     _rbiCount = null;
                     _selectedRbiInning = null;
@@ -5887,38 +5960,82 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     _buildCelebrationChip('Double', 'Double'),
                     _buildCelebrationChip('Triple', 'Triple'),
                     _buildCelebrationChip('Home Run', 'Home Run'),
+                    _buildCelebrationChip('Strikeout', 'Strikeout'),
                   ],
                 ),
               ),
-              // Optional section for With Teammates
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                    child: const Text(
-                      'Optional',
+
+              const SizedBox(height: 8),
+
+              // Custom celebration text field
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Or write custom celebration:',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
                         color: Colors.grey,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                    child: Wrap(
-                      spacing: 2,
-                      runSpacing: 2,
-                      children: [
-                        _buildCelebrationChip(
-                            'With Teammates', 'With Teammates'),
-                      ],
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: customCelebrationController,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'e.g., celebrates a walk-off hit',
+                        hintStyle: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade500),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        isDense: true,
+                      ),
+                      onTap: () {
+                        // When text field is tapped, insert "celebrates " if empty
+                        if (customCelebrationController.text.isEmpty) {
+                          customCelebrationController.text = 'celebrates ';
+                          customCelebrationController.selection =
+                              TextSelection.fromPosition(
+                            TextPosition(
+                                offset:
+                                    customCelebrationController.text.length),
+                          );
+                          setState(() {
+                            // Clear selected celebration chips when custom text is entered
+                            _selectedCelebrationType = null;
+                            _isCelebratingScoring = false;
+                          });
+                          _updateCaption();
+                        }
+                      },
+                      onChanged: (value) {
+                        setState(() {
+                          // Clear selected celebration chips when custom text is entered
+                          if (value.isNotEmpty) {
+                            _selectedCelebrationType = null;
+                            _isCelebratingScoring = false;
+                          }
+                        });
+                        _updateCaption();
+                      },
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               const SizedBox(height: 8),
@@ -5955,6 +6072,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return GestureDetector(
       onTap: () {
         setState(() {
+          // Clear custom celebration text when chips are selected
+          customCelebrationController.clear();
+
           if (celebration == 'Scoring') {
             _isCelebratingScoring = !_isCelebratingScoring;
           } else if (celebration == 'With Teammates') {
@@ -5976,6 +6096,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedCelebrationType = celebration;
             _cameFromCelebration = true; // Mark that we came from celebration
             // Don't clear inning selection - let it carry over
+          } else if (celebration == 'Strikeout') {
+            // Handle strikeout as a simple celebration action
+            _selectedVerb = 'Celebration'; // Keep in celebration interface
+            _selectedActionVerb = celebration; // Set action verb to Strikeout
+            _selectedHittingAction = 'celebrates';
+            _selectedCelebrationType = celebration;
+            // Don't navigate to submenu - stay in celebration interface
           } else {
             if (isSelected) {
               _selectedCelebrationType = null;
