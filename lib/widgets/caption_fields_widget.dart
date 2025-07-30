@@ -1346,364 +1346,375 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(1),
-              child: _selectedVerb == 'Single' ||
-                      _selectedVerb == 'Double' ||
-                      _selectedVerb == 'Triple'
-                  ? _buildHittingSubOptions()
-                  : _selectedVerb == 'Home Run'
-                      ? _buildHomeRunSubOptions()
-                      : _selectedVerb == 'Tags'
-                          ? _buildTagsSubOptions()
-                          : (_selectedVerb == 'At Bat' ||
-                                  _selectedVerb == 'Pitching' ||
-                                  _selectedVerb == 'Swings' ||
-                                  _selectedVerb == 'Catches' ||
-                                  _selectedVerb == 'Throws' ||
-                                  _selectedVerb == 'Fields a Ball' ||
-                                  _selectedVerb == 'Fielding Position')
-                              ? _buildAtBatInterface()
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Top row: Offense, Defense, Running
-                                    Expanded(
-                                      flex: 1,
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: _buildVerbCategory(
-                                                'Offense', [
-                                              'Single',
-                                              'Double',
-                                              'Triple',
-                                              'Home Run',
-                                              'At Bat',
-                                              'Swings'
-                                            ]),
-                                          ),
-                                          const SizedBox(width: 1),
-                                          Expanded(
-                                            child:
-                                                _buildVerbCategory('Defense', [
-                                              'Pitching',
-                                              'Catches',
-                                              'Throws',
-                                              'Tags',
-                                              'Dives',
-                                              'Fields a Ball',
-                                              'Fielding Position'
-                                            ]),
-                                          ),
-                                          const SizedBox(width: 1),
-                                          Expanded(
-                                            child: _buildVerbCategory(
-                                                'Running', [
-                                              'Steals',
-                                              'Slides',
-                                              'Runs',
-                                              'Rounds'
-                                            ]),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+              child:
+                  _selectedVerb == 'Single' ||
+                          _selectedVerb == 'Double' ||
+                          _selectedVerb == 'Triple'
+                      ? _buildHittingSubOptions()
+                      : _selectedVerb == 'Home Run'
+                          ? _buildHomeRunSubOptions()
+                          : _selectedVerb == 'Tags'
+                              ? _buildTagsSubOptions()
+                              : _selectedVerb == 'Catches'
+                                  ? _buildCatchesSubOptions()
+                                  : (_selectedVerb == 'At Bat' ||
+                                          _selectedVerb == 'Pitching' ||
+                                          _selectedVerb == 'Swings' ||
+                                          _selectedVerb == 'Throws' ||
+                                          _selectedVerb == 'Fields a Ball' ||
+                                          _selectedVerb == 'Fielding Position')
+                                      ? _buildInningOnlyInterface()
+                                      : Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Top row: Offense, Defense, Running
+                                            Expanded(
+                                              flex: 1,
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: _buildVerbCategory(
+                                                        'Offense', [
+                                                      'Single',
+                                                      'Double',
+                                                      'Triple',
+                                                      'Home Run',
+                                                      'At Bat',
+                                                      'Swings'
+                                                    ]),
+                                                  ),
+                                                  const SizedBox(width: 1),
+                                                  Expanded(
+                                                    child: _buildVerbCategory(
+                                                        'Defense', [
+                                                      'Pitching',
+                                                      'Catches',
+                                                      'Throws',
+                                                      'Tags',
+                                                      'Dives',
+                                                      'Fields a Ball',
+                                                      'Fielding Position'
+                                                    ]),
+                                                  ),
+                                                  const SizedBox(width: 1),
+                                                  Expanded(
+                                                    child: _buildVerbCategory(
+                                                        'Running', [
+                                                      'Steals',
+                                                      'Slides',
+                                                      'Runs',
+                                                      'Rounds'
+                                                    ]),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
 
-                                    const SizedBox(height: 4),
+                                            const SizedBox(height: 4),
 
-                                    // Bottom row: Celebrating and Other
-                                    Expanded(
-                                      flex: 1,
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: _buildVerbCategory(
-                                                'Celebrating', [
-                                              'Celebrates',
-                                              'Celebrates With',
-                                              'Celebrates Against'
-                                            ]),
-                                          ),
-                                          const SizedBox(width: 1),
-                                          Expanded(
-                                            child: _buildVerbCategory('Other', [
-                                              'Looks On',
-                                              'Warms Up',
-                                              'Stretches',
-                                              'Talks'
-                                            ]),
-                                          ),
-                                          const SizedBox(width: 1),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                // Home run types (when home run is selected)
-                                                if (_selectedVerb == 'Home Run')
-                                                  _buildVerbCategory(
-                                                      'Home Run Types', [
-                                                    'Solo',
-                                                    'Two-Run',
-                                                    'Three-Run',
-                                                    'Grand Slam'
-                                                  ]),
-
-                                                // Inning only (when simple verbs are selected)
-                                                if (_selectedVerb == 'At Bat' ||
-                                                    _selectedVerb ==
-                                                        'Pitching' ||
-                                                    _selectedVerb == 'Swings' ||
-                                                    _selectedVerb ==
-                                                        'Catches' ||
-                                                    _selectedVerb == 'Throws' ||
-                                                    _selectedVerb ==
-                                                        'Fields a Ball' ||
-                                                    _selectedVerb ==
-                                                        'Fielding Position') ...[
-                                                  const SizedBox(height: 1),
-                                                  Container(
-                                                    decoration: BoxDecoration(
-                                                      border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade400),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              2),
-                                                    ),
+                                            // Bottom row: Celebrating and Other
+                                            Expanded(
+                                              flex: 1,
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: _buildVerbCategory(
+                                                        'Celebrating', [
+                                                      'Celebrates',
+                                                      'Celebrates With',
+                                                      'Celebrates Against'
+                                                    ]),
+                                                  ),
+                                                  const SizedBox(width: 1),
+                                                  Expanded(
+                                                    child: _buildVerbCategory(
+                                                        'Other', [
+                                                      'Looks On',
+                                                      'Warms Up',
+                                                      'Stretches',
+                                                      'Talks'
+                                                    ]),
+                                                  ),
+                                                  const SizedBox(width: 1),
+                                                  Expanded(
                                                     child: Column(
                                                       crossAxisAlignment:
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: [
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 4,
-                                                                  vertical: 1),
-                                                          child: const Text(
-                                                            'INN',
-                                                            style: TextStyle(
-                                                              fontSize: 8,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w500,
-                                                              color:
-                                                                  Colors.grey,
+                                                        // Home run types (when home run is selected)
+                                                        if (_selectedVerb ==
+                                                            'Home Run')
+                                                          _buildVerbCategory(
+                                                              'Home Run Types',
+                                                              [
+                                                                'Solo',
+                                                                'Two-Run',
+                                                                'Three-Run',
+                                                                'Grand Slam'
+                                                              ]),
+
+                                                        // Inning only (when simple verbs are selected)
+                                                        if (_selectedVerb == 'At Bat' ||
+                                                            _selectedVerb ==
+                                                                'Pitching' ||
+                                                            _selectedVerb ==
+                                                                'Swings' ||
+                                                            _selectedVerb ==
+                                                                'Catches' ||
+                                                            _selectedVerb ==
+                                                                'Throws' ||
+                                                            _selectedVerb ==
+                                                                'Fields a Ball' ||
+                                                            _selectedVerb ==
+                                                                'Fielding Position') ...[
+                                                          const SizedBox(
+                                                              height: 1),
+                                                          Container(
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              border: Border.all(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade400),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          2),
                                                             ),
-                                                          ),
-                                                        ),
-                                                        GestureDetector(
-                                                          onTap:
-                                                              _showCompactInningSelector,
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        2,
-                                                                    vertical:
-                                                                        1),
-                                                            child: Text(
-                                                              _selectedRbiInning !=
-                                                                      null
-                                                                  ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
-                                                                  : '',
-                                                              style:
-                                                                  const TextStyle(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Container(
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          4,
+                                                                      vertical:
+                                                                          1),
+                                                                  child:
+                                                                      const Text(
+                                                                    'INN',
+                                                                    style:
+                                                                        TextStyle(
                                                                       fontSize:
-                                                                          8),
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .center,
+                                                                          8,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w500,
+                                                                      color: Colors
+                                                                          .grey,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                GestureDetector(
+                                                                  onTap:
+                                                                      _showCompactInningSelector,
+                                                                  child:
+                                                                      Container(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            2,
+                                                                        vertical:
+                                                                            1),
+                                                                    child: Text(
+                                                                      _selectedRbiInning !=
+                                                                              null
+                                                                          ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
+                                                                          : '',
+                                                                      style: const TextStyle(
+                                                                          fontSize:
+                                                                              8),
+                                                                      textAlign:
+                                                                          TextAlign
+                                                                              .center,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
                                                             ),
                                                           ),
-                                                        ),
+                                                        ],
+
+                                                        // RBI & Inning (when any hitting verb is selected)
+                                                        if (_selectedVerb == 'Single' ||
+                                                            _selectedVerb ==
+                                                                'Double' ||
+                                                            _selectedVerb ==
+                                                                'Triple' ||
+                                                            _selectedVerb ==
+                                                                'Home Run' ||
+                                                            _selectedVerb ==
+                                                                'Grand Slam') ...[
+                                                          const SizedBox(
+                                                              height: 1),
+                                                          Row(
+                                                            children: [
+                                                              Expanded(
+                                                                child:
+                                                                    Container(
+                                                                  decoration:
+                                                                      BoxDecoration(
+                                                                    border: Border.all(
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade400),
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(2),
+                                                                  ),
+                                                                  child: Column(
+                                                                    crossAxisAlignment:
+                                                                        CrossAxisAlignment
+                                                                            .start,
+                                                                    children: [
+                                                                      Container(
+                                                                        padding: const EdgeInsets
+                                                                            .symmetric(
+                                                                            horizontal:
+                                                                                4,
+                                                                            vertical:
+                                                                                1),
+                                                                        child:
+                                                                            const Text(
+                                                                          'RBI',
+                                                                          style:
+                                                                              TextStyle(
+                                                                            fontSize:
+                                                                                8,
+                                                                            fontWeight:
+                                                                                FontWeight.w500,
+                                                                            color:
+                                                                                Colors.grey,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      DropdownButtonFormField<
+                                                                          int>(
+                                                                        value:
+                                                                            _rbiCount,
+                                                                        decoration:
+                                                                            const InputDecoration(
+                                                                          isDense:
+                                                                              true,
+                                                                          contentPadding: EdgeInsets.symmetric(
+                                                                              horizontal: 2,
+                                                                              vertical: 1),
+                                                                          border:
+                                                                              InputBorder.none,
+                                                                          labelText:
+                                                                              null,
+                                                                        ),
+                                                                        items: [
+                                                                          0,
+                                                                          1,
+                                                                          2,
+                                                                          3,
+                                                                          4
+                                                                        ].map(
+                                                                            (rbi) {
+                                                                          return DropdownMenuItem(
+                                                                            value:
+                                                                                rbi,
+                                                                            child:
+                                                                                Text(rbi == 0 ? '0' : '$rbi', style: const TextStyle(fontSize: 8)),
+                                                                          );
+                                                                        }).toList(),
+                                                                        onChanged:
+                                                                            (value) {
+                                                                          setState(
+                                                                              () {
+                                                                            _rbiCount =
+                                                                                value;
+                                                                          });
+                                                                          _updateCaption();
+                                                                        },
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 1),
+                                                              Expanded(
+                                                                child:
+                                                                    Container(
+                                                                  decoration:
+                                                                      BoxDecoration(
+                                                                    border: Border.all(
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade400),
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(2),
+                                                                  ),
+                                                                  child: Column(
+                                                                    crossAxisAlignment:
+                                                                        CrossAxisAlignment
+                                                                            .start,
+                                                                    children: [
+                                                                      Container(
+                                                                        padding: const EdgeInsets
+                                                                            .symmetric(
+                                                                            horizontal:
+                                                                                4,
+                                                                            vertical:
+                                                                                1),
+                                                                        child:
+                                                                            const Text(
+                                                                          'INN',
+                                                                          style:
+                                                                              TextStyle(
+                                                                            fontSize:
+                                                                                8,
+                                                                            fontWeight:
+                                                                                FontWeight.w500,
+                                                                            color:
+                                                                                Colors.grey,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      GestureDetector(
+                                                                        onTap:
+                                                                            _showCompactInningSelector,
+                                                                        child:
+                                                                            Container(
+                                                                          padding: const EdgeInsets
+                                                                              .symmetric(
+                                                                              horizontal: 2,
+                                                                              vertical: 1),
+                                                                          child:
+                                                                              Text(
+                                                                            _selectedRbiInning != null
+                                                                                ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
+                                                                                : '',
+                                                                            style:
+                                                                                const TextStyle(fontSize: 8),
+                                                                            textAlign:
+                                                                                TextAlign.center,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
                                                       ],
                                                     ),
                                                   ),
                                                 ],
-
-                                                // RBI & Inning (when any hitting verb is selected)
-                                                if (_selectedVerb == 'Single' ||
-                                                    _selectedVerb == 'Double' ||
-                                                    _selectedVerb == 'Triple' ||
-                                                    _selectedVerb ==
-                                                        'Home Run' ||
-                                                    _selectedVerb ==
-                                                        'Grand Slam') ...[
-                                                  const SizedBox(height: 1),
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Container(
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            border: Border.all(
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade400),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        2),
-                                                          ),
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        4,
-                                                                    vertical:
-                                                                        1),
-                                                                child:
-                                                                    const Text(
-                                                                  'RBI',
-                                                                  style:
-                                                                      TextStyle(
-                                                                    fontSize: 8,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                    color: Colors
-                                                                        .grey,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              DropdownButtonFormField<
-                                                                  int>(
-                                                                value:
-                                                                    _rbiCount,
-                                                                decoration:
-                                                                    const InputDecoration(
-                                                                  isDense: true,
-                                                                  contentPadding:
-                                                                      EdgeInsets.symmetric(
-                                                                          horizontal:
-                                                                              2,
-                                                                          vertical:
-                                                                              1),
-                                                                  border:
-                                                                      InputBorder
-                                                                          .none,
-                                                                  labelText:
-                                                                      null,
-                                                                ),
-                                                                items: [
-                                                                  0,
-                                                                  1,
-                                                                  2,
-                                                                  3,
-                                                                  4
-                                                                ].map((rbi) {
-                                                                  return DropdownMenuItem(
-                                                                    value: rbi,
-                                                                    child: Text(
-                                                                        rbi == 0
-                                                                            ? '0'
-                                                                            : '$rbi',
-                                                                        style: const TextStyle(
-                                                                            fontSize:
-                                                                                8)),
-                                                                  );
-                                                                }).toList(),
-                                                                onChanged:
-                                                                    (value) {
-                                                                  setState(() {
-                                                                    _rbiCount =
-                                                                        value;
-                                                                  });
-                                                                  _updateCaption();
-                                                                },
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 1),
-                                                      Expanded(
-                                                        child: Container(
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            border: Border.all(
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade400),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        2),
-                                                          ),
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        4,
-                                                                    vertical:
-                                                                        1),
-                                                                child:
-                                                                    const Text(
-                                                                  'INN',
-                                                                  style:
-                                                                      TextStyle(
-                                                                    fontSize: 8,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                    color: Colors
-                                                                        .grey,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              GestureDetector(
-                                                                onTap:
-                                                                    _showCompactInningSelector,
-                                                                child:
-                                                                    Container(
-                                                                  padding: const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          2,
-                                                                      vertical:
-                                                                          1),
-                                                                  child: Text(
-                                                                    _selectedRbiInning !=
-                                                                            null
-                                                                        ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
-                                                                        : '',
-                                                                    style: const TextStyle(
-                                                                        fontSize:
-                                                                            8),
-                                                                    textAlign:
-                                                                        TextAlign
-                                                                            .center,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                          ],
+                                        ),
             ),
           ),
         ],
@@ -3347,7 +3358,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Fielding Position':
         return 'takes fielding position against the ${_getOpposingTeamName()}';
       case 'Catches':
-        return 'catches a ball against the ${_getOpposingTeamName()}';
+        if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
+          return 'makes a diving catch against the ${_getOpposingTeamName()}';
+        } else {
+          return 'catches a ball against the ${_getOpposingTeamName()}';
+        }
       case 'Throws':
         return 'throws a ball against the ${_getOpposingTeamName()}';
       case 'Tags':
@@ -4310,11 +4325,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 1st Base options
-                      _buildTagOptionWithChevron('1st Base', [
-                        'Pickoff',
-                        'Stealing',
-                        'Attempting to Stretch a Single'
-                      ]),
+                      _buildTagOptionWithChevron(
+                          '1st Base', ['Pickoff', 'Stealing']),
 
                       // 2nd Base options
                       _buildTagOptionWithChevron('2nd Base', [
@@ -5499,13 +5511,497 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (match != null) {
       final lastName = match.group(2);
       final number = match.group(3);
+
+      // Handle Jr. in the last name
+      if (lastName != null && lastName.contains('Jr.')) {
+        // Extract the name before Jr.
+        final nameBeforeJr = lastName.replaceAll(' Jr.', '');
+        return '#$number $nameBeforeJr';
+      }
+
       return '#$number $lastName';
     }
+
     // Fallback: just return the last word and any trailing number
     final parts = playerName.split(' ');
     if (parts.length > 1 && parts.last.startsWith('#')) {
-      return parts.last.substring(1) + ' ' + parts[parts.length - 2];
+      final secondToLast = parts[parts.length - 2];
+
+      // Handle Jr. in the second-to-last part
+      if (secondToLast.contains('Jr.')) {
+        final nameBeforeJr = secondToLast.replaceAll(' Jr.', '');
+        return parts.last.substring(1) + ' ' + nameBeforeJr;
+      }
+
+      return parts.last.substring(1) + ' ' + secondToLast;
     }
+
+    // Handle cases where Jr. might be in the last part
+    if (parts.isNotEmpty) {
+      final lastPart = parts.last;
+      if (lastPart.contains('Jr.')) {
+        final nameBeforeJr = lastPart.replaceAll(' Jr.', '');
+        return nameBeforeJr;
+      }
+    }
+
     return playerName;
+  }
+
+  // Add this new function right before _buildAtBatInterface()
+  Widget _buildInningOnlyInterface() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected verb indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Inning section
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Innings',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Wrap(
+                  spacing: 2,
+                  runSpacing: 2,
+                  children: [
+                    // Back arrow for extra innings
+                    if (_showExtraInnings)
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (_extraInningsPage > 0) {
+                              _extraInningsPage--;
+                            } else {
+                              // Go back to regular innings
+                              _showExtraInnings = false;
+                              _extraInningsPage = 0;
+                              _selectedRbiInning = null;
+                            }
+                          });
+                        },
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            '←',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Innings (regular or extra based on state)
+                    ...(_showExtraInnings
+                            ? _getExtraInningsForPage()
+                            : List.generate(9, (index) => index + 1))
+                        .map((inning) {
+                      final isSelected = _selectedRbiInning == inning;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedRbiInning =
+                                _selectedRbiInning == inning ? null : inning;
+                          });
+                          _updateCaption();
+                        },
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            '$inning',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    // EXT button that cycles through extra innings
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (_showExtraInnings) {
+                            // If already showing extra innings, go to next page
+                            if (_extraInningsPage < 3) {
+                              _extraInningsPage++;
+                            } else {
+                              // Reset to regular innings
+                              _showExtraInnings = false;
+                              _extraInningsPage = 0;
+                              _selectedRbiInning = null;
+                            }
+                          } else {
+                            // Start showing extra innings
+                            _showExtraInnings = true;
+                            _extraInningsPage = 0;
+                          }
+                        });
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _showExtraInnings
+                              ? Colors.grey.shade100
+                              : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          _showExtraInnings
+                              ? (_extraInningsPage == 0
+                                  ? '→'
+                                  : (_extraInningsPage == 1 ? '→' : '→'))
+                              : 'XTRA',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Close verb selection
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedVerb = null;
+                      _showExtraInnings = false;
+                      _extraInningsPage = 0;
+                    });
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Close',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCatchesSubOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected catch action indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            'Catches',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Action options
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Options',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isDivingCatch = !_isDivingCatch;
+                      if (_isDivingCatch) {
+                        _selectedFieldingAction = 'Diving Catch';
+                      } else {
+                        _selectedFieldingAction = null;
+                      }
+                    });
+                    _updateCaption();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _isDivingCatch
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      'Diving Catch',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Inning section
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Innings',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Wrap(
+                  spacing: 2,
+                  runSpacing: 2,
+                  children: [
+                    // Back arrow for extra innings
+                    if (_showExtraInnings)
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (_extraInningsPage > 0) {
+                              _extraInningsPage--;
+                            } else {
+                              // Go back to regular innings
+                              _showExtraInnings = false;
+                              _extraInningsPage = 0;
+                              _selectedRbiInning = null;
+                            }
+                          });
+                        },
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            '←',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Innings (regular or extra based on state)
+                    ...(_showExtraInnings
+                            ? _getExtraInningsForPage()
+                            : List.generate(9, (index) => index + 1))
+                        .map((inning) {
+                      final isSelected = _selectedRbiInning == inning;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedRbiInning =
+                                _selectedRbiInning == inning ? null : inning;
+                          });
+                          _updateCaption();
+                        },
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(3),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            '$inning',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    // EXT button that cycles through extra innings
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (_showExtraInnings) {
+                            // If already showing extra innings, go to next page
+                            if (_extraInningsPage < 3) {
+                              _extraInningsPage++;
+                            } else {
+                              // Reset to regular innings
+                              _showExtraInnings = false;
+                              _extraInningsPage = 0;
+                              _selectedRbiInning = null;
+                            }
+                          } else {
+                            // Start showing extra innings
+                            _showExtraInnings = true;
+                            _extraInningsPage = 0;
+                          }
+                        });
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _showExtraInnings
+                              ? Colors.grey.shade100
+                              : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Text(
+                          _showExtraInnings
+                              ? (_extraInningsPage == 0
+                                  ? '→'
+                                  : (_extraInningsPage == 1 ? '→' : '→'))
+                              : 'XTRA',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
