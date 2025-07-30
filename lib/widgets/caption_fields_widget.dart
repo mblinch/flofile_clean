@@ -76,6 +76,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String? _selectedCelebrationType;
   bool _isCelebratingScoring = false;
   bool _isCelebratingWithTeammates = false;
+  bool _cameFromCelebration =
+      false; // Track if we came from celebration section
   String? _selectedAtBatAction;
   String? _selectedBattingAction;
 
@@ -5433,12 +5435,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           onTap: onPressed ??
               () {
                 setState(() {
-                  _selectedVerb = null;
-                  _selectedHittingAction = null;
-                  _rbiCount = null;
-                  _selectedRbiInning = null;
-                  _showExtraInnings = false;
-                  _extraInningsPage = 0;
+                  if (_cameFromCelebration) {
+                    // Return to celebration section
+                    _selectedVerb = 'Celebration';
+                    _selectedActionVerb =
+                        null; // Reset action verb to clear caption
+                    _selectedHittingAction = null;
+                    _selectedCelebrationType = null; // Reset celebration type
+                    _isCelebratingScoring = false; // Reset scoring celebration
+                    _isCelebratingWithTeammates =
+                        false; // Reset teammates celebration
+                    _cameFromCelebration = false; // Reset the flag
+                    // Reset all menu items
+                    _rbiCount = null;
+                    _selectedRbiInning = null;
+                    _showExtraInnings = false;
+                    _extraInningsPage = 0;
+                  } else {
+                    // Return to main verb menu
+                    _selectedVerb = null;
+                    _selectedHittingAction = null;
+                    _rbiCount = null;
+                    _selectedRbiInning = null;
+                    _showExtraInnings = false;
+                    _extraInningsPage = 0;
+                  }
                 });
                 _updateCaption();
               },
@@ -5845,7 +5866,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Container(
                 margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
                 child: const Text(
-                  'What they are celebrating',
+                  'Celebrating:',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
@@ -5947,10 +5968,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               celebration == 'Double' ||
               celebration == 'Triple' ||
               celebration == 'Home Run') {
-            // Navigate to hit submenu with specific hit type and celebration selected
+            // Set up for hit type celebration - keep current inning selection
             _selectedVerb = celebration;
+            _selectedActionVerb =
+                celebration; // Also set action verb to ensure it's used
             _selectedHittingAction = 'celebrates';
             _selectedCelebrationType = celebration;
+            _cameFromCelebration = true; // Mark that we came from celebration
+            // Don't clear inning selection - let it carry over
           } else {
             if (isSelected) {
               _selectedCelebrationType = null;
