@@ -126,7 +126,88 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Add a flag to track if the user has manually reset the fields.
   bool _hasBeenReset = false;
 
+  // Track team positioning (true = home on left, false = home on right)
   bool _homeOnLeft = true;
+
+  // Team color mapping
+  Color _getTeamColor(String? teamName) {
+    if (teamName == null) return Colors.grey.shade700;
+
+    final teamColors = {
+      'New York Yankees': Colors.blue.shade900,
+      'Boston Red Sox': Colors.red.shade700,
+      'Toronto Blue Jays': Colors.blue.shade600,
+      'Baltimore Orioles': Colors.orange.shade700,
+      'Tampa Bay Rays': Colors.blue.shade400,
+      'Cleveland Guardians': Colors.red.shade800,
+      'Minnesota Twins': Colors.blue.shade700,
+      'Detroit Tigers': Colors.orange.shade600,
+      'Chicago White Sox': Colors.black,
+      'Kansas City Royals': Colors.amber.shade600, // Gold
+      'Houston Astros': Colors.blue.shade800, // Navy blue
+      'Texas Rangers': Colors.blue.shade800, // Navy blue
+      'Seattle Mariners': Colors.teal.shade600, // Teal
+      'Los Angeles Angels': Colors.white, // White
+      'Oakland Athletics': Colors.yellow.shade600, // Yellow
+      'Atlanta Braves': Colors.red.shade700,
+      'Philadelphia Phillies': Colors.red.shade600,
+      'New York Mets': Colors.blue.shade600,
+      'Washington Nationals': Colors.red.shade700,
+      'Miami Marlins': Colors.orange.shade600,
+      'Milwaukee Brewers': Colors.blue.shade700,
+      'Chicago Cubs': Colors.blue.shade800,
+      'St. Louis Cardinals': Colors.red.shade700,
+      'Cincinnati Reds': Colors.red.shade600,
+      'Pittsburgh Pirates': Colors.black,
+      'Los Angeles Dodgers': Colors.blue.shade800,
+      'San Francisco Giants': Colors.orange.shade600,
+      'San Diego Padres': Colors.brown.shade600,
+      'Colorado Rockies': Colors.purple.shade700,
+      'Arizona Diamondbacks': Colors.red.shade700,
+    };
+
+    return teamColors[teamName] ?? Colors.grey.shade700;
+  }
+
+  // Secondary team color mapping for contrast
+  Color _getTeamSecondaryColor(String? teamName) {
+    if (teamName == null) return Colors.grey.shade500;
+
+    final teamSecondaryColors = {
+      'New York Yankees': Colors.white, // White pinstripes
+      'Boston Red Sox': Colors.blue.shade800, // Navy blue
+      'Toronto Blue Jays': Colors.white, // White
+      'Baltimore Orioles': Colors.black, // Black
+      'Tampa Bay Rays': Colors.yellow.shade600, // Yellow
+      'Cleveland Guardians': Colors.blue.shade800, // Navy blue
+      'Minnesota Twins': Colors.red.shade600, // Red
+      'Detroit Tigers': Colors.white, // White
+      'Chicago White Sox': Colors.white, // White
+      'Kansas City Royals': Colors.amber.shade600, // Gold
+      'Houston Astros': Colors.blue.shade800, // Navy blue
+      'Texas Rangers': Colors.blue.shade800, // Navy blue
+      'Seattle Mariners': Colors.teal.shade600, // Teal
+      'Los Angeles Angels': Colors.white, // White
+      'Oakland Athletics': Colors.yellow.shade600, // Yellow
+      'Atlanta Braves': Colors.blue.shade800, // Navy blue
+      'Philadelphia Phillies': Colors.blue.shade800, // Navy blue
+      'New York Mets': Colors.orange.shade600, // Orange
+      'Washington Nationals': Colors.blue.shade800, // Navy blue
+      'Miami Marlins': Colors.black, // Black
+      'Milwaukee Brewers': Colors.yellow.shade600, // Gold
+      'Chicago Cubs': Colors.red.shade600, // Red
+      'St. Louis Cardinals': Colors.white, // White
+      'Cincinnati Reds': Colors.white, // White
+      'Pittsburgh Pirates': Colors.yellow.shade600, // Gold
+      'Los Angeles Dodgers': Colors.white, // White
+      'San Francisco Giants': Colors.black, // Black
+      'San Diego Padres': Colors.yellow.shade600, // Gold
+      'Colorado Rockies': Colors.black, // Black
+      'Arizona Diamondbacks': Colors.teal.shade600, // Teal
+    };
+
+    return teamSecondaryColors[teamName] ?? Colors.grey.shade500;
+  }
 
   @override
   void initState() {
@@ -1123,7 +1204,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: isHome
+                  ? _getTeamColor(isHome ? selectedHomeTeam : selectedAwayTeam)
+                      .withOpacity(0.1)
+                  : Colors.white,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(6),
                 topRight: Radius.circular(6),
@@ -1135,7 +1219,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Icon(
                     Icons.home,
                     size: 12,
-                    color: Colors.grey.shade700,
+                    color: _getTeamColor(selectedHomeTeam),
                   ),
                 const SizedBox(width: 4),
                 Row(
@@ -1145,7 +1229,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Icon(
                         Icons.flight,
                         size: 10,
-                        color: Colors.grey.shade700,
+                        color: _getTeamColor(selectedAwayTeam),
                       ),
                     if (!isHome) const SizedBox(width: 2),
                     Text(
@@ -1155,7 +1239,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
+                        color: _getTeamColor(
+                            isHome ? selectedHomeTeam : selectedAwayTeam),
                       ),
                     ),
                   ],
@@ -3707,7 +3792,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Arrow in the middle
                 Icon(
                   Icons.swap_horiz,
-                  size: 12,
+                  size: 16,
                   color: Colors.grey.shade700,
                 ),
                 const SizedBox(width: 4),
