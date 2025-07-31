@@ -1564,6 +1564,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                               TextField(
                                                                 controller:
                                                                     customBetweenPlayersController,
+                                                                cursorWidth:
+                                                                    1.5,
+                                                                cursorHeight:
+                                                                    16,
                                                                 style:
                                                                     const TextStyle(
                                                                         fontSize:
