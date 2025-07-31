@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../services/mlb_api_service.dart';
+import '../services/api_manager.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
@@ -123,8 +124,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Track the first player selected (for star indicator)
   String? _firstPlayerSelected;
 
-  // MLB API service and roster data
-  final MlbApiService _mlbApiService = MlbApiService();
+  // API Manager and roster data
+  final ApiManager _apiManager = ApiManager();
   List<Player> _homeRoster = [];
   List<Player> _awayRoster = [];
   bool _isLoadingRosters = false;
@@ -384,10 +385,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     try {
       // Load both team rosters and team info in parallel
       final futures = await Future.wait([
-        _mlbApiService.fetchRosterByTeamName(selectedHomeTeam!),
-        _mlbApiService.fetchRosterByTeamName(selectedAwayTeam!),
-        _mlbApiService.findTeamByName(selectedHomeTeam!),
-        _mlbApiService.findTeamByName(selectedAwayTeam!),
+        _apiManager.fetchTeamRoster(selectedHomeTeam!),
+        _apiManager.fetchTeamRoster(selectedAwayTeam!),
+        _apiManager.fetchTeams().then((teams) => teams.firstWhere(
+              (team) => team.name == selectedHomeTeam,
+              orElse: () => throw Exception('Team not found'),
+            )),
+        _apiManager.fetchTeams().then((teams) => teams.firstWhere(
+              (team) => team.name == selectedAwayTeam,
+              orElse: () => throw Exception('Team not found'),
+            )),
       ]);
 
       setState(() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/caption_builder_screen.dart';
+import 'widgets/api_test_widget.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,6 +23,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const CaptionBuilderScreen(),
+      // home: const ApiTestWidget(), // Temporarily show API test
     );
   }
 }

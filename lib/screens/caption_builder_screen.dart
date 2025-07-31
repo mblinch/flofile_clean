@@ -26,6 +26,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   String? selectedHomeTeam;
   String? selectedAwayTeam;
 
+  // API selection
+  String selectedApi = 'Balldontlie.io API'; // Default to new API
+
   // Personality override for reset
   String? _personalityOverride;
 
@@ -130,6 +133,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           setState(() {
             selectedAwayTeam = team;
           });
+        },
+        onApiChanged: (api) {
+          setState(() {
+            selectedApi = api;
+          });
+          print('API changed in main screen: $api');
         },
       ),
       body: Padding(

@@ -4,17 +4,20 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:async';
+import '../services/api_manager.dart';
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(List<String>) onImagesLoaded;
   final Function(String?)? onHomeTeamChanged;
   final Function(String?)? onAwayTeamChanged;
+  final Function(String)? onApiChanged;
 
   const AppHeaderWidget({
     super.key,
     required this.onImagesLoaded,
     this.onHomeTeamChanged,
     this.onAwayTeamChanged,
+    this.onApiChanged,
   });
 
   @override
@@ -25,9 +28,13 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _AppHeaderWidgetState extends State<AppHeaderWidget> {
+  // API Manager
+  final ApiManager _apiManager = ApiManager();
+
   // State variables for team selection
   String? selectedAwayTeam;
   String? selectedHomeTeam;
+  String selectedApi = 'Balldontlie.io API'; // API selection
   bool _isConnectedToApi = false; // This would be connected to your API service
   Set<String> _favoriteTeams = {}; // This would be loaded from preferences
 
@@ -35,6 +42,26 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   String? _selectedFolderPath;
   List<String> imagePaths = [];
   int currentIndex = 0;
+
+  // Test API connection
+  Future<void> _testApiConnection() async {
+    try {
+      print('Testing API connection for: ${_apiManager.currentApi}');
+      final teams = await _apiManager.fetchTeams();
+      print(
+          'Successfully fetched ${teams.length} teams from ${_apiManager.currentApi}');
+
+      // Show sample teams
+      if (teams.isNotEmpty) {
+        print('Sample teams from ${_apiManager.currentApi}:');
+        for (int i = 0; i < teams.length.clamp(0, 3); i++) {
+          print('  - ${teams[i].name}');
+        }
+      }
+    } catch (e) {
+      print('Error testing API connection: $e');
+    }
+  }
 
   // Teams list
   final List<String> teams = [
@@ -69,6 +96,13 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     'Toronto Blue Jays',
     'Washington Nationals',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Test initial API connection
+    _testApiConnection();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,16 +146,63 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
           // API Connection Indicator
           Tooltip(
-            message: _isConnectedToApi
-                ? 'Connected to MLB Stats API'
-                : 'MLB Stats API Disconnected',
+            message: _apiManager.getConnectionStatusMessage(),
             child: Icon(
-              _isConnectedToApi ? Icons.cloud_done : Icons.cloud_off,
-              color: _isConnectedToApi ? Colors.green : Colors.red,
+              Icons.cloud_done,
+              color: Colors.green,
               size: 18,
             ),
           ),
           const SizedBox(width: 8),
+
+          // API Selection Dropdown (Hidden but code preserved)
+          // Container(
+          //   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          //   decoration: BoxDecoration(
+          //     color: Colors.white,
+          //     borderRadius: BorderRadius.circular(4),
+          //     border: Border.all(color: Colors.grey.shade300),
+          //   ),
+          //   child: DropdownButton<String>(
+          //     value: selectedApi,
+          //     underline: Container(), // Remove default underline
+          //     style: const TextStyle(
+          //       fontSize: 11,
+          //       color: Colors.black87,
+          //       fontWeight: FontWeight.w500,
+          //   ),
+          //   items: const [
+          //     DropdownMenuItem(
+          //       value: 'MLB Stats API',
+          //       child: Text('MLB Stats API'),
+          //   ),
+          //   DropdownMenuItem(
+          //       value: 'Balldontlie.io API',
+          //       child: Text('Balldontlie.io API'),
+          //   ),
+          // ],
+          // onChanged: (String? newValue) {
+          //   if (newValue != null) {
+          //     setState(() {
+          //       selectedApi = newValue;
+          //   });
+          //
+          //   // Update API manager
+          //   _apiManager.setApi(newValue);
+          //
+          //   // Notify parent screen of API change
+          //   if (widget.onApiChanged != null) {
+          //     widget.onApiChanged!(newValue);
+          //   }
+          //
+          //   // Test the API by fetching teams
+          //   _testApiConnection();
+          //
+          //   print('API changed to: $newValue');
+          // }
+          // },
+          // ),
+          // const SizedBox(width: 8),
 
           // Team Selection Row
           Row(
