@@ -43,6 +43,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController creatorController = TextEditingController();
   final TextEditingController customCelebrationController =
       TextEditingController();
+  final TextEditingController customDejectionController =
+      TextEditingController();
   final TextEditingController customBetweenPlayersController =
       TextEditingController();
   String _homeSearchText = '';
@@ -78,6 +80,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Set<String> celebrateWith = {};
   Set<String> celebrateAgainst = {};
   String? _selectedCelebrationType;
+  String? _selectedDejectionType;
   bool _isCelebratingScoring = false;
   bool _isCelebratingWithTeammates = false;
   bool _cameFromCelebration =
@@ -163,8 +166,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Runs Off Field',
       'Takes the Field'
     ],
-    'Pre Game': [],
-    'Post Game': [],
+    'Pre Game': [
+      'Looks On Pre Game',
+      'Stretches',
+      'Batting Practice',
+      'Fielding Practice',
+      'Warm Ups',
+      'Walks On Field',
+      'Runs On Field'
+    ],
+    'Post Game': [
+      'Celebrates',
+      'Bucket Dump',
+      'Post Game Interview',
+      'Reacts to Post Game'
+    ],
   };
 
   bool _isResetting = false;
@@ -1506,47 +1522,50 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(1),
-              child:
-                  _selectedVerb == 'Single' ||
-                          _selectedVerb == 'Double' ||
-                          _selectedVerb == 'Triple'
-                      ? _buildHittingSubOptions()
-                      : _selectedVerb == 'Home Run'
-                          ? _buildHomeRunSubOptions()
-                          : _selectedVerb == 'Tags'
-                              ? _buildTagsSubOptions()
-                              : _selectedVerb == 'Catches'
-                                  ? _buildCatchesSubOptions()
-                                  : _selectedVerb == 'Groundball'
-                                      ? _buildGroundballSubOptions()
-                                      : (_selectedVerb == 'At Bat' ||
-                                              _selectedVerb == 'Pitching' ||
-                                              _selectedVerb == 'Swings' ||
-                                              _selectedVerb == 'Throws' ||
-                                              _selectedVerb ==
-                                                  'Fielding Position' ||
-                                              _selectedVerb == 'Bunts' ||
-                                              _selectedVerb == 'Hit by Pitch' ||
-                                              _selectedVerb == 'Strikeout')
-                                          ? _buildInningOnlyInterface()
-                                          : (_selectedVerb == 'Steals' ||
-                                                  _selectedVerb == 'Slides' ||
-                                                  _selectedVerb == 'Runs' ||
-                                                  _selectedVerb == 'Rounds' ||
+              child: _selectedVerb == 'Single' ||
+                      _selectedVerb == 'Double' ||
+                      _selectedVerb == 'Triple'
+                  ? _buildHittingSubOptions()
+                  : _selectedVerb == 'Home Run'
+                      ? _buildHomeRunSubOptions()
+                      : _selectedVerb == 'Tags'
+                          ? _buildTagsSubOptions()
+                          : _selectedVerb == 'Catches'
+                              ? _buildCatchesSubOptions()
+                              : _selectedVerb == 'Groundball'
+                                  ? _buildGroundballSubOptions()
+                                  : (_selectedVerb == 'At Bat' ||
+                                          _selectedVerb == 'Pitching' ||
+                                          _selectedVerb == 'Swings' ||
+                                          _selectedVerb == 'Throws' ||
+                                          _selectedVerb ==
+                                              'Fielding Position' ||
+                                          _selectedVerb == 'Bunts' ||
+                                          _selectedVerb == 'Walks' ||
+                                          _selectedVerb == 'Hit by Pitch' ||
+                                          _selectedVerb == 'Strikeout' ||
+                                          _selectedVerb == 'Looks On' ||
+                                          _selectedVerb == 'Walks Off Field' ||
+                                          _selectedVerb == 'Runs Off Field' ||
+                                          _selectedVerb == 'Takes the Field')
+                                      ? _buildInningOnlyInterface()
+                                      : (_selectedVerb == 'Steals' ||
+                                              _selectedVerb == 'Slides' ||
+                                              _selectedVerb == 'Runs' ||
+                                              _selectedVerb == 'Rounds' ||
+                                              _selectedVerb == 'Double Play' ||
+                                              _selectedVerb == 'Triple Play')
+                                          ? _buildBaseSelectionInterface()
+                                          : (_selectedVerb == 'Celebration' ||
                                                   _selectedVerb ==
-                                                      'Double Play' ||
+                                                      'Celebrates' ||
                                                   _selectedVerb ==
-                                                      'Triple Play')
-                                              ? _buildBaseSelectionInterface()
-                                              : (_selectedVerb ==
-                                                          'Celebration' ||
-                                                      _selectedVerb ==
-                                                          'Celebrates' ||
-                                                      _selectedVerb ==
-                                                          'Celebrates With' ||
-                                                      _selectedVerb ==
-                                                          'Celebrates Against')
-                                                  ? _buildCelebrationInterface()
+                                                      'Celebrates With' ||
+                                                  _selectedVerb ==
+                                                      'Celebrates Against')
+                                              ? _buildCelebrationInterface()
+                                              : (_selectedVerb == 'Dejection')
+                                                  ? _buildDejectionInterface()
                                                   : Column(
                                                       crossAxisAlignment:
                                                           CrossAxisAlignment
@@ -1587,8 +1606,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 decoration:
                                                                     InputDecoration(
                                                                   hintText: _isPlayerSearchMode
-                                                                      ? 'Type player numbers (e.g., 75, 23)...'
-                                                                      : 'Type custom action...',
+                                                                      ? 'Magic Bar: Type player numbers (e.g., 75, 23)...'
+                                                                      : 'Magic Bar: Type custom action...',
                                                                   border:
                                                                       InputBorder
                                                                           .none,
@@ -1747,91 +1766,109 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             .text
                                                             .isNotEmpty) ...[
                                                           Expanded(
-                                                            flex: 3,
-                                                            child: Row(
-                                                              children: [
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Offense',
-                                                                      [
-                                                                        'Single',
-                                                                        'Double',
-                                                                        'Triple',
-                                                                        'Home Run',
-                                                                        'At Bat',
-                                                                        'Swings',
-                                                                        'Bunts',
-                                                                        'Hit by Pitch'
-                                                                      ]),
-                                                                ),
-                                                                const SizedBox(
-                                                                    width: 1),
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Defense',
-                                                                      [
-                                                                        'Pitching',
-                                                                        'Catches',
-                                                                        'Throws',
-                                                                        'Tags',
-                                                                        'Groundball',
-                                                                        'Fielding Position',
-                                                                        'Double Play',
-                                                                        'Triple Play'
-                                                                      ]),
-                                                                ),
-                                                                const SizedBox(
-                                                                    width: 1),
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Running',
-                                                                      [
-                                                                        'Steals',
-                                                                        'Slides',
-                                                                        'Runs',
-                                                                        'Rounds'
-                                                                      ]),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
+                                                            flex: 4,
+                                                            child:
+                                                                LayoutBuilder(
+                                                              builder: (context,
+                                                                  constraints) {
+                                                                // Calculate width for exactly 4 columns
+                                                                final columnWidth =
+                                                                    (constraints.maxWidth -
+                                                                            3) /
+                                                                        4; // Subtract spacing between columns
 
-                                                          const SizedBox(
-                                                              height: 4),
-
-                                                          // Second row: Reactions, Portraiture, Pre Game
-                                                          Expanded(
-                                                            flex: 2,
-                                                            child: Row(
-                                                              children: [
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Reactions',
-                                                                      [
-                                                                        'Celebration',
-                                                                        'Dejection'
-                                                                      ]),
-                                                                ),
-                                                                const SizedBox(
-                                                                    width: 1),
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Portraiture',
-                                                                      [
-                                                                        'Looks On',
-                                                                        'Walks Off Field',
-                                                                        'Runs Off Field',
-                                                                        'Takes the Field'
-                                                                      ]),
-                                                                ),
-                                                                const SizedBox(
-                                                                    width: 1),
-                                                                Expanded(
-                                                                  child: _buildVerbCategory(
-                                                                      'Pre Game',
-                                                                      []),
-                                                                ),
-                                                              ],
+                                                                return Wrap(
+                                                                  spacing: 1,
+                                                                  runSpacing: 4,
+                                                                  children: [
+                                                                    // First row - 4 columns
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Offense',
+                                                                          [
+                                                                            'Single',
+                                                                            'Double',
+                                                                            'Triple',
+                                                                            'Home Run',
+                                                                            'At Bat',
+                                                                            'Swings',
+                                                                            'Bunts',
+                                                                            'Walks',
+                                                                            'Hit by Pitch'
+                                                                          ]),
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Defense',
+                                                                          [
+                                                                            'Pitching',
+                                                                            'Catches',
+                                                                            'Throws',
+                                                                            'Tags',
+                                                                            'Groundball',
+                                                                            'Fielding Position',
+                                                                            'Double Play',
+                                                                            'Triple Play'
+                                                                          ]),
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Running',
+                                                                          [
+                                                                            'Steals',
+                                                                            'Slides',
+                                                                            'Runs',
+                                                                            'Rounds'
+                                                                          ]),
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Reactions',
+                                                                          [
+                                                                            'Celebration',
+                                                                            'Dejection'
+                                                                          ]),
+                                                                    ),
+                                                                    // Second row - 3 columns + 1 empty
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Portraiture',
+                                                                          [
+                                                                            'Looks On',
+                                                                            'Walks Off Field',
+                                                                            'Runs Off Field',
+                                                                            'Takes the Field'
+                                                                          ]),
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Pre Game',
+                                                                          verbCategories[
+                                                                              'Pre Game']!),
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width:
+                                                                          columnWidth,
+                                                                      child: _buildVerbCategory(
+                                                                          'Post Game',
+                                                                          verbCategories[
+                                                                              'Post Game']!),
+                                                                    ),
+                                                                  ],
+                                                                );
+                                                              },
                                                             ),
                                                           ),
                                                         ],
@@ -1839,15 +1876,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         const SizedBox(
                                                             height: 4),
 
-                                                        // Third row: Post Game and dynamic content
+                                                        // Third row: Dynamic content
                                                         Expanded(
                                                           flex: 2,
                                                           child: Row(
                                                             children: [
                                                               Expanded(
-                                                                child: _buildVerbCategory(
-                                                                    'Post Game',
-                                                                    []),
+                                                                child:
+                                                                    Container(), // Empty space
                                                               ),
                                                               const SizedBox(
                                                                   width: 1),
@@ -1941,7 +1977,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         _selectedVerb ==
                                                                             'Home Run' ||
                                                                         _selectedVerb ==
-                                                                            'Grand Slam') ...[
+                                                                            'Grand Slam' ||
+                                                                        _selectedVerb ==
+                                                                            'Walks') ...[
                                                                       const SizedBox(
                                                                           height:
                                                                               1),
@@ -2937,7 +2975,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Celebrates' ||
         verbToUse == 'Celebrates With' ||
         verbToUse == 'Celebrates Against' ||
-        customCelebrationController.text.isNotEmpty) {
+        verbToUse == 'Walks' ||
+        verbToUse == 'Dejection' ||
+        verbToUse == 'Looks On' ||
+        verbToUse == 'Walks Off Field' ||
+        verbToUse == 'Runs Off Field' ||
+        verbToUse == 'Takes the Field' ||
+        customCelebrationController.text.isNotEmpty ||
+        customDejectionController.text.isNotEmpty) {
       // For these actions, don't add opponent part here - it's handled in the action phrase
       opponentPart = '';
     } else {
@@ -3769,8 +3814,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final opposingTeam = _getOpposingTeamName();
           return 'gets hit by a pitch against the $opposingTeam';
         }
+      case 'Walks':
+        // Check if opposing players are selected
+        final opposingPlayersWalks = _getOpposingPlayers();
+        if (opposingPlayersWalks.isNotEmpty) {
+          final pitcherName = _formatPlayersWithTeam(opposingPlayersWalks);
+          return 'takes a walk against $pitcherName';
+        } else {
+          final opposingTeam = _getOpposingTeamName();
+          return 'takes a walk against the $opposingTeam';
+        }
       case 'Fielding Position':
         return 'takes fielding position against the ${_getOpposingTeamName()}';
+      case 'Looks On Pre Game':
+        return 'looks on during pre-game warmups';
+      case 'Looks On':
+        return 'looks on against the ${_getOpposingTeamName()}';
+      case 'Walks Off Field':
+        return 'walks off the field against the ${_getOpposingTeamName()}';
+      case 'Runs Off Field':
+        return 'runs off the field against the ${_getOpposingTeamName()}';
+      case 'Takes the Field':
+        return 'takes the field against the ${_getOpposingTeamName()}';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
@@ -4125,6 +4190,51 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$celebrationPhrase against $playerNames';
         } else {
           return '$celebrationPhrase against the $opposingTeam';
+        }
+      case 'Dejection':
+        // Check if custom dejection text is provided
+        if (customDejectionController.text.isNotEmpty) {
+          final opposingPlayers = _getOpposingPlayers();
+          final opposingTeam = _getOpposingTeamName();
+
+          // Use custom dejection text
+          String customDejection = customDejectionController.text.trim();
+
+          // Add opponent
+          if (opposingPlayers.isNotEmpty) {
+            final playerNames = _formatPlayersWithTeam(opposingPlayers);
+            return '$customDejection against $playerNames';
+          } else {
+            return '$customDejection against the $opposingTeam';
+          }
+        }
+
+        // Handle specific dejection types
+        final opposingPlayers = _getOpposingPlayers();
+        final opposingTeam = _getOpposingTeamName();
+
+        if (_selectedDejectionType == 'Strikeout') {
+          if (opposingPlayers.isNotEmpty) {
+            final playerNames = _formatPlayersWithTeam(opposingPlayers);
+            return 'reacts to striking out against $playerNames';
+          } else {
+            return 'reacts to striking out against the $opposingTeam';
+          }
+        } else if (_selectedDejectionType == 'Pitcher Taken Out') {
+          if (opposingPlayers.isNotEmpty) {
+            final playerNames = _formatPlayersWithTeam(opposingPlayers);
+            return 'reacts to being taken out of the game against $playerNames';
+          } else {
+            return 'reacts to being taken out of the game against the $opposingTeam';
+          }
+        } else {
+          // Default dejection
+          if (opposingPlayers.isNotEmpty) {
+            final playerNames = _formatPlayersWithTeam(opposingPlayers);
+            return 'reacts with dejection against $playerNames';
+          } else {
+            return 'reacts with dejection against the $opposingTeam';
+          }
         }
       default:
         baseAction = verbToUse.toLowerCase();
@@ -5817,6 +5927,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       customBetweenPlayersController.clear();
       _filteredPlayers.clear();
     });
+
+    // Update caption when player is selected from Magic Bar
+    _updateCaption();
   }
 
   void _finishPlayerSelection() {
@@ -6498,6 +6611,189 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
       ],
+    );
+  }
+
+  // Dejection interface for dejection verbs
+  Widget _buildDejectionInterface() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected verb indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Dejection options section
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Dejection Type:',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
+                child: Wrap(
+                  spacing: 2,
+                  runSpacing: 2,
+                  children: [
+                    _buildDejectionChip('Strikeout', 'Strikeout'),
+                    _buildDejectionChip(
+                        'Pitcher Taken Out', 'Pitcher Taken Out'),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Custom dejection text field
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Or write custom dejection:',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: customDejectionController,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'e.g., reacts to a bad call',
+                        hintStyle: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade500),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        isDense: true,
+                      ),
+                      onTap: () {
+                        // When text field is tapped, insert "reacts to " if empty
+                        if (customDejectionController.text.isEmpty) {
+                          customDejectionController.text = 'reacts to ';
+                          customDejectionController.selection =
+                              TextSelection.fromPosition(
+                            TextPosition(
+                                offset: customDejectionController.text.length),
+                          );
+                          setState(() {
+                            // Clear selected dejection chips when custom text is entered
+                            _selectedDejectionType = null;
+                          });
+                          _updateCaption();
+                        }
+                      },
+                      onChanged: (value) {
+                        setState(() {
+                          // Clear selected dejection chips when custom text is entered
+                          if (value.isNotEmpty) {
+                            _selectedDejectionType = null;
+                          }
+                        });
+                        _updateCaption();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Inning section
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Back button
+              _buildBackButton(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDejectionChip(String dejection, String label) {
+    final isSelected = _selectedDejectionType == dejection;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          // Clear custom dejection text when chips are selected
+          customDejectionController.clear();
+
+          if (isSelected) {
+            _selectedDejectionType = null;
+          } else {
+            _selectedDejectionType = dejection;
+          }
+        });
+        _updateCaption();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.grey.shade300 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade300,
+            width: 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
+          ),
+        ),
+      ),
     );
   }
 
