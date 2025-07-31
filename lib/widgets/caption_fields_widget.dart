@@ -89,6 +89,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _showCustomTextInningSelector = false;
   int? _selectedCustomTextInning;
 
+  // Smart custom text field state
+  bool _isPlayerSearchMode = true;
+  List<Player> _filteredPlayers = [];
+  Set<String> _selectedPlayerNumbers = {};
+  String _playerSearchText = '';
+
   // Team data
   bool _isConnectedToApi = false;
   String? homeTeamStadium;
@@ -1405,6 +1411,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           final player = filteredRoster[index];
                           final isSelected =
                               selectedPlayers.contains(player.displayName);
+                          print(
+                              'DEBUG: Checking if ${player.displayName} is selected: $isSelected');
+                          print(
+                              'DEBUG: selectedPlayers contains: $selectedPlayers');
 
                           return GestureDetector(
                             onTap: () {
@@ -1575,9 +1585,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         height:
                                                                             2.3),
                                                                 decoration:
-                                                                    const InputDecoration(
-                                                                  hintText:
-                                                                      'Custom text between players...',
+                                                                    InputDecoration(
+                                                                  hintText: _isPlayerSearchMode
+                                                                      ? 'Type player numbers (e.g., 75, 23)...'
+                                                                      : 'Type custom action...',
                                                                   border:
                                                                       InputBorder
                                                                           .none,
@@ -1591,14 +1602,135 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 ),
                                                                 onChanged:
                                                                     (value) {
+                                                                  print(
+                                                                      'DEBUG: Text field changed to: "$value"');
+                                                                  print(
+                                                                      'DEBUG: _isPlayerSearchMode: $_isPlayerSearchMode');
+                                                                  print(
+                                                                      'DEBUG: _isNumeric(value): ${_isNumeric(value)}');
+
                                                                   setState(() {
-                                                                    _showCustomTextInningSelector =
+                                                                    if (_isPlayerSearchMode &&
+                                                                        _isNumeric(
+                                                                            value)) {
+                                                                      print(
+                                                                          'DEBUG: Calling _filterPlayersByNumber');
+                                                                      _filterPlayersByNumber(
+                                                                          value);
+                                                                    } else if (_isPlayerSearchMode &&
                                                                         value
-                                                                            .isNotEmpty;
-                                                                    _updateCaption();
+                                                                            .isEmpty) {
+                                                                      print(
+                                                                          'DEBUG: Clearing filtered players');
+                                                                      _filteredPlayers
+                                                                          .clear();
+                                                                    } else if (!_isPlayerSearchMode) {
+                                                                      print(
+                                                                          'DEBUG: In custom verb mode');
+                                                                      _showCustomTextInningSelector =
+                                                                          value
+                                                                              .isNotEmpty;
+                                                                      _updateCaption();
+                                                                    }
                                                                   });
                                                                 },
                                                               ),
+                                                              // Player selection overlay
+                                                              if (_filteredPlayers
+                                                                  .isNotEmpty)
+                                                                Material(
+                                                                  elevation: 8,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              4),
+                                                                  child:
+                                                                      Container(
+                                                                    decoration:
+                                                                        BoxDecoration(
+                                                                      color: Colors
+                                                                          .white,
+                                                                      borderRadius:
+                                                                          BorderRadius.circular(
+                                                                              4),
+                                                                      border: Border.all(
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade300),
+                                                                    ),
+                                                                    child:
+                                                                        Column(
+                                                                      mainAxisSize:
+                                                                          MainAxisSize
+                                                                              .min,
+                                                                      children: [
+                                                                        ..._filteredPlayers
+                                                                            .map(
+                                                                          (player) =>
+                                                                              GestureDetector(
+                                                                            onTap: () =>
+                                                                                _selectPlayer(player),
+                                                                            child:
+                                                                                Container(
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                              child: Row(
+                                                                                children: [
+                                                                                  Text(
+                                                                                    '#${player.jerseyNumber}',
+                                                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                                                                                  ),
+                                                                                  const SizedBox(width: 4),
+                                                                                  Text(
+                                                                                    _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
+                                                                                    style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  Icon(
+                                                                                    _isHomePlayer(player) ? Icons.home : Icons.flight,
+                                                                                    size: 10,
+                                                                                    color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
+                                                                                  ),
+                                                                                  const SizedBox(width: 4),
+                                                                                  Expanded(
+                                                                                    child: Text(
+                                                                                      _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
+                                                                                      style: const TextStyle(fontSize: 10),
+                                                                                      overflow: TextOverflow.ellipsis,
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        if (_selectedPlayerNumbers
+                                                                            .isNotEmpty)
+                                                                          GestureDetector(
+                                                                            onTap:
+                                                                                _finishPlayerSelection,
+                                                                            child:
+                                                                                Container(
+                                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.blue.shade50,
+                                                                                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                                                              ),
+                                                                              child: Row(
+                                                                                children: [
+                                                                                  Icon(Icons.check, size: 16, color: Colors.blue.shade700),
+                                                                                  const SizedBox(width: 8),
+                                                                                  Text(
+                                                                                    'Done selecting players (${_selectedPlayerNumbers.length})',
+                                                                                    style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                ),
                                                               // Inning selector
                                                               if (_showCustomTextInningSelector)
                                                                 Container(
@@ -5623,6 +5755,94 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     return playerName;
+  }
+
+  // Helper functions for smart text field
+  bool _isNumeric(String text) {
+    return text.isNotEmpty && int.tryParse(text) != null;
+  }
+
+  void _filterPlayersByNumber(String number) {
+    setState(() {
+      _playerSearchText = number;
+      _filteredPlayers = [];
+
+      // Search in both home and away rosters
+      for (Player player in _homeRoster) {
+        if (player.jerseyNumber?.contains(number) == true) {
+          _filteredPlayers.add(player);
+        }
+      }
+      for (Player player in _awayRoster) {
+        if (player.jerseyNumber?.contains(number) == true) {
+          _filteredPlayers.add(player);
+        }
+      }
+    });
+  }
+
+  void _selectPlayer(Player player) {
+    setState(() {
+      if (player.jerseyNumber != null) {
+        _selectedPlayerNumbers.add(player.jerseyNumber!);
+      }
+
+      // Add player to the appropriate team's selected players
+      final playerName = player.displayName ?? 'Unknown';
+      final cleanedPlayerName = _removeJerseyNumberFromName(playerName);
+
+      if (_isHomePlayer(player)) {
+        selectedHomePlayers
+            .add(playerName); // Use original display name for side lists
+        // Set as first player selected if none selected yet
+        if (_firstPlayerSelected == null) {
+          _firstPlayerSelected =
+              cleanedPlayerName; // Use cleaned name for caption
+          print(
+              'DEBUG: First player selected from overlay: $cleanedPlayerName');
+        }
+      } else {
+        selectedAwayPlayers
+            .add(playerName); // Use original display name for side lists
+        // Set as first player selected if none selected yet
+        if (_firstPlayerSelected == null) {
+          _firstPlayerSelected =
+              cleanedPlayerName; // Use cleaned name for caption
+          print(
+              'DEBUG: First player selected from overlay: $cleanedPlayerName');
+        }
+      }
+
+      _playerSearchText = '';
+      customBetweenPlayersController.clear();
+      _filteredPlayers.clear();
+    });
+  }
+
+  void _finishPlayerSelection() {
+    setState(() {
+      _isPlayerSearchMode = false;
+      customBetweenPlayersController.text = '';
+    });
+  }
+
+  void _resetSmartTextField() {
+    setState(() {
+      _isPlayerSearchMode = true;
+      _filteredPlayers.clear();
+      _selectedPlayerNumbers.clear();
+      _playerSearchText = '';
+      customBetweenPlayersController.clear();
+    });
+  }
+
+  bool _isHomePlayer(Player player) {
+    return _homeRoster.contains(player);
+  }
+
+  String _removeJerseyNumberFromName(String playerName) {
+    // Remove jersey number patterns like "#23" or " #23" from the end of the name
+    return playerName.replaceAll(RegExp(r'\s*#\d+\s*$'), '').trim();
   }
 
   // Reusable back button widget
