@@ -1567,7 +1567,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                               child: Text(
-                                player.displayName,
+                                _getFormattedPlayerName(player.displayName,
+                                    isHome ? _homeSortOption : _awaySortOption),
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: isSelected
@@ -6080,6 +6081,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           color: Colors.grey.shade600,
         );
     }
+  }
+
+  // Format player name based on current sort option
+  String _getFormattedPlayerName(String displayName, String sortOption) {
+    final parts = displayName.split(' ');
+    final jerseyNumber = parts.last.startsWith('#') ? parts.last : '';
+    final nameParts = parts.where((part) => !part.startsWith('#')).toList();
+
+    if (sortOption == 'number') {
+      // Extract jersey number and put it at the beginning
+      final nameWithoutNumber = nameParts.join(' ');
+
+      if (jerseyNumber.isNotEmpty) {
+        return '$jerseyNumber $nameWithoutNumber';
+      }
+    } else if (sortOption == 'lastName' && nameParts.length >= 2) {
+      // Format as "Last Name, First Name #"
+      final firstName = nameParts.first;
+      final lastName = nameParts.last;
+
+      if (jerseyNumber.isNotEmpty) {
+        return '$lastName, $firstName $jerseyNumber';
+      } else {
+        return '$lastName, $firstName';
+      }
+    }
+    // For other sort options, return original format
+    return displayName;
   }
 
   // Helper functions for smart text field
