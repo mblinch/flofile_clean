@@ -212,7 +212,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
           // EXIF data section at top
           if (_exifData != null || _isLoadingExif)
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(
+                  4), // Reduced from 8 to 4 for more compact display
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
                 borderRadius: const BorderRadius.only(
@@ -232,7 +233,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                       ),
                     )
                   : Container(
-                      height: 32, // Fixed height to prevent jumping
+                      height:
+                          20, // Reduced from 24 to 20 for more compact display
                       child: Row(
                         mainAxisAlignment:
                             MainAxisAlignment.center, // Center the content
@@ -379,8 +381,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
 
                 // Navigation arrows at bottom
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical:
+                          2), // Reduced from 4 to 2 for more compact display
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: const BorderRadius.only(

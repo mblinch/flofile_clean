@@ -145,8 +145,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // TOP ROW
-            Expanded(
+            // TOP ROW - Reduced height (43% instead of 50%)
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.43,
               child: Row(
                 children: [
                   // TOP LEFT BOX - Picture Preview
@@ -180,7 +181,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             ),
 
-            // BOTTOM ROW
+            // BOTTOM ROW - Increased height (60% instead of 50%)
             Expanded(
               child: Row(
                 children: [

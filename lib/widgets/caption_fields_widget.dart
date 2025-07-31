@@ -130,6 +130,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<Player> _awayRoster = [];
   bool _isLoadingRosters = false;
 
+  // Static teams list for dropdown
+  final List<String> teamsList = [
+    'Arizona Diamondbacks',
+    'Atlanta Braves',
+    'Baltimore Orioles',
+    'Boston Red Sox',
+    'Chicago Cubs',
+    'Chicago White Sox',
+    'Cincinnati Reds',
+    'Cleveland Guardians',
+    'Colorado Rockies',
+    'Detroit Tigers',
+    'Houston Astros',
+    'Kansas City Royals',
+    'Los Angeles Angels',
+    'Los Angeles Dodgers',
+    'Miami Marlins',
+    'Milwaukee Brewers',
+    'Minnesota Twins',
+    'New York Mets',
+    'New York Yankees',
+    'Oakland Athletics',
+    'Philadelphia Phillies',
+    'Pittsburgh Pirates',
+    'San Diego Padres',
+    'San Francisco Giants',
+    'Seattle Mariners',
+    'St. Louis Cardinals',
+    'Tampa Bay Rays',
+    'Texas Rangers',
+    'Toronto Blue Jays',
+    'Washington Nationals',
+  ];
+
   // Additional verb building state
   int? _selectedRbiInning;
   bool _isDivingCatch = false;
@@ -198,6 +232,111 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Track team positioning (true = home on left, false = home on right)
   bool _homeOnLeft = true;
+
+  // Build team dropdown widget
+  Widget _buildTeamDropdown({
+    required bool isHome,
+    required String? selectedTeam,
+    required ValueChanged<String?> onTeamChanged,
+  }) {
+    // Filter out the other team
+    final availableTeams = isHome
+        ? teamsList.where((team) => team != selectedAwayTeam).toList()
+        : teamsList.where((team) => team != selectedHomeTeam).toList();
+
+    final dropdown = Material(
+      elevation: 2.0,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+          borderRadius: BorderRadius.circular(4),
+          color: Colors.white,
+        ),
+        child: PopupMenuButton<String>(
+          initialValue: selectedTeam,
+          onSelected: onTeamChanged,
+          constraints: const BoxConstraints(maxHeight: 600),
+          itemBuilder: (context) => availableTeams
+              .map(
+                (item) => PopupMenuItem<String>(
+                  value: item,
+                  height: 14,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  child: Container(
+                    height: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Row(
+                      children: [
+                        // Home/Away symbol
+                        if (isHome)
+                          Icon(Icons.home,
+                              size: 12, color: Colors.grey.shade700),
+                        if (!isHome)
+                          Icon(Icons.flight_takeoff,
+                              size: 12, color: Colors.grey.shade700),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          child: Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Row(
+              children: [
+                // Label
+                Text(
+                  '${isHome ? "Home" : "Away"}: ',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                // Home/Away symbol for selected item
+                if (selectedTeam != null) ...[
+                  if (isHome)
+                    Icon(Icons.home, size: 11, color: Colors.grey.shade700),
+                  if (!isHome)
+                    Icon(Icons.flight_takeoff,
+                        size: 11, color: Colors.grey.shade700),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      selectedTeam,
+                      style: const TextStyle(fontSize: 11, color: Colors.black),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ] else ...[
+                  const Expanded(
+                    child: Text(
+                      'Select Team',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                ],
+                const Icon(Icons.arrow_drop_down, size: 14),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return dropdown;
+  }
 
   // Team color mapping
   Color _getTeamColor(String? teamName) {
@@ -1343,114 +1482,127 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             child: Row(
               children: [
-                Icon(
-                  isHome ? Icons.home : Icons.flight,
-                  size: 12,
-                  color: Colors.black87,
-                ),
-                const SizedBox(width: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isHome
-                          ? _getTeamAbbreviation(selectedHomeTeam ?? 'HOME')
-                          : _getTeamAbbreviation(selectedAwayTeam ?? 'AWAY'),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    // Sort button
-                    GestureDetector(
-                      onTap: () {
+                // Show team dropdown when no team selected, or team name + controls when team selected
+                if (isHome
+                    ? selectedHomeTeam == null
+                    : selectedAwayTeam == null) ...[
+                  // Team selection area when no team selected
+                  Expanded(
+                    child: _buildTeamDropdown(
+                      isHome: isHome,
+                      selectedTeam:
+                          isHome ? selectedHomeTeam : selectedAwayTeam,
+                      onTeamChanged: (String? newValue) {
+                        if (newValue == null) return;
                         setState(() {
                           if (isHome) {
-                            // Cycle through sort options: number -> lastName -> firstName -> number
-                            switch (_homeSortOption) {
-                              case 'number':
-                                _homeSortOption = 'lastName';
-                                break;
-                              case 'lastName':
-                                _homeSortOption = 'firstName';
-                                break;
-                              case 'firstName':
-                                _homeSortOption = 'number';
-                                break;
-                            }
+                            selectedHomeTeam = newValue;
+                            _loadTeamRosters();
                           } else {
-                            // Cycle through sort options: number -> lastName -> firstName -> number
-                            switch (_awaySortOption) {
-                              case 'number':
-                                _awaySortOption = 'lastName';
-                                break;
-                              case 'lastName':
-                                _awaySortOption = 'firstName';
-                                break;
-                              case 'firstName':
-                                _awaySortOption = 'number';
-                                break;
-                            }
+                            selectedAwayTeam = newValue;
+                            _loadTeamRosters();
                           }
                         });
-                        print(
-                            'Sort changed to: ${isHome ? _homeSortOption : _awaySortOption} for ${isHome ? "HOME" : "AWAY"} team');
                       },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                              color: Colors.grey.shade300, width: 0.5),
-                        ),
-                        child: _getSortIconWidget(
-                            isHome ? _homeSortOption : _awaySortOption),
-                      ),
                     ),
-                    const SizedBox(width: 2),
-                    // Ascending/Descending button
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (isHome) {
-                            _homeSortAscending = !_homeSortAscending;
-                          } else {
-                            _awaySortAscending = !_awaySortAscending;
+                  ),
+                ] else ...[
+                  // Team name and controls when team is selected
+                  Icon(
+                    isHome ? Icons.home : Icons.flight,
+                    size: 12,
+                    color: Colors.black87,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _getTeamAbbreviation(
+                        isHome ? selectedHomeTeam! : selectedAwayTeam!),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Sort button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (isHome) {
+                          switch (_homeSortOption) {
+                            case 'number':
+                              _homeSortOption = 'lastName';
+                              break;
+                            case 'lastName':
+                              _homeSortOption = 'firstName';
+                              break;
+                            case 'firstName':
+                              _homeSortOption = 'number';
+                              break;
                           }
-                        });
-                        print(
-                            'Sort direction changed to: ${isHome ? (_homeSortAscending ? 'ASC' : 'DESC') : (_awaySortAscending ? 'ASC' : 'DESC')} for ${isHome ? "HOME" : "AWAY"} team');
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(
-                              color: Colors.grey.shade300, width: 0.5),
-                        ),
-                        child: Icon(
-                          isHome
-                              ? (_homeSortAscending
-                                  ? Icons.keyboard_arrow_up
-                                  : Icons.keyboard_arrow_down)
-                              : (_awaySortAscending
-                                  ? Icons.keyboard_arrow_up
-                                  : Icons.keyboard_arrow_down),
-                          size: 12,
-                          color: Colors.grey.shade600,
-                        ),
+                        } else {
+                          switch (_awaySortOption) {
+                            case 'number':
+                              _awaySortOption = 'lastName';
+                              break;
+                            case 'lastName':
+                              _awaySortOption = 'firstName';
+                              break;
+                            case 'firstName':
+                              _awaySortOption = 'number';
+                              break;
+                          }
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(3),
+                        border:
+                            Border.all(color: Colors.grey.shade300, width: 0.5),
+                      ),
+                      child: _getSortIconWidget(
+                          isHome ? _homeSortOption : _awaySortOption),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  // Ascending/Descending button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (isHome) {
+                          _homeSortAscending = !_homeSortAscending;
+                        } else {
+                          _awaySortAscending = !_awaySortAscending;
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(3),
+                        border:
+                            Border.all(color: Colors.grey.shade300, width: 0.5),
+                      ),
+                      child: Icon(
+                        isHome
+                            ? (_homeSortAscending
+                                ? Icons.keyboard_arrow_up
+                                : Icons.keyboard_arrow_down)
+                            : (_awaySortAscending
+                                ? Icons.keyboard_arrow_up
+                                : Icons.keyboard_arrow_down),
+                        size: 12,
+                        color: Colors.grey.shade600,
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 3),
+                  ),
+                  const SizedBox(width: 4),
+                  // Search field
+                  Expanded(
                     child: SizedBox(
                       height: 24,
                       child: TextField(
@@ -1464,10 +1616,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               _awaySearchText = value;
                             }
                           });
-                          print(
-                              'Search text changed: ${isHome ? "HOME" : "AWAY"} = "$value"');
-                          print(
-                              'Filtered roster length: ${filteredRoster.length}');
                         },
                         decoration: InputDecoration(
                           isDense: true,
@@ -1497,7 +1645,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
