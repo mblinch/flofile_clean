@@ -6052,77 +6052,221 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  Widget _buildBackButton({VoidCallback? onPressed}) {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.4, // Half width
-        margin: const EdgeInsets.symmetric(
-            horizontal: 5), // 5px padding from left and right
-        child: GestureDetector(
-          onTap: onPressed ??
-              () {
-                setState(() {
-                  if (_cameFromCelebration) {
-                    // Return to celebration section
-                    _selectedVerb = 'Celebration';
-                    _selectedActionVerb =
-                        null; // Reset action verb to clear caption
-                    _selectedHittingAction = null;
-                    _selectedCelebrationType = null; // Reset celebration type
-                    _isCelebratingScoring = false; // Reset scoring celebration
-                    _isCelebratingWithTeammates =
-                        false; // Reset teammates celebration
-                    _cameFromCelebration = false; // Reset the flag
-                    // Reset all menu items
-                    _rbiCount = null;
-                    _selectedRbiInning = null;
-                    _showExtraInnings = false;
-                    _extraInningsPage = 0;
-                  } else {
-                    // Return to main verb menu
-                    _selectedVerb = null;
-                    _selectedActionVerb =
-                        null; // Reset action verb to clear caption
-                    _selectedHittingAction = null;
-                    _rbiCount = null;
-                    _selectedRbiInning = null;
-                    _showExtraInnings = false;
-                    _extraInningsPage = 0;
-                  }
-                });
-                _updateCaption();
-              },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade300),
+  Widget _buildCompactActionButtons() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      child: Row(
+        children: [
+          // Reset button - Left aligned
+          GestureDetector(
+            onTap: _resetCaption,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Icon(Icons.refresh, size: 16, color: Colors.grey.shade700),
             ),
+          ),
+
+          // Center section with arrows and copy/paste buttons
+          Expanded(
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(width: 15), // 15px padding from the left edge
-                Icon(
-                  Icons.arrow_back,
-                  size: 14,
-                  color: Colors.grey.shade700,
+                // Previous button
+                GestureDetector(
+                  onTap: () {
+                    widget.onPreviousImage?.call();
+                  },
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Icon(Icons.arrow_back,
+                        size: 16, color: Colors.grey.shade700),
+                  ),
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  'Back',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
+                // Copy button
+                GestureDetector(
+                  onTap: () {
+                    if (captionController.text.isNotEmpty) {
+                      Clipboard.setData(
+                          ClipboardData(text: captionController.text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Caption copied!'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue.shade300),
+                    ),
+                    child:
+                        Icon(Icons.copy, size: 16, color: Colors.blue.shade700),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Paste button
+                GestureDetector(
+                  onTap: _onPastePressed,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Icon(Icons.paste,
+                        size: 16, color: Colors.green.shade700),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Next button
+                GestureDetector(
+                  onTap: () {
+                    widget.onNextImage?.call();
+                  },
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Icon(Icons.arrow_forward,
+                        size: 16, color: Colors.grey.shade700),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+
+          // FTP button - Right aligned
+          GestureDetector(
+            onTap: _disableFtp ? null : _onFtpPressed,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: _disableFtp
+                    ? Colors.grey.shade300
+                    : const Color(0xFF0052CC),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                    color: _disableFtp
+                        ? Colors.grey.shade300
+                        : const Color(0xFF0052CC)),
+              ),
+              child: Icon(Icons.cloud_upload,
+                  size: 16,
+                  color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildBackButton({VoidCallback? onPressed}) {
+    return Column(
+      children: [
+        // Compact action buttons
+        _buildCompactActionButtons(),
+        const SizedBox(height: 8),
+        // Back button
+        Align(
+          alignment: Alignment.center,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.4, // Half width
+            margin: const EdgeInsets.symmetric(
+                horizontal: 5), // 5px padding from left and right
+            child: GestureDetector(
+              onTap: onPressed ??
+                  () {
+                    setState(() {
+                      if (_cameFromCelebration) {
+                        // Return to celebration section
+                        _selectedVerb = 'Celebration';
+                        _selectedActionVerb =
+                            null; // Reset action verb to clear caption
+                        _selectedHittingAction = null;
+                        _selectedCelebrationType =
+                            null; // Reset celebration type
+                        _isCelebratingScoring =
+                            false; // Reset scoring celebration
+                        _isCelebratingWithTeammates =
+                            false; // Reset teammates celebration
+                        _cameFromCelebration = false; // Reset the flag
+                        // Reset all menu items
+                        _rbiCount = null;
+                        _selectedRbiInning = null;
+                        _showExtraInnings = false;
+                        _extraInningsPage = 0;
+                      } else {
+                        // Return to main verb menu
+                        _selectedVerb = null;
+                        _selectedActionVerb =
+                            null; // Reset action verb to clear caption
+                        _selectedHittingAction = null;
+                        _rbiCount = null;
+                        _selectedRbiInning = null;
+                        _showExtraInnings = false;
+                        _extraInningsPage = 0;
+                      }
+                    });
+                    _updateCaption();
+                  },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    const SizedBox(
+                        width: 15), // 15px padding from the left edge
+                    Icon(
+                      Icons.arrow_back,
+                      size: 14,
+                      color: Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Back',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
