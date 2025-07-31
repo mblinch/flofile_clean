@@ -142,7 +142,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         },
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(8.0, 2.0, 8.0, 8.0),
         child: Column(
           children: [
             // TOP ROW - Reduced height (43% instead of 50%)
@@ -208,6 +208,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       },
                       onReset: _handleReset,
                       personalityOverride: _personalityOverride,
+                      onImagesLoaded: (files) {
+                        setState(() {
+                          imagePaths = files;
+                          currentIndex = 0;
+                        });
+                      },
                     ),
                   ),
 

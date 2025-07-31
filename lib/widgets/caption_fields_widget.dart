@@ -5,6 +5,7 @@ import '../services/mlb_api_service.dart';
 import '../services/api_manager.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:file_picker/file_picker.dart';
 
 class CaptionFieldsWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -15,6 +16,7 @@ class CaptionFieldsWidget extends StatefulWidget {
   final VoidCallback? onPreviousImage;
   final VoidCallback? onReset;
   final String? personalityOverride;
+  final Function(List<String>)? onImagesLoaded;
 
   const CaptionFieldsWidget({
     super.key,
@@ -26,6 +28,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onPreviousImage,
     this.onReset,
     this.personalityOverride,
+    this.onImagesLoaded,
   });
 
   @override
@@ -797,6 +800,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 12),
 
+                        // Folder Picker button
+                        GestureDetector(
+                          onTap: _pickFolder,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.grey.shade400),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.folder_open,
+                                    size: 12, color: Colors.grey.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Pick Folder',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
                         // FTP button
                         GestureDetector(
                           onTap: _disableFtp ? null : _onFtpPressed,
@@ -1113,6 +1149,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // API Connector Logo - Only show when connected
+                        FutureBuilder<bool>(
+                          future: _testApiConnection(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData && snapshot.data == true) {
+                              return Align(
+                                alignment: Alignment.center,
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.cloud_done,
+                                        size: 16,
+                                        color: Colors.green.shade600,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Connected to roster source',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.green.shade600,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox
+                                .shrink(); // Don't show anything if not connected
+                          },
                         ),
                       ],
                     ),
@@ -1508,141 +1582,177 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ] else ...[
                   // Team name and controls when team is selected
-                  Icon(
-                    isHome ? Icons.home : Icons.flight,
-                    size: 12,
-                    color: Colors.black87,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _getTeamAbbreviation(
-                        isHome ? selectedHomeTeam! : selectedAwayTeam!),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Sort button
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isHome) {
-                          switch (_homeSortOption) {
-                            case 'number':
-                              _homeSortOption = 'lastName';
-                              break;
-                            case 'lastName':
-                              _homeSortOption = 'firstName';
-                              break;
-                            case 'firstName':
-                              _homeSortOption = 'number';
-                              break;
-                          }
-                        } else {
-                          switch (_awaySortOption) {
-                            case 'number':
-                              _awaySortOption = 'lastName';
-                              break;
-                            case 'lastName':
-                              _awaySortOption = 'firstName';
-                              break;
-                            case 'firstName':
-                              _awaySortOption = 'number';
-                              break;
-                          }
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(3),
-                        border:
-                            Border.all(color: Colors.grey.shade300, width: 0.5),
-                      ),
-                      child: _getSortIconWidget(
-                          isHome ? _homeSortOption : _awaySortOption),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  // Ascending/Descending button
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isHome) {
-                          _homeSortAscending = !_homeSortAscending;
-                        } else {
-                          _awaySortAscending = !_awaySortAscending;
-                        }
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(3),
-                        border:
-                            Border.all(color: Colors.grey.shade300, width: 0.5),
-                      ),
-                      child: Icon(
-                        isHome
-                            ? (_homeSortAscending
-                                ? Icons.keyboard_arrow_up
-                                : Icons.keyboard_arrow_down)
-                            : (_awaySortAscending
-                                ? Icons.keyboard_arrow_up
-                                : Icons.keyboard_arrow_down),
-                        size: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Search field
                   Expanded(
-                    child: SizedBox(
-                      height: 24,
-                      child: TextField(
-                        controller: searchController,
-                        style: const TextStyle(fontSize: 10),
-                        onChanged: (value) {
-                          setState(() {
-                            if (isHome) {
-                              _homeSearchText = value;
-                            } else {
-                              _awaySearchText = value;
-                            }
-                          });
-                        },
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 0),
-                          hintText: 'Search',
-                          prefixIcon:
-                              Icon(Icons.search, size: 14, color: Colors.grey),
-                          prefixIconConstraints:
-                              BoxConstraints(minWidth: 20, minHeight: 20),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                                color: Colors.blue.shade400, width: 1),
-                          ),
-                          hintStyle:
-                              const TextStyle(fontSize: 10, color: Colors.grey),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Team name row
+                        Row(
+                          children: [
+                            Icon(
+                              isHome ? Icons.home : Icons.flight,
+                              size: 12,
+                              color: Colors.black87,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _getTeamAbbreviation(isHome
+                                  ? selectedHomeTeam!
+                                  : selectedAwayTeam!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Search field on top line
+                            Expanded(
+                              child: SizedBox(
+                                height: 24,
+                                child: TextField(
+                                  controller: searchController,
+                                  style: const TextStyle(fontSize: 10),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      if (isHome) {
+                                        _homeSearchText = value;
+                                      } else {
+                                        _awaySearchText = value;
+                                      }
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 0),
+                                    hintText: 'Search',
+                                    prefixIcon: Icon(Icons.search,
+                                        size: 14, color: Colors.grey),
+                                    prefixIconConstraints: BoxConstraints(
+                                        minWidth: 20, minHeight: 20),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.grey.shade400),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.grey.shade400),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.blue.shade400,
+                                          width: 1),
+                                    ),
+                                    hintStyle: const TextStyle(
+                                        fontSize: 10, color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        // Controls row
+                        Row(
+                          children: [
+                            // Sort label
+                            Text(
+                              'Sort: ',
+                              style: const TextStyle(
+                                  fontSize: 10, color: Colors.grey),
+                            ),
+                            // Sort button
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isHome) {
+                                    switch (_homeSortOption) {
+                                      case 'number':
+                                        _homeSortOption = 'lastName';
+                                        break;
+                                      case 'lastName':
+                                        _homeSortOption = 'firstName';
+                                        break;
+                                      case 'firstName':
+                                        _homeSortOption = 'number';
+                                        break;
+                                    }
+                                  } else {
+                                    switch (_awaySortOption) {
+                                      case 'number':
+                                        _awaySortOption = 'lastName';
+                                        break;
+                                      case 'lastName':
+                                        _awaySortOption = 'firstName';
+                                        break;
+                                      case 'firstName':
+                                        _awaySortOption = 'number';
+                                        break;
+                                    }
+                                  }
+                                });
+                              },
+                              child: Container(
+                                width:
+                                    80, // Fixed width to prevent size changes
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                      color: Colors.grey.shade300, width: 0.5),
+                                ),
+                                child: Text(
+                                  _getSortText(isHome
+                                      ? _homeSortOption
+                                      : _awaySortOption),
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.black87),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Ascending/Descending button
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isHome) {
+                                    _homeSortAscending = !_homeSortAscending;
+                                  } else {
+                                    _awaySortAscending = !_awaySortAscending;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                      color: Colors.grey.shade300, width: 0.5),
+                                ),
+                                child: Icon(
+                                  isHome
+                                      ? (_homeSortAscending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward)
+                                      : (_awaySortAscending
+                                          ? Icons.arrow_upward
+                                          : Icons.arrow_downward),
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -3318,6 +3428,87 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       _ftpPictureNumber++;
     });
+  }
+
+  // Folder picking functionality
+  Future<void> _pickFolder() async {
+    print('Starting folder picker...');
+    final dirPath = await FilePicker.platform.getDirectoryPath();
+    if (dirPath == null) {
+      print('No folder selected');
+      return;
+    }
+
+    print('Selected folder: $dirPath');
+
+    // List image files
+    final files = await _listImageFiles(dirPath);
+
+    if (files.isNotEmpty) {
+      // Notify parent about loaded images
+      if (widget.onImagesLoaded != null) {
+        widget.onImagesLoaded!(files);
+      }
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Loaded ${files.length} images from folder'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Test API connection
+  Future<bool> _testApiConnection() async {
+    try {
+      final teams = await _apiManager.fetchTeams();
+      return teams.isNotEmpty;
+    } catch (e) {
+      print('Error testing API connection: $e');
+      return false;
+    }
+  }
+
+  // Helper method to list image files
+  Future<List<String>> _listImageFiles(String dirPath) async {
+    try {
+      final directory = Directory(dirPath);
+      final files = directory.listSync();
+
+      final imageExtensions = [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.tiff',
+        '.bmp',
+        '.JPG',
+        '.JPEG',
+        '.PNG',
+        '.TIFF',
+        '.BMP'
+      ];
+
+      final imageFiles = files
+          .where((file) {
+            if (file is! File) return false;
+
+            final path = file.path;
+            final extension = path.split('.').last.toLowerCase();
+            return imageExtensions.contains('.$extension');
+          })
+          .map((file) => file.path)
+          .toList();
+
+      // Sort files by name
+      imageFiles.sort();
+
+      return imageFiles;
+    } catch (e) {
+      print('Error listing image files: $e');
+      return [];
+    }
   }
 
   void _updatePersonalityField() {
@@ -6315,6 +6506,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           size: 12,
           color: Colors.grey.shade600,
         );
+    }
+  }
+
+  // Get sort text for button display
+  String _getSortText(String sortOption) {
+    switch (sortOption) {
+      case 'number':
+        return 'Number';
+      case 'lastName':
+        return 'Last Name';
+      case 'firstName':
+        return 'First Name';
+      default:
+        return 'Number';
     }
   }
 

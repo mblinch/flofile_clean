@@ -24,7 +24,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   _AppHeaderWidgetState createState() => _AppHeaderWidgetState();
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(28);
 }
 
 class _AppHeaderWidgetState extends State<AppHeaderWidget> {
@@ -107,231 +107,25 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   @override
   Widget build(BuildContext context) {
     return AdaptiveAppBar(
-      toolbarHeight: 60,
-      titleSpacing: 4,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          // Logo
-          Container(
-            width: 40,
-            height: 40,
-            child: Image.asset(
-              'assets/images/flo_file_logo.png',
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                // Fallback if logo not found
-                return Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'FF',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                );
-              },
+      toolbarHeight: 28, // Larger to accommodate 20px font
+      titleSpacing: 0,
+      backgroundColor: Colors.grey.shade200,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      title: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 12, 2),
+          child: Text(
+            'FLO FILE Beta',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade700,
+              letterSpacing: -1.0,
             ),
           ),
-          const SizedBox(width: 12),
-
-          // API Connection Indicator
-          Tooltip(
-            message: _apiManager.getConnectionStatusMessage(),
-            child: Icon(
-              Icons.cloud_done,
-              color: Colors.green,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // API Selection Dropdown (Hidden but code preserved)
-          // Container(
-          //   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          //   decoration: BoxDecoration(
-          //     color: Colors.white,
-          //     borderRadius: BorderRadius.circular(4),
-          //     border: Border.all(color: Colors.grey.shade300),
-          //   ),
-          //   child: DropdownButton<String>(
-          //     value: selectedApi,
-          //     underline: Container(), // Remove default underline
-          //     style: const TextStyle(
-          //       fontSize: 11,
-          //       color: Colors.black87,
-          //       fontWeight: FontWeight.w500,
-          //   ),
-          //   items: const [
-          //     DropdownMenuItem(
-          //       value: 'MLB Stats API',
-          //       child: Text('MLB Stats API'),
-          //   ),
-          //   DropdownMenuItem(
-          //       value: 'Balldontlie.io API',
-          //       child: Text('Balldontlie.io API'),
-          //   ),
-          // ],
-          // onChanged: (String? newValue) {
-          //   if (newValue != null) {
-          //     setState(() {
-          //       selectedApi = newValue;
-          //   });
-          //
-          //   // Update API manager
-          //   _apiManager.setApi(newValue);
-          //
-          //   // Notify parent screen of API change
-          //   if (widget.onApiChanged != null) {
-          //     widget.onApiChanged!(newValue);
-          //   }
-          //
-          //   // Test the API by fetching teams
-          //   _testApiConnection();
-          //
-          //   print('API changed to: $newValue');
-          // }
-          // },
-          // ),
-          // const SizedBox(width: 8),
-
-          // Team Selection Row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Away Team Dropdown
-              SizedBox(
-                width: 180,
-                child: _buildTeamDropdown(
-                  label: 'Away Team',
-                  value: selectedAwayTeam,
-                  allItems: teams,
-                  excludeTeam: selectedHomeTeam,
-                  useExpanded: false,
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => selectedAwayTeam = v);
-
-                    // Notify parent screen of team change
-                    if (widget.onAwayTeamChanged != null) {
-                      widget.onAwayTeamChanged!(v);
-                    }
-
-                    // Here you would call _loadTeam(v, isHomeTeam: false);
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Home Team Dropdown and Favorites Button
-              Row(
-                children: [
-                  SizedBox(
-                    width: 180,
-                    child: _buildTeamDropdown(
-                      label: 'Home Team',
-                      value: selectedHomeTeam,
-                      allItems: teams,
-                      excludeTeam: selectedAwayTeam,
-                      useExpanded: false,
-                      onChanged: (v) async {
-                        if (v == null) return;
-                        setState(() => selectedHomeTeam = v);
-
-                        // Notify parent screen of team change
-                        if (widget.onHomeTeamChanged != null) {
-                          widget.onHomeTeamChanged!(v);
-                        }
-
-                        // Here you would call _loadTeam(v, isHomeTeam: true);
-
-                        // Auto-fill metadata dialog logic would go here
-                        // For now, just show a simple dialog
-                        if (v == 'Toronto Blue Jays') {
-                          _showAutoFillDialog(v);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Manage Favorites Button
-                  GestureDetector(
-                    onTap: _showManageFavoritesDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.star, size: 12, color: Colors.amber),
-                          SizedBox(width: 4),
-                          Text(
-                            'Favorites',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Folder Picker Button
-                  GestureDetector(
-                    onTap: () {
-                      print('Folder picker button tapped');
-                      _pickFolder();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.folder_open, size: 12, color: Colors.blue),
-                          SizedBox(width: 4),
-                          Text(
-                            'Pick Folder',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
