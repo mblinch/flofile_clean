@@ -1564,11 +1564,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                               TextField(
                                                                 controller:
                                                                     customBetweenPlayersController,
-                                                                style: const TextStyle(
-                                                                    fontSize:
-                                                                        12,
-                                                                    height:
-                                                                        1.35),
+                                                                style:
+                                                                    const TextStyle(
+                                                                        fontSize:
+                                                                            12,
+                                                                        height:
+                                                                            2.3),
                                                                 decoration:
                                                                     const InputDecoration(
                                                                   hintText:
@@ -1581,9 +1582,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                           horizontal:
                                                                               8,
                                                                           vertical:
-                                                                              3),
-                                                                  isDense:
-                                                                      false,
+                                                                              2),
+                                                                  isDense: true,
                                                                 ),
                                                                 onChanged:
                                                                     (value) {
@@ -1698,12 +1698,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                               ],
                                                             ),
                                                           ),
+                                                        ],
 
-                                                          const SizedBox(
-                                                              height: 4),
+                                                        const SizedBox(
+                                                            height: 4),
 
-                                                          // Third row: Post Game and dynamic content
-                                                          Expanded(
+                                                        // Third row: Post Game and dynamic content
+                                                        Expanded(
                                                           flex: 2,
                                                           child: Row(
                                                             children: [
