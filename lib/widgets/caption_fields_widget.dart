@@ -43,6 +43,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController creatorController = TextEditingController();
   final TextEditingController customCelebrationController =
       TextEditingController();
+  final TextEditingController customBetweenPlayersController =
+      TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
 
@@ -82,6 +84,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       false; // Track if we came from celebration section
   String? _selectedAtBatAction;
   String? _selectedBattingAction;
+
+  // Custom text inning selector
+  bool _showCustomTextInningSelector = false;
+  int? _selectedCustomTextInning;
 
   // Team data
   bool _isConnectedToApi = false;
@@ -145,7 +151,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
     'Running': ['Steals', 'Slides', 'Runs', 'Rounds'],
     'Celebrating': ['Celebrates', 'Celebrates With', 'Celebrates Against'],
-    'Other': ['Looks On', 'Warms Up', 'Stretches', 'Talks'],
+    'Portraiture': [
+      'Looks On',
+      'Walks Off Field',
+      'Runs Off Field',
+      'Takes the Field'
+    ],
+    'Pre Game': [],
+    'Post Game': [],
   };
 
   bool _isResetting = false;
@@ -1529,88 +1542,181 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                           CrossAxisAlignment
                                                               .start,
                                                       children: [
-                                                        // Top row: Offense, Defense, Running
-                                                        Expanded(
-                                                          flex: 1,
-                                                          child: Row(
+                                                        // Custom text field for between players
+                                                        Container(
+                                                          width:
+                                                              double.infinity,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Colors.white,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        2),
+                                                            border: Border.all(
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade300),
+                                                          ),
+                                                          child: Column(
                                                             children: [
-                                                              Expanded(
-                                                                child:
-                                                                    _buildVerbCategory(
-                                                                        'Offense',
-                                                                        [
-                                                                      'Single',
-                                                                      'Double',
-                                                                      'Triple',
-                                                                      'Home Run',
-                                                                      'At Bat',
-                                                                      'Swings',
-                                                                      'Bunts',
-                                                                      'Hit by Pitch'
-                                                                    ]),
+                                                              // Text field
+                                                              TextField(
+                                                                controller:
+                                                                    customBetweenPlayersController,
+                                                                style: const TextStyle(
+                                                                    fontSize:
+                                                                        12,
+                                                                    height:
+                                                                        1.35),
+                                                                decoration:
+                                                                    const InputDecoration(
+                                                                  hintText:
+                                                                      'Custom text between players...',
+                                                                  border:
+                                                                      InputBorder
+                                                                          .none,
+                                                                  contentPadding:
+                                                                      EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              8,
+                                                                          vertical:
+                                                                              3),
+                                                                  isDense:
+                                                                      false,
+                                                                ),
+                                                                onChanged:
+                                                                    (value) {
+                                                                  setState(() {
+                                                                    _showCustomTextInningSelector =
+                                                                        value
+                                                                            .isNotEmpty;
+                                                                    _updateCaption();
+                                                                  });
+                                                                },
                                                               ),
-                                                              const SizedBox(
-                                                                  width: 1),
-                                                              Expanded(
-                                                                child:
-                                                                    _buildVerbCategory(
-                                                                        'Defense',
-                                                                        [
-                                                                      'Pitching',
-                                                                      'Catches',
-                                                                      'Throws',
-                                                                      'Tags',
-                                                                      'Groundball',
-                                                                      'Fielding Position',
-                                                                      'Double Play',
-                                                                      'Triple Play'
-                                                                    ]),
-                                                              ),
-                                                              const SizedBox(
-                                                                  width: 1),
-                                                              Expanded(
-                                                                child:
-                                                                    _buildVerbCategory(
-                                                                        'Running',
-                                                                        [
-                                                                      'Steals',
-                                                                      'Slides',
-                                                                      'Runs',
-                                                                      'Rounds'
-                                                                    ]),
-                                                              ),
+                                                              // Inning selector
+                                                              if (_showCustomTextInningSelector)
+                                                                Container(
+                                                                  height: 80,
+                                                                  child:
+                                                                      _buildCustomTextInningSelector(),
+                                                                ),
                                                             ],
                                                           ),
                                                         ),
 
-                                                        const SizedBox(
-                                                            height: 4),
+                                                        // Verb categories (hidden when custom text is being used)
+                                                        if (!customBetweenPlayersController
+                                                            .text
+                                                            .isNotEmpty) ...[
+                                                          Expanded(
+                                                            flex: 3,
+                                                            child: Row(
+                                                              children: [
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Offense',
+                                                                      [
+                                                                        'Single',
+                                                                        'Double',
+                                                                        'Triple',
+                                                                        'Home Run',
+                                                                        'At Bat',
+                                                                        'Swings',
+                                                                        'Bunts',
+                                                                        'Hit by Pitch'
+                                                                      ]),
+                                                                ),
+                                                                const SizedBox(
+                                                                    width: 1),
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Defense',
+                                                                      [
+                                                                        'Pitching',
+                                                                        'Catches',
+                                                                        'Throws',
+                                                                        'Tags',
+                                                                        'Groundball',
+                                                                        'Fielding Position',
+                                                                        'Double Play',
+                                                                        'Triple Play'
+                                                                      ]),
+                                                                ),
+                                                                const SizedBox(
+                                                                    width: 1),
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Running',
+                                                                      [
+                                                                        'Steals',
+                                                                        'Slides',
+                                                                        'Runs',
+                                                                        'Rounds'
+                                                                      ]),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
 
-                                                        // Bottom row: Celebrating and Other
-                                                        Expanded(
-                                                          flex: 1,
+                                                          const SizedBox(
+                                                              height: 4),
+
+                                                          // Second row: Reactions, Portraiture, Pre Game
+                                                          Expanded(
+                                                            flex: 2,
+                                                            child: Row(
+                                                              children: [
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Reactions',
+                                                                      [
+                                                                        'Celebration',
+                                                                        'Dejection'
+                                                                      ]),
+                                                                ),
+                                                                const SizedBox(
+                                                                    width: 1),
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Portraiture',
+                                                                      [
+                                                                        'Looks On',
+                                                                        'Walks Off Field',
+                                                                        'Runs Off Field',
+                                                                        'Takes the Field'
+                                                                      ]),
+                                                                ),
+                                                                const SizedBox(
+                                                                    width: 1),
+                                                                Expanded(
+                                                                  child: _buildVerbCategory(
+                                                                      'Pre Game',
+                                                                      []),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+
+                                                          const SizedBox(
+                                                              height: 4),
+
+                                                          // Third row: Post Game and dynamic content
+                                                          Expanded(
+                                                          flex: 2,
                                                           child: Row(
                                                             children: [
                                                               Expanded(
                                                                 child: _buildVerbCategory(
-                                                                    'Reactions',
-                                                                    [
-                                                                      'Celebration',
-                                                                      'Dejection'
-                                                                    ]),
+                                                                    'Post Game',
+                                                                    []),
                                                               ),
                                                               const SizedBox(
                                                                   width: 1),
                                                               Expanded(
                                                                 child:
-                                                                    _buildVerbCategory(
-                                                                        'Other',
-                                                                        [
-                                                                      'Looks On',
-                                                                      'Warms Up',
-                                                                      'Stretches',
-                                                                      'Talks'
-                                                                    ]),
+                                                                    Container(), // Empty space
                                                               ),
                                                               const SizedBox(
                                                                   width: 1),
@@ -1867,11 +1973,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(
             color: isSelected ? Colors.grey.shade400 : Colors.grey.shade300,
             width: 0.5,
@@ -1880,7 +1986,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           verb,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -2690,6 +2796,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Rounds' ||
         verbToUse == 'Double Play' ||
         verbToUse == 'Triple Play' ||
+        verbToUse == 'Celebration' ||
         verbToUse == 'Celebrates' ||
         verbToUse == 'Celebrates With' ||
         verbToUse == 'Celebrates Against' ||
@@ -2714,15 +2821,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (_selectedRbiInning != null) {
       inningPart =
           ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
+    } else if (_selectedCustomTextInning != null) {
+      inningPart =
+          ' during the ${_getOrdinalSuffix(_selectedCustomTextInning!)} inning';
     }
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
     final photoBy = creatorController.text;
 
+    // Add custom text between players if provided
+    String customTextPart = '';
+    if (customBetweenPlayersController.text.isNotEmpty) {
+      customTextPart = ' ${customBetweenPlayersController.text}';
+    }
+
     // Build the final caption
     final caption = '$dateline '
-        '$playerName${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPart$inningPart '
+        '$playerName${customTextPart}${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPart$inningPart '
         'in their MLB game at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
     // Apply diacritic removal if enabled
@@ -3284,6 +3400,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       captionController.clear();
       personalityController.clear();
       customCelebrationController.clear();
+      customBetweenPlayersController.clear();
+      _selectedCustomTextInning = null;
+      _showCustomTextInningSelector = false;
 
       // Reset all verb-related state
       _selectedVerb = null;
@@ -3296,6 +3415,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedBaseRunningAction = null;
       _selectedStealBase = null;
       _selectedCelebrationType = null;
+      _isCelebratingScoring = false; // Reset scoring celebration selection
+      _isCelebratingWithTeammates =
+          false; // Reset teammates celebration selection
       _selectedAtBatAction = null;
       _selectedBattingAction = null;
       _selectedRbiInning = null;
@@ -5165,8 +5287,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Other',
-                            ['Looks On', 'Warms Up', 'Stretches', 'Talks']),
+                        child: _buildVerbCategory('Portraiture', [
+                          'Looks On',
+                          'Walks Off Field',
+                          'Runs Off Field',
+                          'Takes the Field'
+                        ]),
                       ),
                     ),
                   ),
@@ -5495,6 +5621,99 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   // Reusable back button widget
+  Widget _buildCustomTextInningSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        children: [
+          // Innings 1-9
+          Expanded(
+            child: Row(
+              children: List.generate(9, (index) {
+                final inning = index + 1;
+                final isSelected = _selectedCustomTextInning == inning;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedCustomTextInning = inning;
+                        _updateCaption();
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.all(1),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.blue.shade100
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.blue.shade300
+                              : Colors.grey.shade300,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$inning',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: isSelected
+                                ? Colors.blue.shade700
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          // Navigation and extras row
+          Expanded(
+            child: Row(
+              children: [
+                // Clear button
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedCustomTextInning = null;
+                        _updateCaption();
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.all(1),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(2),
+                        border:
+                            Border.all(color: Colors.grey.shade300, width: 0.5),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBackButton({VoidCallback? onPressed}) {
     return Align(
       alignment: Alignment.center,
