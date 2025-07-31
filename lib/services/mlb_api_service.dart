@@ -7,6 +7,7 @@ class Player {
   final String? jerseyNumber;
   final String displayName;
   final bool isManager;
+  final bool isCoach;
 
   Player({
     required this.fullName,
@@ -14,6 +15,7 @@ class Player {
     this.jerseyNumber,
     required this.displayName,
     this.isManager = false,
+    this.isCoach = false,
   });
 
   factory Player.fromJson(Map<String, dynamic> json, String? jerseyNumber) {
@@ -27,6 +29,7 @@ class Player {
       firstName: firstName,
       jerseyNumber: jerseyNumber,
       displayName: displayName,
+      isCoach: false, // Players are not coaches
     );
   }
 
@@ -48,6 +51,7 @@ class Player {
       jerseyNumber: jerseyNumber,
       displayName: displayName,
       isManager: isManager,
+      isCoach: true, // Coaches are coaches
     );
   }
 }
