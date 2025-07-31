@@ -1392,19 +1392,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             'Sort changed to: ${isHome ? _homeSortOption : _awaySortOption} for ${isHome ? "HOME" : "AWAY"} team');
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(2),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(
                               color: Colors.grey.shade300, width: 0.5),
                         ),
-                        child: Icon(
-                          _getSortIcon(
-                              isHome ? _homeSortOption : _awaySortOption),
-                          size: 10,
-                          color: Colors.grey.shade600,
-                        ),
+                        child: _getSortIconWidget(
+                            isHome ? _homeSortOption : _awaySortOption),
                       ),
                     ),
                     const SizedBox(width: 2),
@@ -1422,10 +1418,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             'Sort direction changed to: ${isHome ? (_homeSortAscending ? 'ASC' : 'DESC') : (_awaySortAscending ? 'ASC' : 'DESC')} for ${isHome ? "HOME" : "AWAY"} team');
                       },
                       child: Container(
-                        padding: const EdgeInsets.all(2),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(
                               color: Colors.grey.shade300, width: 0.5),
                         ),
@@ -1437,7 +1433,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               : (_awaySortAscending
                                   ? Icons.keyboard_arrow_up
                                   : Icons.keyboard_arrow_down),
-                          size: 10,
+                          size: 12,
                           color: Colors.grey.shade600,
                         ),
                       ),
@@ -6050,17 +6046,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return displayName;
   }
 
-  // Get appropriate icon for current sort option
-  IconData _getSortIcon(String sortOption) {
+  // Get appropriate icon widget for current sort option
+  Widget _getSortIconWidget(String sortOption) {
     switch (sortOption) {
       case 'number':
-        return Icons.sort;
+        return Icon(
+          Icons.numbers,
+          size: 12,
+          color: Colors.grey.shade600,
+        );
       case 'lastName':
-        return Icons.sort_by_alpha;
+        return Text(
+          'ZA',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade600,
+          ),
+        );
       case 'firstName':
-        return Icons.sort_by_alpha;
+        return Text(
+          'AZ',
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade600,
+          ),
+        );
       default:
-        return Icons.sort;
+        return Icon(
+          Icons.sort,
+          size: 12,
+          color: Colors.grey.shade600,
+        );
     }
   }
 
