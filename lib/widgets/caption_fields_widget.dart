@@ -97,6 +97,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<Player> _filteredPlayers = [];
   Set<String> _selectedPlayerNumbers = {};
   String _playerSearchText = '';
+  bool _noPlayersFound = false;
 
   // Team data
   bool _isConnectedToApi = false;
@@ -673,7 +674,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   _disableFtp ? 'FTP DISABLED' : 'FTP',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: _disableFtp
                                         ? Colors.grey.shade600
                                         : Colors.white,
@@ -724,7 +725,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Text(
                                         'Copy',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 13,
                                           color: Colors.blue.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -758,7 +759,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Text(
                                         'Paste',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 13,
                                           color: Colors.green.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -801,7 +802,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Text(
                                         'Prev',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 13,
                                           color: Colors.grey.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -833,7 +834,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Text(
                                         'Next',
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 13,
                                           color: Colors.grey.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -873,7 +874,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Reset Caption',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -891,7 +892,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             'Options:',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                               color: Colors.black87,
                             ),
@@ -922,7 +923,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const Text(
                               'Disable FTP',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 13,
                                 color: Colors.black87,
                               ),
                             ),
@@ -955,7 +956,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const Text(
                               'Remove Diacritics (e.g., é → e)',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 13,
                                 color: Colors.black87,
                               ),
                             ),
@@ -1124,11 +1125,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
-                        children:
-                            (isHome ? selectedHomePlayers : selectedAwayPlayers)
-                                .map((playerName) =>
-                                    _buildPlayerChip(playerName, isHome))
-                                .toList(),
+                        children: _sortPlayersByNumber(isHome
+                                ? selectedHomePlayers
+                                : selectedAwayPlayers)
+                            .map((playerName) =>
+                                _buildPlayerChip(playerName, isHome))
+                            .toList(),
                       ),
                     ],
                   ],
@@ -1288,13 +1290,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final searchText = isHome ? _homeSearchText : _awaySearchText;
 
     // Filtered roster
-    final filteredRoster = searchText.isEmpty
+    final filteredRosterUnsorted = searchText.isEmpty
         ? roster
         : roster
             .where((player) => player.displayName
                 .toLowerCase()
                 .contains(searchText.toLowerCase()))
             .toList();
+
+    // Sort the filtered roster by jersey number
+    final filteredRoster = _sortPlayerObjectsByNumber(filteredRosterUnsorted);
 
     // Debug output
     print(
@@ -1656,7 +1661,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                               ),
                                                               // Player selection overlay
                                                               if (_filteredPlayers
-                                                                  .isNotEmpty)
+                                                                      .isNotEmpty ||
+                                                                  _noPlayersFound)
                                                                 Material(
                                                                   elevation: 8,
                                                                   borderRadius:
@@ -1683,45 +1689,65 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                           MainAxisSize
                                                                               .min,
                                                                       children: [
-                                                                        ..._filteredPlayers
-                                                                            .map(
-                                                                          (player) =>
-                                                                              GestureDetector(
-                                                                            onTap: () =>
-                                                                                _selectPlayer(player),
+                                                                        if (_noPlayersFound)
+                                                                          Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                                                             child:
-                                                                                Container(
-                                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                                              child: Row(
-                                                                                children: [
-                                                                                  Text(
-                                                                                    '#${player.jerseyNumber}',
-                                                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                                                                                Row(
+                                                                              children: [
+                                                                                Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
+                                                                                const SizedBox(width: 8),
+                                                                                Text(
+                                                                                  'No player with number ${_playerSearchText}',
+                                                                                  style: TextStyle(
+                                                                                    fontSize: 12,
+                                                                                    color: Colors.orange.shade700,
+                                                                                    fontWeight: FontWeight.w500,
                                                                                   ),
-                                                                                  const SizedBox(width: 4),
-                                                                                  Text(
-                                                                                    _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
-                                                                                    style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  Icon(
-                                                                                    _isHomePlayer(player) ? Icons.home : Icons.flight,
-                                                                                    size: 10,
-                                                                                    color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
-                                                                                  ),
-                                                                                  const SizedBox(width: 4),
-                                                                                  Expanded(
-                                                                                    child: Text(
-                                                                                      _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
-                                                                                      style: const TextStyle(fontSize: 10),
-                                                                                      overflow: TextOverflow.ellipsis,
+                                                                                ),
+                                                                              ],
+                                                                            ),
+                                                                          )
+                                                                        else ...[
+                                                                          ..._filteredPlayers
+                                                                              .map(
+                                                                            (player) =>
+                                                                                GestureDetector(
+                                                                              onTap: () => _selectPlayer(player),
+                                                                              child: Container(
+                                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                child: Row(
+                                                                                  children: [
+                                                                                    Text(
+                                                                                      '#${player.jerseyNumber}',
+                                                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
                                                                                     ),
-                                                                                  ),
-                                                                                ],
+                                                                                    const SizedBox(width: 4),
+                                                                                    Text(
+                                                                                      _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
+                                                                                      style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                    Icon(
+                                                                                      _isHomePlayer(player) ? Icons.home : Icons.flight,
+                                                                                      size: 10,
+                                                                                      color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
+                                                                                    ),
+                                                                                    const SizedBox(width: 4),
+                                                                                    Expanded(
+                                                                                      child: Text(
+                                                                                        _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
+                                                                                        style: const TextStyle(fontSize: 10),
+                                                                                        overflow: TextOverflow.ellipsis,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ],
+                                                                                ),
                                                                               ),
                                                                             ),
                                                                           ),
-                                                                        ),
+                                                                        ],
                                                                         if (_selectedPlayerNumbers
                                                                             .isNotEmpty)
                                                                           GestureDetector(
@@ -2208,7 +2234,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -2257,7 +2283,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -4554,12 +4580,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             spacing: 4,
             runSpacing: 2,
             alignment: _homeOnLeft ? WrapAlignment.start : WrapAlignment.end,
-            children: (_homeOnLeft ? selectedHomePlayers : selectedAwayPlayers)
+            children: _sortPlayersByNumber(
+                    _homeOnLeft ? selectedHomePlayers : selectedAwayPlayers)
                 .map((playerName) {
               final isFirstSelected = _isFirstSelectedPlayer(playerName);
               final isHomePlayer = selectedHomePlayers.contains(playerName);
-              print(
-                  'DEBUG: Building ${_homeOnLeft ? 'left' : 'right'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
 
               return Container(
                 height: 20,
@@ -4663,12 +4688,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             spacing: 4,
             runSpacing: 2,
             alignment: _homeOnLeft ? WrapAlignment.end : WrapAlignment.start,
-            children: (_homeOnLeft ? selectedAwayPlayers : selectedHomePlayers)
+            children: _sortPlayersByNumber(
+                    _homeOnLeft ? selectedAwayPlayers : selectedHomePlayers)
                 .map((playerName) {
               final isFirstSelected = _isFirstSelectedPlayer(playerName);
               final isHomePlayer = selectedHomePlayers.contains(playerName);
-              print(
-                  'DEBUG: Building ${_homeOnLeft ? 'right' : 'left'} chip for "$playerName" - isFirstSelected: $isFirstSelected');
 
               return Container(
                 height: 20,
@@ -4792,7 +4816,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             _selectedHomeRunType ?? 'Home Run',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade800,
             ),
@@ -4814,7 +4838,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: const Text(
                       'Home Run Type',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                         color: Colors.grey,
                       ),
@@ -4856,7 +4880,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               hrType,
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.grey.shade700,
                               ),
@@ -4880,7 +4904,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: const Text(
                       'Options',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                         color: Colors.grey,
                       ),
@@ -4907,8 +4931,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 16),
-
               // Back button
               _buildBackButton(),
             ],
@@ -4933,7 +4955,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             _selectedVerb ?? 'At Bat',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade800,
             ),
@@ -4951,7 +4973,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: const Text(
                   'Innings',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: Colors.grey,
                   ),
@@ -4995,7 +5017,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             '←',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: Colors.grey.shade700,
                             ),
@@ -5033,7 +5055,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             '$inning',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: Colors.grey.shade700,
                             ),
@@ -5221,8 +5243,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   height: 80, // Reduced height for compact layout
                   child: _buildReusableInningSelector(),
                 ),
-
-                const SizedBox(height: 16),
 
                 // Back button
                 _buildBackButton(),
@@ -5717,8 +5737,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 8),
-
               // Options header
               Container(
                 margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
@@ -5741,8 +5759,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Slides into base option (not for Single)
               if (_selectedVerb != 'Single')
                 _buildSubOption('Slides into Base', 'slides_into_base'),
-
-              const SizedBox(height: 16),
 
               // Back button
               _buildBackButton(),
@@ -5867,6 +5883,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return playerName;
   }
 
+  // Extract jersey number from player name for sorting
+  int _extractJerseyNumber(String playerName) {
+    // Try to match jersey number at the end of the string
+    final nameMatch = RegExp(r'#(\d+)$').firstMatch(playerName);
+    if (nameMatch != null) {
+      final number = int.tryParse(nameMatch.group(1) ?? '0') ?? 0;
+      return number;
+    }
+    return 999; // Return high number for players without numbers to put them at end
+  }
+
+  // Sort players by jersey number
+  List<String> _sortPlayersByNumber(Set<String> players) {
+    if (players.isEmpty) return [];
+
+    final sortedPlayers = players.toList();
+    sortedPlayers.sort((a, b) {
+      final numberA = _extractJerseyNumber(a);
+      final numberB = _extractJerseyNumber(b);
+      return numberA.compareTo(numberB);
+    });
+
+    return sortedPlayers;
+  }
+
+  // Sort Player objects by jersey number
+  List<Player> _sortPlayerObjectsByNumber(List<Player> players) {
+    if (players.isEmpty) return [];
+
+    final sortedPlayers = List<Player>.from(players);
+    sortedPlayers.sort((a, b) {
+      final numberA = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+      final numberB = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+      return numberA.compareTo(numberB);
+    });
+
+    return sortedPlayers;
+  }
+
   // Helper functions for smart text field
   bool _isNumeric(String text) {
     return text.isNotEmpty && int.tryParse(text) != null;
@@ -5876,17 +5931,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       _playerSearchText = number;
       _filteredPlayers = [];
+      _noPlayersFound = false;
 
-      // Search in both home and away rosters
+      // Search in both home and away rosters for exact matches only
       for (Player player in _homeRoster) {
-        if (player.jerseyNumber?.contains(number) == true) {
+        if (player.jerseyNumber == number) {
           _filteredPlayers.add(player);
         }
       }
       for (Player player in _awayRoster) {
-        if (player.jerseyNumber?.contains(number) == true) {
+        if (player.jerseyNumber == number) {
           _filteredPlayers.add(player);
         }
+      }
+
+      // Set flag if no players found
+      if (_filteredPlayers.isEmpty) {
+        _noPlayersFound = true;
       }
     });
   }
@@ -6188,6 +6249,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildBackButton({VoidCallback? onPressed}) {
     return Column(
       children: [
+        const SizedBox(height: 8),
         // Compact action buttons
         _buildCompactActionButtons(),
         const SizedBox(height: 8),
@@ -6520,8 +6582,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 16),
-
               // Back button
               _buildBackButton(),
             ],
@@ -6747,8 +6807,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 16),
-
               // Back button
               _buildBackButton(),
             ],
@@ -6890,8 +6948,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 80, // Reduced height for compact layout
                 child: _buildReusableInningSelector(),
               ),
-
-              const SizedBox(height: 16),
 
               // Back button
               _buildBackButton(),
@@ -7052,8 +7108,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-              const SizedBox(height: 16),
-
               // Back button
               _buildBackButton(),
             ],
@@ -7152,8 +7206,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 80, // Reduced height for compact layout
                 child: _buildReusableInningSelector(),
               ),
-
-              const SizedBox(height: 16),
 
               // Back button
               _buildBackButton(),
@@ -7255,8 +7307,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 80, // Reduced height for compact layout
                 child: _buildReusableInningSelector(),
               ),
-
-              const SizedBox(height: 16),
 
               // Back button
               _buildBackButton(),
