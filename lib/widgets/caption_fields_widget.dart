@@ -115,10 +115,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _awaySortOption = 'number';
   bool _homeSortAscending = true; // true = ascending, false = descending
   bool _awaySortAscending = true;
-
-  // Filter options for player lists
-  String _homeFilterOption = 'all'; // 'all', 'players', 'coaching'
-  String _awayFilterOption = 'all';
   String? selectedCaptionVerb;
 
   // Track which team was selected first (for determining main subject)
@@ -386,28 +382,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     });
 
     try {
-      // Load both team rosters, coach rosters, and team info in parallel
+      // Load both team rosters and team info in parallel
       final futures = await Future.wait([
         _mlbApiService.fetchRosterByTeamName(selectedHomeTeam!),
         _mlbApiService.fetchRosterByTeamName(selectedAwayTeam!),
-        _mlbApiService.fetchCoachRosterByTeamName(selectedHomeTeam!),
-        _mlbApiService.fetchCoachRosterByTeamName(selectedAwayTeam!),
         _mlbApiService.findTeamByName(selectedHomeTeam!),
         _mlbApiService.findTeamByName(selectedAwayTeam!),
       ]);
 
       setState(() {
-        final homePlayers = futures[0] as List<Player>;
-        final awayPlayers = futures[1] as List<Player>;
-        final homeCoaches = futures[2] as List<Player>;
-        final awayCoaches = futures[3] as List<Player>;
-
-        // Combine players and coaches (managers will be included)
-        _homeRoster = [...homePlayers, ...homeCoaches];
-        _awayRoster = [...awayPlayers, ...awayCoaches];
-
-        final homeTeamInfo = futures[4] as TeamInfo?;
-        final awayTeamInfo = futures[5] as TeamInfo?;
+        _homeRoster = futures[0] as List<Player>;
+        _awayRoster = futures[1] as List<Player>;
+        final homeTeamInfo = futures[2] as TeamInfo?;
+        final awayTeamInfo = futures[3] as TeamInfo?;
 
         // Set stadium names from API
         homeTeamStadium = homeTeamInfo?.venueName;
@@ -1308,24 +1295,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         isHome ? _homeSearchController : _awaySearchController;
     final searchText = isHome ? _homeSearchText : _awaySearchText;
 
-    // Get filter option
-    final filterOption = isHome ? _homeFilterOption : _awayFilterOption;
-
-    // Apply search filter
-    final searchFiltered = searchText.isEmpty
+    // Filtered roster
+    final filteredRosterUnsorted = searchText.isEmpty
         ? roster
         : roster
             .where((player) => player.displayName
                 .toLowerCase()
                 .contains(searchText.toLowerCase()))
             .toList();
-
-    // Apply player/coaching filter using the isCoach field from API
-    final filteredRosterUnsorted = filterOption == 'all'
-        ? searchFiltered
-        : filterOption == 'players'
-            ? searchFiltered.where((player) => !player.isCoach).toList()
-            : searchFiltered.where((player) => player.isCoach).toList();
 
     // Sort the filtered roster by current sort option
     final sortOption = isHome ? _homeSortOption : _awaySortOption;
@@ -1378,6 +1355,89 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         color: Colors.black87,
                       ),
                     ),
+                    const SizedBox(width: 4),
+                    // Sort button
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isHome) {
+                            // Cycle through sort options: number -> lastName -> firstName -> number
+                            switch (_homeSortOption) {
+                              case 'number':
+                                _homeSortOption = 'lastName';
+                                break;
+                              case 'lastName':
+                                _homeSortOption = 'firstName';
+                                break;
+                              case 'firstName':
+                                _homeSortOption = 'number';
+                                break;
+                            }
+                          } else {
+                            // Cycle through sort options: number -> lastName -> firstName -> number
+                            switch (_awaySortOption) {
+                              case 'number':
+                                _awaySortOption = 'lastName';
+                                break;
+                              case 'lastName':
+                                _awaySortOption = 'firstName';
+                                break;
+                              case 'firstName':
+                                _awaySortOption = 'number';
+                                break;
+                            }
+                          }
+                        });
+                        print(
+                            'Sort changed to: ${isHome ? _homeSortOption : _awaySortOption} for ${isHome ? "HOME" : "AWAY"} team');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                              color: Colors.grey.shade300, width: 0.5),
+                        ),
+                        child: _getSortIconWidget(
+                            isHome ? _homeSortOption : _awaySortOption),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    // Ascending/Descending button
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isHome) {
+                            _homeSortAscending = !_homeSortAscending;
+                          } else {
+                            _awaySortAscending = !_awaySortAscending;
+                          }
+                        });
+                        print(
+                            'Sort direction changed to: ${isHome ? (_homeSortAscending ? 'ASC' : 'DESC') : (_awaySortAscending ? 'ASC' : 'DESC')} for ${isHome ? "HOME" : "AWAY"} team');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                              color: Colors.grey.shade300, width: 0.5),
+                        ),
+                        child: Icon(
+                          isHome
+                              ? (_homeSortAscending
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down)
+                              : (_awaySortAscending
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down),
+                          size: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(width: 4),
@@ -1428,166 +1488,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               const TextStyle(fontSize: 10, color: Colors.grey),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Filter and sort buttons
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              border: Border(
-                top: BorderSide(color: Colors.grey.shade300, width: 0.5),
-                bottom: BorderSide(color: Colors.grey.shade300, width: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Sort type button
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isHome) {
-                        // Cycle through sort options: number -> lastName -> firstName -> number
-                        switch (_homeSortOption) {
-                          case 'number':
-                            _homeSortOption = 'lastName';
-                            break;
-                          case 'lastName':
-                            _homeSortOption = 'firstName';
-                            break;
-                          case 'firstName':
-                            _homeSortOption = 'number';
-                            break;
-                        }
-                      } else {
-                        // Cycle through sort options: number -> lastName -> firstName -> number
-                        switch (_awaySortOption) {
-                          case 'number':
-                            _awaySortOption = 'lastName';
-                            break;
-                          case 'lastName':
-                            _awaySortOption = 'firstName';
-                            break;
-                          case 'firstName':
-                            _awaySortOption = 'number';
-                            break;
-                        }
-                      }
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(3),
-                      border:
-                          Border.all(color: Colors.grey.shade300, width: 0.5),
-                    ),
-                    child: _getSortIconWidget(
-                        isHome ? _homeSortOption : _awaySortOption),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Ascending/Descending button
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isHome) {
-                        _homeSortAscending = !_homeSortAscending;
-                      } else {
-                        _awaySortAscending = !_awaySortAscending;
-                      }
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(3),
-                      border:
-                          Border.all(color: Colors.grey.shade300, width: 0.5),
-                    ),
-                    child: Icon(
-                      isHome
-                          ? (_homeSortAscending
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down)
-                          : (_awaySortAscending
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down),
-                      size: 12,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Filter button
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isHome) {
-                        // Cycle through filter options: all -> players -> coaching -> all
-                        switch (_homeFilterOption) {
-                          case 'all':
-                            _homeFilterOption = 'players';
-                            break;
-                          case 'players':
-                            _homeFilterOption = 'coaching';
-                            break;
-                          case 'coaching':
-                            _homeFilterOption = 'all';
-                            break;
-                        }
-                      } else {
-                        // Cycle through filter options: all -> players -> coaching -> all
-                        switch (_awayFilterOption) {
-                          case 'all':
-                            _awayFilterOption = 'players';
-                            break;
-                          case 'players':
-                            _awayFilterOption = 'coaching';
-                            break;
-                          case 'coaching':
-                            _awayFilterOption = 'all';
-                            break;
-                        }
-                      }
-                    });
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(3),
-                      border:
-                          Border.all(color: Colors.grey.shade300, width: 0.5),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _getFilterIcon(
-                              isHome ? _homeFilterOption : _awayFilterOption),
-                          size: 10,
-                          color: Colors.grey.shade600,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          _getFilterLabel(
-                              isHome ? _homeFilterOption : _awayFilterOption),
-                          style: TextStyle(
-                            fontSize: 8,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),
@@ -6263,55 +6163,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
-  // Get appropriate icon for current filter option
-  IconData _getFilterIcon(String filterOption) {
-    switch (filterOption) {
-      case 'all':
-        return Icons.group;
-      case 'players':
-        return Icons.sports_baseball;
-      case 'coaching':
-        return Icons.person_pin;
-      default:
-        return Icons.group;
-    }
-  }
-
-  // Get appropriate label for current filter option
-  String _getFilterLabel(String filterOption) {
-    switch (filterOption) {
-      case 'all':
-        return 'ALL';
-      case 'players':
-        return 'PLAYERS';
-      case 'coaching':
-        return 'COACHING';
-      default:
-        return 'ALL';
-    }
-  }
-
   // Format player name based on current sort option
   String _getFormattedPlayerName(String displayName, String sortOption) {
-    // Check if this is a manager (contains "(MNGR)")
-    final isManager = displayName.contains('(MNGR)');
-
-    // Remove "(MNGR)" temporarily for processing
-    final displayNameWithoutManager = displayName.replaceAll(' (MNGR)', '');
-
-    final parts = displayNameWithoutManager.split(' ');
+    final parts = displayName.split(' ');
     final jerseyNumber = parts.last.startsWith('#') ? parts.last : '';
     final nameParts = parts.where((part) => !part.startsWith('#')).toList();
 
-    String formattedName;
     if (sortOption == 'number') {
       // Extract jersey number and put it at the beginning
       final nameWithoutNumber = nameParts.join(' ');
 
       if (jerseyNumber.isNotEmpty) {
-        formattedName = '$jerseyNumber $nameWithoutNumber';
-      } else {
-        formattedName = nameWithoutNumber;
+        return '$jerseyNumber $nameWithoutNumber';
       }
     } else if (sortOption == 'lastName' && nameParts.length >= 2) {
       // Format as "Last Name, First Name #"
@@ -6319,17 +6182,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final lastName = nameParts.last;
 
       if (jerseyNumber.isNotEmpty) {
-        formattedName = '$lastName, $firstName $jerseyNumber';
+        return '$lastName, $firstName $jerseyNumber';
       } else {
-        formattedName = '$lastName, $firstName';
+        return '$lastName, $firstName';
       }
-    } else {
-      // For other sort options, return original format without manager tag
-      formattedName = displayNameWithoutManager;
     }
-
-    // Add back "(MNGR)" if it was a manager
-    return isManager ? '$formattedName (MNGR)' : formattedName;
+    // For other sort options, return original format
+    return displayName;
   }
 
   // Helper functions for smart text field

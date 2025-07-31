@@ -6,16 +6,12 @@ class Player {
   final String firstName;
   final String? jerseyNumber;
   final String displayName;
-  final bool isManager;
-  final bool isCoach;
 
   Player({
     required this.fullName,
     required this.firstName,
     this.jerseyNumber,
     required this.displayName,
-    this.isManager = false,
-    this.isCoach = false,
   });
 
   factory Player.fromJson(Map<String, dynamic> json, String? jerseyNumber) {
@@ -29,29 +25,6 @@ class Player {
       firstName: firstName,
       jerseyNumber: jerseyNumber,
       displayName: displayName,
-      isCoach: false, // Players are not coaches
-    );
-  }
-
-  factory Player.fromCoachJson(
-      Map<String, dynamic> json, String? jerseyNumber) {
-    final fullName = json['fullName'] as String;
-    final firstName = fullName.split(' ').first;
-    final job = json['job'] as String?;
-    final isManager = job == 'Manager';
-    final displayName = isManager
-        ? (jerseyNumber != null
-            ? '$fullName #$jerseyNumber (MNGR)'
-            : '$fullName (MNGR)')
-        : (jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName);
-
-    return Player(
-      fullName: fullName,
-      firstName: firstName,
-      jerseyNumber: jerseyNumber,
-      displayName: displayName,
-      isManager: isManager,
-      isCoach: true, // Coaches are coaches
     );
   }
 }
@@ -144,51 +117,6 @@ class MlbApiService {
       print('Error fetching roster for team $teamId: $e');
       rethrow;
     }
-  }
-
-  /// Fetches coach roster for a team (includes managers)
-  Future<List<Player>> fetchTeamCoachRoster(String teamId) async {
-    try {
-      final url = Uri.https(
-        _baseUrl,
-        '/api/v1/teams/$teamId/roster',
-        {'rosterType': 'coach'},
-      );
-      final response = await http.get(url);
-
-      if (response.statusCode != 200) {
-        throw Exception('Coach roster fetch failed: ${response.statusCode}');
-      }
-
-      final data = jsonDecode(response.body);
-      final rosterList = data['roster'] as List<dynamic>;
-
-      final coaches = rosterList.map((coachJson) {
-        final person = coachJson['person'] as Map<String, dynamic>;
-        final jerseyNumber = coachJson['jerseyNumber'] as String?;
-        final job = coachJson['job'] as String?;
-
-        // Add the job field to the person data so fromCoachJson can access it
-        final personWithJob = Map<String, dynamic>.from(person);
-        personWithJob['job'] = job;
-
-        return Player.fromCoachJson(personWithJob, jerseyNumber);
-      }).toList();
-
-      return coaches;
-    } catch (e) {
-      print('Error fetching coach roster for team $teamId: $e');
-      rethrow;
-    }
-  }
-
-  /// Fetches coach roster by team name (convenience method)
-  Future<List<Player>> fetchCoachRosterByTeamName(String teamName) async {
-    final team = await findTeamByName(teamName);
-    if (team == null) {
-      throw Exception('Team "$teamName" not found');
-    }
-    return fetchTeamCoachRoster(team.id);
   }
 
   /// Fetches roster by team name (convenience method)
