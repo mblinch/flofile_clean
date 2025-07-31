@@ -109,6 +109,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String? selectedAwayTeam;
   Set<String> selectedHomePlayers = {};
   Set<String> selectedAwayPlayers = {};
+
+  // Sort options for player lists
+  String _homeSortOption = 'number'; // 'number', 'lastName', 'firstName'
+  String _awaySortOption = 'number';
+  bool _homeSortAscending = true; // true = ascending, false = descending
+  bool _awaySortAscending = true;
   String? selectedCaptionVerb;
 
   // Track which team was selected first (for determining main subject)
@@ -1298,8 +1304,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 .contains(searchText.toLowerCase()))
             .toList();
 
-    // Sort the filtered roster by jersey number
-    final filteredRoster = _sortPlayerObjectsByNumber(filteredRosterUnsorted);
+    // Sort the filtered roster by current sort option
+    final sortOption = isHome ? _homeSortOption : _awaySortOption;
+    final ascending = isHome ? _homeSortAscending : _awaySortAscending;
+    final filteredRoster =
+        _sortPlayerObjects(filteredRosterUnsorted, sortOption, ascending);
 
     // Debug output
     print(
@@ -1344,6 +1353,93 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Sort button
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isHome) {
+                            // Cycle through sort options: number -> lastName -> firstName -> number
+                            switch (_homeSortOption) {
+                              case 'number':
+                                _homeSortOption = 'lastName';
+                                break;
+                              case 'lastName':
+                                _homeSortOption = 'firstName';
+                                break;
+                              case 'firstName':
+                                _homeSortOption = 'number';
+                                break;
+                            }
+                          } else {
+                            // Cycle through sort options: number -> lastName -> firstName -> number
+                            switch (_awaySortOption) {
+                              case 'number':
+                                _awaySortOption = 'lastName';
+                                break;
+                              case 'lastName':
+                                _awaySortOption = 'firstName';
+                                break;
+                              case 'firstName':
+                                _awaySortOption = 'number';
+                                break;
+                            }
+                          }
+                        });
+                        print(
+                            'Sort changed to: ${isHome ? _homeSortOption : _awaySortOption} for ${isHome ? "HOME" : "AWAY"} team');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(
+                              color: Colors.grey.shade300, width: 0.5),
+                        ),
+                        child: Icon(
+                          _getSortIcon(
+                              isHome ? _homeSortOption : _awaySortOption),
+                          size: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    // Ascending/Descending button
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isHome) {
+                            _homeSortAscending = !_homeSortAscending;
+                          } else {
+                            _awaySortAscending = !_awaySortAscending;
+                          }
+                        });
+                        print(
+                            'Sort direction changed to: ${isHome ? (_homeSortAscending ? 'ASC' : 'DESC') : (_awaySortAscending ? 'ASC' : 'DESC')} for ${isHome ? "HOME" : "AWAY"} team');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(
+                              color: Colors.grey.shade300, width: 0.5),
+                        ),
+                        child: Icon(
+                          isHome
+                              ? (_homeSortAscending
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down)
+                              : (_awaySortAscending
+                                  ? Icons.keyboard_arrow_up
+                                  : Icons.keyboard_arrow_down),
+                          size: 10,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                     ),
                   ],
@@ -1474,34 +1570,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       color: Colors.grey.shade200, width: 0.5),
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isSelected
-                                        ? Icons.check_circle
-                                        : Icons.circle_outlined,
-                                    size: 12,
-                                    color: isSelected
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      player.displayName,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                        color: isSelected
-                                            ? Colors.grey.shade800
-                                            : Colors.black87,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                player.displayName,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.grey.shade800
+                                      : Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           );
@@ -5908,18 +5988,80 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return sortedPlayers;
   }
 
-  // Sort Player objects by jersey number
-  List<Player> _sortPlayerObjectsByNumber(List<Player> players) {
+  // Sort Player objects by different criteria
+  List<Player> _sortPlayerObjects(
+      List<Player> players, String sortOption, bool ascending) {
     if (players.isEmpty) return [];
 
     final sortedPlayers = List<Player>.from(players);
-    sortedPlayers.sort((a, b) {
-      final numberA = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
-      final numberB = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
-      return numberA.compareTo(numberB);
-    });
+
+    switch (sortOption) {
+      case 'number':
+        sortedPlayers.sort((a, b) {
+          final numberA = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+          final numberB = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+          return ascending
+              ? numberA.compareTo(numberB)
+              : numberB.compareTo(numberA);
+        });
+        break;
+      case 'lastName':
+        sortedPlayers.sort((a, b) {
+          final lastNameA = _extractLastName(a.displayName ?? '');
+          final lastNameB = _extractLastName(b.displayName ?? '');
+          return ascending
+              ? lastNameA.compareTo(lastNameB)
+              : lastNameB.compareTo(lastNameA);
+        });
+        break;
+      case 'firstName':
+        sortedPlayers.sort((a, b) {
+          final firstNameA = _extractFirstName(a.displayName ?? '');
+          final firstNameB = _extractFirstName(b.displayName ?? '');
+          return ascending
+              ? firstNameA.compareTo(firstNameB)
+              : firstNameB.compareTo(firstNameA);
+        });
+        break;
+    }
 
     return sortedPlayers;
+  }
+
+  // Extract last name from display name (e.g., "John Smith #23" -> "Smith")
+  String _extractLastName(String displayName) {
+    final parts = displayName.split(' ');
+    if (parts.length >= 2) {
+      // Remove jersey number if present
+      final nameParts = parts.where((part) => !part.startsWith('#')).toList();
+      return nameParts.isNotEmpty ? nameParts.last : displayName;
+    }
+    return displayName;
+  }
+
+  // Extract first name from display name (e.g., "John Smith #23" -> "John")
+  String _extractFirstName(String displayName) {
+    final parts = displayName.split(' ');
+    if (parts.length >= 2) {
+      // Remove jersey number if present
+      final nameParts = parts.where((part) => !part.startsWith('#')).toList();
+      return nameParts.isNotEmpty ? nameParts.first : displayName;
+    }
+    return displayName;
+  }
+
+  // Get appropriate icon for current sort option
+  IconData _getSortIcon(String sortOption) {
+    switch (sortOption) {
+      case 'number':
+        return Icons.sort;
+      case 'lastName':
+        return Icons.sort_by_alpha;
+      case 'firstName':
+        return Icons.sort_by_alpha;
+      default:
+        return Icons.sort;
+    }
   }
 
   // Helper functions for smart text field
