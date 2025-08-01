@@ -25,7 +25,7 @@ class ThumbnailGridWidget extends StatefulWidget {
 }
 
 class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
-  static const int kThumbnailSize = 160; // Balanced quality and speed
+  static const int kThumbnailSize = 200; // Better quality
 
   // Thumbnail size control
   double _thumbSize = 140.0; // Start at middle size (140px)
@@ -451,20 +451,20 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           // Calculate cache dimensions for faster rendering
           int cacheWidth, cacheHeight;
           try {
-            // Use balanced cache dimensions for good quality and speed
+            // Use higher cache dimensions for better quality
             if (isLandscape) {
-              cacheWidth = 120; // Balanced size for quality and speed
-              cacheHeight = (120 * imageSize.height / imageSize.width).round();
+              cacheWidth = 160; // Better quality
+              cacheHeight = (160 * imageSize.height / imageSize.width).round();
             } else {
-              cacheHeight = 120; // Balanced size for quality and speed
-              cacheWidth = (120 * imageSize.width / imageSize.height).round();
+              cacheHeight = 160; // Better quality
+              cacheWidth = (160 * imageSize.width / imageSize.height).round();
             }
 
-            cacheWidth = cacheWidth.clamp(1, 120);
-            cacheHeight = cacheHeight.clamp(1, 120);
+            cacheWidth = cacheWidth.clamp(1, 160);
+            cacheHeight = cacheHeight.clamp(1, 160);
           } catch (e) {
-            cacheWidth = 120;
-            cacheHeight = 120;
+            cacheWidth = 160;
+            cacheHeight = 160;
           }
 
           return Container(
@@ -479,7 +479,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
-              filterQuality: FilterQuality.medium,
+              filterQuality: FilterQuality.high,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (frame != null) {
                   // Image loaded successfully
