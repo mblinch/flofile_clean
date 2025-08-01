@@ -33,7 +33,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   Map<String, String> _exifTimeCache = {};
 
   // Loading state for thumbnails
-  bool _isLoadingThumbnails = true;
+  bool _isLoadingThumbnails = false;
   int _loadedThumbnails = 0;
   List<String> _previousImagePaths = [];
 
@@ -102,17 +102,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       print('DEBUG: Image count: ${widget.imagePaths.length}');
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
-      _isLoadingThumbnails = true;
-
-      // Force completion after a timeout to prevent infinite loading
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted && _isLoadingThumbnails) {
-          print('DEBUG: Forcing thumbnail loading completion after timeout');
-          setState(() {
-            _isLoadingThumbnails = false;
-          });
-        }
-      });
+      _isLoadingThumbnails =
+          false; // Start with false, let grid show immediately
     }
 
     // Mark loading as complete when all thumbnails are loaded
