@@ -52,6 +52,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   }
 
   void _onThumbnailLoaded() {
+    if (!mounted) return;
+
     _loadedThumbnails++;
     if (_loadedThumbnails >= widget.imagePaths.length) {
       setState(() {
@@ -97,7 +99,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
       _isLoadingThumbnails =
-          false; // Start with false, let grid show immediately
+          widget.imagePaths.isNotEmpty; // Start loading if we have images
     }
 
     // Mark loading as complete when all thumbnails are loaded
@@ -106,6 +108,17 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         _loadedThumbnails >= widget.imagePaths.length) {
       setState(() {
         _isLoadingThumbnails = false;
+      });
+    }
+
+    // Timeout mechanism to prevent infinite loading
+    if (widget.imagePaths.isNotEmpty && _isLoadingThumbnails) {
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted && _isLoadingThumbnails) {
+          setState(() {
+            _isLoadingThumbnails = false;
+          });
+        }
       });
     }
 
