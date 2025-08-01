@@ -482,7 +482,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
               filterQuality:
-                  FilterQuality.low, // 70% quality for faster loading
+                  FilterQuality.high, // 100% quality for best appearance
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (frame != null) {
                   // Image loaded successfully
