@@ -381,9 +381,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       ),
                       child: Slider(
                         value: _thumbSize,
-                        min: 80.0,
+                        min: 110.0,
                         max: 170.0,
-                        divisions: 3,
+                        divisions: 2,
                         activeColor: Colors.grey.shade800,
                         inactiveColor: Colors.grey.shade300,
                         onChanged: (value) {
@@ -401,9 +401,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     onTap: () {
                       setState(() {
                         // Move to next division (30px increments)
-                        final currentStep = ((_thumbSize - 80) / 30).round();
-                        final newStep = (currentStep + 1).clamp(0, 3);
-                        _thumbSize = 80 + (newStep * 30);
+                        final currentStep = ((_thumbSize - 110) / 30).round();
+                        final newStep = (currentStep + 1).clamp(0, 2);
+                        _thumbSize = 110 + (newStep * 30);
                         _thumbSpacing = _thumbSize * 0.1;
                       });
                     },
