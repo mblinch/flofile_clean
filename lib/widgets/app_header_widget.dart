@@ -46,18 +46,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   // Test API connection
   Future<bool> _testApiConnection() async {
     try {
-      print('Testing API connection for: ${_apiManager.currentApi}');
+      // Removed debug print for cleaner console output
       final teams = await _apiManager.fetchTeams();
-      print(
-          'Successfully fetched ${teams.length} teams from ${_apiManager.currentApi}');
-
-      // Show sample teams
-      if (teams.isNotEmpty) {
-        print('Sample teams from ${_apiManager.currentApi}:');
-        for (int i = 0; i < teams.length.clamp(0, 3); i++) {
-          print('  - ${teams[i].name}');
-        }
-      }
+      // Removed debug prints for cleaner console output
       return teams.isNotEmpty;
     } catch (e) {
       print('Error testing API connection: $e');

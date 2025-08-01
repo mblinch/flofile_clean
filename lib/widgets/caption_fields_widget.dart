@@ -2225,129 +2225,127 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             if (!customBetweenPlayersController
                                                                 .text
                                                                 .isNotEmpty) ...[
-                                                              Expanded(
-                                                                flex: 4,
-                                                                child: Padding(
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .all(
-                                                                          4),
+                                                              Container(
+                                                                height:
+                                                                    500, // Increased height for verb area
+                                                                // Removed debug background for cleaner appearance
+                                                                child:
+                                                                    SingleChildScrollView(
                                                                   child:
-                                                                      LayoutBuilder(
-                                                                    builder:
-                                                                        (context,
-                                                                            constraints) {
-                                                                      // Calculate width for exactly 3 columns
-                                                                      final columnWidth =
-                                                                          (constraints.maxWidth - 8) /
-                                                                              3; // Subtract spacing between columns (4px * 2 gaps)
+                                                                      Padding(
+                                                                    padding:
+                                                                        const EdgeInsets
+                                                                            .all(
+                                                                            4),
+                                                                    child:
+                                                                        LayoutBuilder(
+                                                                      builder:
+                                                                          (context,
+                                                                              constraints) {
+                                                                        // Calculate width for exactly 3 columns
+                                                                        final columnWidth =
+                                                                            (constraints.maxWidth - 8) /
+                                                                                3; // Subtract spacing between columns (4px * 2 gaps)
 
-                                                                      return Wrap(
-                                                                        spacing:
-                                                                            4,
-                                                                        runSpacing:
-                                                                            6,
-                                                                        children: [
-                                                                          // First row - 3 columns
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Offense', [
-                                                                              'Single',
-                                                                              'Double',
-                                                                              'Triple',
-                                                                              'Home Run',
-                                                                              'RBI Sacrifice Fly',
-                                                                              'At Bat',
-                                                                              'Swings',
-                                                                              'Bunts',
-                                                                              'Walks',
-                                                                              'Hit by Pitch'
-                                                                            ]),
+                                                                        return Container(
+                                                                          // Removed debug background for cleaner appearance
+                                                                          child:
+                                                                              Wrap(
+                                                                            spacing:
+                                                                                4,
+                                                                            runSpacing:
+                                                                                6,
+                                                                            children: [
+                                                                              // First row - 3 columns
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Offense', [
+                                                                                  'Single',
+                                                                                  'Double',
+                                                                                  'Triple',
+                                                                                  'Home Run',
+                                                                                  'RBI Sacrifice Fly',
+                                                                                  'At Bat',
+                                                                                  'Swings',
+                                                                                  'Bunts',
+                                                                                  'Walks',
+                                                                                  'Hit by Pitch'
+                                                                                ]),
+                                                                              ),
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Defense', [
+                                                                                  'Pitching',
+                                                                                  'Catches',
+                                                                                  'Throws',
+                                                                                  'Tags',
+                                                                                  'Groundball',
+                                                                                  'Fielding Position',
+                                                                                  'Double Play',
+                                                                                  'Triple Play',
+                                                                                  '',
+                                                                                  ''
+                                                                                ]),
+                                                                              ),
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Non Game-Action', [
+                                                                                  'Looks On',
+                                                                                  'Batting Practice',
+                                                                                  'Fielding Practice',
+                                                                                  'Takes the Field',
+                                                                                  'Comes Off the Field',
+                                                                                  'National Anthem',
+                                                                                  'Stretching',
+                                                                                  'Warm Ups',
+                                                                                  'Pitching Change',
+                                                                                  ''
+                                                                                ]),
+                                                                              ),
+                                                                              // Second row - 3 columns
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Reactions', [
+                                                                                  'Celebrates',
+                                                                                  'Dejection',
+                                                                                  'Post Game Win',
+                                                                                  'Post Game Loss',
+                                                                                  '',
+                                                                                  '',
+                                                                                  ''
+                                                                                ]),
+                                                                              ),
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Running', [
+                                                                                  'Steals',
+                                                                                  'Slides',
+                                                                                  'Runs',
+                                                                                  'Rounds',
+                                                                                  '',
+                                                                                  '',
+                                                                                  ''
+                                                                                ]),
+                                                                              ),
+                                                                              SizedBox(
+                                                                                width: columnWidth,
+                                                                                child: _buildVerbCategory('Favorites', [
+                                                                                  '',
+                                                                                  '',
+                                                                                  '',
+                                                                                  '',
+                                                                                  '',
+                                                                                  '',
+                                                                                  ''
+                                                                                ]),
+                                                                              ),
+                                                                            ],
                                                                           ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Defense', [
-                                                                              'Pitching',
-                                                                              'Catches',
-                                                                              'Throws',
-                                                                              'Tags',
-                                                                              'Groundball',
-                                                                              'Fielding Position',
-                                                                              'Double Play',
-                                                                              'Triple Play',
-                                                                              '',
-                                                                              ''
-                                                                            ]),
-                                                                          ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Non Game-Action', [
-                                                                              'Looks On',
-                                                                              'Batting Practice',
-                                                                              'Fielding Practice',
-                                                                              'Takes the Field',
-                                                                              'Comes Off the Field',
-                                                                              'National Anthem',
-                                                                              'Stretching',
-                                                                              'Warm Ups',
-                                                                              'Pitching Change',
-                                                                              ''
-                                                                            ]),
-                                                                          ),
-                                                                          // Second row - 3 columns
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Reactions', [
-                                                                              'Celebrates',
-                                                                              'Dejection',
-                                                                              'Post Game Win',
-                                                                              'Post Game Loss',
-                                                                              '',
-                                                                              '',
-                                                                              ''
-                                                                            ]),
-                                                                          ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Running', [
-                                                                              'Steals',
-                                                                              'Slides',
-                                                                              'Runs',
-                                                                              'Rounds',
-                                                                              '',
-                                                                              '',
-                                                                              ''
-                                                                            ]),
-                                                                          ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                columnWidth,
-                                                                            child:
-                                                                                _buildVerbCategory('Favorites', [
-                                                                              '',
-                                                                              '',
-                                                                              '',
-                                                                              '',
-                                                                              '',
-                                                                              '',
-                                                                              ''
-                                                                            ]),
-                                                                          ),
-                                                                        ],
-                                                                      );
-                                                                    },
+                                                                        ); // Close Container for Wrap
+                                                                      },
+                                                                    ),
                                                                   ),
-                                                                ),
+                                                                ), // Close SingleChildScrollView
                                                               ),
                                                             ],
 
@@ -2356,7 +2354,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                                             // Third row: Dynamic content
                                                             Expanded(
-                                                              flex: 2,
+                                                              // Fills remaining space after verb area takes what it needs
                                                               child: Row(
                                                                 children: [
                                                                   Expanded(
@@ -2566,6 +2564,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildVerbCategory(String title, List<String> verbs) {
     return Container(
+      // Removed debug background for cleaner appearance
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
