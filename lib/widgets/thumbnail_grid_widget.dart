@@ -103,6 +103,16 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
       _isLoadingThumbnails = true;
+
+      // Force completion after a timeout to prevent infinite loading
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _isLoadingThumbnails) {
+          print('DEBUG: Forcing thumbnail loading completion after timeout');
+          setState(() {
+            _isLoadingThumbnails = false;
+          });
+        }
+      });
     }
 
     // Mark loading as complete when all thumbnails are loaded
