@@ -487,9 +487,12 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               cacheHeight: cacheHeight,
               filterQuality: FilterQuality.medium,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                print(
+                    'DEBUG: frameBuilder called for $imagePath, frame: $frame');
                 if (frame != null) {
                   // Image loaded successfully
                   WidgetsBinding.instance.addPostFrameCallback((_) {
+                    print('DEBUG: Calling _onThumbnailLoaded for $imagePath');
                     _onThumbnailLoaded();
                   });
                 }
@@ -511,7 +514,13 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             ),
           );
         } else {
-          // Loading state
+          // Loading state - add a timeout to force completion
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              print('DEBUG: Forcing thumbnail load completion for $imagePath');
+              _onThumbnailLoaded();
+            }
+          });
           return Container(
             color: Colors.grey.shade200,
             child: const Center(
