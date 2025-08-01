@@ -25,7 +25,7 @@ class ThumbnailGridWidget extends StatefulWidget {
 }
 
 class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
-  static const int kThumbnailSize = 200; // Better quality
+  static const int kThumbnailSize = 240; // High quality cache size
 
   // Thumbnail size control
   double _thumbSize = 140.0; // Start at middle size (140px)
@@ -382,8 +382,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       child: Slider(
                         value: _thumbSize,
                         min: 80.0,
-                        max: 200.0,
-                        divisions: 4,
+                        max: 170.0,
+                        divisions: 3,
                         activeColor: Colors.grey.shade800,
                         inactiveColor: Colors.grey.shade300,
                         onChanged: (value) {
@@ -402,7 +402,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       setState(() {
                         // Move to next division (30px increments)
                         final currentStep = ((_thumbSize - 80) / 30).round();
-                        final newStep = (currentStep + 1).clamp(0, 4);
+                        final newStep = (currentStep + 1).clamp(0, 3);
                         _thumbSize = 80 + (newStep * 30);
                         _thumbSpacing = _thumbSize * 0.1;
                       });
@@ -448,23 +448,24 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           final imageSize = snapshot.data!;
           final isLandscape = imageSize.width > imageSize.height;
 
-          // Calculate cache dimensions for faster rendering
+          // Calculate cache dimensions for better quality
           int cacheWidth, cacheHeight;
           try {
-            // Use higher cache dimensions for better quality
             if (isLandscape) {
-              cacheWidth = 160; // Better quality
-              cacheHeight = (160 * imageSize.height / imageSize.width).round();
+              cacheWidth = kThumbnailSize;
+              cacheHeight =
+                  (kThumbnailSize * imageSize.height / imageSize.width).round();
             } else {
-              cacheHeight = 160; // Better quality
-              cacheWidth = (160 * imageSize.width / imageSize.height).round();
+              cacheHeight = kThumbnailSize;
+              cacheWidth =
+                  (kThumbnailSize * imageSize.width / imageSize.height).round();
             }
 
-            cacheWidth = cacheWidth.clamp(1, 160);
-            cacheHeight = cacheHeight.clamp(1, 160);
+            cacheWidth = cacheWidth.clamp(1, kThumbnailSize);
+            cacheHeight = cacheHeight.clamp(1, kThumbnailSize);
           } catch (e) {
-            cacheWidth = 160;
-            cacheHeight = 160;
+            cacheWidth = kThumbnailSize;
+            cacheHeight = kThumbnailSize;
           }
 
           return Container(
@@ -479,7 +480,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
-              filterQuality: FilterQuality.high,
+              filterQuality: FilterQuality.medium,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (frame != null) {
                   // Image loaded successfully
