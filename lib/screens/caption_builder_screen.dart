@@ -364,8 +364,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       );
     }
 
-    // Show loading screen if loading players or thumbnails
-    if (_isLoadingPlayers || _isLoadingThumbnails) {
+    // Show loading screen only for players
+    if (_isLoadingPlayers) {
       return Scaffold(
         backgroundColor: Colors.grey.shade100,
         body: Center(
@@ -396,59 +396,193 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                if (_isLoadingPlayers) ...[
-                  const Text(
-                    'Loading Players...',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
-                    ),
+                const Text(
+                  'Loading Players...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
                   ),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: _playerLoadingProgress,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(
+                  value: _playerLoadingProgress,
+                  backgroundColor: Colors.grey.shade200,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(_playerLoadingProgress * 100).toInt()}%',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${(_playerLoadingProgress * 100).toInt()}%',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ] else if (_isLoadingThumbnails) ...[
-                  const Text(
-                    'Loading Thumbnails...',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: _thumbnailLoadingProgress,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.green.shade600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${(_thumbnailLoadingProgress * 100).toInt()}%',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+                ),
               ],
             ),
           ),
         ),
+      );
+    }
+
+    // For thumbnail loading, show the main app with a loading overlay
+    if (_isLoadingThumbnails) {
+      return Stack(
+        children: [
+          // Main app with thumbnails rendering
+          Scaffold(
+            backgroundColor: Colors.grey.shade100,
+            body: Padding(
+              padding: const EdgeInsets.fromLTRB(8.0, 2.0, 8.0, 8.0),
+              child: Column(
+                children: [
+                  // TOP ROW - Reduced height (43% instead of 50%)
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.43,
+                    child: Row(
+                      children: [
+                        // TOP LEFT BOX - Picture Preview
+                        Expanded(
+                          child: PicturePreviewWidget(
+                            imagePaths: imagePaths,
+                            currentIndex: currentIndex,
+                            onImageSelected: _onImageSelected,
+                            onNextImage: () {
+                              if (currentIndex < imagePaths.length - 1) {
+                                _onImageSelected(currentIndex + 1);
+                              }
+                            },
+                            onPreviousImage: () {
+                              if (currentIndex > 0) {
+                                _onImageSelected(currentIndex - 1);
+                              }
+                            },
+                          ),
+                        ),
+
+                        // TOP RIGHT BOX - Thumbnail Grid (rendering)
+                        Expanded(
+                          child: ThumbnailGridWidget(
+                            imagePaths: imagePaths,
+                            currentIndex: currentIndex,
+                            onImageSelected: _onImageSelected,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // BOTTOM ROW - Increased height (60% instead of 50%)
+                  Expanded(
+                    child: Row(
+                      children: [
+                        // BOTTOM LEFT BOX - Caption Fields
+                        Expanded(
+                          child: CaptionFieldsWidget(
+                            metadata: currentMetadata,
+                            onMetadataUpdated: (metadata) {
+                              setState(() {
+                                currentMetadata = metadata;
+                              });
+                            },
+                            homeTeam: selectedHomeTeam,
+                            awayTeam: selectedAwayTeam,
+                            onNextImage: () {
+                              if (currentIndex < imagePaths.length - 1) {
+                                _onImageSelected(currentIndex + 1);
+                              }
+                            },
+                            onPreviousImage: () {
+                              if (currentIndex > 0) {
+                                _onImageSelected(currentIndex - 1);
+                              }
+                            },
+                            onReset: _handleReset,
+                            personalityOverride: _personalityOverride,
+                            onImagesLoaded: (files) {
+                              setState(() {
+                                imagePaths = files;
+                                currentIndex = 0;
+                              });
+                            },
+                            preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
+                                ? _cachedHomeRoster
+                                : null,
+                            preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
+                                ? _cachedAwayRoster
+                                : null,
+                          ),
+                        ),
+
+                        // BOTTOM RIGHT BOX - Metadata
+                        Expanded(
+                          child: MetadataWidget(
+                            metadata: currentMetadata,
+                            onMetadataUpdated: (metadata) {
+                              setState(() {
+                                currentMetadata = metadata;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Semi-transparent loading overlay
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: Center(
+              child: Container(
+                width: 300,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Loading Thumbnails...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(
+                      value: _thumbnailLoadingProgress,
+                      backgroundColor: Colors.grey.shade200,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.green.shade600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${(_thumbnailLoadingProgress * 100).toInt()}%',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
