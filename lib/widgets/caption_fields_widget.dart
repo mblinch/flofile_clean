@@ -47,6 +47,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final VoidCallback? onReset;
   final String? personalityOverride;
   final Function(List<String>)? onImagesLoaded;
+  final List<Player>? preloadedHomeRoster;
+  final List<Player>? preloadedAwayRoster;
 
   const CaptionFieldsWidget({
     super.key,
@@ -59,6 +61,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onReset,
     this.personalityOverride,
     this.onImagesLoaded,
+    this.preloadedHomeRoster,
+    this.preloadedAwayRoster,
   });
 
   @override
@@ -604,6 +608,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Future<void> _loadTeamRosters() async {
     if (selectedHomeTeam == null || selectedAwayTeam == null) return;
+
+    // Check if we have preloaded roster data
+    if (widget.preloadedHomeRoster != null &&
+        widget.preloadedAwayRoster != null) {
+      setState(() {
+        _homeRoster = widget.preloadedHomeRoster!;
+        _awayRoster = widget.preloadedAwayRoster!;
+        _isLoadingRosters = false;
+
+        // Clear any existing selections since rosters have changed
+        selectedHomePlayers.clear();
+        selectedAwayPlayers.clear();
+        _firstTeamSelected = null; // Reset first team selection
+        _firstPlayerSelected = null; // Reset first player selection
+        print(
+            'DEBUG: Using preloaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players');
+      });
+
+      // Fetch venue information for the specific game and update stadium field
+      if (selectedHomeTeam != null &&
+          selectedAwayTeam != null &&
+          stadiumController.text.isEmpty) {
+        _fetchAndSetVenueForGame();
+      }
+
+      return; // Skip API calls since we have preloaded data
+    }
 
     setState(() {
       _isLoadingRosters = true;
