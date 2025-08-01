@@ -240,15 +240,103 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show startup dialog if configuration is not complete
-    if (!_isStartupComplete) {
-      return Scaffold(
-        backgroundColor: Colors.grey.shade100,
-        body: Center(
-          child: StartupDialog(
-            onConfigurationComplete: _handleStartupComplete,
+    // Build the main app content
+    Widget mainAppContent = Scaffold(
+      backgroundColor: Colors.grey.shade100,
+      body: Column(
+        children: [
+          // App header
+          Container(
+            height: 60,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Text(
+                  'FLO FILE',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const Spacer(),
+                if (_isStartupComplete) ...[
+                  Text(
+                    'Ready to configure...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
+          // Main content area
+          Expanded(
+            child: Container(
+              color: Colors.grey.shade50,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.folder_open,
+                      size: 64,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Select your images folder to begin',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Configure teams and game date',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Show startup dialog overlay if configuration is not complete
+    if (!_isStartupComplete) {
+      return Stack(
+        children: [
+          // Main app in background
+          mainAppContent,
+          // Semi-transparent overlay
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: Center(
+              child: StartupDialog(
+                onConfigurationComplete: _handleStartupComplete,
+              ),
+            ),
+          ),
+        ],
       );
     }
 
