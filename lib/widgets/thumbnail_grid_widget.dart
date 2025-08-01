@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
+import 'package:extended_image/extended_image.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -476,34 +477,26 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               color: Colors.grey.shade50,
               borderRadius: BorderRadius.circular(2),
             ),
-            child: Image.file(
+            child: ExtendedImage.file(
               File(imagePath),
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
               filterQuality:
                   FilterQuality.high, // 100% quality for best appearance
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if (frame != null) {
+              loadStateChanged: (state) {
+                if (state.extendedImageLoadState == LoadState.completed) {
                   // Image loaded successfully
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _onThumbnailLoaded();
                   });
+                } else if (state.extendedImageLoadState == LoadState.failed) {
+                  // Count error as loaded to prevent infinite loading
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _onThumbnailLoaded();
+                  });
                 }
-                return child;
-              },
-              errorBuilder: (context, error, stackTrace) {
-                // Count error as loaded to prevent infinite loading
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _onThumbnailLoaded();
-                });
-                return Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child:
-                        Icon(Icons.broken_image, color: Colors.red, size: 16),
-                  ),
-                );
+                return null; // Use default loading/error states
               },
             ),
           );
@@ -558,11 +551,11 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     );
   }
 
-  // Get image dimensions efficiently
+  // Get image dimensions efficiently using ExtendedImage
   Future<Size> _getImageDimensions(String imagePath) async {
     try {
       final completer = Completer<Size>();
-      final image = Image.file(File(imagePath));
+      final image = ExtendedImage.file(File(imagePath));
 
       image.image.resolve(const ImageConfiguration()).addListener(
             ImageStreamListener(
