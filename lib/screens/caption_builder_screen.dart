@@ -121,9 +121,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Load images from the selected folder
     await _loadImagesFromFolder(folderPath);
 
+    // Only clear loading state after ensuring images are loaded
     setState(() {
       _isLoadingThumbnails = false;
     });
+
+    // Debug: Check if images were loaded
+    print('Thumbnail loading complete. Images loaded: ${imagePaths.length}');
   }
 
   Future<void> _loadImagesFromFolder(String folderPath) async {
@@ -161,6 +165,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       });
 
       print('Loaded ${imageFiles.length} images from folder: $folderPath');
+
+      // Small delay to ensure state is committed
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Load metadata for the first image
       if (imageFiles.isNotEmpty) {
