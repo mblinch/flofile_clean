@@ -6,6 +6,36 @@ import '../services/api_manager.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
+import 'package:collection/collection.dart';
+
+// Custom button widget with cursor styling
+class CustomButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final BorderRadius? borderRadius;
+
+  const CustomButton({
+    super.key,
+    required this.onTap,
+    required this.child,
+    this.backgroundColor,
+    this.borderColor,
+    this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
 
 class CaptionFieldsWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -204,27 +234,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Triple Play'
     ],
     'Running': ['Steals', 'Slides', 'Runs', 'Rounds'],
-    'Celebrating': ['Celebrates', 'Celebrates With', 'Celebrates Against'],
-    'Portraiture': [
+    'Reactions': ['Celebrates', 'Dejection', 'Post Game Win', 'Post Game Loss'],
+    'Non Game-Action': [
       'Looks On',
-      'Walks Off Field',
-      'Runs Off Field',
-      'Takes the Field'
-    ],
-    'Pre Game': [
-      'Looks On Pre Game',
-      'Stretches',
       'Batting Practice',
       'Fielding Practice',
+      'Takes the Field',
+      'Comes Off the Field',
+      'National Anthem',
+      'Stretching',
       'Warm Ups',
-      'Walks On Field',
-      'Runs On Field'
-    ],
-    'Post Game': [
-      'Celebrates',
-      'Bucket Dump',
-      'Post Game Interview',
-      'Reacts to Post Game'
+      'Pitching Change'
     ],
   };
 
@@ -734,9 +754,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Player chips row
                         Container(
                           width: double.infinity,
-                          constraints: const BoxConstraints(minHeight: 28),
+                          constraints: const BoxConstraints(minHeight: 32),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 8, vertical: 6),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(6),
@@ -800,41 +820,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 12),
 
-                        // Folder Picker button
-                        GestureDetector(
-                          onTap: _pickFolder,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade400),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.folder_open,
-                                    size: 12, color: Colors.grey.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Pick Folder',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
                         // FTP button
-                        GestureDetector(
+                        CustomButton(
                           onTap: _disableFtp ? null : _onFtpPressed,
                           child: Container(
                             width: double.infinity,
@@ -854,7 +841,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(Icons.cloud_upload,
-                                    size: 12,
+                                    size: 20,
                                     color: _disableFtp
                                         ? Colors.grey.shade600
                                         : Colors.white),
@@ -881,7 +868,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                             // Copy button
                             Expanded(
-                              child: GestureDetector(
+                              child: CustomButton(
                                 onTap: () {
                                   if (captionController.text.isNotEmpty) {
                                     Clipboard.setData(ClipboardData(
@@ -898,23 +885,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade100,
+                                    color: Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(6),
                                     border:
-                                        Border.all(color: Colors.blue.shade300),
+                                        Border.all(color: Colors.grey.shade300),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(Icons.copy,
                                           size: 12,
-                                          color: Colors.blue.shade700),
+                                          color: Colors.grey.shade700),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Copy',
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: Colors.blue.shade700,
+                                          color: Colors.grey.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -926,29 +913,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const SizedBox(width: 6),
                             // Paste button
                             Expanded(
-                              child: GestureDetector(
+                              child: CustomButton(
                                 onTap: _onPastePressed,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.shade100,
+                                    color: Colors.grey.shade100,
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                        color: Colors.green.shade300),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(Icons.paste,
                                           size: 12,
-                                          color: Colors.green.shade700),
+                                          color: Colors.grey.shade700),
                                       const SizedBox(width: 4),
                                       Text(
                                         'Paste',
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: Colors.green.shade700,
+                                          color: Colors.grey.shade700,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -967,7 +954,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                             // Previous button
                             Expanded(
-                              child: GestureDetector(
+                              child: CustomButton(
                                 onTap: () {
                                   widget.onPreviousImage?.call();
                                 },
@@ -1003,7 +990,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const SizedBox(width: 6),
                             // Next button
                             Expanded(
-                              child: GestureDetector(
+                              child: CustomButton(
                                 onTap: () {
                                   widget.onNextImage?.call();
                                 },
@@ -1042,7 +1029,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         const SizedBox(height: 8),
 
                         // Reset button
-                        GestureDetector(
+                        CustomButton(
                           onTap: _resetCaption,
                           child: Container(
                             width: double.infinity,
@@ -1150,44 +1137,42 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
 
-                        // API Connector Logo - Only show when connected
-                        FutureBuilder<bool>(
-                          future: _testApiConnection(),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasData && snapshot.data == true) {
-                              return Align(
-                                alignment: Alignment.center,
-                                child: Container(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 4),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.cloud_done,
-                                        size: 16,
-                                        color: Colors.green.shade600,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Connected to roster source',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.green.shade600,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
+                        // Push folder picker to bottom
+                        const Spacer(),
+
+                        // Folder Picker button
+                        CustomButton(
+                          onTap: _pickFolder,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orange.shade200),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.folder,
+                                    size: 12, color: Colors.orange.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Pick Images Folder',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.orange.shade600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                              );
-                            }
-                            return const SizedBox
-                                .shrink(); // Don't show anything if not connected
-                          },
+                              ],
+                            ),
+                          ),
                         ),
+
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -1700,7 +1685,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 width:
                                     80, // Fixed width to prevent size changes
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(3),
@@ -1730,7 +1715,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 });
                               },
                               child: Container(
-                                padding: const EdgeInsets.all(4),
+                                padding: const EdgeInsets.all(2),
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(3),
@@ -1883,23 +1868,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       _selectedVerb == 'Double' ||
                       _selectedVerb == 'Triple'
                   ? _buildHittingSubOptions()
-                  : _selectedVerb == 'Home Run'
-                      ? _buildHomeRunSubOptions()
-                      : _selectedVerb == 'Tags'
-                          ? _buildTagsSubOptions()
-                          : _selectedVerb == 'Catches'
-                              ? _buildCatchesSubOptions()
-                              : _selectedVerb == 'Groundball'
-                                  ? _buildGroundballSubOptions()
-                                  : (_selectedVerb == 'Looks On Pre Game' ||
-                                          _selectedVerb == 'Stretches' ||
-                                          _selectedVerb == 'Batting Practice' ||
-                                          _selectedVerb ==
-                                              'Fielding Practice' ||
-                                          _selectedVerb == 'Warm Ups' ||
-                                          _selectedVerb == 'Walks On Field' ||
-                                          _selectedVerb == 'Runs On Field')
-                                      ? _buildPreGameInterface()
+                  : _selectedVerb == 'RBI Sacrifice Fly'
+                      ? _buildSacrificeFlySubOptions()
+                      : _selectedVerb == 'Home Run'
+                          ? _buildHomeRunSubOptions()
+                          : _selectedVerb == 'Tags'
+                              ? _buildTagsSubOptions()
+                              : _selectedVerb == 'Catches'
+                                  ? _buildCatchesSubOptions()
+                                  : _selectedVerb == 'Groundball'
+                                      ? _buildGroundballSubOptions()
                                       : (_selectedVerb == 'At Bat' ||
                                               _selectedVerb == 'Pitching' ||
                                               _selectedVerb == 'Swings' ||
@@ -2143,112 +2121,119 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                               ),
                                                             ),
 
+                                                            const SizedBox(
+                                                                height:
+                                                                    4), // Padding between Magic Bar and verb categories
+
                                                             // Verb categories (hidden when custom text is being used, except for Pre Game verbs)
                                                             if (!customBetweenPlayersController
                                                                 .text
                                                                 .isNotEmpty) ...[
                                                               Expanded(
                                                                 flex: 4,
-                                                                child:
-                                                                    LayoutBuilder(
-                                                                  builder: (context,
-                                                                      constraints) {
-                                                                    // Calculate width for exactly 4 columns
-                                                                    final columnWidth =
-                                                                        (constraints.maxWidth -
-                                                                                3) /
-                                                                            4; // Subtract spacing between columns
+                                                                child: Padding(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .all(
+                                                                          4),
+                                                                  child:
+                                                                      LayoutBuilder(
+                                                                    builder:
+                                                                        (context,
+                                                                            constraints) {
+                                                                      // Calculate width for exactly 3 columns
+                                                                      final columnWidth =
+                                                                          (constraints.maxWidth - 8) /
+                                                                              3; // Subtract spacing between columns (4px * 2 gaps)
 
-                                                                    return Wrap(
-                                                                      spacing:
-                                                                          1,
-                                                                      runSpacing:
-                                                                          4,
-                                                                      children: [
-                                                                        // First row - 4 columns
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child:
-                                                                              _buildVerbCategory('Offense', [
-                                                                            'Single',
-                                                                            'Double',
-                                                                            'Triple',
-                                                                            'Home Run',
-                                                                            'At Bat',
-                                                                            'Swings',
-                                                                            'Bunts',
-                                                                            'Walks',
-                                                                            'Hit by Pitch'
-                                                                          ]),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child:
-                                                                              _buildVerbCategory('Defense', [
-                                                                            'Pitching',
-                                                                            'Catches',
-                                                                            'Throws',
-                                                                            'Tags',
-                                                                            'Groundball',
-                                                                            'Fielding Position',
-                                                                            'Double Play',
-                                                                            'Triple Play'
-                                                                          ]),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child: _buildVerbCategory(
-                                                                              'Running',
-                                                                              [
-                                                                                'Steals',
-                                                                                'Slides',
-                                                                                'Runs',
-                                                                                'Rounds'
-                                                                              ]),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child: _buildVerbCategory(
-                                                                              'Reactions',
-                                                                              [
-                                                                                'Celebration',
-                                                                                'Dejection'
-                                                                              ]),
-                                                                        ),
-                                                                        // Second row - 3 columns + 1 empty
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child: _buildVerbCategory(
-                                                                              'Portraiture',
-                                                                              [
-                                                                                'Looks On',
-                                                                                'Walks Off Field',
-                                                                                'Runs Off Field',
-                                                                                'Takes the Field'
-                                                                              ]),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child: _buildVerbCategory(
-                                                                              'Pre Game',
-                                                                              verbCategories['Pre Game']!),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              columnWidth,
-                                                                          child: _buildVerbCategory(
-                                                                              'Post Game',
-                                                                              verbCategories['Post Game']!),
-                                                                        ),
-                                                                      ],
-                                                                    );
-                                                                  },
+                                                                      return Wrap(
+                                                                        spacing:
+                                                                            4,
+                                                                        runSpacing:
+                                                                            6,
+                                                                        children: [
+                                                                          // First row - 3 columns
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Offense', [
+                                                                              'Single',
+                                                                              'Double',
+                                                                              'Triple',
+                                                                              'Home Run',
+                                                                              'RBI Sacrifice Fly',
+                                                                              'At Bat',
+                                                                              'Swings',
+                                                                              'Bunts',
+                                                                              'Walks',
+                                                                              'Hit by Pitch'
+                                                                            ]),
+                                                                          ),
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Defense', [
+                                                                              'Pitching',
+                                                                              'Catches',
+                                                                              'Throws',
+                                                                              'Tags',
+                                                                              'Groundball',
+                                                                              'Fielding Position',
+                                                                              'Double Play',
+                                                                              'Triple Play'
+                                                                            ]),
+                                                                          ),
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Non Game-Action', [
+                                                                              'Looks On',
+                                                                              'Batting Practice',
+                                                                              'Fielding Practice',
+                                                                              'Takes the Field',
+                                                                              'Comes Off the Field',
+                                                                              'National Anthem',
+                                                                              'Stretching',
+                                                                              'Warm Ups',
+                                                                              'Pitching Change'
+                                                                            ]),
+                                                                          ),
+                                                                          // Second row - 3 columns
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Reactions', [
+                                                                              'Celebrates',
+                                                                              'Dejection',
+                                                                              'Post Game Win',
+                                                                              'Post Game Loss'
+                                                                            ]),
+                                                                          ),
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Running', [
+                                                                              'Steals',
+                                                                              'Slides',
+                                                                              'Runs',
+                                                                              'Rounds'
+                                                                            ]),
+                                                                          ),
+                                                                          SizedBox(
+                                                                            width:
+                                                                                columnWidth,
+                                                                            child:
+                                                                                _buildVerbCategory('Favorites', []),
+                                                                          ),
+                                                                        ],
+                                                                      );
+                                                                    },
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ],
@@ -2515,24 +2500,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
-
-            // Clear Magic Bar when selecting Pre Game verbs to make them accessible
-            if (verb == 'Looks On Pre Game' ||
-                verb == 'Stretches' ||
-                verb == 'Batting Practice' ||
-                verb == 'Fielding Practice' ||
-                verb == 'Warm Ups' ||
-                verb == 'Walks On Field' ||
-                verb == 'Runs On Field') {
-              customBetweenPlayersController.clear();
-            }
           }
         });
         _updateCaption();
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -2545,7 +2519,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           verb,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -2580,7 +2554,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _updateCaption();
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(8),
@@ -2592,7 +2566,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -3363,13 +3337,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Walks' ||
         verbToUse == 'Dejection' ||
         verbToUse == 'Looks On' ||
-        verbToUse == 'Looks On Pre Game' ||
-        verbToUse == 'Stretches' ||
-        verbToUse == 'Batting Practice' ||
-        verbToUse == 'Fielding Practice' ||
-        verbToUse == 'Warm Ups' ||
-        verbToUse == 'Walks On Field' ||
-        verbToUse == 'Runs On Field' ||
         verbToUse == 'Walks Off Field' ||
         verbToUse == 'Runs Off Field' ||
         verbToUse == 'Takes the Field' ||
@@ -3850,12 +3817,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Verb Selection',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.black87,
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 20),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(6),
+              topRight: Radius.circular(6),
+            ),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Text(
+            'Verb Selection',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -4279,6 +4258,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Home Run':
         baseAction = _buildHomeRunPhrase();
         break;
+      case 'RBI Sacrifice Fly':
+        baseAction = 'RBI sacrifice fly';
+        break;
       case 'Strikeout':
         baseAction = 'strikeout';
         break;
@@ -4315,12 +4297,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       case 'Fielding Position':
         return 'takes fielding position against the ${_getOpposingTeamName()}';
-      case 'Looks On Pre Game':
-        if (activePlayerCount >= 2) {
-          return 'look on prior to playing the ${_getOpposingTeamName()}';
-        } else {
-          return 'looks on prior to playing the ${_getOpposingTeamName()}';
-        }
+
       case 'Looks On':
         return 'looks on against the ${_getOpposingTeamName()}';
       case 'Walks Off Field':
@@ -4817,6 +4794,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         case 'runs_base_paths':
           return 'runs the base path on $baseAction';
+        case 'runs to first base':
+          return 'runs to first base on a $baseAction';
         case 'trots_the_bases':
           // Get opposing players if any are selected
           final opposingPlayers = _getOpposingPlayers();
@@ -6035,7 +6014,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
             const SizedBox(height: 4),
 
-            // Bottom row: Celebrating and Other (greyed out)
+            // Bottom row: Reactions and Non Game-Action
             Expanded(
               flex: 1,
               child: Row(
@@ -6044,10 +6023,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Celebrating', [
+                        child: _buildVerbCategory('Reactions', [
                           'Celebrates',
-                          'Celebrates With',
-                          'Celebrates Against'
+                          'Dejection',
+                          'Post Game Win',
+                          'Post Game Loss'
                         ]),
                       ),
                     ),
@@ -6057,19 +6037,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Portraiture', [
+                        child: _buildVerbCategory('Non Game-Action', [
                           'Looks On',
-                          'Walks Off Field',
-                          'Runs Off Field',
-                          'Takes the Field'
+                          'Batting Practice',
+                          'Fielding Practice',
+                          'Takes the Field',
+                          'Comes Off the Field',
+                          'National Anthem',
+                          'Stretching',
+                          'Warm Ups',
+                          'Pitching Change'
                         ]),
                       ),
                     ),
                   ),
                   const SizedBox(width: 1),
-                  const Expanded(
-                      child:
-                          SizedBox()), // Empty space where inning picker would be
+                  const Expanded(child: SizedBox()), // Empty space
                 ],
               ),
             ),
@@ -6143,6 +6126,68 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  Widget _buildSacrificeFlySubOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected hit type indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Action options
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Inning section with reusable widget
+              SizedBox(
+                height: 80, // Reduced height for compact layout
+                child: _buildReusableInningSelector(),
+              ),
+
+              // Options header
+              Container(
+                margin: const EdgeInsets.only(left: 8, right: 8, top: 4),
+                child: const Text(
+                  'Options',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              // Celebrates option
+              _buildSubOption('Celebrates', 'celebrates'),
+
+              // Runs to first base option
+              _buildSubOption('Runs to First Base', 'runs to first base'),
+
+              // Back button
+              _buildBackButton(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildHittingSubOptions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -6150,15 +6195,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Selected hit type indicator
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey.shade300,
+            color: Colors.grey.shade200,
             borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
             _selectedVerb ?? '',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade800,
             ),
@@ -6748,7 +6793,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Row(
         children: [
           // Reset button - Left aligned
-          GestureDetector(
+          CustomButton(
             onTap: _resetCaption,
             child: Container(
               width: 32,
@@ -6768,7 +6813,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Previous button
-                GestureDetector(
+                CustomButton(
                   onTap: () {
                     widget.onPreviousImage?.call();
                   },
@@ -6786,7 +6831,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 const SizedBox(width: 4),
                 // Copy button
-                GestureDetector(
+                CustomButton(
                   onTap: () {
                     if (captionController.text.isNotEmpty) {
                       Clipboard.setData(
@@ -6803,33 +6848,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
+                      color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.blue.shade300),
+                      border: Border.all(color: Colors.grey.shade300),
                     ),
                     child:
-                        Icon(Icons.copy, size: 16, color: Colors.blue.shade700),
+                        Icon(Icons.copy, size: 16, color: Colors.grey.shade700),
                   ),
                 ),
                 const SizedBox(width: 4),
                 // Paste button
-                GestureDetector(
+                CustomButton(
                   onTap: _onPastePressed,
                   child: Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: Colors.green.shade100,
+                      color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.green.shade300),
+                      border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Icon(Icons.paste,
-                        size: 16, color: Colors.green.shade700),
+                        size: 16, color: Colors.grey.shade700),
                   ),
                 ),
                 const SizedBox(width: 4),
                 // Next button
-                GestureDetector(
+                CustomButton(
                   onTap: () {
                     widget.onNextImage?.call();
                   },
@@ -6850,23 +6895,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
 
           // FTP button - Right aligned
-          GestureDetector(
+          CustomButton(
             onTap: _disableFtp ? null : _onFtpPressed,
             child: Container(
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: _disableFtp
-                    ? Colors.grey.shade300
-                    : const Color(0xFF0052CC),
+                color:
+                    _disableFtp ? Colors.grey.shade300 : Colors.blue.shade800,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                     color: _disableFtp
                         ? Colors.grey.shade300
-                        : const Color(0xFF0052CC)),
+                        : Colors.blue.shade800),
               ),
               child: Icon(Icons.cloud_upload,
-                  size: 16,
+                  size: 24,
                   color: _disableFtp ? Colors.grey.shade600 : Colors.white),
             ),
           ),
@@ -6889,7 +6933,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             width: MediaQuery.of(context).size.width * 0.4, // Half width
             margin: const EdgeInsets.symmetric(
                 horizontal: 5), // 5px padding from left and right
-            child: GestureDetector(
+            child: CustomButton(
               onTap: onPressed ??
                   () {
                     setState(() {
@@ -7700,36 +7744,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
       ),
-    );
-  }
-
-  // Pre Game interface that skips innings
-  Widget _buildPreGameInterface() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Selected verb indicator
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: Text(
-            _selectedVerb ?? '',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // Skip innings and go directly to back button
-        _buildBackButton(),
-      ],
     );
   }
 

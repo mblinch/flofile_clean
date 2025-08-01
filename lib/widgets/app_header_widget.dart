@@ -44,7 +44,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   int currentIndex = 0;
 
   // Test API connection
-  Future<void> _testApiConnection() async {
+  Future<bool> _testApiConnection() async {
     try {
       print('Testing API connection for: ${_apiManager.currentApi}');
       final teams = await _apiManager.fetchTeams();
@@ -58,8 +58,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           print('  - ${teams[i].name}');
         }
       }
+      return teams.isNotEmpty;
     } catch (e) {
       print('Error testing API connection: $e');
+      return false;
     }
   }
 
@@ -112,19 +114,49 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       backgroundColor: Colors.grey.shade200,
       elevation: 0,
       automaticallyImplyLeading: false,
-      title: Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 12, 2),
-          child: Text(
-            'FLO FILE Beta',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade700,
-              letterSpacing: -1.0,
+      title: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 12, 2),
+        child: Row(
+          children: [
+            Text(
+              'FLO FILE Beta',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade700,
+                letterSpacing: -1.0,
+              ),
             ),
-          ),
+            const Spacer(),
+            // Connectivity indicator
+            FutureBuilder<bool>(
+              future: _testApiConnection(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data == true) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.cable,
+                        size: 14,
+                        color: Colors.green.shade600,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Connected to roster source',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
         ),
       ),
     );

@@ -91,11 +91,11 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
               ? () => widget.onSelected!(!widget.selected)
               : null,
           child: Container(
-            height: 32, // Increased from 24 to 32 for taller chips
+            height: 40, // Increased from 32 to 40 for taller chips
             width: widget.width,
             alignment: Alignment.center,
             padding: widget.padding ??
-                const EdgeInsets.symmetric(vertical: 6), // Increased padding
+                const EdgeInsets.symmetric(vertical: 8), // Increased padding
             decoration: BoxDecoration(
               color: widget.disableColorChange
                   ? Colors.grey.shade200
@@ -106,7 +106,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
             ),
             child: DefaultTextStyle(
               style: TextStyle(
-                fontSize: 11, // Increased from 10 to 11 for better readability
+                fontSize: 14, // Increased from 11 to 14 for better readability
                 fontWeight:
                     widget.selected ? FontWeight.w600 : FontWeight.normal,
                 color: widget.disableColorChange

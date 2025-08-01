@@ -129,7 +129,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       ),
       child: Column(
         children: [
-          // Header with image count
+          // Header with image count only
           Container(
             padding:
                 const EdgeInsets.all(4), // Match image preview header padding
@@ -143,8 +143,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             child: Container(
               height: 20, // Match image preview header height
               child: Row(
-                mainAxisAlignment: MainAxisAlignment
-                    .spaceBetween, // Space between counter and controls
+                mainAxisAlignment:
+                    MainAxisAlignment.center, // Center the counter
                 children: [
                   // Thumbnail counter
                   Text(
@@ -154,100 +154,6 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       fontWeight: FontWeight.w500,
                       color: Colors.black87,
                     ),
-                  ),
-                  // Small slider with plus/minus buttons
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Minus button
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            // Move to previous division (30px increments)
-                            final currentStep =
-                                ((_thumbSize - 80) / 30).round();
-                            final newStep = (currentStep - 1).clamp(0, 3);
-                            _thumbSize = 80 + (newStep * 30);
-                            _thumbSpacing = _thumbSize * 0.1;
-                          });
-                        },
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(
-                                2), // Square with slight rounding
-                            border: Border.all(color: Colors.grey.shade400),
-                          ),
-                          child: Icon(
-                            Icons.remove,
-                            size: 10,
-                            color: Colors.grey.shade800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // Small slider
-                      SizedBox(
-                        width: 120, // Less wide slider
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 4,
-                              elevation: 1, // Smaller shadow
-                            ),
-                            trackHeight: 4, // Thicker track
-                            thumbColor: Colors.black, // Black circle
-                          ),
-                          child: Slider(
-                            value: _thumbSize,
-                            min: 80.0,
-                            max: 200.0,
-                            divisions:
-                                4, // Even fewer divisions for more meaningful changes
-                            activeColor: Colors.grey.shade800, // Dark grey
-                            inactiveColor: Colors.grey.shade300,
-                            onChanged: (value) {
-                              setState(() {
-                                _thumbSize = value;
-                                _thumbSpacing = value * 0.1;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // Plus button
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            // Move to next division (30px increments)
-                            final currentStep =
-                                ((_thumbSize - 80) / 30).round();
-                            final newStep = (currentStep + 1)
-                                .clamp(0, 4); // Allow step 4 to reach 200px
-                            _thumbSize = 80 + (newStep * 30);
-                            _thumbSpacing = _thumbSize * 0.1;
-                          });
-                        },
-                        child: Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(
-                                2), // Square with slight rounding
-                            border: Border.all(color: Colors.grey.shade400),
-                          ),
-                          child: Icon(
-                            Icons.add,
-                            size: 10,
-                            color: Colors.grey.shade800,
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -347,6 +253,108 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   ),
                 );
               },
+            ),
+          ),
+
+          // Bottom bar with slider
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
+              ),
+            ),
+            child: Container(
+              height: 20,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Minus button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        // Move to previous division (30px increments)
+                        final currentStep = ((_thumbSize - 80) / 30).round();
+                        final newStep = (currentStep - 1).clamp(0, 3);
+                        _thumbSize = 80 + (newStep * 30);
+                        _thumbSpacing = _thumbSize * 0.1;
+                      });
+                    },
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      child: Icon(
+                        Icons.remove,
+                        size: 10,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Slider
+                  SizedBox(
+                    width: 120,
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 3,
+                          elevation: 1,
+                        ),
+                        trackHeight: 4,
+                        thumbColor: Colors.black,
+                      ),
+                      child: Slider(
+                        value: _thumbSize,
+                        min: 80.0,
+                        max: 200.0,
+                        divisions: 4,
+                        activeColor: Colors.grey.shade800,
+                        inactiveColor: Colors.grey.shade300,
+                        onChanged: (value) {
+                          setState(() {
+                            _thumbSize = value;
+                            _thumbSpacing = value * 0.1;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Plus button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        // Move to next division (30px increments)
+                        final currentStep = ((_thumbSize - 80) / 30).round();
+                        final newStep = (currentStep + 1).clamp(0, 4);
+                        _thumbSize = 80 + (newStep * 30);
+                        _thumbSpacing = _thumbSize * 0.1;
+                      });
+                    },
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: 10,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
