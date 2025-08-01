@@ -121,23 +121,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Load images from the selected folder
     await _loadImagesFromFolder(folderPath);
 
-    // Force a rebuild cycle to ensure ThumbnailGridWidget can render
-    if (mounted) {
-      setState(() {
-        // Trigger rebuild with populated imagePaths
-      });
-
-      // Wait one frame for widgets to build
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-
-    // Now clear loading state - thumbnails should be ready to render
+    // Go straight to app - no thumbnail loading screen
     setState(() {
       _isLoadingThumbnails = false;
     });
 
-    // Debug: Check if images were loaded
-    print('Thumbnail loading complete. Images loaded: ${imagePaths.length}');
+    print('Images loaded: ${imagePaths.length} - going straight to app');
   }
 
   Future<void> _loadImagesFromFolder(String folderPath) async {
@@ -160,24 +149,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Sort files by name
       imageFiles.sort();
 
-      // Simulate thumbnail loading progress
-      final int totalImages = imageFiles.length;
-      for (int i = 0; i < totalImages; i++) {
-        await Future.delayed(const Duration(milliseconds: 20));
-        setState(() {
-          _thumbnailLoadingProgress = (i + 1) / totalImages;
-        });
-      }
-
       setState(() {
         imagePaths = imageFiles;
         currentIndex = 0;
       });
 
       print('Loaded ${imageFiles.length} images from folder: $folderPath');
-
-      // Small delay to ensure state is committed
-      await Future.delayed(const Duration(milliseconds: 100));
 
       // Load metadata for the first image
       if (imageFiles.isNotEmpty) {

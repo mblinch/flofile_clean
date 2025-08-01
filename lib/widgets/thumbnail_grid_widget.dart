@@ -28,8 +28,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   static const int kThumbnailSize = 240; // High quality cache size
 
   // Thumbnail size control
-  double _thumbSize = 80.0; // Start at 80px
-  double _thumbSpacing = 8.0;
+  double _thumbSize = 140.0; // Start at middle size (140px)
+  double _thumbSpacing = 14.0;
 
   // EXIF data cache
   Map<String, String> _exifTimeCache = {};
