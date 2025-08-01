@@ -25,7 +25,7 @@ class ThumbnailGridWidget extends StatefulWidget {
 }
 
 class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
-  static const int kThumbnailSize = 240; // High quality cache size
+  static const int kThumbnailSize = 120; // Reduced for faster rendering
 
   // Thumbnail size control
   double _thumbSize = 140.0; // Start at middle size (140px)
@@ -448,24 +448,23 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           final imageSize = snapshot.data!;
           final isLandscape = imageSize.width > imageSize.height;
 
-          // Calculate cache dimensions for better quality
+          // Calculate cache dimensions for faster rendering
           int cacheWidth, cacheHeight;
           try {
+            // Use smaller cache dimensions for faster loading
             if (isLandscape) {
-              cacheWidth = kThumbnailSize;
-              cacheHeight =
-                  (kThumbnailSize * imageSize.height / imageSize.width).round();
+              cacheWidth = 80; // Fixed small size for speed
+              cacheHeight = (80 * imageSize.height / imageSize.width).round();
             } else {
-              cacheHeight = kThumbnailSize;
-              cacheWidth =
-                  (kThumbnailSize * imageSize.width / imageSize.height).round();
+              cacheHeight = 80; // Fixed small size for speed
+              cacheWidth = (80 * imageSize.width / imageSize.height).round();
             }
 
-            cacheWidth = cacheWidth.clamp(1, kThumbnailSize);
-            cacheHeight = cacheHeight.clamp(1, kThumbnailSize);
+            cacheWidth = cacheWidth.clamp(1, 80);
+            cacheHeight = cacheHeight.clamp(1, 80);
           } catch (e) {
-            cacheWidth = kThumbnailSize;
-            cacheHeight = kThumbnailSize;
+            cacheWidth = 80;
+            cacheHeight = 80;
           }
 
           return Container(
@@ -480,7 +479,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
-              filterQuality: FilterQuality.medium,
+              filterQuality: FilterQuality.low,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (frame != null) {
                   // Image loaded successfully
