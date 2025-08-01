@@ -53,11 +53,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   void _onThumbnailLoaded() {
     _loadedThumbnails++;
-    print(
-        'DEBUG: Thumbnail loaded: $_loadedThumbnails / ${widget.imagePaths.length}');
     if (_loadedThumbnails >= widget.imagePaths.length) {
-      print(
-          'DEBUG: All thumbnails loaded, setting _isLoadingThumbnails to false');
       setState(() {
         _isLoadingThumbnails = false;
       });
@@ -98,8 +94,6 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   Widget build(BuildContext context) {
     // Reset loading state when new images are loaded
     if (widget.imagePaths != _previousImagePaths) {
-      print('DEBUG: New images detected, resetting loading state');
-      print('DEBUG: Image count: ${widget.imagePaths.length}');
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
       _isLoadingThumbnails =
@@ -486,19 +480,15 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               cacheHeight: cacheHeight,
               filterQuality: FilterQuality.medium,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                print(
-                    'DEBUG: frameBuilder called for $imagePath, frame: $frame');
                 if (frame != null) {
                   // Image loaded successfully
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    print('DEBUG: Calling _onThumbnailLoaded for $imagePath');
                     _onThumbnailLoaded();
                   });
                 }
                 return child;
               },
               errorBuilder: (context, error, stackTrace) {
-                print('DEBUG: Image error for $imagePath: $error');
                 // Count error as loaded to prevent infinite loading
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _onThumbnailLoaded();
