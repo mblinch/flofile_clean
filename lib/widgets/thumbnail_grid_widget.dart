@@ -435,100 +435,45 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   }
 
   Widget _buildThumbnail(String imagePath) {
-    return FutureBuilder<Size>(
-      future: _getImageDimensions(imagePath),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
+    // Simplified thumbnail loading without FutureBuilder
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Image.file(
+        File(imagePath),
+        fit: BoxFit.contain,
+        cacheWidth: kThumbnailSize,
+        cacheHeight: kThumbnailSize,
+        filterQuality: FilterQuality.medium,
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          print('DEBUG: frameBuilder called for $imagePath, frame: $frame');
+          if (frame != null) {
+            // Image loaded successfully
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              print('DEBUG: Calling _onThumbnailLoaded for $imagePath');
+              _onThumbnailLoaded();
+            });
+          }
+          return child;
+        },
+        errorBuilder: (context, error, stackTrace) {
+          print('DEBUG: Image error for $imagePath: $error');
+          // Count error as loaded to prevent infinite loading
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _onThumbnailLoaded();
+          });
           return Container(
             color: Colors.grey.shade200,
             child: const Center(
               child: Icon(Icons.broken_image, color: Colors.red, size: 16),
             ),
           );
-        }
-
-        if (snapshot.hasData) {
-          final imageSize = snapshot.data!;
-          final isLandscape = imageSize.width > imageSize.height;
-
-          // Calculate cache dimensions for better quality
-          int cacheWidth, cacheHeight;
-          try {
-            if (isLandscape) {
-              cacheWidth = kThumbnailSize;
-              cacheHeight =
-                  (kThumbnailSize * imageSize.height / imageSize.width).round();
-            } else {
-              cacheHeight = kThumbnailSize;
-              cacheWidth =
-                  (kThumbnailSize * imageSize.width / imageSize.height).round();
-            }
-
-            cacheWidth = cacheWidth.clamp(1, kThumbnailSize);
-            cacheHeight = cacheHeight.clamp(1, kThumbnailSize);
-          } catch (e) {
-            cacheWidth = kThumbnailSize;
-            cacheHeight = kThumbnailSize;
-          }
-
-          return Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color:
-                  Colors.grey.shade50, // Light background for better visibility
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Image.file(
-              File(imagePath),
-              fit: BoxFit
-                  .contain, // Changed from cover to contain to show full image
-              cacheWidth: cacheWidth,
-              cacheHeight: cacheHeight,
-              filterQuality: FilterQuality.medium,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                print(
-                    'DEBUG: frameBuilder called for $imagePath, frame: $frame');
-                if (frame != null) {
-                  // Image loaded successfully
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    print('DEBUG: Calling _onThumbnailLoaded for $imagePath');
-                    _onThumbnailLoaded();
-                  });
-                }
-                return child;
-              },
-              errorBuilder: (context, error, stackTrace) {
-                // Count error as loaded to prevent infinite loading
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _onThumbnailLoaded();
-                });
-                return Container(
-                  color: Colors.grey.shade200,
-                  child: const Center(
-                    child:
-                        Icon(Icons.broken_image, color: Colors.red, size: 16),
-                  ),
-                );
-              },
-            ),
-          );
-        } else {
-          // Loading state - add a timeout to force completion
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              print('DEBUG: Forcing thumbnail load completion for $imagePath');
-              _onThumbnailLoaded();
-            }
-          });
-          return Container(
-            color: Colors.grey.shade200,
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
-      },
+        },
+      ),
     );
   }
 
