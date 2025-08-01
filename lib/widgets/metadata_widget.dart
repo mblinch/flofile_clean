@@ -350,8 +350,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       ),
       child: Column(
         children: [
-<<<<<<< Updated upstream
-=======
           // Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -377,8 +375,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               ],
             ),
           ),
-
->>>>>>> Stashed changes
           // Main content
           Expanded(
             child: SingleChildScrollView(
