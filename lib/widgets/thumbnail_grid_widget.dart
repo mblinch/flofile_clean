@@ -448,24 +448,25 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           final imageSize = snapshot.data!;
           final isLandscape = imageSize.width > imageSize.height;
 
-          // Calculate cache dimensions for better quality
+          // Calculate cache dimensions for 170px max with 70% quality
           int cacheWidth, cacheHeight;
+          final maxSize = 170; // Max thumbnail size
           try {
             if (isLandscape) {
-              cacheWidth = kThumbnailSize;
+              cacheWidth = maxSize;
               cacheHeight =
-                  (kThumbnailSize * imageSize.height / imageSize.width).round();
+                  (maxSize * imageSize.height / imageSize.width).round();
             } else {
-              cacheHeight = kThumbnailSize;
+              cacheHeight = maxSize;
               cacheWidth =
-                  (kThumbnailSize * imageSize.width / imageSize.height).round();
+                  (maxSize * imageSize.width / imageSize.height).round();
             }
 
-            cacheWidth = cacheWidth.clamp(1, kThumbnailSize);
-            cacheHeight = cacheHeight.clamp(1, kThumbnailSize);
+            cacheWidth = cacheWidth.clamp(1, maxSize);
+            cacheHeight = cacheHeight.clamp(1, maxSize);
           } catch (e) {
-            cacheWidth = kThumbnailSize;
-            cacheHeight = kThumbnailSize;
+            cacheWidth = maxSize;
+            cacheHeight = maxSize;
           }
 
           return Container(
@@ -480,7 +481,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               fit: BoxFit.contain,
               cacheWidth: cacheWidth,
               cacheHeight: cacheHeight,
-              filterQuality: FilterQuality.medium,
+              filterQuality:
+                  FilterQuality.low, // 70% quality for faster loading
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (frame != null) {
                   // Image loaded successfully
