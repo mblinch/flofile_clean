@@ -1,0 +1,224 @@
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+import '../widgets/app_header_widget.dart';
+import '../widgets/picture_preview_widget.dart';
+import '../widgets/thumbnail_grid_widget.dart';
+import '../widgets/caption_fields_widget.dart';
+import '../widgets/metadata_widget.dart';
+import '../widgets/api_sports_test_widget.dart';
+
+class CaptionBuilderScreen extends StatefulWidget {
+  const CaptionBuilderScreen({super.key});
+
+  @override
+  _CaptionBuilderScreenState createState() => _CaptionBuilderScreenState();
+}
+
+class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
+  // Image state management
+  List<String> imagePaths = [];
+  int currentIndex = 0;
+
+  // Metadata state
+  Map<String, dynamic>? currentMetadata;
+
+  // Team selection
+  String? selectedHomeTeam;
+  String? selectedAwayTeam;
+
+  // Personality override for reset
+  String? _personalityOverride;
+
+  void _handleReset() {
+    setState(() {
+      _personalityOverride = '';
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  // Load metadata from the current image
+  Future<void> _loadMetadata() async {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+
+    final imagePath = imagePaths[currentIndex];
+    print('Loading metadata from: $imagePath');
+
+    try {
+      // Extract metadata via exiftool in JSON format
+      final proc = await Process.run('exiftool', [
+        '-j', // JSON output
+        '-Caption-Abstract',
+        '-ImageDescription',
+        '-XMP-getty:Personality',
+        '-TransmissionReference',
+        '-DescriptionWriter',
+        '-Headline',
+        '-Keywords',
+        '-Creator',
+        '-CreatorJobTitle',
+        '-Credit',
+        '-Copyright',
+        '-Source',
+        '-ObjectName',
+        '-Category',
+        '-SupplementalCategories',
+        '-XMP-photoshop:Instructions',
+        '-Sub-location',
+        '-City',
+        '-Province-State',
+        '-Urgency',
+        '-Country',
+        '-CountryCode',
+        '-DateTimeOriginal',
+        '-CreateDate',
+        '-ModifyDate',
+        '-FileModifyDate',
+        imagePath,
+      ]);
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
+        if (data.isNotEmpty) {
+          setState(() {
+            currentMetadata = data.first as Map<String, dynamic>;
+          });
+          print('Metadata loaded successfully');
+        }
+      } else {
+        print('Exiftool error: ${proc.stderr}');
+      }
+    } catch (e) {
+      print('Error loading metadata: $e');
+    }
+  }
+
+  // Handle image selection
+  void _onImageSelected(int index) {
+    setState(() {
+      currentIndex = index;
+    });
+    _loadMetadata();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppHeaderWidget(
+        onImagesLoaded: (images) {
+          print('CaptionBuilderScreen received ${images.length} images');
+          setState(() {
+            imagePaths = images;
+            currentIndex = 0;
+          });
+          print(
+              'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
+          // Load metadata for the first image
+          if (images.isNotEmpty) {
+            _loadMetadata();
+          }
+        },
+        onHomeTeamChanged: (team) {
+          setState(() {
+            selectedHomeTeam = team;
+          });
+        },
+        onAwayTeamChanged: (team) {
+          setState(() {
+            selectedAwayTeam = team;
+          });
+        },
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // TOP ROW
+            Expanded(
+              child: Row(
+                children: [
+                  // TOP LEFT BOX - Picture Preview
+                  Expanded(
+                    child: PicturePreviewWidget(
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: _onImageSelected,
+                      onNextImage: () {
+                        if (currentIndex < imagePaths.length - 1) {
+                          _onImageSelected(currentIndex + 1);
+                        }
+                      },
+                      onPreviousImage: () {
+                        if (currentIndex > 0) {
+                          _onImageSelected(currentIndex - 1);
+                        }
+                      },
+                    ),
+                  ),
+
+                  // TOP RIGHT BOX - Thumbnail Grid
+                  Expanded(
+                    child: ThumbnailGridWidget(
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: _onImageSelected,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // BOTTOM ROW
+            Expanded(
+              child: Row(
+                children: [
+                  // BOTTOM LEFT BOX - Caption Fields
+                  Expanded(
+                    child: CaptionFieldsWidget(
+                      metadata: currentMetadata,
+                      onMetadataUpdated: (metadata) {
+                        setState(() {
+                          currentMetadata = metadata;
+                        });
+                      },
+                      homeTeam: selectedHomeTeam,
+                      awayTeam: selectedAwayTeam,
+                      onNextImage: () {
+                        if (currentIndex < imagePaths.length - 1) {
+                          _onImageSelected(currentIndex + 1);
+                        }
+                      },
+                      onPreviousImage: () {
+                        if (currentIndex > 0) {
+                          _onImageSelected(currentIndex - 1);
+                        }
+                      },
+                      onReset: _handleReset,
+                      personalityOverride: _personalityOverride,
+                    ),
+                  ),
+
+                  // BOTTOM RIGHT BOX - Metadata
+                  Expanded(
+                    child: MetadataWidget(
+                      metadata: currentMetadata,
+                      onMetadataUpdated: (metadata) {
+                        setState(() {
+                          currentMetadata = metadata;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

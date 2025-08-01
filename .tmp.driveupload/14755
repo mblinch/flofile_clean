@@ -1,0 +1,19 @@
+import 'package:flutter/material.dart';
+
+class AppHeaderWidget extends StatelessWidget implements PreferredSizeWidget {
+  const AppHeaderWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      title: const Text('Caption Writer'),
+      backgroundColor: const Color(0xFF2E3A59),
+      foregroundColor: Colors.white,
+      toolbarHeight:
+          MediaQuery.of(context).size.height * 0.05, // 5% of screen height
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}

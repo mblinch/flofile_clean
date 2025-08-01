@@ -1,0 +1,36 @@
+name: quick_cap
+description: A Flutter app for generating Getty-style captions with IPTC metadata and code-replacement dropdowns.
+publish_to: "none"
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # File & directory picking
+  file_picker: ^6.2.1
+
+  # For network requests
+  http: ^1.2.1
+
+  # Internationalization & date formatting
+  intl: ^0.18.1
+
+  # For native menu bar integration on desktop
+  menubar:
+  git:
+    url: git@github.com:larryaasen/menubar.git
+
+  # Path utilities
+  path: ^1.8.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true

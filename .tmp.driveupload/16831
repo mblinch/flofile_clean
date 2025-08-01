@@ -1,0 +1,507 @@
+import 'package:flutter/material.dart';
+import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
+import 'package:path/path.dart' as p;
+
+// Custom square thumb shape for slider
+class SquareSliderThumbShape extends SliderComponentShape {
+  const SquareSliderThumbShape({
+    required this.enabledThumbRadius,
+    this.elevation = 0,
+  });
+
+  final double enabledThumbRadius;
+  final double elevation;
+
+  @override
+  double getPreferredSize(bool isEnabled, bool isDiscrete) {
+    return enabledThumbRadius * 2;
+  }
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final Canvas canvas = context.canvas;
+    final Tween<double> radiusTween = Tween<double>(
+      begin: enabledThumbRadius - 1,
+      end: enabledThumbRadius,
+    );
+    final double radius = radiusTween.evaluate(enableAnimation);
+    final Tween<double> centerTween = Tween<Offset>(
+      begin: center - const Offset(0, 1),
+      end: center,
+    );
+    final Offset centerOffset = centerTween.evaluate(enableAnimation);
+
+    // Draw square thumb
+    final Rect rect = Rect.fromCenter(
+      center: centerOffset,
+      width: radius * 2,
+      height: radius * 2,
+    );
+
+    final Paint paint = Paint()
+      ..color = sliderTheme.thumbColor ?? Colors.black
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(rect, paint);
+  }
+}
+
+class ThumbnailGridWidget extends StatefulWidget {
+  final List<String> imagePaths;
+  final int currentIndex;
+  final Function(int) onImageSelected;
+  final ScrollController? scrollController;
+
+  const ThumbnailGridWidget({
+    super.key,
+    required this.imagePaths,
+    required this.currentIndex,
+    required this.onImageSelected,
+    this.scrollController,
+  });
+
+  @override
+  State<ThumbnailGridWidget> createState() => _ThumbnailGridWidgetState();
+}
+
+class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
+  static const int kThumbnailSize = 240; // High quality cache size
+
+  // Thumbnail size control
+  double _thumbSize = 80.0; // Start at 80px
+  double _thumbSpacing = 8.0;
+
+  // EXIF data cache
+  Map<String, String> _exifTimeCache = {};
+
+  String _formatTime(String? dateTimeStr) {
+    if (dateTimeStr == null) return '';
+    try {
+      final dt = DateTime.parse(
+          dateTimeStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$hour:$minute $ampm';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Future<String> _getImageTime(String imagePath) async {
+    if (_exifTimeCache.containsKey(imagePath)) {
+      return _exifTimeCache[imagePath]!;
+    }
+
+    try {
+      final proc = await Process.run('exiftool', [
+        '-j',
+        '-DateTimeOriginal',
+        imagePath,
+      ]);
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
+        if (data.isNotEmpty) {
+          final meta = data.first as Map<String, dynamic>;
+          final dateTime = meta['DateTimeOriginal']?.toString();
+          final formattedTime = _formatTime(dateTime);
+          _exifTimeCache[imagePath] = formattedTime;
+          return formattedTime;
+        }
+      }
+    } catch (e) {
+      print('Error loading EXIF time for $imagePath: $e');
+    }
+
+    _exifTimeCache[imagePath] = '';
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.imagePaths.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.all(8.0),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.grey.shade50,
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.grid_view, size: 48, color: Colors.grey),
+              SizedBox(height: 8),
+              Text(
+                'No Images',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Thumbnails will appear here',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Calculate grid parameters based on container size
+    final containerWidth =
+        MediaQuery.of(context).size.width * 0.4; // Approximate width
+    final columns =
+        ((containerWidth - _thumbSpacing) / (_thumbSize + _thumbSpacing))
+            .floor();
+
+    return Container(
+      margin: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: Column(
+        children: [
+          // Header with image count
+          Container(
+            padding:
+                const EdgeInsets.all(4), // Match image preview header padding
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50, // Match image preview header color
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Container(
+              height: 20, // Match image preview header height
+              child: Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.center, // Center everything in header
+                children: [
+                  // Small slider with plus/minus buttons
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Minus button
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            // Move to previous division (30px increments)
+                            final currentStep =
+                                ((_thumbSize - 80) / 30).round();
+                            final newStep = (currentStep - 1).clamp(0, 3);
+                            _thumbSize = 80 + (newStep * 30);
+                            _thumbSpacing = _thumbSize * 0.1;
+                          });
+                        },
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(
+                                2), // Square with slight rounding
+                            border: Border.all(color: Colors.grey.shade400),
+                          ),
+                          child: const Icon(
+                            Icons.remove,
+                            size: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Small slider
+                      SizedBox(
+                        width: 120, // Less wide slider
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            thumbShape: const SquareSliderThumbShape(
+                              enabledThumbRadius: 4,
+                              elevation: 0, // No shadow
+                            ),
+                            overlayShape: const SliderComponentShape
+                                .noOverlay(), // No overlay shadow
+                            trackHeight: 4, // Thicker track
+                            thumbColor: Colors.black, // Black circle
+                          ),
+                          child: Slider(
+                            value: _thumbSize,
+                            min: 80.0,
+                            max: 200.0,
+                            divisions:
+                                4, // Even fewer divisions for more meaningful changes
+                            activeColor: Colors.grey.shade500, // Lighter grey
+                            inactiveColor: Colors.grey.shade300,
+                            onChanged: (value) {
+                              setState(() {
+                                _thumbSize = value;
+                                _thumbSpacing = value * 0.1;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Plus button
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            // Move to next division (30px increments)
+                            final currentStep =
+                                ((_thumbSize - 80) / 30).round();
+                            final newStep = (currentStep + 1)
+                                .clamp(0, 4); // Allow step 4 to reach 200px
+                            _thumbSize = 80 + (newStep * 30);
+                            _thumbSpacing = _thumbSize * 0.1;
+                          });
+                        },
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(
+                                2), // Square with slight rounding
+                            border: Border.all(color: Colors.grey.shade400),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Thumbnail grid
+          Expanded(
+            child: GridView.builder(
+              controller: widget.scrollController,
+              padding: const EdgeInsets.all(8),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns > 0 ? columns : 4,
+                mainAxisSpacing: _thumbSpacing,
+                crossAxisSpacing: _thumbSpacing,
+                childAspectRatio: 1.0,
+              ),
+              itemCount: widget.imagePaths.length,
+              itemBuilder: (context, index) {
+                final imagePath = widget.imagePaths[index];
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => widget.onImageSelected(index),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: index == widget.currentIndex
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.grey.shade500,
+                          width: index == widget.currentIndex ? 1.5 : 0.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Image thumbnail
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                child: _buildThumbnail(imagePath),
+                              ),
+                            ),
+                          ),
+                          // Filename at top
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            child: Text(
+                              p.basename(imagePath),
+                              style: const TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // Time at bottom
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            child: FutureBuilder<String>(
+                              future: _getImageTime(imagePath),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData &&
+                                    snapshot.data!.isNotEmpty) {
+                                  return Text(
+                                    snapshot.data!,
+                                    style: const TextStyle(
+                                      fontSize: 7,
+                                      color: Colors.grey,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThumbnail(String imagePath) {
+    return FutureBuilder<Size>(
+      future: _getImageDimensions(imagePath),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: Icon(Icons.broken_image, color: Colors.red, size: 16),
+            ),
+          );
+        }
+
+        if (snapshot.hasData) {
+          final imageSize = snapshot.data!;
+          final isLandscape = imageSize.width > imageSize.height;
+
+          // Calculate cache dimensions for better quality
+          int cacheWidth, cacheHeight;
+          try {
+            if (isLandscape) {
+              cacheWidth = kThumbnailSize;
+              cacheHeight =
+                  (kThumbnailSize * imageSize.height / imageSize.width).round();
+            } else {
+              cacheHeight = kThumbnailSize;
+              cacheWidth =
+                  (kThumbnailSize * imageSize.width / imageSize.height).round();
+            }
+
+            cacheWidth = cacheWidth.clamp(1, kThumbnailSize);
+            cacheHeight = cacheHeight.clamp(1, kThumbnailSize);
+          } catch (e) {
+            cacheWidth = kThumbnailSize;
+            cacheHeight = kThumbnailSize;
+          }
+
+          return Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              color:
+                  Colors.grey.shade50, // Light background for better visibility
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Image.file(
+              File(imagePath),
+              fit: BoxFit
+                  .contain, // Changed from cover to contain to show full image
+              cacheWidth: cacheWidth,
+              cacheHeight: cacheHeight,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade200,
+                  child: const Center(
+                    child:
+                        Icon(Icons.broken_image, color: Colors.red, size: 16),
+                  ),
+                );
+              },
+            ),
+          );
+        } else {
+          // Loading state
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  // Get image dimensions efficiently
+  Future<Size> _getImageDimensions(String imagePath) async {
+    try {
+      final completer = Completer<Size>();
+      final image = Image.file(File(imagePath));
+
+      image.image.resolve(const ImageConfiguration()).addListener(
+            ImageStreamListener(
+              (ImageInfo info, bool _) {
+                final width = info.image.width.toDouble();
+                final height = info.image.height.toDouble();
+                completer.complete(Size(width, height));
+              },
+              onError: (dynamic exception, StackTrace? stackTrace) {
+                completer.complete(const Size(1.0, 1.0));
+              },
+            ),
+          );
+
+      return completer.future;
+    } catch (e) {
+      return const Size(1.0, 1.0);
+    }
+  }
+}

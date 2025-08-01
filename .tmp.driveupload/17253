@@ -1,0 +1,153 @@
+import 'package:flutter/material.dart';
+import '../services/api_sports_service.dart';
+
+class ApiSportsTestWidget extends StatefulWidget {
+  const ApiSportsTestWidget({super.key});
+
+  @override
+  State<ApiSportsTestWidget> createState() => _ApiSportsTestWidgetState();
+}
+
+class _ApiSportsTestWidgetState extends State<ApiSportsTestWidget> {
+  final ApiSportsService _apiService = ApiSportsService();
+  bool _isLoading = false;
+  String _testResult = '';
+  List<ApiSportsTeamInfo> _teams = [];
+  List<ApiSportsPlayer> _players = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('API-Sports Test'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _testConnection,
+                  child:
+                      Text(_isLoading ? 'Testing...' : 'Test API Connection'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _testLeagues,
+                  child: const Text('Test Leagues'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_testResult.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _testResult.contains('successful')
+                      ? Colors.green.shade50
+                      : Colors.red.shade50,
+                  border: Border.all(
+                    color: _testResult.contains('successful')
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(_testResult),
+              ),
+            const SizedBox(height: 16),
+            if (_teams.isNotEmpty) ...[
+              const Text('Teams Found:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _teams.length,
+                  itemBuilder: (context, index) {
+                    final team = _teams[index];
+                    return ListTile(
+                      title: Text(team.name),
+                      subtitle: Text('ID: ${team.id}'),
+                      trailing: ElevatedButton(
+                        onPressed: () => _loadTeamPlayers(team.id),
+                        child: const Text('Load Players'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            if (_players.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text('Players Found:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _players.length,
+                  itemBuilder: (context, index) {
+                    final player = _players[index];
+                    return ListTile(
+                      title: Text(player.displayName),
+                      subtitle: Text('First: ${player.firstName}'),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _testConnection() async {
+    setState(() {
+      _isLoading = true;
+      _testResult = '';
+      _teams = [];
+      _players = [];
+    });
+
+    try {
+      final success = await _apiService.testConnection();
+      if (success) {
+        final teams = await _apiService.fetchAllTeams();
+        setState(() {
+          _testResult =
+              '✅ API connection successful! Found ${teams.length} teams';
+          _teams = teams;
+        });
+      } else {
+        setState(() {
+          _testResult = '❌ API connection failed. Check console for details.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _testResult = '❌ Error: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadTeamPlayers(String teamId) async {
+    try {
+      final players = await _apiService.fetchTeamRoster(teamId);
+      setState(() {
+        _players = players;
+      });
+    } catch (e) {
+      setState(() {
+        _testResult = '❌ Error loading players: $e';
+      });
+    }
+  }
+}

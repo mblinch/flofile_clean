@@ -1,0 +1,2712 @@
+import 'package:flutter/material.dart';
+import 'package:adaptive_navigation/adaptive_navigation.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:http/http.dart' as http;
+import 'dart:convert'; // for jsonDecode
+import 'dart:io'; // for File, Directory, Process
+import 'dart:collection'; // for LinkedHashSet
+import 'dart:math'; // for sin, cos, pi
+import 'dart:ui' as ui;
+import 'dart:async'; // for Timer
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:xml/xml.dart';
+import 'package:collection/collection.dart'; // for firstOrNull
+import 'package:spell_check_on_client/spell_check_on_client.dart';
+
+// MLB Team to State/Province mapping
+const Map<String, String> teamStates = {
+  'Baltimore Orioles': 'Maryland',
+  'Boston Red Sox': 'Massachusetts',
+  'New York Yankees': 'New York',
+  'Tampa Bay Rays': 'Florida',
+  'Toronto Blue Jays': 'Ontario',
+  'Chicago White Sox': 'Illinois',
+  'Cleveland Guardians': 'Ohio',
+  'Detroit Tigers': 'Michigan',
+  'Kansas City Royals': 'Missouri',
+  'Minnesota Twins': 'Minnesota',
+  'Houston Astros': 'Texas',
+  'Los Angeles Angels': 'California',
+  'Oakland Athletics': 'California',
+  'Seattle Mariners': 'Washington',
+  'Texas Rangers': 'Texas',
+  'Atlanta Braves': 'Georgia',
+  'Miami Marlins': 'Florida',
+  'New York Mets': 'New York',
+  'Philadelphia Phillies': 'Pennsylvania',
+  'Washington Nationals': 'DC',
+  'Chicago Cubs': 'Illinois',
+  'Cincinnati Reds': 'Ohio',
+  'Milwaukee Brewers': 'Wisconsin',
+  'Pittsburgh Pirates': 'Pennsylvania',
+  'St. Louis Cardinals': 'Missouri',
+  'Arizona Diamondbacks': 'Arizona',
+  'Colorado Rockies': 'Colorado',
+  'Los Angeles Dodgers': 'California',
+  'San Diego Padres': 'California',
+  'San Francisco Giants': 'California',
+};
+
+const double kInputTextSize = 14.0;
+const int kThumbnailSize =
+    100; // Size for thumbnails (smaller = faster loading, less memory)
+
+const kInputTitleStyle = TextStyle(
+  fontSize: 24,
+  fontWeight: FontWeight.bold,
+);
+
+void main() {
+  try {
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.dumpErrorToConsole(details);
+      if (details.exceptionAsString().contains('DropdownButton')) {
+        print('DROPDOWN ERROR: ${details.exceptionAsString()}');
+      }
+    };
+    runApp(const MyApp());
+  } catch (e, stack) {
+    print('FATAL ERROR in main(): $e');
+    print(stack);
+  }
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Quick Cap',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2E3A59), // Cool Gray
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white, // Pure white background
+        useMaterial3: true,
+        fontFamily: 'RobotoCondensed',
+        textTheme: ThemeData.light().textTheme.copyWith(
+              bodyLarge: const TextStyle(fontSize: kInputTextSize),
+              bodyMedium: const TextStyle(fontSize: 8),
+              bodySmall: const TextStyle(fontSize: 8),
+              titleMedium:
+                  const TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+              headlineSmall: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold), // Smaller for section titles
+              labelMedium: const TextStyle(fontSize: 8),
+            ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2E3A59), // Cool Gray
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            textStyle:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFF00A8E8), // Sky Blue Accent
+          ),
+        ),
+        // inputDecorationTheme: const InputDecorationTheme(
+        //   border: OutlineInputBorder(),
+        //   hintStyle: TextStyle(fontSize: kInputTextSize),
+        //   labelStyle: TextStyle(fontSize: kInputTextSize),
+        //   contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        // ),
+      ),
+      home: const CaptionBuilder(),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            // Ensure minimum size for the app
+            size: Size(
+              MediaQuery.of(context).size.width.clamp(1200, double.infinity),
+              MediaQuery.of(context).size.height.clamp(800, double.infinity),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+}
+
+class Replacement {
+  final String full;
+  final String short;
+  final String firstName;
+  final String? jerseyNumber;
+  Replacement(this.full, this.short, this.firstName, [this.jerseyNumber]);
+
+  // Consider if this `fullTeam` logic is robust enough.
+  // It relies on "of the" being in the `full` string.
+  String get fullTeam {
+    if (full.contains('of the')) {
+      final parts = full.split('of the');
+      return parts.length > 1 ? parts[1].trim() : '';
+    }
+    return '';
+  }
+}
+
+/// Intent to toggle Home/Away player list via keyboard
+class ToggleHomeAwayIntent extends Intent {}
+
+class CaptionBuilder extends StatefulWidget {
+  const CaptionBuilder({super.key});
+
+  @override
+  _CaptionBuilderState createState() => _CaptionBuilderState();
+}
+
+class FlashingFilterChip extends StatefulWidget {
+  final Widget label;
+  final bool selected;
+  final ValueChanged<bool>? onSelected;
+  final VisualDensity? visualDensity;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? labelPadding;
+  final MaterialTapTargetSize? materialTapTargetSize;
+  final bool showCheckmark;
+
+  const FlashingFilterChip({
+    Key? key,
+    required this.label,
+    required this.selected,
+    this.onSelected,
+    this.visualDensity,
+    this.padding,
+    this.labelPadding,
+    this.materialTapTargetSize,
+    this.showCheckmark = true,
+  }) : super(key: key);
+
+  @override
+  _FlashingFilterChipState createState() => _FlashingFilterChipState();
+}
+
+class _FlashingFilterChipState extends State<FlashingFilterChip>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  Animation<Color?>? _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400), // Made it a bit faster
+    );
+  }
+
+  @override
+  void didUpdateWidget(FlashingFilterChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected && !oldWidget.selected && widget.onSelected != null) {
+      // Just got selected
+      final chipTheme = ChipTheme.of(context);
+      const flashColor = Color(0x0D000000); // 5% opacity black for flash
+      const selectedColor =
+          Color(0x0D000000); // 5% opacity black for selected state
+      final unselectedColor =
+          chipTheme.backgroundColor ?? const Color(0x0D000000);
+
+      _animation = TweenSequence<Color?>([
+        TweenSequenceItem(
+            tween: ColorTween(begin: unselectedColor, end: flashColor),
+            weight: 30),
+        TweenSequenceItem(
+            tween: ColorTween(begin: flashColor, end: unselectedColor),
+            weight: 30),
+        TweenSequenceItem(
+            tween: ColorTween(begin: unselectedColor, end: selectedColor),
+            weight: 40),
+      ]).animate(_controller);
+
+      _controller.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return GestureDetector(
+          onTap: widget.onSelected != null
+              ? () => widget.onSelected!(!widget.selected)
+              : null,
+          child: Container(
+            height: 24,
+            decoration: BoxDecoration(
+              color:
+                  widget.selected ? Colors.grey.shade600 : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: Colors.black,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Center(
+              child: DefaultTextStyle(
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight:
+                      widget.selected ? FontWeight.w600 : FontWeight.normal,
+                  color: widget.selected ? Colors.white : Colors.black,
+                ),
+                child: widget.label,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CaptionBuilderState extends State<CaptionBuilder>
+    with TickerProviderStateMixin {
+  // At the top of _CaptionBuilderState:
+  String selectedState = '';
+  final double _fixedChipWidth = 90.0;
+  final double _dropdownWidth = 120.0;
+
+  // Animation controllers for caption effects
+  late AnimationController _captionGlowController;
+  late AnimationController _captionScaleController;
+  late AnimationController _captionShakeController;
+  late AnimationController _typewriterController;
+  late Animation<double> _captionGlowAnimation;
+  late Animation<double> _captionScaleAnimation;
+  late Animation<double> _captionShakeAnimation;
+  late Animation<double> _typewriterAnimation;
+
+  // Typewriter effect state
+  String _displayedCaption = '';
+  String _targetCaption = '';
+  String _previousCaption = '';
+
+  // Personality field typewriter effect
+  late AnimationController _personalityTypewriterController;
+  late Animation<double> _personalityTypewriterAnimation;
+  String _displayedPersonality = '';
+  String _targetPersonality = '';
+  String _previousPersonality = '';
+
+  // Burst detection
+  List<int> _burstIndices = [];
+  bool _isBurstMode = false;
+
+  // Sorting
+  bool _isSortedByDate = false;
+  bool _isSortedByFilename = false;
+
+  // Thumbnail caching
+  final Map<String, ui.Image?> _thumbnailCache = {};
+  final Map<String, bool> _thumbnailLoading = {};
+  int _loadedThumbnailCount = 0;
+  final ValueNotifier<int> _thumbnailProgressNotifier = ValueNotifier<int>(0);
+
+  // Player picker autocomplete
+  final TextEditingController _playerPickerController = TextEditingController();
+  final FocusNode _playerPickerFocusNode = FocusNode();
+  bool _showPlayerSuggestions = false;
+
+  // Spell checker state
+  List<String> _misspelledWords = [];
+  bool _isSpellChecking = false;
+
+  void _onCopyPressed() {
+    Clipboard.setData(ClipboardData(text: captionController.text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Caption copied to clipboard!')),
+    );
+  }
+
+  Future<void> _onPastePressed() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData != null && clipboardData.text != null) {
+      setState(() {
+        captionController.text = clipboardData.text!;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Metadata pasted from clipboard!')),
+      );
+    }
+  }
+
+  // Simple spell checking function
+  void _checkSpelling(String text) {
+    if (_isSpellChecking) return;
+
+    setState(() {
+      _isSpellChecking = true;
+    });
+
+    // Simple word extraction and basic spell checking
+    final words = text
+        .split(RegExp(r'\s+'))
+        .where((word) =>
+                word.isNotEmpty &&
+                word.length > 2 &&
+                !RegExp(r'^[A-Z][a-z]+$').hasMatch(word) // Skip proper nouns
+            )
+        .toList();
+
+    // For now, just mark words that are very short or contain numbers as potentially misspelled
+    // This is a placeholder - in a real implementation you'd use a proper dictionary
+    final misspelled = words
+        .where((word) =>
+            word.length < 3 ||
+            RegExp(r'\d').hasMatch(word) ||
+            word.contains('_') ||
+            word.contains('-'))
+        .toList();
+
+    setState(() {
+      _misspelledWords = misspelled;
+      _isSpellChecking = false;
+    });
+  }
+
+  // Build RichText with spell check highlighting
+  TextSpan _buildSpellCheckedText(String text) {
+    if (_misspelledWords.isEmpty) {
+      return TextSpan(
+        text: text,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Colors.transparent,
+        ),
+      );
+    }
+
+    final spans = <TextSpan>[];
+    final words = text.split(RegExp(r'(\s+)'));
+
+    for (final word in words) {
+      if (_misspelledWords.contains(word.trim())) {
+        spans.add(TextSpan(
+          text: word,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.transparent,
+            decoration: TextDecoration.underline,
+            decorationColor: Colors.red,
+            decorationThickness: 2,
+          ),
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: word,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.transparent,
+          ),
+        ));
+      }
+    }
+
+    return TextSpan(children: spans);
+  }
+
+  void _resetCaption() {
+    setState(() {
+      // Clear caption text
+      captionController.clear();
+
+      // Clear player selections
+      selectedPlayers.clear();
+      selectedOpponentPlayers.clear();
+
+      // Reset verb selection
+      _selectedVerb = null;
+
+      // Reset hit-related state
+      _showHitTypes = false;
+      _selectedHitType = null;
+      _selectedHomeRunType = null;
+      _rbiCount = null;
+      _isBatterRunning = null;
+      _selectedRbiInning = null;
+
+      // Reset fielding-related state
+      _showFieldingOptions = false;
+      _selectedFieldingAction = null;
+      _isDivingCatch = false;
+      _isDivingForGroundBall = false;
+
+      // Reset celebration-related state
+      _isSoloCelebration = false;
+      celebrateWith.clear();
+      celebrateAgainst.clear();
+
+      // Reset Prior to Game state
+      _selectedPriorAction = null;
+
+      // Reset At Bat state
+      _selectedAtBatAction = null;
+
+      // Reset Portrait state
+      _isLooksOn = false;
+
+      // Reset other states
+      _walkOff = false;
+
+      // Clear personality field
+      personalityController.clear();
+
+      // Update personality field
+      _updatePersonality();
+
+      // Clear spell check results
+      _misspelledWords.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Caption and selections reset!')),
+    );
+  }
+
+  void _onFtpPressed() {
+    // ... your FTP logic here ...
+    setState(() {
+      _ftpPictureNumber++;
+      _updateObjectName();
+    });
+  }
+
+  void _onZoomPressed() {}
+
+  // Sort images by filename
+  Future<void> _sortImagesByFilename() async {
+    if (imagePaths.isEmpty) return;
+
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sorting images by filename...')),
+      );
+
+      // Get filename data for all images
+      List<Map<String, dynamic>> imageData = [];
+
+      for (int i = 0; i < imagePaths.length; i++) {
+        final filename = p.basename(imagePaths[i]);
+        imageData.add({
+          'index': i,
+          'path': imagePaths[i],
+          'filename': filename,
+        });
+      }
+
+      // Sort by filename
+      imageData.sort((a, b) => a['filename'].compareTo(b['filename']));
+
+      // Update image paths and current index
+      final originalIndex = currentIndex;
+      final originalPath = imagePaths[originalIndex];
+
+      setState(() {
+        imagePaths = imageData.map((data) => data['path'] as String).toList();
+        // Find the new index of the current image
+        currentIndex = imagePaths.indexOf(originalPath);
+        if (currentIndex == -1) currentIndex = 0; // Fallback if not found
+        _isSortedByDate = false;
+        _isSortedByFilename = true;
+      });
+
+      // Reload metadata and detect burst for the current image
+      await _loadMetadata();
+      await _detectBurst(currentIndex);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Images sorted by filename (${imagePaths.length} images)'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error sorting images by filename: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sorting images by filename: $e')),
+      );
+    }
+  }
+
+  // Sort images by date/time taken
+  Future<void> _sortImagesByDate() async {
+    if (imagePaths.isEmpty) return;
+
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sorting images by date...')),
+      );
+
+      // Get metadata for all images
+      List<Map<String, dynamic>> imageData = [];
+
+      for (int i = 0; i < imagePaths.length; i++) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-DateTimeOriginal', imagePaths[i]]);
+
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (dateTime != null) {
+            try {
+              final parsedTime = DateTime.parse(
+                  dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+              imageData.add({
+                'index': i,
+                'path': imagePaths[i],
+                'dateTime': parsedTime,
+              });
+            } catch (e) {
+              // If parsing fails, use a default date
+              imageData.add({
+                'index': i,
+                'path': imagePaths[i],
+                'dateTime': DateTime(1900, 1, 1),
+              });
+            }
+          } else {
+            // No date found, use default
+            imageData.add({
+              'index': i,
+              'path': imagePaths[i],
+              'dateTime': DateTime(1900, 1, 1),
+            });
+          }
+        } else {
+          // Error reading metadata, use default
+          imageData.add({
+            'index': i,
+            'path': imagePaths[i],
+            'dateTime': DateTime(1900, 1, 1),
+          });
+        }
+      }
+
+      // Sort by date/time (oldest first)
+      print(
+          'Before sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+      imageData.sort((a, b) => a['dateTime'].compareTo(b['dateTime']));
+      print(
+          'After sorting: ${imageData.take(3).map((d) => '${d['path'].split('/').last}: ${d['dateTime']}').toList()}');
+
+      // Update image paths and current index
+      final originalIndex = currentIndex;
+      final originalPath = imagePaths[originalIndex];
+
+      setState(() {
+        imagePaths = imageData.map((data) => data['path'] as String).toList();
+        // Find the new index of the current image
+        currentIndex = imagePaths.indexOf(originalPath);
+        if (currentIndex == -1) currentIndex = 0; // Fallback if not found
+        _isSortedByDate = true;
+        _isSortedByFilename = false;
+        print(
+            'setState: imagePaths updated, currentIndex = $currentIndex, first 3: ${imagePaths.take(3).map((p) => p.split('/').last).toList()}');
+      });
+
+      // Reload metadata and detect burst for the current image
+      await _loadMetadata();
+      await _detectBurst(currentIndex);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Images sorted by date (oldest first) (${imagePaths.length} images)'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('Error sorting images: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sorting images: $e')),
+      );
+    }
+  }
+
+  // Burst detection function
+  Future<void> _detectBurst(int currentIndex) async {
+    if (imagePaths.isEmpty ||
+        currentIndex < 0 ||
+        currentIndex >= imagePaths.length) {
+      setState(() {
+        _burstIndices = [];
+        _isBurstMode = false;
+      });
+      return;
+    }
+
+    try {
+      // Get metadata for current image
+      final currentPath = imagePaths[currentIndex];
+      final currentResult = await Process.run(
+          'exiftool', ['-j', '-LensID', '-DateTimeOriginal', currentPath]);
+
+      if (currentResult.exitCode != 0) {
+        setState(() {
+          _burstIndices = [];
+          _isBurstMode = false;
+        });
+        return;
+      }
+
+      final currentData = jsonDecode(currentResult.stdout.toString())[0];
+      final currentLens = currentData['LensID']?.toString();
+      final currentDateTime = currentData['DateTimeOriginal']?.toString();
+
+      if (currentLens == null || currentDateTime == null) {
+        setState(() {
+          _burstIndices = [];
+          _isBurstMode = false;
+        });
+        return;
+      }
+
+      // Parse current image time
+      final currentTime = DateTime.parse(
+          currentDateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+
+      List<int> burstIndices = [currentIndex];
+
+      // Check images before current
+      for (int i = currentIndex - 1; i >= 0; i--) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final lens = data['LensID']?.toString();
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (lens == currentLens && dateTime != null) {
+            final time = DateTime.parse(
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+            final difference = currentTime.difference(time).abs();
+
+            // If same lens and within 1 second, it's part of the burst
+            if (difference.inSeconds <= 1) {
+              burstIndices.insert(0, i);
+            } else {
+              break; // Gap found, burst ended
+            }
+          } else {
+            break; // Different lens or no metadata, burst ended
+          }
+        } else {
+          break; // Error reading metadata, assume burst ended
+        }
+      }
+
+      // Check images after current
+      for (int i = currentIndex + 1; i < imagePaths.length; i++) {
+        final result = await Process.run(
+            'exiftool', ['-j', '-LensID', '-DateTimeOriginal', imagePaths[i]]);
+        if (result.exitCode == 0) {
+          final data = jsonDecode(result.stdout.toString())[0];
+          final lens = data['LensID']?.toString();
+          final dateTime = data['DateTimeOriginal']?.toString();
+
+          if (lens == currentLens && dateTime != null) {
+            final time = DateTime.parse(
+                dateTime.replaceFirst(':', '-').replaceFirst(':', '-'));
+            final difference = currentTime.difference(time).abs();
+
+            // If same lens and within 1 second, it's part of the burst
+            if (difference.inSeconds <= 1) {
+              burstIndices.add(i);
+            } else {
+              break; // Gap found, burst ended
+            }
+          } else {
+            break; // Different lens or no metadata, burst ended
+          }
+        } else {
+          break; // Error reading metadata, assume burst ended
+        }
+      }
+
+      setState(() {
+        _burstIndices = burstIndices;
+        _isBurstMode = burstIndices.length > 1;
+      });
+
+      // Burst detection notification removed
+    } catch (e) {
+      print('Error detecting burst: $e');
+      setState(() {
+        _burstIndices = [];
+        _isBurstMode = false;
+      });
+    }
+  }
+
+  Widget _buildActionToolbar() {
+    return Row(
+      mainAxisSize: MainAxisSize.min, // Prevent overflow by using minimum size
+      children: [
+        _buildSquareIconButton(
+          icon: Icons.arrow_back,
+          tooltip: 'Previous Image',
+          onPressed: previousImage,
+        ),
+        const SizedBox(width: 8),
+        _buildSquareIconButton(
+          icon: Icons.arrow_forward,
+          tooltip: 'Next Image',
+          onPressed: nextImage,
+        ),
+        if (_isBurstMode) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.orange,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.orange.shade700, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.burst_mode,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'BURST (${_burstIndices.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_isSortedByDate || _isSortedByFilename) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.blue.shade700, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.sort,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isSortedByDate ? 'SORTED BY DATE' : 'SORTED BY NAME',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSquareIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool isBlue = false,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor =
+        isBlue ? const Color(0xFF0052CC) : colorScheme.surface;
+    final iconColor = isBlue ? Colors.white : colorScheme.onSurface;
+    final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: borderColor, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.shade400,
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon),
+        iconSize: 18,
+        color: iconColor,
+        tooltip: tooltip,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        splashRadius: 20,
+      ),
+    );
+  }
+
+  Widget _buildStyledButton(String text, VoidCallback? onPressed,
+      {bool isBlue = false}) {
+    final backgroundColor = isBlue ? const Color(0xFF0052CC) : Colors.white;
+    final textColor = isBlue ? Colors.white : Colors.black;
+    final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
+
+    return SizedBox(
+      height: 32,
+      child: Material(
+        color: backgroundColor,
+        elevation: 2,
+        shadowColor: Colors.grey.shade400,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: borderColor, width: 1.0),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Center(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: textColor,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactButton(String text, VoidCallback? onPressed,
+      {bool isBlue = false}) {
+    final backgroundColor = isBlue ? const Color(0xFF0052CC) : Colors.white;
+    final textColor = isBlue ? Colors.white : Colors.black;
+    final borderColor = isBlue ? const Color(0xFF0052CC) : Colors.grey.shade400;
+
+    return SizedBox(
+      height: 24,
+      child: Material(
+        color: backgroundColor,
+        elevation: 2,
+        shadowColor: Colors.grey.shade400,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: borderColor, width: 1.0),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: Center(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: textColor,
+                  fontWeight: FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideFtpButton() {
+    const backgroundColor = Color(0xFF0052CC);
+    const textColor = Colors.white;
+    const borderColor = Color(0xFF0052CC);
+
+    return SizedBox(
+      width: 80,
+      height: 24,
+      child: Material(
+        color: backgroundColor,
+        elevation: 2,
+        shadowColor: Colors.grey.shade400,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: borderColor, width: 1.0),
+        ),
+        child: InkWell(
+          onTap: _onFtpPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.cloud_upload,
+                  size: 14,
+                  color: textColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'FTP',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: textColor,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Hit chip indent calculation
+  double _hitIndent = 0.0;
+  String? _dateTimeOriginal;
+  String? _fileName;
+  int? _imageWidth;
+  int? _imageHeight;
+  String? _cameraModel;
+  String? _cameraMake;
+  String? _shutterSpeed;
+  String? _aperture;
+  String? _iso;
+  String? _lensInfo;
+  String? _whiteBalance;
+  int? _kelvin;
+  int? _tint;
+  bool _isHoveringOnImage = false;
+  bool _isZoomed = false;
+  bool _showHomeFirst = true;
+  bool _disableFtp = false;
+  bool _showGettyMetadata = true;
+  bool _showHitTypes = false;
+  bool _isSoloCelebration = false;
+  bool _walkOff = false;
+  String _pastedRosterText = '';
+
+  // Hit selection state
+  String? _selectedHitType; // 'single', 'double', 'triple', 'home run'
+  String? _selectedHomeRunType; // 'solo', 'two-run', 'three-run', 'grand slam'
+  bool? _isRBI;
+  int? _rbiCount;
+  int? _selectedRbiInning;
+  int? _onBaseCount;
+  bool? _isBatterRunning;
+
+  // Preserve per-hit-type selections
+  Widget _buildArrow() {
+    return const SizedBox(
+      height:
+          32.0, // A common touch target height, aligns well with compact chips.
+      child: Center(
+        child: Text('→', style: TextStyle(fontSize: 12)),
+      ),
+    );
+  }
+
+  final Map<String, int?> _rbiCountByHit = {};
+  final Map<String, String?> _homeRunTypeByHit = {};
+  final Map<String, int?> _inningByHit = {};
+  final Map<String, bool?> _batterRunningByHit = {};
+
+  // --- Portrait chip state
+  bool _showLooksOn = false;
+  // Patch: Prior to Game selected action state
+  String? _selectedPriorAction;
+
+  // At Bat selected action state
+  String? _selectedAtBatAction;
+
+  // Patch: Fielding row and chip keys and indent
+  double _fieldingIndent = 0.0;
+
+  // At the top of _CaptionBuilderState:
+  bool _isLooksOn = false;
+
+  /// Reusable inline inning selector
+  Widget buildInlineInningSelector({
+    required int? selectedInning,
+    required ValueChanged<int?> onInningSelected,
+    bool showWalkOffOption = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min, // Prevent overflow
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min, // Prevent overflow
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(left: 8.0, right: 8.0),
+              child: Text(
+                'Inning:',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 0.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // No IN option
+
+                    // Innings 1-9
+                    ...List.generate(9, (i) => i + 1).map((inning) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4.0),
+                        child: GestureDetector(
+                          onTap: () => onInningSelected(inning),
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: selectedInning == inning
+                                  ? Colors.grey.shade600
+                                  : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Colors.black,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '$inning',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: selectedInning == inning
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: selectedInning == inning
+                                      ? Colors.white
+                                      : Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    // Extras option
+                    GestureDetector(
+                      onTap: () {
+                        // Show dialog for extra innings selection
+                        _showExtraInningsDialog(onInningSelected);
+                      },
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color:
+                              (selectedInning != null && selectedInning >= 10)
+                                  ? Colors.grey.shade600
+                                  : Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.black,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'X',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: (selectedInning != null &&
+                                      selectedInning >= 10)
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: (selectedInning != null &&
+                                      selectedInning >= 10)
+                                  ? Colors.white
+                                  : Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Walk-off win chip inline to the right of X
+                    if (showWalkOffOption &&
+                        selectedInning != null &&
+                        selectedInning >= 9)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Center(
+                              child: Text(
+                                'Walk Off',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
+                          selected: _walkOff,
+                          onSelected: (isSelected) {
+                            setState(() {
+                              _walkOff = isSelected;
+                              _updateCaption();
+                            });
+                          },
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 8),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Helper method to show extra innings dialog
+  void _showExtraInningsDialog(ValueChanged<int?> onInningSelected) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Extra Inning'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 2.5,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: 21, // 10th through 30th inning
+              itemBuilder: (context, index) {
+                final inning = index + 10;
+                return GestureDetector(
+                  onTap: () {
+                    onInningSelected(inning);
+                    Navigator.of(context).pop();
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _selectedRbiInning == inning
+                          ? Colors.blue.shade100
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedRbiInning == inning
+                            ? Colors.blue.shade300
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$inning',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: _selectedRbiInning == inning
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: _selectedRbiInning == inning
+                              ? Colors.blue.shade700
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _getInningWord(int inning) {
+    const inningWords = [
+      'first',
+      'second',
+      'third',
+      'fourth',
+      'fifth',
+      'sixth',
+      'seventh',
+      'eighth',
+      'ninth',
+      'tenth',
+      'eleventh',
+      'twelfth',
+      'thirteenth',
+      'fourteenth',
+      'fifteenth',
+      'sixteenth',
+      'seventeenth',
+      'eighteenth',
+      'nineteenth',
+      'twentieth',
+      'twenty-first',
+      'twenty-second',
+      'twenty-third',
+      'twenty-fourth',
+      'twenty-fifth',
+      'twenty-sixth',
+      'twenty-seventh',
+      'twenty-eighth',
+      'twenty-ninth',
+      'thirtieth'
+    ];
+    final idx = inning - 1;
+    if (idx >= 0 && idx < inningWords.length) {
+      return inningWords[idx];
+    }
+    return '${inning}th';
+  }
+
+  String _getInningTextWithWalkOff(int inning) {
+    final inningWord = _getInningWord(inning);
+    if (inning >= 9) {
+      return ' in the $inningWord inning for the walk off win';
+    } else {
+      return ' in the $inningWord inning';
+    }
+  }
+
+  /// List of solo and competition verb phrases for logic/UI.
+  // Helper to build a single list of all verbs with category headers.
+  List<Widget> _buildAllVerbsList() {
+    final List<Widget> widgets = [];
+    final allVerbs = verbCategories.values.expand((list) => list);
+
+    // Check if multiple players from the same team are selected
+    final multipleHomeSelected = selectedPlayers.length > 1;
+    final multipleAwaySelected = selectedOpponentPlayers.length > 1;
+    final multiplePlayersSelected =
+        multipleHomeSelected || multipleAwaySelected;
+
+    // Define verbs to hide when multiple players are selected
+    final soloOnlyVerbs = [
+      'hit',
+      'Fielding',
+      'pitches',
+      'At Bat',
+      'Base Running'
+    ];
+
+    for (final verb in allVerbs) {
+      // Skip solo-only verbs if multiple players are selected
+      if (multiplePlayersSelected && soloOnlyVerbs.contains(verb)) {
+        continue;
+      }
+      // Only display the verb if no verb is selected, or if this is the selected verb
+      if (_selectedVerb == null || _selectedVerb == verb) {
+        if (verb == 'hit') {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      key: UniqueKey(),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Center(
+                              child: Text(
+                                'Hit',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.normal),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          selected: _selectedVerb == 'hit',
+                          onSelected: (isSelected) => setState(() {
+                            _selectedVerb = isSelected ? 'hit' : null;
+                            _selectedHitType = null;
+                            _selectedHomeRunType = null;
+                            _rbiCount = null;
+                            _selectedRbiInning = null;
+                            _isBatterRunning = null;
+                            _updateCaption();
+                          }),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        if (_selectedVerb == 'hit') ...[
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          _buildHitInningSelector(showWalkOffOption: true),
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line between inning and hit type selection
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 16.0),
+                          ...(_selectedHitType == null
+                                  ? ['single', 'double', 'triple', 'home run']
+                                  : [_selectedHitType!])
+                              .map((label) => Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: FlashingFilterChip(
+                                      label: SizedBox(
+                                        width: _fixedChipWidth,
+                                        child: Center(
+                                          child: Text(
+                                            label,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      selected: _selectedHitType == label,
+                                      onSelected: (isSelected) {
+                                        setState(() {
+                                          _selectedHitType =
+                                              isSelected ? label : null;
+                                          if (isSelected) {
+                                            if (label != 'home run') {
+                                              // Pre-select "No RBI" for non-HR hits
+                                              _rbiCount = 0;
+                                              _rbiCountByHit[label] = 0;
+                                            } else {
+                                              // For home runs, RBI is determined by HR type, so clear general count
+                                              _rbiCount = null;
+                                            }
+                                          } else {
+                                            // Deselecting the hit type
+                                            _rbiCount = null;
+                                          }
+                                          _updateCaption();
+                                        });
+                                      },
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      key: UniqueKey(),
+                                    ),
+                                  )),
+                          // Add runs scored selector inline after hit type selection
+                          if (_selectedHitType != null) ...[
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line before runs scored
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            const SizedBox(width: 16.0),
+                            // Inline runs scored selector
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      left: 0.0, right: 8.0),
+                                  child: Text(
+                                    _selectedHitType == 'home run'
+                                        ? 'HR Type:'
+                                        : 'Runs Scored:',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                if (_selectedHitType == 'home run') ...[
+                                  // Home run specific options
+                                  ...['Solo', '2 Run', '3 Run', 'Grand Slam']
+                                      .map((hrType) {
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 4.0),
+                                      child: FlashingFilterChip(
+                                        label: Text(hrType),
+                                        selected:
+                                            (_selectedHomeRunType == 'solo' &&
+                                                    hrType == 'Solo') ||
+                                                (_selectedHomeRunType ==
+                                                        'two-run' &&
+                                                    hrType == '2 Run') ||
+                                                (_selectedHomeRunType ==
+                                                        'three-run' &&
+                                                    hrType == '3 Run') ||
+                                                (_selectedHomeRunType ==
+                                                        'grand slam' &&
+                                                    hrType == 'Grand Slam'),
+                                        onSelected: (isSelected) {
+                                          setState(() {
+                                            if (isSelected) {
+                                              switch (hrType) {
+                                                case 'Solo':
+                                                  _selectedHomeRunType = 'solo';
+                                                  break;
+                                                case '2 Run':
+                                                  _selectedHomeRunType =
+                                                      'two-run';
+                                                  break;
+                                                case '3 Run':
+                                                  _selectedHomeRunType =
+                                                      'three-run';
+                                                  break;
+                                                case 'Grand Slam':
+                                                  _selectedHomeRunType =
+                                                      'grand slam';
+                                                  break;
+                                              }
+                                            } else {
+                                              _selectedHomeRunType = null;
+                                            }
+                                            _updateCaption();
+                                          });
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                    );
+                                  }),
+                                ] else ...[
+                                  // Regular runs scored for other hit types
+                                  ...List.generate(3, (i) => i + 1).map((rbi) {
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.only(right: 4.0),
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _rbiCount = rbi;
+                                            _rbiCountByHit[_selectedHitType!] =
+                                                rbi;
+                                            _updateCaption();
+                                          });
+                                        },
+                                        child: Container(
+                                          width: 22,
+                                          height: 22,
+                                          decoration: BoxDecoration(
+                                            color: _rbiCount == rbi
+                                                ? Colors.grey.shade600
+                                                : Colors.grey.shade200,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '$rbi',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: _rbiCount == rbi
+                                                    ? FontWeight.w600
+                                                    : FontWeight.normal,
+                                                color: _rbiCount == rbi
+                                                    ? Colors.white
+                                                    : Colors.black,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                            // Add divider and celebration/batter running options
+                            const SizedBox(width: 16.0),
+                            // Vertical divider line before celebration options
+                            Container(
+                              width: 1,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade400,
+                                borderRadius: BorderRadius.circular(0.5),
+                              ),
+                            ),
+                            const SizedBox(width: 16.0),
+                            // Optional label
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8.0),
+                              child: Text(
+                                'Optional',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            // Celebration chip
+                            FlashingFilterChip(
+                              label: const Text('Celebrates Alone'),
+                              selected: _isSoloCelebration ||
+                                  celebrateWith.isNotEmpty ||
+                                  celebrateAgainst.isNotEmpty,
+                              onSelected: (isSelected) async {
+                                if (isSelected) {
+                                  // Set default to solo celebration
+                                  setState(() {
+                                    _isSoloCelebration = true;
+                                    celebrateWith.clear();
+                                    celebrateAgainst.clear();
+                                    _isBatterRunning = false;
+                                  });
+                                  _updateCaption();
+                                } else {
+                                  setState(() {
+                                    _isSoloCelebration = false;
+                                    celebrateWith.clear();
+                                    celebrateAgainst.clear();
+                                  });
+                                  _updateCaption();
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                            // Only show celebrates with teammates for home runs
+                            if (_selectedHitType == 'home run') ...[
+                              const SizedBox(width: 8.0),
+                              // Celebrates with teammates chip
+                              FlashingFilterChip(
+                                label: const Text('Celebrates with teammates'),
+                                selected: celebrateWith.isNotEmpty,
+                                onSelected: (isSelected) async {
+                                  if (isSelected) {
+                                    setState(() {
+                                      celebrateAgainst.clear();
+                                    });
+                                    _showCelebrateDialog();
+                                  } else {
+                                    setState(() {
+                                      celebrateWith.clear();
+                                      _updateCaption();
+                                      _updatePersonality();
+                                    });
+                                  }
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                            const SizedBox(width: 8.0),
+                            // Celebrates against chip (available for all hit types)
+                            FlashingFilterChip(
+                              label: const Text('Celebrates against'),
+                              selected: celebrateAgainst.isNotEmpty,
+                              onSelected: (isSelected) async {
+                                if (isSelected) {
+                                  setState(() {
+                                    _isSoloCelebration = false;
+                                    celebrateWith.clear();
+                                  });
+                                  _showCelebrateAgainstDialog();
+                                } else {
+                                  setState(() {
+                                    celebrateAgainst.clear();
+                                    _updateCaption();
+                                    _updatePersonality();
+                                  });
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                            const SizedBox(width: 8.0),
+                            // Batter running chip
+                            FlashingFilterChip(
+                              label: const Text('Batter running'),
+                              selected: _isBatterRunning == true,
+                              onSelected: (isSelected) {
+                                setState(() {
+                                  _isBatterRunning = isSelected;
+                                  if (isSelected) {
+                                    _isSoloCelebration = false;
+                                    celebrateWith.clear();
+                                    celebrateAgainst.clear();
+                                  }
+                                  _updateCaption();
+                                });
+                              },
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else if (verb == 'Prior to Game') {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    FlashingFilterChip(
+                      label: SizedBox(
+                        width: _fixedChipWidth,
+                        child: const Center(
+                            child: Text('Prior to Game',
+                                style: TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis)),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      selected: _selectedVerb == 'Prior to Game',
+                      onSelected: (_showHomeFirst
+                              ? selectedPlayers.isNotEmpty
+                              : selectedOpponentPlayers.isNotEmpty)
+                          ? (isSelected) {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedVerb = 'Prior to Game';
+                                  _showLooksOn = false;
+                                  _showHitTypes = false;
+                                  _selectedHitType = null;
+                                  _selectedHomeRunType = null;
+                                  _rbiCount = null;
+                                  _selectedFieldingAction = null;
+                                  _showFieldingOptions = false;
+                                } else {
+                                  _selectedVerb = null;
+                                }
+                                _updateCaption();
+                              });
+                            }
+                          : null,
+                    ),
+                    if (_selectedVerb == 'Prior to Game') ...[
+                      const SizedBox(width: 4),
+                      _buildHitInningSelector(showWalkOffOption: true),
+                      const SizedBox(width: 4),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 4.0,
+                        children: [
+                          'Looks on',
+                          'Warm ups',
+                          'Walk to dugout',
+                          'Takes the field',
+                        ].map((label) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 2.0),
+                            child: FlashingFilterChip(
+                              label: SizedBox(
+                                width: _fixedChipWidth,
+                                child: Center(
+                                    child: Text(label,
+                                        style: const TextStyle(fontSize: 12),
+                                        overflow: TextOverflow.ellipsis)),
+                              ),
+                              selected: _selectedPriorAction == label,
+                              onSelected: (_showHomeFirst
+                                      ? selectedPlayers.isNotEmpty
+                                      : selectedOpponentPlayers.isNotEmpty)
+                                  ? (isSelected) {
+                                      setState(() {
+                                        _selectedPriorAction =
+                                            isSelected ? label : null;
+                                        _updateCaption();
+                                      });
+                                    }
+                                  : null,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              labelPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else if (verb == 'Portrait') {
+          // This block handles the 'Portrait' verb and its sub-options
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    key: UniqueKey(),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Center(
+                                child: Text('Portrait',
+                                    style: TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis)),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 6),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          selected: _selectedVerb == 'Portrait',
+                          onSelected: (_showHomeFirst
+                                  ? selectedPlayers.isNotEmpty
+                                  : selectedOpponentPlayers.isNotEmpty)
+                              ? (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedVerb = 'Portrait';
+                                      _showLooksOn = true;
+                                      // Reset other states
+                                      _selectedRbiInning = null;
+                                      _showHitTypes = false;
+                                      _selectedHitType = null;
+                                      _selectedHomeRunType = null;
+                                      _rbiCount = null;
+                                      _showFieldingOptions = false;
+                                      _selectedFieldingAction = null;
+                                    } else {
+                                      _selectedVerb = null;
+                                      _showLooksOn = false;
+                                      _isLooksOn = false;
+                                    }
+                                    _updateCaption();
+                                  });
+                                }
+                              : null,
+                        ),
+                        if (_showLooksOn && _selectedVerb == 'Portrait') ...[
+                          const SizedBox(width: 8.0),
+                          _buildHitInningSelector(showWalkOffOption: true),
+                          const SizedBox(width: 8.0),
+                          FlashingFilterChip(
+                            label: SizedBox(
+                              width: _fixedChipWidth,
+                              child: const Center(
+                                  child: Text('Looks on',
+                                      style: TextStyle(fontSize: 12))),
+                            ),
+                            selected: _isLooksOn,
+                            onSelected: (isSelected) {
+                              setState(() {
+                                _isLooksOn = isSelected;
+                                _updateCaption();
+                              });
+                            },
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            labelPadding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          const SizedBox(width: 8),
+                          buildInlineInningSelector(
+                            selectedInning: _selectedRbiInning,
+                            onInningSelected: (val) {
+                              setState(() {
+                                _selectedRbiInning = val;
+                                _updateCaption();
+                              });
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else if (verb == 'Fielding') {
+          // This block handles the 'Fielding' verb and its sub-options
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    key: UniqueKey(),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Center(
+                                child: Text('Fielding',
+                                    style: TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis)),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 6),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          selected: _selectedVerb == 'Fielding',
+                          onSelected: (_showHomeFirst
+                                  ? selectedPlayers.isNotEmpty
+                                  : selectedOpponentPlayers.isNotEmpty)
+                              ? (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedVerb = 'Fielding';
+                                      _showFieldingOptions = true;
+                                      _selectedFieldingAction = null;
+                                      // Reset other states
+                                      _selectedRbiInning = null;
+                                      _showHitTypes = false;
+                                      _selectedHitType = null;
+                                      _selectedHomeRunType = null;
+                                      _rbiCount = null;
+                                    } else {
+                                      _selectedVerb = null;
+                                      _showFieldingOptions = false;
+                                      _selectedFieldingAction = null;
+                                      _showDivingCatch = false;
+                                      _isDivingCatch = false;
+                                    }
+                                    _updateCaption();
+                                  });
+                                }
+                              : null,
+                        ),
+                        if (_showFieldingOptions &&
+                            _selectedVerb == 'Fielding') ...[
+                          const SizedBox(width: 8.0),
+                          _buildHitInningSelector(showWalkOffOption: true),
+                          const SizedBox(width: 8.0),
+                          if (_selectedFieldingAction == null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: FlashingFilterChip(
+                                key: UniqueKey(),
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: const Center(
+                                    child: Text(
+                                      'Catch',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected:
+                                    _selectedFieldingAction == 'makes a catch',
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedFieldingAction = 'makes a catch';
+                                    } else {
+                                      _selectedFieldingAction = null;
+                                      _isDivingCatch = false;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: FlashingFilterChip(
+                                key: UniqueKey(),
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: const Center(
+                                    child: Text(
+                                      'Ground Ball',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected: _selectedFieldingAction ==
+                                    'fields a ground ball',
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedFieldingAction =
+                                          'fields a ground ball';
+                                    } else {
+                                      _selectedFieldingAction = null;
+                                      _isDivingForGroundBall = false;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: FlashingFilterChip(
+                                key: UniqueKey(),
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: const Center(
+                                    child: Text(
+                                      'Throws',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected:
+                                    _selectedFieldingAction == 'throws a ball',
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedFieldingAction = 'throws a ball';
+                                    } else {
+                                      _selectedFieldingAction = null;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: FlashingFilterChip(
+                                key: UniqueKey(),
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: const Center(
+                                    child: Text(
+                                      'Fielding Position',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected: _selectedFieldingAction ==
+                                    'stands in fielding position',
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedFieldingAction =
+                                          'stands in fielding position';
+                                    } else {
+                                      _selectedFieldingAction = null;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: FlashingFilterChip(
+                                key: UniqueKey(),
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: const Center(
+                                    child: Text(
+                                      'Takes the Field',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                selected: _selectedFieldingAction ==
+                                    'takes the field',
+                                onSelected: (isSelected) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedFieldingAction =
+                                          'takes the field';
+                                    } else {
+                                      _selectedFieldingAction = null;
+                                    }
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                labelPadding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
+                          if (_selectedFieldingAction != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: ActionChip(
+                                label: SizedBox(
+                                  width: _fixedChipWidth,
+                                  child: Center(
+                                    child: Text(
+                                      _selectedFieldingAction == 'makes a catch'
+                                          ? 'Catch'
+                                          : _selectedFieldingAction ==
+                                                  'fields a ground ball'
+                                              ? 'Ground Ball'
+                                              : _selectedFieldingAction ==
+                                                      'throws a ball'
+                                                  ? 'Throws'
+                                                  : _selectedFieldingAction ==
+                                                          'stands in fielding position'
+                                                      ? 'Fielding Position'
+                                                      : _selectedFieldingAction ==
+                                                              'takes the field'
+                                                          ? 'Takes the Field'
+                                                          : _capitalize(
+                                                              _selectedFieldingAction!),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.normal),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedFieldingAction = null;
+                                    _isDivingCatch = false;
+                                    _isDivingForGroundBall = false;
+                                    _selectedRbiInning = null;
+                                    _updateCaption();
+                                  });
+                                },
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.all(2),
+                                elevation: 2, // Add shadow
+                                shape: RoundedRectangleBorder(
+                                  // Add thin dark grey border
+                                  borderRadius: BorderRadius.circular(4),
+                                  side: BorderSide(
+                                      color: Colors.grey.shade400, width: 1.0),
+                                ),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            // Diving options inline to the right of selected action
+                            if (_selectedFieldingAction == 'makes a catch') ...[
+                              const SizedBox(width: 8.0),
+                              _buildDivingCatchOption(),
+                            ],
+                            if (_selectedFieldingAction ==
+                                'fields a ground ball') ...[
+                              const SizedBox(width: 8.0),
+                              _buildDivingForGroundBallOption(),
+                            ],
+                          ],
+                        ]
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else if (verb == 'At Bat') {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      key: UniqueKey(),
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        FlashingFilterChip(
+                          label: SizedBox(
+                            width: _fixedChipWidth,
+                            child: const Center(
+                              child: Text(
+                                'At Bat',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.normal),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          selected: _selectedVerb == 'At Bat',
+                          onSelected: (isSelected) => setState(() {
+                            _selectedVerb = isSelected ? 'At Bat' : null;
+                            _selectedAtBatAction = null;
+                            _selectedRbiInning = null;
+                            _updateCaption();
+                          }),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        if (_selectedVerb == 'At Bat') ...[
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          buildInlineInningSelector(
+                            selectedInning: _selectedRbiInning,
+                            onInningSelected: (val) {
+                              setState(() {
+                                _selectedRbiInning = val;
+                                _walkOff = false;
+                                _updateCaption();
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 16.0),
+                          // Vertical divider line between inning and at bat action selection
+                          Container(
+                            width: 1,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(0.5),
+                            ),
+                          ),
+                          const SizedBox(width: 16.0),
+                          ...(_selectedAtBatAction == null
+                                  ? ['swings', 'runs to first base']
+                                  : [_selectedAtBatAction!])
+                              .map((label) => Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: FlashingFilterChip(
+                                      label: SizedBox(
+                                        width: _fixedChipWidth,
+                                        child: Center(
+                                          child: Text(
+                                            label,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.normal),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      selected: _selectedAtBatAction == label,
+                                      onSelected: (isSelected) {
+                                        setState(() {
+                                          _selectedAtBatAction =
+                                              isSelected ? label : null;
+                                          _updateCaption();
+                                        });
+                                      },
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      key: UniqueKey(),
+                                    ),
+                                  )),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2.0, top: 4.0),
+              child: SingleChildScrollView(
+                // Wrap the row in SingleChildScrollView
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    FlashingFilterChip(
+                      // Changed from InkWell/Container
+                      label: SizedBox(
+                        width: _fixedChipWidth,
+                        child: Center(
+                            child: Text(_capitalize(verb),
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis)),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(
+                          horizontal: 6), // Consistent padding
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      selected: _selectedVerb == verb,
+                      onSelected: () {
+                        print('DEBUG: Verb selection check:');
+                        print('DEBUG: _showHomeFirst: $_showHomeFirst');
+                        print(
+                            'DEBUG: selectedPlayers.isNotEmpty: ${selectedPlayers.isNotEmpty}');
+                        print(
+                            'DEBUG: selectedOpponentPlayers.isNotEmpty: ${selectedOpponentPlayers.isNotEmpty}');
+                        // Enable verbs if ANY players are selected (from short picker or side menu)
+                        final shouldEnable = selectedPlayers.isNotEmpty ||
+                            selectedOpponentPlayers.isNotEmpty;
+                        print('DEBUG: shouldEnable: $shouldEnable');
+                        return shouldEnable
+                            ? (isSelected) => _onVerbSelected(verb)
+                            : null;
+                      }(),
+                    ),
+                    if (_selectedVerb == verb) ...[
+                      const SizedBox(width: 16.0),
+                      // Vertical divider line
+                      Container(
+                        width: 1,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(0.5),
+                        ),
+                      ),
+                      buildInlineInningSelector(
+                        selectedInning: _selectedRbiInning,
+                        onInningSelected: (val) {
+                          setState(() {
+                            _selectedRbiInning = val;
+                            _walkOff = false;
+                            _updateCaption();
+                          });
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+      } // End of conditional rendering for each verb
+    }
+    return widgets;
+  }
+
+  /// Helper to build home-run type chips + inning selector inline.
+  List<Widget> _buildHomeRunOptions() {
+    final hrDisplayLabels = {
+      'solo': '1 Run HR',
+      'two-run': '2 Run HR',
+      'three-run': '3 Run HR',
+      'grand slam': 'Grand Slam',
+    };
+    return [
+      if (_selectedHomeRunType == null) ...[
+        ...['solo', 'two-run', 'three-run', 'grand slam'].map((type) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FlashingFilterChip(
+              label: SizedBox(
+                width: _fixedChipWidth,
+                child: Center(
+                    child: Text(hrDisplayLabels[type]!,
+                        style: const TextStyle(fontSize: 12))),
+              ),
+              selected: _selectedHomeRunType == type,
+              onSelected: (_) => setState(() {
+                _selectedHomeRunType =
+                    _selectedHomeRunType == type ? null : type;
+                _updateCaption();
+              }),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+            ),
+          );
+        }).toList(),
+      ] else ...[
+        Padding(
+          padding: const EdgeInsets.only(right: 8.0),
+          child: FlashingFilterChip(
+            label: SizedBox(
+              width: _fixedChipWidth,
+              child: Center(
+                  child: Text(hrDisplayLabels[_selectedHomeRunType!]!,
+                      style: const TextStyle(fontSize: 12))),
+            ),
+            selected: true,
+            showCheckmark: true,
+            onSelected: (_) => setState(() {
+              _selectedHomeRunType = null;
+              _updateCaption();
+            }),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+      // Old RBI selector removed - using horizontal RBI selector below
+      // RBI selector removed - using horizontal RBI selector below
+      // After home run choice, always show inning selector
+      const SizedBox(width: 8.0),
+      _buildHitInningSelector(showWalkOffOption: true),
+    ];
+  }
+
+  // Helper for fielding options
+  Widget _buildFieldingOption(String actionKey, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
+      child: FlashingFilterChip(
+        label: SizedBox(
+          width: _fixedChipWidth,
+          child: Center(
+            child: Text(
+              label,
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        selected: _selectedFieldingAction == actionKey,
+        onSelected: (isSelected) {
+          setState(() {
+            if (isSelected) {
+              _selectedFieldingAction = actionKey;
+            } else {
+              _selectedFieldingAction = null;
+              _isDivingCatch =
+                  false; // Reset sub-option if parent is deselected
+            }
+            _updateCaption();
+          });
+        },
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+
+  Widget _buildDivingCatchOption() {
+    return FlashingFilterChip(
+      label: SizedBox(
+        width: _fixedChipWidth,
+        child: const Center(
+            child: Text('Diving catch',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal))),
+      ),
+      selected: _isDivingCatch == true,
+      onSelected: (isSelected) {
+        setState(() {
+          _isDivingCatch = isSelected;
+          _updateCaption();
+        });
+      },
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  // Helper for 'Diving' option on 'Fields a ground ball'
+  Widget _buildDivingForGroundBallOption() {
+    return FlashingFilterChip(
+      label: SizedBox(
+        width: _fixedChipWidth,
+        child: const Center(
+            child: Text('Diving',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal))),
+      ),
+      selected: _isDivingForGroundBall == true,
+      onSelected: (isSelected) {
+        setState(() {
+          _isDivingForGroundBall = isSelected;
+          _updateCaption();
+        });
+      },
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  final List<String> soloVerbs = const [
+    'hit',
+    'pitches',
+    'Celebrate',
+    'Fielding',
+    'Base Running',
+    'At Bat',
+    'Portrait',
+    'Prior to Game',
+  ];
+
+  final List<String> celebrationVerbs = const [
+    'Celebrate',
+  ];
+
+  Map<String, List<String>> get verbCategories => {
+        'Actions': soloVerbs,
+      };
+
+  // ── Info section ─────────────────────────────
+  DateTime selectedDate = DateTime.now();
+
+  final stadiumController = TextEditingController();
+  final cityController = TextEditingController();
+  final TextEditingController provinceController = TextEditingController();
+
+  String? selectedHomeTeam;
+  String? selectedAwayTeam;
+  // ...rest of state...
+  // UI BUILD
+  // (Removed duplicate build method)
+
+  // ── Image & IPTC ────────────────────────────
+  List<String> imagePaths = [];
+  int currentIndex = 0;
+  int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
+  // ... rest of state ...
+  // --- UI: Info section with team dropdowns (insert API Test button after last dropdown) ---
+  Widget buildInfoPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ...other info widgets...
+        DropdownButton<String>(
+          value: selectedHomeTeam,
+          onChanged: (String? newValue) {
+            setState(() {
+              selectedHomeTeam = newValue;
+              if (selectedHomeTeam != null) {
+                _loadTeam(selectedHomeTeam!, isHomeTeam: true);
+              }
+            });
+          },
+          items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value),
+            );
+          }).toList(),
+        ),
+        DropdownButton<String>(
+          value: selectedAwayTeam,
+          onChanged: (String? newValue) {
+            setState(() {
+              selectedAwayTeam = newValue;
+              if (selectedAwayTeam != null) {
+                _loadTeam(selectedAwayTeam!, isHomeTeam: false);
+              }
+            });
+          },
+          items: teamStates.keys.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value),
+            );
+          }).toList(),
+        ),
+        // The API Test button is always visible directly under the team dropdowns:
+        // buildTeamApiTestButton(), // Removed - using only MLB Stats API
+        // ...rest of info panel...
+      ],
+    );
+  }
+
+  // ── Code‐replacement data ───────────────────
+  final Map<String, Replacement> codeReplacements = {};
+
+  // Function to generate Object Name with FTP pattern
+  String _generateObjectName() {
+    final meid =
+        jobIdController.text.isNotEmpty ? jobIdController.text : 'MEID';
+    final descriptionWriter = descriptionWritersController.text.isNotEmpty
+        ? descriptionWritersController.text
+        : 'MB';
+    final picNumber =
+        _ftpPictureNumber.toString().padLeft(3, '0'); // 001, 002, etc.
+    final visitingTeam = selectedAwayTeam ?? 'VisitingTeam';
+    final homeTeam = selectedHomeTeam ?? 'HomeTeam';
+
+    return '776271572_MB_00_VJAYS ${meid}_${descriptionWriter}_${picNumber}_${visitingTeam}vs${homeTeam}';
+  }
+
+  // Function to update Object Name when relevant fields change
+  void _updateObjectName() {
+    titleObjectNameController.text = _generateObjectName();
+  }
+
+  bool isHome =
+      true; // This state variable might need to be managed more actively depending on UI flow
+  Set<String> selectedPlayers =
+      {}; // For home players or the primary player in solo actions
+  Set<String> selectedOpponentPlayers =
+      {}; // For opponent players in competition verbs
+  String? _selectedVerb;
+  String? selectedInning;
+  bool _showDivingCatch = false;
+  bool _showFieldingOptions = false;
+  String? _selectedFieldingAction;
+  bool _isDivingForGroundBall =
+      false; // Added: State for 'Diving' on ground ball
+  bool _isDivingCatch = false;
+  List<String> celebrateWith = [];
+  List<String> celebrateAgainst = [];
+
+  // Personality controller
+  final TextEditingController _personalityController = TextEditingController();
+
+  // Player search controllers
+  final _homeSearchController = TextEditingController();
+  final _awaySearchController = TextEditingController();
+
+  // Player search for inline player selection UI (not directly used in current fixed UI)
+  String playerSearch = '';
+
+  bool _isConnectedToApi =
+      false; // New state variable for API connection status
+  // Filmstrip scroll controller
+  final ScrollController _filmstripController = ScrollController();
+
+  int _lastScrollIndex = -1;
+  Timer? _scrollDebounceTimer;
+
+  void _onFilmstripScroll() {
+    if (!_filmstripController.hasClients) return;
+
+    // Debounce scroll events to prevent excessive processing
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 30), () {
+      _processScrollEvent();
+    });
+  }

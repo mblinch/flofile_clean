@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+
+class VerbInningScreen extends StatefulWidget {
+  final String verb;
+  final int? selectedInning;
+  final Function(int?) onInningSelected;
+  final VoidCallback onBack;
+
+  const VerbInningScreen({
+    Key? key,
+    required this.verb,
+    required this.selectedInning,
+    required this.onInningSelected,
+    required this.onBack,
+  }) : super(key: key);
+
+  @override
+  State<VerbInningScreen> createState() => _VerbInningScreenState();
+}
+
+class _VerbInningScreenState extends State<VerbInningScreen> {
+  int? _selectedInning;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedInning = widget.selectedInning;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Select Inning for ${widget.verb}'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBack,
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select the inning for: ${widget.verb}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  childAspectRatio: 2.5,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: 30, // 1st through 30th inning
+                itemBuilder: (context, index) {
+                  final inning = index + 1;
+                  final isSelected = _selectedInning == inning;
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedInning = inning;
+                      });
+                      widget.onInningSelected(inning);
+                      Navigator.of(context).pop();
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.blue.shade100
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.blue.shade300
+                              : Colors.grey.shade400,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _getOrdinalSuffix(inning),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? Colors.blue.shade700
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getOrdinalSuffix(int number) {
+    if (number >= 11 && number <= 13) {
+      return '${number}th';
+    }
+    switch (number % 10) {
+      case 1:
+        return '${number}st';
+      case 2:
+        return '${number}nd';
+      case 3:
+        return '${number}rd';
+      default:
+        return '${number}th';
+    }
+  }
+}

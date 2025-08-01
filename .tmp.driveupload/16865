@@ -1,0 +1,442 @@
+import 'package:flutter/material.dart';
+import '../services/balldontlie_api_service.dart';
+
+class GameTestWidget extends StatefulWidget {
+  const GameTestWidget({super.key});
+
+  @override
+  State<GameTestWidget> createState() => _GameTestWidgetState();
+}
+
+class _GameTestWidgetState extends State<GameTestWidget> {
+  final BalldontlieApiService _apiService = BalldontlieApiService();
+  String _testResults = '';
+  bool _isLoading = false;
+  List<BalldontlieGame> _games = [];
+  BalldontlieGame? _selectedGame;
+
+  // Date selection
+  String _selectedMonth = '07';
+  String _selectedDay = '24';
+  final List<String> _months = [
+    '01',
+    '02',
+    '03',
+    '04',
+    '05',
+    '06',
+    '07',
+    '08',
+    '09',
+    '10',
+    '11',
+    '12'
+  ];
+  final List<String> _days = [
+    '01',
+    '02',
+    '03',
+    '04',
+    '05',
+    '06',
+    '07',
+    '08',
+    '09',
+    '10',
+    '11',
+    '12',
+    '13',
+    '14',
+    '15',
+    '16',
+    '17',
+    '18',
+    '19',
+    '20',
+    '21',
+    '22',
+    '23',
+    '24',
+    '25',
+    '26',
+    '27',
+    '28',
+    '29',
+    '30',
+    '31'
+  ];
+
+  Future<void> _testGames() async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Testing games API...\n';
+    });
+
+    try {
+      final games = await _apiService.fetchGames();
+      setState(() {
+        _games = games;
+        _testResults += 'Found ${games.length} games:\n\n';
+
+        // Show first 5 games with season info
+        for (int i = 0; i < games.length.clamp(0, 5); i++) {
+          final game = games[i];
+          _testResults += 'Game ${i + 1}:\n';
+          _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+          _testResults += '  Date: ${game.date}\n';
+          _testResults += '  Season: ${game.season}\n'; // Show season
+          _testResults += '  Venue: ${game.venue}\n';
+          _testResults += '  Status: ${game.status}\n';
+          _testResults += '  Scoring Plays: ${game.scoringSummary.length}\n\n';
+        }
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testRecentGames() async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Testing recent games API (past week)...\n';
+    });
+
+    try {
+      final games = await _apiService.fetchRecentGames();
+      setState(() {
+        _games = games;
+        _testResults += 'Found ${games.length} recent games:\n\n';
+
+        // Show all recent games with season info
+        for (int i = 0; i < games.length; i++) {
+          final game = games[i];
+          _testResults += 'Game ${i + 1}:\n';
+          _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+          _testResults += '  Date: ${game.date}\n';
+          _testResults += '  Season: ${game.season}\n'; // Show season
+          _testResults += '  Venue: ${game.venue}\n';
+          _testResults += '  Status: ${game.status}\n';
+          _testResults += '  Scoring Plays: ${game.scoringSummary.length}\n\n';
+        }
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testSpecificGame(String gameId) async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Testing specific game $gameId...\n';
+    });
+
+    try {
+      final game = await _apiService.fetchGameById(gameId);
+      if (game != null) {
+        setState(() {
+          _selectedGame = game;
+          _testResults += 'Game Details:\n';
+          _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+          _testResults += '  Date: ${game.date}\n';
+          _testResults += '  Venue: ${game.venue}\n';
+          _testResults += '  Status: ${game.status}\n';
+          _testResults +=
+              '  Final Score: ${game.awayTeamData['runs']} - ${game.homeTeamData['runs']}\n\n';
+          _testResults += 'Scoring Plays (${game.scoringSummary.length}):\n';
+
+          for (int i = 0; i < game.scoringSummary.length; i++) {
+            final play = game.scoringSummary[i];
+            _testResults +=
+                '  ${i + 1}. ${play.period} ${play.inning}: ${play.play}\n';
+            _testResults +=
+                '     Score: ${play.awayScore} - ${play.homeScore}\n\n';
+          }
+
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _testResults += 'Game not found';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testLastBlueJaysGame() async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Fetching last Blue Jays game...\n';
+    });
+
+    try {
+      final game = await _apiService.fetchLastBlueJaysGame();
+      if (game != null) {
+        setState(() {
+          _selectedGame = game;
+          _testResults += 'Last Blue Jays Game Details:\n';
+          _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+          _testResults += '  Date: ${game.date}\n';
+          _testResults += '  Season: ${game.season}\n';
+          _testResults += '  Venue: ${game.venue}\n';
+          _testResults += '  Status: ${game.status}\n';
+          _testResults += '  Attendance: ${game.attendance}\n';
+          _testResults +=
+              '  Final Score: ${game.awayTeamData['runs']} - ${game.homeTeamData['runs']}\n\n';
+
+          // Show team data
+          _testResults += 'Home Team Data:\n';
+          game.homeTeamData.forEach((key, value) {
+            _testResults += '  $key: $value\n';
+          });
+          _testResults += '\nAway Team Data:\n';
+          game.awayTeamData.forEach((key, value) {
+            _testResults += '  $key: $value\n';
+          });
+          _testResults += '\n';
+
+          _testResults += 'Scoring Plays (${game.scoringSummary.length}):\n';
+
+          for (int i = 0; i < game.scoringSummary.length; i++) {
+            final play = game.scoringSummary[i];
+            _testResults +=
+                '  ${i + 1}. ${play.period} ${play.inning}: ${play.play}\n';
+            _testResults +=
+                '     Score: ${play.awayScore} - ${play.homeScore}\n\n';
+          }
+
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _testResults += 'No Blue Jays games found in 2025';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testLastOriolesGame() async {
+    setState(() {
+      _isLoading = true;
+      _testResults = 'Fetching last Orioles game...\n';
+    });
+
+    try {
+      final game = await _apiService.fetchLastOriolesGame();
+      if (game != null) {
+        setState(() {
+          _selectedGame = game;
+          _testResults += 'Last Orioles Game Details:\n';
+          _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+          _testResults += '  Date: ${game.date}\n';
+          _testResults += '  Season: ${game.season}\n';
+          _testResults += '  Venue: ${game.venue}\n';
+          _testResults += '  Status: ${game.status}\n';
+          _testResults += '  Attendance: ${game.attendance}\n';
+          _testResults +=
+              '  Final Score: ${game.awayTeamData['runs']} - ${game.homeTeamData['runs']}\n\n';
+
+          // Show team data
+          _testResults += 'Home Team Data:\n';
+          game.homeTeamData.forEach((key, value) {
+            _testResults += '  $key: $value\n';
+          });
+          _testResults += '\nAway Team Data:\n';
+          game.awayTeamData.forEach((key, value) {
+            _testResults += '  $key: $value\n';
+          });
+          _testResults += '\n';
+
+          _testResults += 'Scoring Plays (${game.scoringSummary.length}):\n';
+
+          for (int i = 0; i < game.scoringSummary.length; i++) {
+            final play = game.scoringSummary[i];
+            _testResults +=
+                '  ${i + 1}. ${play.period} ${play.inning}: ${play.play}\n';
+            _testResults +=
+                '     Score: ${play.awayScore} - ${play.homeScore}\n\n';
+          }
+
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _testResults += 'No Orioles games found in 2025';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testGamesByDate() async {
+    setState(() {
+      _isLoading = true;
+      _testResults =
+          'Fetching games for ${_selectedMonth}/${_selectedDay}/2025...\n';
+    });
+
+    try {
+      final games =
+          await _apiService.fetchGamesByDate(_selectedMonth, _selectedDay);
+      setState(() {
+        _games = games;
+        _testResults +=
+            'Found ${games.length} games on ${_selectedMonth}/${_selectedDay}/2025:\n\n';
+
+        if (games.isEmpty) {
+          _testResults += 'No games found for this date.\n';
+        } else {
+          for (int i = 0; i < games.length; i++) {
+            final game = games[i];
+            _testResults += 'Game ${i + 1}:\n';
+            _testResults += '  ${game.awayTeamName} @ ${game.homeTeamName}\n';
+            _testResults += '  Date: ${game.date}\n';
+            _testResults += '  Venue: ${game.venue}\n';
+            _testResults += '  Status: ${game.status}\n';
+            _testResults +=
+                '  Final Score: ${game.awayTeamData['runs']} - ${game.homeTeamData['runs']}\n';
+            _testResults +=
+                '  Scoring Plays: ${game.scoringSummary.length}\n\n';
+          }
+        }
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _testResults += 'Error: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Balldontlie.io Game Data Test'),
+        backgroundColor: Colors.blue.shade700,
+        foregroundColor: Colors.white,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Test buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _testGames,
+                    child: const Text('All Games'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _testRecentGames,
+                    child: const Text('Past Week'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (_isLoading || _games.isEmpty)
+                        ? null
+                        : () {
+                            if (_games.isNotEmpty) {
+                              _testSpecificGame(_games.first.id);
+                            }
+                          },
+                    child: const Text('Test First Game'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _testLastBlueJaysGame,
+                    child: const Text('Last Blue Jays'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _testLastOriolesGame,
+                    child: const Text('Last Orioles'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Loading indicator
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(),
+              ),
+
+            const SizedBox(height: 16),
+
+            // Results display
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    _testResults.isEmpty
+                        ? 'Click a test button to start...'
+                        : _testResults,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

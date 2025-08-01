@@ -1,0 +1,99 @@
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'mlb_api_service.dart';
+import 'balldontlie_api_service.dart';
+
+class ApiManager {
+  static const String _mlbStatsApi = 'MLB Stats API';
+  static const String _balldontlieApi = 'Balldontlie.io API';
+
+  final MlbApiService _mlbService = MlbApiService();
+  final BalldontlieApiService _balldontlieService = BalldontlieApiService();
+
+  String _currentApi = _balldontlieApi; // Default to balldontlie
+
+  String get currentApi => _currentApi;
+
+  void setApi(String api) {
+    _currentApi = api;
+    print('API Manager: Switched to $api');
+  }
+
+  /// Fetches teams from the currently selected API
+  Future<List<TeamInfo>> fetchTeams() async {
+    print('API Manager: Fetching teams from $_currentApi');
+
+    try {
+      if (_currentApi == _balldontlieApi) {
+        final balldontlieTeams = await _balldontlieService.fetchAllTeams();
+        // Convert BalldontlieTeam to TeamInfo for compatibility
+        return balldontlieTeams
+            .map((team) => TeamInfo(
+                  id: team.id,
+                  name: team.displayName,
+                  locationName: team.location,
+                  venueName: null, // Balldontlie doesn't provide venue info
+                ))
+            .toList();
+      } else {
+        return await _mlbService.fetchAllTeams();
+      }
+    } catch (e) {
+      print('API Manager: Error fetching teams from $_currentApi: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches team roster from the currently selected API
+  Future<List<Player>> fetchTeamRoster(String teamName) async {
+    print('API Manager: Fetching roster from $_currentApi for team $teamName');
+
+    try {
+      if (_currentApi == _balldontlieApi) {
+        // For balldontlie, we need to find the team ID first
+        final teams = await _balldontlieService.fetchAllTeams();
+        final team = teams.firstWhere(
+          (t) => t.displayName == teamName,
+          orElse: () => throw Exception('Team "$teamName" not found'),
+        );
+
+        final balldontliePlayers =
+            await _balldontlieService.fetchTeamPlayers(team.id);
+        // Convert BalldontliePlayer to Player for compatibility
+        return balldontliePlayers
+            .map((player) => Player(
+                  fullName: player.fullName,
+                  firstName: player.firstName,
+                  jerseyNumber: player.jerseyNumber,
+                  displayName: player.displayName,
+                ))
+            .toList();
+      } else {
+        return await _mlbService.fetchTeamRoster(teamName);
+      }
+    } catch (e) {
+      print('API Manager: Error fetching roster from $_currentApi: $e');
+      rethrow;
+    }
+  }
+
+  /// Gets the API name for display
+  String getApiDisplayName() {
+    return _currentApi;
+  }
+
+  /// Gets the API connection status
+  bool get isConnected {
+    // For now, assume connected if API is set
+    return _currentApi.isNotEmpty;
+  }
+
+  /// Gets the connection status message
+  String getConnectionStatusMessage() {
+    if (_currentApi == _balldontlieApi) {
+      return 'Connected to Balldontlie.io API';
+    } else {
+      return 'Connected to MLB Stats API';
+    }
+  }
+}

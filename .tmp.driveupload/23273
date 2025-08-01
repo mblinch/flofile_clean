@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+
+def remove_verb_box():
+    with open('lib/main.dart', 'r') as f:
+        lines = f.readlines()
+    
+    # Find the start and end of the verb box section
+    start_index = -1
+    end_index = -1
+    
+    for i, line in enumerate(lines):
+        if '// Verb chips on the right' in line:
+            start_index = i + 1  # Start from the Expanded widget line
+            print(f"Found start at line {i + 1}: {line.strip()}")
+            break
+    
+    if start_index == -1:
+        print("Could not find start marker")
+        return
+    
+    # Find the matching closing bracket for the Expanded widget
+    bracket_count = 0
+    for i in range(start_index, len(lines)):
+        line = lines[i]
+        # Count opening and closing brackets/parentheses
+        bracket_count += line.count('(') - line.count(')')
+        bracket_count += line.count('{') - line.count('}')
+        bracket_count += line.count('[') - line.count(']')
+        
+        # Look for the filmstrip comment as additional confirmation
+        if '// Filmstrip removed' in line and bracket_count <= 0:
+            end_index = i - 1  # End before the filmstrip comment
+            print(f"Found end at line {i}: {line.strip()}")
+            break
+    
+    if end_index == -1:
+        print("Could not find end marker")
+        return
+    
+    print(f"Removing lines {start_index + 1} to {end_index + 1}")
+    
+    # Create new content without the verb box section
+    new_lines = (
+        lines[:start_index] +
+        ['                                      // Old verb box removed - now positioned between teams\n'] +
+        lines[end_index + 1:]
+    )
+    
+    # Write the modified content back
+    with open('lib/main.dart', 'w') as f:
+        f.writelines(new_lines)
+    
+    print("Successfully removed verb box section")
+
+if __name__ == '__main__':
+    remove_verb_box() 

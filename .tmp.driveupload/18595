@@ -1,0 +1,290 @@
+import 'package:flutter/material.dart';
+
+class InningSelectorScreen extends StatefulWidget {
+  final int? selectedInning;
+  final Function(int) onInningSelected;
+
+  const InningSelectorScreen({
+    super.key,
+    this.selectedInning,
+    required this.onInningSelected,
+  });
+
+  @override
+  State<InningSelectorScreen> createState() => _InningSelectorScreenState();
+}
+
+class _InningSelectorScreenState extends State<InningSelectorScreen> {
+  int? _selectedInning;
+  bool _showExtraInnings = false;
+  int _extraInningsPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedInning = widget.selectedInning;
+  }
+
+  String _getOrdinalSuffix(int number) {
+    switch (number) {
+      case 1:
+        return 'first';
+      case 2:
+        return 'second';
+      case 3:
+        return 'third';
+      case 4:
+        return 'fourth';
+      case 5:
+        return 'fifth';
+      case 6:
+        return 'sixth';
+      case 7:
+        return 'seventh';
+      case 8:
+        return 'eighth';
+      case 9:
+        return 'ninth';
+      case 10:
+        return 'tenth';
+      case 11:
+        return 'eleventh';
+      case 12:
+        return 'twelfth';
+      case 13:
+        return 'thirteenth';
+      case 14:
+        return 'fourteenth';
+      case 15:
+        return 'fifteenth';
+      case 16:
+        return 'sixteenth';
+      case 17:
+        return 'seventeenth';
+      case 18:
+        return 'eighteenth';
+      case 19:
+        return 'nineteenth';
+      case 20:
+        return 'twentieth';
+      default:
+        return '${number}th';
+    }
+  }
+
+  List<int> _getExtraInningsForPage() {
+    final startInning = 10 + (_extraInningsPage * 9);
+    return List.generate(9, (index) => startInning + index);
+  }
+
+  void _selectInning(int inning) {
+    setState(() {
+      _selectedInning = _selectedInning == inning ? null : inning;
+    });
+  }
+
+  void _confirmSelection() {
+    if (_selectedInning != null) {
+      widget.onInningSelected(_selectedInning!);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Inning'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 1,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // Instructions
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: const Text(
+                'Select the inning for this action',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Inning Grid
+            Expanded(
+              child: Column(
+                children: [
+                  // Navigation controls
+                  Row(
+                    children: [
+                      // Back arrow for extra innings
+                      if (_showExtraInnings)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              if (_extraInningsPage > 0) {
+                                _extraInningsPage--;
+                              } else {
+                                // Go back to regular innings
+                                _showExtraInnings = false;
+                                _extraInningsPage = 0;
+                                _selectedInning = null;
+                              }
+                            });
+                          },
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+
+                      const Spacer(),
+
+                      // EXT button that cycles through extra innings
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            if (_showExtraInnings) {
+                              // If already showing extra innings, go to next page
+                              if (_extraInningsPage < 3) {
+                                _extraInningsPage++;
+                              } else {
+                                // Go back to regular innings
+                                _showExtraInnings = false;
+                                _extraInningsPage = 0;
+                                _selectedInning = null;
+                              }
+                            } else {
+                              // Start showing extra innings
+                              _showExtraInnings = true;
+                              _extraInningsPage = 0;
+                              _selectedInning = null;
+                            }
+                          });
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: _showExtraInnings
+                              ? Colors.orange.shade100
+                              : Colors.grey.shade200,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        child: Text(
+                          'EXT',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _showExtraInnings
+                                ? Colors.orange.shade700
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Innings Grid
+                  Expanded(
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        childAspectRatio: 2.5,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                      ),
+                      itemCount: _showExtraInnings
+                          ? _getExtraInningsForPage().length
+                          : 9,
+                      itemBuilder: (context, index) {
+                        final inning = _showExtraInnings
+                            ? _getExtraInningsForPage()[index]
+                            : index + 1;
+                        final isSelected = _selectedInning == inning;
+
+                        return GestureDetector(
+                          onTap: () => _selectInning(inning),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.blue.shade100
+                                  : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? Colors.blue.shade300
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _getOrdinalSuffix(inning),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.blue.shade700
+                                      : Colors.grey.shade600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed:
+                        _selectedInning != null ? _confirmSelection : null,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Confirm'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

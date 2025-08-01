@@ -1,0 +1,72 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+void main() async {
+  print('Testing API-Sports MLB teams...');
+
+  try {
+    // First, let's find the MLB league
+    print('\n=== Finding MLB League ===');
+    final leaguesUrl = Uri.https('v1.baseball.api-sports.io', '/leagues');
+    final leaguesResp = await http.get(
+      leaguesUrl,
+      headers: {'x-apisports-key': 'ac9bc3548464f0f74ab4e1e76b061599'},
+    );
+
+    if (leaguesResp.statusCode == 200) {
+      final leaguesData = jsonDecode(leaguesResp.body);
+      final leagues = leaguesData['response'] as List<dynamic>;
+
+      // Look for MLB league
+      int? mlbLeagueId;
+      for (final league in leagues) {
+        final name = league['name'] as String;
+        if (name.toLowerCase().contains('mlb') ||
+            name.toLowerCase().contains('major league') ||
+            name.toLowerCase().contains('baseball')) {
+          print(
+              'Found potential MLB league: ${league['name']} (ID: ${league['id']})');
+          if (name.toLowerCase().contains('mlb')) {
+            mlbLeagueId = league['id'] as int;
+            break;
+          }
+        }
+      }
+
+      if (mlbLeagueId != null) {
+        print('\n=== Getting MLB Teams ===');
+        final teamsUrl = Uri.https('v1.baseball.api-sports.io',
+            '/teams?league=$mlbLeagueId&season=2024');
+        final teamsResp = await http.get(
+          teamsUrl,
+          headers: {'x-apisports-key': 'ac9bc3548464f0f74ab4e1e76b061599'},
+        );
+
+        print('Teams Status: ${teamsResp.statusCode}');
+        if (teamsResp.statusCode == 200) {
+          final teamsData = jsonDecode(teamsResp.body);
+          print('Teams response keys: ${teamsData.keys.toList()}');
+
+          if (teamsData.containsKey('response')) {
+            final teams = teamsData['response'] as List<dynamic>;
+            print('MLB Teams found: ${teams.length}');
+
+            for (final team in teams) {
+              final teamInfo = team['team'] as Map<String, dynamic>;
+              final name = teamInfo['name'] as String;
+              final id = teamInfo['id'] as int;
+              print('Team: "$name" (ID: $id)');
+            }
+          }
+        }
+      } else {
+        print('MLB league not found. Available leagues:');
+        for (final league in leagues.take(10)) {
+          print('- ${league['name']} (ID: ${league['id']})');
+        }
+      }
+    }
+  } catch (e) {
+    print('Error: $e');
+  }
+}

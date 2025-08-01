@@ -1,0 +1,482 @@
+import 'package:flutter/material.dart';
+import 'package:adaptive_navigation/adaptive_navigation.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:async';
+import '../services/api_manager.dart';
+
+class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
+  final Function(List<String>) onImagesLoaded;
+  final Function(String?)? onHomeTeamChanged;
+  final Function(String?)? onAwayTeamChanged;
+  final Function(String)? onApiChanged;
+
+  const AppHeaderWidget({
+    super.key,
+    required this.onImagesLoaded,
+    this.onHomeTeamChanged,
+    this.onAwayTeamChanged,
+    this.onApiChanged,
+  });
+
+  @override
+  _AppHeaderWidgetState createState() => _AppHeaderWidgetState();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(14);
+}
+
+class _AppHeaderWidgetState extends State<AppHeaderWidget> {
+  // API Manager
+  final ApiManager _apiManager = ApiManager();
+
+  // State variables for team selection
+  String? selectedAwayTeam;
+  String? selectedHomeTeam;
+  String selectedApi = 'Balldontlie.io API'; // API selection
+  bool _isConnectedToApi = false; // This would be connected to your API service
+  Set<String> _favoriteTeams = {}; // This would be loaded from preferences
+
+  // Folder picking state
+  String? _selectedFolderPath;
+  List<String> imagePaths = [];
+  int currentIndex = 0;
+
+  // Test API connection
+  Future<void> _testApiConnection() async {
+    try {
+      print('Testing API connection for: ${_apiManager.currentApi}');
+      final teams = await _apiManager.fetchTeams();
+      print(
+          'Successfully fetched ${teams.length} teams from ${_apiManager.currentApi}');
+
+      // Show sample teams
+      if (teams.isNotEmpty) {
+        print('Sample teams from ${_apiManager.currentApi}:');
+        for (int i = 0; i < teams.length.clamp(0, 3); i++) {
+          print('  - ${teams[i].name}');
+        }
+      }
+    } catch (e) {
+      print('Error testing API connection: $e');
+    }
+  }
+
+  // Teams list
+  final List<String> teams = [
+    'Arizona Diamondbacks',
+    'Atlanta Braves',
+    'Baltimore Orioles',
+    'Boston Red Sox',
+    'Chicago Cubs',
+    'Chicago White Sox',
+    'Cincinnati Reds',
+    'Cleveland Guardians',
+    'Colorado Rockies',
+    'Detroit Tigers',
+    'Houston Astros',
+    'Kansas City Royals',
+    'Los Angeles Angels',
+    'Los Angeles Dodgers',
+    'Miami Marlins',
+    'Milwaukee Brewers',
+    'Minnesota Twins',
+    'New York Mets',
+    'New York Yankees',
+    'Oakland Athletics',
+    'Philadelphia Phillies',
+    'Pittsburgh Pirates',
+    'San Diego Padres',
+    'San Francisco Giants',
+    'Seattle Mariners',
+    'St. Louis Cardinals',
+    'Tampa Bay Rays',
+    'Texas Rangers',
+    'Toronto Blue Jays',
+    'Washington Nationals',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Test initial API connection
+    _testApiConnection();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AdaptiveAppBar(
+      toolbarHeight: 14, // Slightly larger to accommodate text
+      titleSpacing: 0,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      title: const Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Text(
+            'FLO FILE Beta',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper for building team dropdowns
+  Widget _buildTeamDropdown({
+    required String label,
+    required String? value,
+    required List<String> allItems,
+    required ValueChanged<String?> onChanged,
+    String? excludeTeam,
+    bool useExpanded = true,
+  }) {
+    // Filter out the excluded team
+    final availableTeams = excludeTeam != null
+        ? allItems.where((team) => team != excludeTeam).toList()
+        : allItems;
+
+    // Sort teams with favorites first, then alphabetically
+    final sortedTeams = List<String>.from(availableTeams);
+    sortedTeams.sort((a, b) {
+      final aIsFavorite = _favoriteTeams.contains(a);
+      final bIsFavorite = _favoriteTeams.contains(b);
+
+      if (aIsFavorite && !bIsFavorite) return -1;
+      if (!aIsFavorite && bIsFavorite) return 1;
+
+      return a.compareTo(b);
+    });
+
+    final dropdown = Material(
+      elevation: 2.0,
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300, width: 1.0),
+          borderRadius: BorderRadius.circular(4),
+          color: Colors.white,
+        ),
+        child: PopupMenuButton<String>(
+          initialValue: value,
+          onSelected: onChanged,
+          constraints: const BoxConstraints(maxHeight: 600),
+          itemBuilder: (context) => sortedTeams
+              .map(
+                (item) => PopupMenuItem<String>(
+                  value: item,
+                  height: 14,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  child: Container(
+                    height: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Row(
+                      children: [
+                        // Home/Away symbol
+                        if (label == 'Home Team')
+                          Icon(Icons.home,
+                              size: 12, color: Colors.grey.shade700),
+                        if (label == 'Away Team')
+                          Icon(Icons.flight_takeoff,
+                              size: 12, color: Colors.grey.shade700),
+                        const SizedBox(width: 3),
+                        Expanded(
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (_favoriteTeams.contains(item))
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          child: Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Row(
+              children: [
+                // Label
+                Text(
+                  '${label.replaceAll(' Team', '')}: ',
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                // Home/Away symbol for selected item
+                if (value != null) ...[
+                  if (label == 'Home Team')
+                    Icon(Icons.home, size: 11, color: Colors.grey.shade700),
+                  if (label == 'Away Team')
+                    Icon(Icons.flight_takeoff,
+                        size: 11, color: Colors.grey.shade700),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      value ?? 'Select Team',
+                      style: const TextStyle(fontSize: 11, color: Colors.black),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ] else ...[
+                  const Expanded(
+                    child: Text(
+                      'Select Team',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                ],
+                const Icon(Icons.arrow_drop_down, size: 14),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return useExpanded ? Expanded(child: dropdown) : dropdown;
+  }
+
+  void _showAutoFillDialog(String teamName) {
+    showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text(
+          'Auto-fill Metadata?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Would you like to auto-fill the following location fields for this team?',
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+            Text('• City: Toronto', style: const TextStyle(fontSize: 13)),
+            Text('• Province/State: Ontario',
+                style: const TextStyle(fontSize: 13)),
+            Text('• Country: Canada', style: const TextStyle(fontSize: 13)),
+            Text('• Country Code: CAN', style: const TextStyle(fontSize: 13)),
+            Text('• Stadium: Rogers Centre',
+                style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+        actionsPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _buildStyledButton('No', () => Navigator.pop(context, false)),
+              const SizedBox(width: 12),
+              _buildStyledButton('Yes', () => Navigator.pop(context, true),
+                  isBlue: true),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManageFavoritesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Manage Favorite Teams'),
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: Column(
+            children: [
+              const Text('Select teams to add to favorites:'),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: teams.length,
+                  itemBuilder: (context, index) {
+                    final team = teams[index];
+                    final isFavorite = _favoriteTeams.contains(team);
+                    return ListTile(
+                      title: Text(team),
+                      trailing: Icon(
+                        isFavorite ? Icons.star : Icons.star_border,
+                        color: isFavorite ? Colors.amber : Colors.grey,
+                      ),
+                      onTap: () {
+                        setState(() {
+                          if (isFavorite) {
+                            _favoriteTeams.remove(team);
+                          } else {
+                            _favoriteTeams.add(team);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStyledButton(String text, VoidCallback onPressed,
+      {bool isBlue = false}) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isBlue ? Colors.blue : Colors.grey.shade300,
+        foregroundColor: isBlue ? Colors.white : Colors.black87,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
+      child: Text(text),
+    );
+  }
+
+  // Folder picking functionality
+  Future<void> _pickFolder() async {
+    print('Starting folder picker...');
+    final dirPath = await FilePicker.platform.getDirectoryPath();
+    if (dirPath == null) {
+      print('No folder selected');
+      return;
+    }
+
+    print('Selected folder: $dirPath');
+
+    // Store the selected folder path
+    setState(() {
+      _selectedFolderPath = dirPath;
+    });
+
+    // List image files
+    final files = await _listImageFiles(dirPath);
+
+    if (files.isNotEmpty) {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            title: const Text('Loading Images'),
+            content: SizedBox(
+              width: 300,
+              height: 120,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading ${files.length} images...',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      setState(() {
+        imagePaths = files;
+        currentIndex = 0;
+      });
+
+      // Notify parent about loaded images
+      print('Notifying parent with ${files.length} images');
+      widget.onImagesLoaded(files);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Loaded ${files.length} images from folder'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Helper method to list image files
+  Future<List<String>> _listImageFiles(String dirPath) async {
+    try {
+      final directory = Directory(dirPath);
+      final files = directory.listSync();
+
+      final imageExtensions = [
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.tiff',
+        '.bmp',
+        '.JPG',
+        '.JPEG',
+        '.PNG',
+        '.TIFF',
+        '.BMP'
+      ];
+
+      final imageFiles = files
+          .where((file) {
+            if (file is! File) return false;
+
+            final path = file.path;
+            final extension = path.split('.').last.toLowerCase();
+
+            print('Checking file: $path with extension: $extension');
+
+            return imageExtensions.contains('.$extension');
+          })
+          .map((file) => file.path)
+          .toList();
+
+      print('Found ${imageFiles.length} image files in $dirPath');
+      if (imageFiles.isNotEmpty) {
+        print('First few files: ${imageFiles.take(3).toList()}');
+      }
+
+      return imageFiles;
+    } catch (e) {
+      print('Error listing image files: $e');
+      return [];
+    }
+  }
+}

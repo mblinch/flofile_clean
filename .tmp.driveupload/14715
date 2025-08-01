@@ -1,0 +1,758 @@
+import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:async';
+import 'dart:io';
+import '../services/api_manager.dart';
+import 'dart:convert'; // Added for jsonDecode
+
+// Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
+class CustomButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  final Widget child;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final BorderRadius? borderRadius;
+
+  const CustomButton({
+    super.key,
+    required this.onTap,
+    required this.child,
+    this.backgroundColor,
+    this.borderColor,
+    this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
+class StartupDialog extends StatefulWidget {
+  final Function(String folderPath, String? homeTeam, String? awayTeam)
+      onConfigurationComplete;
+
+  const StartupDialog({
+    Key? key,
+    required this.onConfigurationComplete,
+  }) : super(key: key);
+
+  @override
+  State<StartupDialog> createState() => _StartupDialogState();
+}
+
+class _StartupDialogState extends State<StartupDialog> {
+  String? selectedFolderPath;
+  String? selectedHomeTeam;
+  String? selectedAwayTeam;
+  DateTime? selectedGameDate;
+  List<String> availableTeams = [];
+  bool isLoadingTeams = true;
+  bool isLoadingFolder = false;
+  bool hasImagesInFolder = false;
+  bool isExtractingDate = false;
+
+  // Questionnaire state
+  int currentQuestion = 0;
+  String displayedText = '';
+  bool isTyping = false;
+  int typingIndex = 0;
+  Timer? typingTimer;
+
+  final ApiManager _apiManager = ApiManager();
+
+  final List<String> questions = [
+    'Where is your images folder?',
+    'What is the game date?',
+    'What teams are playing?',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeams();
+    _startTyping();
+  }
+
+  @override
+  void dispose() {
+    typingTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startTyping() {
+    setState(() {
+      displayedText = '';
+      typingIndex = 0;
+      isTyping = true;
+    });
+    _typeNextCharacter();
+  }
+
+  void _typeNextCharacter() {
+    if (typingIndex < questions[currentQuestion].length) {
+      setState(() {
+        displayedText += questions[currentQuestion][typingIndex];
+        typingIndex++;
+      });
+      typingTimer = Timer(const Duration(milliseconds: 50), _typeNextCharacter);
+    } else {
+      setState(() {
+        isTyping = false;
+      });
+    }
+  }
+
+  void _nextQuestion() {
+    if (currentQuestion < questions.length - 1) {
+      setState(() {
+        currentQuestion++;
+      });
+      _startTyping();
+    }
+  }
+
+  Future<void> _loadTeams() async {
+    try {
+      final teams = await _apiManager.fetchTeams();
+      setState(() {
+        availableTeams = teams.map((team) => team.name).toList();
+        isLoadingTeams = false;
+      });
+    } catch (e) {
+      print('Error loading teams: $e');
+      setState(() {
+        isLoadingTeams = false;
+      });
+    }
+  }
+
+  Future<void> _pickFolder() async {
+    setState(() {
+      isLoadingFolder = true;
+    });
+
+    try {
+      String? result = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Select folder containing your images',
+      );
+
+      if (result != null) {
+        // Check if folder contains images
+        final directory = Directory(result);
+        final List<FileSystemEntity> entities = await directory.list().toList();
+
+        final List<String> imageFiles = entities
+            .where((entity) => entity is File)
+            .map((entity) => entity.path)
+            .where((path) =>
+                path.toLowerCase().endsWith('.jpg') ||
+                path.toLowerCase().endsWith('.jpeg') ||
+                path.toLowerCase().endsWith('.png') ||
+                path.toLowerCase().endsWith('.tiff') ||
+                path.toLowerCase().endsWith('.bmp'))
+            .toList();
+
+        setState(() {
+          selectedFolderPath = result;
+          hasImagesInFolder = imageFiles.isNotEmpty;
+          isLoadingFolder = false;
+        });
+
+        // If images found, try to read date from first 5 images
+        if (imageFiles.isNotEmpty) {
+          setState(() {
+            isExtractingDate = true;
+          });
+          await _extractDateFromImages(imageFiles);
+          setState(() {
+            isExtractingDate = false;
+          });
+        }
+
+        // Always proceed to next step after folder selection
+        _nextQuestion();
+      } else {
+        setState(() {
+          isLoadingFolder = false;
+        });
+      }
+    } catch (e) {
+      print('Error picking folder: $e');
+      setState(() {
+        isLoadingFolder = false;
+      });
+    }
+  }
+
+  Future<void> _extractDateFromImages(List<String> imageFiles) async {
+    try {
+      // Take first 5 images
+      final imagesToCheck = imageFiles.take(5).toList();
+      List<DateTime?> dates = [];
+
+      for (String imagePath in imagesToCheck) {
+        try {
+          // Extract metadata via exiftool
+          final proc = await Process.run('exiftool', [
+            '-j', // JSON output
+            '-DateTimeOriginal',
+            '-CreateDate',
+            '-ModifyDate',
+            imagePath,
+          ]);
+
+          if (proc.exitCode == 0) {
+            final List data = jsonDecode(proc.stdout as String);
+            if (data.isNotEmpty) {
+              final metadata = data.first as Map<String, dynamic>;
+
+              // Try to get date from various EXIF fields
+              String? dateString = metadata['DateTimeOriginal']?.toString() ??
+                  metadata['CreateDate']?.toString() ??
+                  metadata['ModifyDate']?.toString();
+
+              if (dateString != null && dateString.isNotEmpty) {
+                try {
+                  // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
+                  final parts = dateString.split(' ');
+                  if (parts.length >= 1) {
+                    final datePart = parts[0];
+                    final dateComponents = datePart.split(':');
+                    if (dateComponents.length >= 3) {
+                      final year = int.parse(dateComponents[0]);
+                      final month = int.parse(dateComponents[1]);
+                      final day = int.parse(dateComponents[2]);
+                      dates.add(DateTime(year, month, day));
+                    }
+                  }
+                } catch (e) {
+                  print('Error parsing date from $imagePath: $e');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          print('Error reading metadata from $imagePath: $e');
+        }
+      }
+
+      // If we found dates, use the most common date or the first one
+      if (dates.isNotEmpty) {
+        // Find the most common date
+        Map<DateTime, int> dateCounts = {};
+        for (DateTime? date in dates) {
+          if (date != null) {
+            // Normalize to just the date part
+            final normalizedDate = DateTime(date.year, date.month, date.day);
+            dateCounts[normalizedDate] = (dateCounts[normalizedDate] ?? 0) + 1;
+          }
+        }
+
+        if (dateCounts.isNotEmpty) {
+          // Find the date with the highest count
+          final mostCommonDate = dateCounts.entries
+              .reduce((a, b) => a.value > b.value ? a : b)
+              .key;
+
+          setState(() {
+            selectedGameDate = mostCommonDate;
+          });
+          print(
+              'Extracted game date from images: ${mostCommonDate.toIso8601String().split('T')[0]}');
+        }
+      }
+    } catch (e) {
+      print('Error extracting dates from images: $e');
+    }
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (picked != null) {
+      setState(() {
+        selectedGameDate = picked;
+      });
+      _nextQuestion();
+    }
+  }
+
+  bool get _canProceed {
+    if (hasImagesInFolder) {
+      return selectedFolderPath != null &&
+          selectedHomeTeam != null &&
+          selectedAwayTeam != null &&
+          selectedHomeTeam != selectedAwayTeam;
+    } else {
+      return selectedFolderPath != null &&
+          selectedGameDate != null &&
+          selectedHomeTeam != null &&
+          selectedAwayTeam != null &&
+          selectedHomeTeam != selectedAwayTeam;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.5), // Semi-transparent overlay
+      child: Center(
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: 600, // Increased from 500
+            height: 400, // Added fixed height
+            padding: const EdgeInsets.all(32), // Increased padding
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                const Text(
+                  'FLO FILE',
+                  style: TextStyle(
+                    fontSize: 24, // Increased from 20
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 40), // Increased from 32
+
+                // Question with typewriter effect
+                Text(
+                  displayedText + (isTyping ? '|' : ''),
+                  style: const TextStyle(
+                    fontSize: 20, // Increased from 18
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 32), // Increased from 24
+
+                // Question-specific content
+                if (currentQuestion == 0) ...[
+                  // Folder selection
+                  CustomButton(
+                    onTap: isLoadingFolder ? null : _pickFolder,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isLoadingFolder
+                            ? Colors.grey.shade300
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          isLoadingFolder
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Icon(Icons.folder_open,
+                                  size: 12, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            isLoadingFolder
+                                ? 'Loading...'
+                                : 'Pick Images Folder',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isLoadingFolder
+                                  ? Colors.grey.shade600
+                                  : Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16), // Increased spacing
+                  // Display selected folder path
+                  if (selectedFolderPath != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16), // Increased padding
+                      decoration: BoxDecoration(
+                        color: hasImagesInFolder
+                            ? Colors.green.shade50
+                            : Colors.orange.shade50,
+                        border: Border.all(
+                            color: hasImagesInFolder
+                                ? Colors.green.shade200
+                                : Colors.orange.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                hasImagesInFolder
+                                    ? Icons.check_circle
+                                    : Icons.warning,
+                                color: hasImagesInFolder
+                                    ? Colors.green
+                                    : Colors.orange,
+                                size: 18, // Increased size
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                hasImagesInFolder
+                                    ? 'Folder Selected:'
+                                    : 'No Images Found:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: hasImagesInFolder
+                                      ? Colors.green
+                                      : Colors.orange,
+                                  fontSize: 14, // Added font size
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6), // Increased spacing
+                          Text(
+                            selectedFolderPath!,
+                            style: const TextStyle(
+                              fontSize: 13, // Increased from 12
+                              color: Colors.grey,
+                            ),
+                          ),
+                          if (!hasImagesInFolder) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'No image files found. Please select the game date to continue.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade700,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ] else if (selectedGameDate != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Game date extracted from images: ${selectedGameDate!.year}-${selectedGameDate!.month.toString().padLeft(2, '0')}-${selectedGameDate!.day.toString().padLeft(2, '0')}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green.shade700,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24), // Increased spacing
+                    if (hasImagesInFolder)
+                      CustomButton(
+                        onTap: () => _nextQuestion(),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.arrow_forward,
+                                  size: 12, color: Colors.grey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Next',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ] else if (currentQuestion == 2) ...[
+                  // Date selection (only show if no date was extracted from images)
+                  if (selectedGameDate == null) ...[
+                    CustomButton(
+                      onTap: _selectDate,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.calendar_today,
+                                size: 12, color: Colors.grey.shade700),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Select Game Date',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24), // Increased spacing
+                  ] else ...[
+                    // Show extracted date
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        border: Border.all(color: Colors.green.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.check_circle,
+                                  color: Colors.green, size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'Game Date Extracted:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${selectedGameDate!.year}-${selectedGameDate!.month.toString().padLeft(2, '0')}-${selectedGameDate!.day.toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  CustomButton(
+                    onTap: () => _nextQuestion(),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.arrow_forward,
+                              size: 12, color: Colors.grey.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Next',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else if (currentQuestion == 3) ...[
+                  // Team selection
+                  if (!isLoadingTeams) ...[
+                    // Home Team
+                    const Text('Home Team:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16, // Added font size
+                        )),
+                    const SizedBox(height: 8), // Increased spacing
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12), // Increased padding
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedHomeTeam,
+                          hint: const Text('Select home team'),
+                          isExpanded: true,
+                          items: availableTeams.map((team) {
+                            return DropdownMenuItem<String>(
+                              value: team,
+                              child: Text(team),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              selectedHomeTeam = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24), // Increased spacing
+
+                    // Away Team
+                    const Text('Away Team:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16, // Added font size
+                        )),
+                    const SizedBox(height: 8), // Increased spacing
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12), // Increased padding
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedAwayTeam,
+                          hint: const Text('Select away team'),
+                          isExpanded: true,
+                          items: availableTeams.map((team) {
+                            return DropdownMenuItem<String>(
+                              value: team,
+                              child: Text(team),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              selectedAwayTeam = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24), // Increased spacing
+
+                    // Error message if same team selected
+                    if (selectedHomeTeam != null &&
+                        selectedAwayTeam != null &&
+                        selectedHomeTeam == selectedAwayTeam)
+                      Container(
+                        padding: const EdgeInsets.all(12), // Increased padding
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          border: Border.all(color: Colors.red.shade200),
+                          borderRadius:
+                              BorderRadius.circular(6), // Increased radius
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.error,
+                                color: Colors.red, size: 18), // Increased size
+                            SizedBox(width: 8),
+                            Text(
+                              'Home and away teams must be different',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 14, // Added font size
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 24), // Increased spacing
+
+                    // Start button
+                    if (_canProceed)
+                      CustomButton(
+                        onTap: () {
+                          widget.onConfigurationComplete(
+                            selectedFolderPath!,
+                            selectedHomeTeam,
+                            selectedAwayTeam,
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.play_arrow,
+                                  size: 12, color: Colors.grey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Start Caption Writer',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ] else ...[
+                    const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

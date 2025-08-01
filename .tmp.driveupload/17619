@@ -1,0 +1,400 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class BalldontliePlayer {
+  final String id;
+  final String firstName;
+  final String lastName;
+  final String? jerseyNumber;
+  final String? position;
+  final String? teamName;
+  final String? teamId;
+
+  BalldontliePlayer({
+    required this.id,
+    required this.firstName,
+    required this.lastName,
+    this.jerseyNumber,
+    this.position,
+    this.teamName,
+    this.teamId,
+  });
+
+  String get fullName => '$firstName $lastName';
+  String get displayName =>
+      jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName;
+
+  factory BalldontliePlayer.fromJson(Map<String, dynamic> json) {
+    return BalldontliePlayer(
+      id: json['id'].toString(),
+      firstName: json['first_name'] as String,
+      lastName: json['last_name'] as String,
+      jerseyNumber: json['jersey_number']?.toString(),
+      position: json['position'] as String?,
+      teamName: json['team']?['name'] as String?,
+      teamId: json['team']?['id']?.toString(),
+    );
+  }
+}
+
+class BalldontlieTeam {
+  final String id;
+  final String slug;
+  final String abbreviation;
+  final String displayName;
+  final String shortDisplayName;
+  final String name;
+  final String location;
+  final String league;
+  final String division;
+
+  BalldontlieTeam({
+    required this.id,
+    required this.slug,
+    required this.abbreviation,
+    required this.displayName,
+    required this.shortDisplayName,
+    required this.name,
+    required this.location,
+    required this.league,
+    required this.division,
+  });
+
+  factory BalldontlieTeam.fromJson(Map<String, dynamic> json) {
+    return BalldontlieTeam(
+      id: json['id'].toString(),
+      slug: json['slug'] as String,
+      abbreviation: json['abbreviation'] as String,
+      displayName: json['display_name'] as String,
+      shortDisplayName: json['short_display_name'] as String,
+      name: json['name'] as String,
+      location: json['location'] as String,
+      league: json['league'] as String,
+      division: json['division'] as String,
+    );
+  }
+}
+
+class BalldontlieGame {
+  final String id;
+  final String homeTeamName;
+  final String awayTeamName;
+  final BalldontlieTeam homeTeam;
+  final BalldontlieTeam awayTeam;
+  final int season;
+  final bool postseason;
+  final String date;
+  final Map<String, dynamic> homeTeamData;
+  final Map<String, dynamic> awayTeamData;
+  final String venue;
+  final int attendance;
+  final bool conferencePlay;
+  final String status;
+  final int period;
+  final int clock;
+  final String displayClock;
+  final List<BalldontlieScoringPlay> scoringSummary;
+
+  BalldontlieGame({
+    required this.id,
+    required this.homeTeamName,
+    required this.awayTeamName,
+    required this.homeTeam,
+    required this.awayTeam,
+    required this.season,
+    required this.postseason,
+    required this.date,
+    required this.homeTeamData,
+    required this.awayTeamData,
+    required this.venue,
+    required this.attendance,
+    required this.conferencePlay,
+    required this.status,
+    required this.period,
+    required this.clock,
+    required this.displayClock,
+    required this.scoringSummary,
+  });
+
+  factory BalldontlieGame.fromJson(Map<String, dynamic> json) {
+    final scoringSummaryData = json['scoring_summary'] as List<dynamic>? ?? [];
+
+    return BalldontlieGame(
+      id: json['id'].toString(),
+      homeTeamName: json['home_team_name'] as String,
+      awayTeamName: json['away_team_name'] as String,
+      homeTeam: BalldontlieTeam.fromJson(json['home_team']),
+      awayTeam: BalldontlieTeam.fromJson(json['away_team']),
+      season: json['season'] as int,
+      postseason: json['postseason'] as bool,
+      date: json['date'] as String,
+      homeTeamData: json['home_team_data'] as Map<String, dynamic>,
+      awayTeamData: json['away_team_data'] as Map<String, dynamic>,
+      venue: json['venue'] as String,
+      attendance: json['attendance'] as int,
+      conferencePlay: json['conference_play'] as bool,
+      status: json['status'] as String,
+      period: json['period'] as int,
+      clock: json['clock'] as int,
+      displayClock: json['display_clock'] as String,
+      scoringSummary: scoringSummaryData
+          .map((play) => BalldontlieScoringPlay.fromJson(play))
+          .toList(),
+    );
+  }
+}
+
+class BalldontlieScoringPlay {
+  final String play;
+  final String inning;
+  final String period;
+  final int awayScore;
+  final int homeScore;
+
+  BalldontlieScoringPlay({
+    required this.play,
+    required this.inning,
+    required this.period,
+    required this.awayScore,
+    required this.homeScore,
+  });
+
+  factory BalldontlieScoringPlay.fromJson(Map<String, dynamic> json) {
+    return BalldontlieScoringPlay(
+      play: json['play'] as String,
+      inning: json['inning'] as String,
+      period: json['period'] as String,
+      awayScore: json['away_score'] as int,
+      homeScore: json['home_score'] as int,
+    );
+  }
+}
+
+class BalldontlieApiService {
+  static const String _baseUrl = 'api.balldontlie.io';
+  static const String _apiKey = 'f081f205-1993-4171-8c06-06694c6ae8a4';
+
+  /// Fetches all MLB teams
+  Future<List<BalldontlieTeam>> fetchAllTeams() async {
+    try {
+      final url = Uri.https(_baseUrl, '/mlb/v1/teams');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Team lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final teamsData = data['data'] as List<dynamic>;
+
+      return teamsData
+          .map((teamJson) => BalldontlieTeam.fromJson(teamJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching teams: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches all players
+  Future<List<BalldontliePlayer>> fetchAllPlayers() async {
+    try {
+      final url = Uri.https(_baseUrl, '/mlb/v1/players');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Player lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final playersData = data['data'] as List<dynamic>;
+
+      return playersData
+          .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching players: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches players for a specific team
+  Future<List<BalldontliePlayer>> fetchTeamPlayers(String teamId) async {
+    try {
+      final url =
+          Uri.https(_baseUrl, '/mlb/v1/players', {'team_ids[]': teamId});
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Team players lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final playersData = data['data'] as List<dynamic>;
+
+      return playersData
+          .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching team players: $e');
+      rethrow;
+    }
+  }
+
+  /// Finds a team by name (case-insensitive)
+  Future<BalldontlieTeam?> findTeamByName(String teamName) async {
+    try {
+      final teams = await fetchAllTeams();
+      return teams.firstWhere(
+        (team) => team.name.toLowerCase() == teamName.toLowerCase(),
+        orElse: () => throw Exception('Team "$teamName" not found'),
+      );
+    } catch (e) {
+      print('Error finding team $teamName: $e');
+      return null;
+    }
+  }
+
+  /// Test function to compare with MLB API
+  Future<void> testApiComparison() async {
+    print('=== Balldontlie.io MLB API Test ===');
+
+    try {
+      // Test fetching teams
+      print('\n1. Testing team fetch...');
+      final teams = await fetchAllTeams();
+      print('Found ${teams.length} teams');
+      print('Sample teams:');
+      for (int i = 0; i < teams.length.clamp(0, 5); i++) {
+        print('  - ${teams[i].displayName} (${teams[i].location})');
+      }
+
+      // Test fetching players
+      print('\n2. Testing player fetch...');
+      final players = await fetchAllPlayers();
+      print('Found ${players.length} players');
+      print('Sample players:');
+      for (int i = 0; i < players.length.clamp(0, 5); i++) {
+        final player = players[i];
+        print(
+            '  - ${player.displayName} (${player.position ?? 'N/A'}) - ${player.teamName ?? 'No Team'}');
+      }
+
+      // Test team-specific players
+      if (teams.isNotEmpty) {
+        print('\n3. Testing team-specific players...');
+        final firstTeam = teams.first;
+        final teamPlayers = await fetchTeamPlayers(firstTeam.id);
+        print('Found ${teamPlayers.length} players for ${firstTeam.name}');
+        print('Sample team players:');
+        for (int i = 0; i < teamPlayers.length.clamp(0, 3); i++) {
+          final player = teamPlayers[i];
+          print('  - ${player.displayName} (${player.position ?? 'N/A'})');
+        }
+      }
+    } catch (e) {
+      print('Error during API test: $e');
+    }
+  }
+
+  /// Fetches games data
+  Future<List<BalldontlieGame>> fetchGames() async {
+    try {
+      final url = Uri.https(_baseUrl, '/mlb/v1/games');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Games lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final gamesData = data['data'] as List<dynamic>;
+
+      return gamesData
+          .map((gameJson) => BalldontlieGame.fromJson(gameJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching games: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches games from the past week
+  Future<List<BalldontlieGame>> fetchRecentGames() async {
+    try {
+      // Calculate dates for past week
+      final now = DateTime.now();
+      final oneWeekAgo = now.subtract(const Duration(days: 7));
+
+      // Format dates as YYYY-MM-DD
+      final endDate =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final startDate =
+          '${oneWeekAgo.year}-${oneWeekAgo.month.toString().padLeft(2, '0')}-${oneWeekAgo.day.toString().padLeft(2, '0')}';
+
+      print('Fetching games from $startDate to $endDate');
+
+      final url = Uri.https(_baseUrl, '/mlb/v1/games', {
+        'start_date': startDate,
+        'end_date': endDate,
+      });
+
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Recent games lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final gamesData = data['data'] as List<dynamic>;
+
+      final games = gamesData
+          .map((gameJson) => BalldontlieGame.fromJson(gameJson))
+          .toList();
+
+      // Sort by date (most recent first)
+      games.sort((a, b) => b.date.compareTo(a.date));
+
+      return games;
+    } catch (e) {
+      print('Error fetching recent games: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches a specific game by ID
+  Future<BalldontlieGame?> fetchGameById(String gameId) async {
+    try {
+      final url = Uri.https(_baseUrl, '/mlb/v1/games/$gameId');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Game lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      return BalldontlieGame.fromJson(data['data']);
+    } catch (e) {
+      print('Error fetching game $gameId: $e');
+      rethrow;
+    }
+  }
+}

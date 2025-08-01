@@ -1,0 +1,3 @@
+0000000000000000000000000000000000000000 01eefdb85e0d88384b9bac5ce1d2116ce97d9fb5 Mark Blinch <markblinch@example.com> 1751841968 -0400	branch: Created from 01eefdb
+01eefdb85e0d88384b9bac5ce1d2116ce97d9fb5 c773e0135369b84784008baf260728f9851c41b9 Mark Blinch <markblinch@example.com> 1751842362 -0400	commit: Switch picture preview and IPTC metadata panels - image preview now on left, metadata on right
+c773e0135369b84784008baf260728f9851c41b9 26a48183f0478d237c740e926d222532d30ac54c Mark Blinch <markblinch@example.com> 1751843774 -0400	commit: Player picker moved beside verb chips (new layout, old section still present)

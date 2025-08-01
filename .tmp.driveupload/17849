@@ -1,0 +1,77 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class NbaTestService {
+  static const String _baseUrl = 'v2.nba.api-sports.io';
+  static const String _apiKey = 'b8d510e1184e75653fdae95a69319d78';
+
+  /// Test NBA players endpoint
+  Future<void> testNbaPlayers() async {
+    try {
+      final url = Uri.https(_baseUrl, '/players', {
+        'team': '5', // Test with team ID 5
+        'season': '2024',
+      });
+
+      final response = await http.get(
+        url,
+        headers: {
+          'X-RapidAPI-Key': _apiKey,
+          'X-RapidAPI-Host': _baseUrl,
+        },
+      );
+
+      print('NBA API response status: ${response.statusCode}');
+      print('NBA API response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final players = data['response'] as List;
+        print('NBA API: Found ${players.length} players');
+
+        if (players.isNotEmpty) {
+          print('Sample NBA player: ${players.first}');
+        }
+      } else {
+        print('NBA API failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('NBA API test error: $e');
+    }
+  }
+
+  /// Test NBA teams endpoint
+  Future<void> testNbaTeams() async {
+    try {
+      final url = Uri.https(_baseUrl, '/teams', {
+        'league': '12', // NBA league ID
+        'season': '2024',
+      });
+
+      final response = await http.get(
+        url,
+        headers: {
+          'X-RapidAPI-Key': _apiKey,
+          'X-RapidAPI-Host': _baseUrl,
+        },
+      );
+
+      print('NBA Teams API response status: ${response.statusCode}');
+      print('NBA Teams API response: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final teams = data['response'] as List;
+        print('NBA Teams API: Found ${teams.length} teams');
+
+        if (teams.isNotEmpty) {
+          print('Sample NBA team: ${teams.first}');
+        }
+      } else {
+        print('NBA Teams API failed with status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('NBA Teams API test error: $e');
+    }
+  }
+}

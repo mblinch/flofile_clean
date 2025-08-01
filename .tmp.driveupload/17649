@@ -1,0 +1,213 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+class BalldontliePlayer {
+  final String id;
+  final String firstName;
+  final String lastName;
+  final String? jerseyNumber;
+  final String? position;
+  final String? teamName;
+  final String? teamId;
+
+  BalldontliePlayer({
+    required this.id,
+    required this.firstName,
+    required this.lastName,
+    this.jerseyNumber,
+    this.position,
+    this.teamName,
+    this.teamId,
+  });
+
+  String get fullName => '$firstName $lastName';
+  String get displayName =>
+      jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName;
+
+  factory BalldontliePlayer.fromJson(Map<String, dynamic> json) {
+    return BalldontliePlayer(
+      id: json['id'].toString(),
+      firstName: json['first_name'] as String,
+      lastName: json['last_name'] as String,
+      jerseyNumber: json['jersey_number']?.toString(),
+      position: json['position'] as String?,
+      teamName: json['team']?['name'] as String?,
+      teamId: json['team']?['id']?.toString(),
+    );
+  }
+}
+
+class BalldontlieTeam {
+  final String id;
+  final String slug;
+  final String abbreviation;
+  final String displayName;
+  final String shortDisplayName;
+  final String name;
+  final String location;
+  final String league;
+  final String division;
+
+  BalldontlieTeam({
+    required this.id,
+    required this.slug,
+    required this.abbreviation,
+    required this.displayName,
+    required this.shortDisplayName,
+    required this.name,
+    required this.location,
+    required this.league,
+    required this.division,
+  });
+
+  factory BalldontlieTeam.fromJson(Map<String, dynamic> json) {
+    return BalldontlieTeam(
+      id: json['id'].toString(),
+      slug: json['slug'] as String,
+      abbreviation: json['abbreviation'] as String,
+      displayName: json['display_name'] as String,
+      shortDisplayName: json['short_display_name'] as String,
+      name: json['name'] as String,
+      location: json['location'] as String,
+      league: json['league'] as String,
+      division: json['division'] as String,
+    );
+  }
+}
+
+class BalldontlieApiService {
+  static const String _baseUrl = 'api.balldontlie.io';
+  static const String _apiKey = 'f081f205-1993-4171-8c06-06694c6ae8a4';
+
+  /// Fetches all NBA teams
+  Future<List<BalldontlieTeam>> fetchAllTeams() async {
+    try {
+      final url = Uri.https(_baseUrl, '/api/v1/teams');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $_apiKey'},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Team lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final teamsData = data['data'] as List<dynamic>;
+
+      return teamsData
+          .map((teamJson) => BalldontlieTeam.fromJson(teamJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching teams: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches all players
+  Future<List<BalldontliePlayer>> fetchAllPlayers() async {
+    try {
+      final url = Uri.https(_baseUrl, '/api/v1/players');
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $_apiKey'},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Player lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final playersData = data['data'] as List<dynamic>;
+
+      return playersData
+          .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching players: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches players for a specific team
+  Future<List<BalldontliePlayer>> fetchTeamPlayers(String teamId) async {
+    try {
+      final url =
+          Uri.https(_baseUrl, '/api/v1/players', {'team_ids[]': teamId});
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $_apiKey'},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Team players lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body);
+      final playersData = data['data'] as List<dynamic>;
+
+      return playersData
+          .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
+          .toList();
+    } catch (e) {
+      print('Error fetching team players: $e');
+      rethrow;
+    }
+  }
+
+  /// Finds a team by name (case-insensitive)
+  Future<BalldontlieTeam?> findTeamByName(String teamName) async {
+    try {
+      final teams = await fetchAllTeams();
+      return teams.firstWhere(
+        (team) => team.name.toLowerCase() == teamName.toLowerCase(),
+        orElse: () => throw Exception('Team "$teamName" not found'),
+      );
+    } catch (e) {
+      print('Error finding team $teamName: $e');
+      return null;
+    }
+  }
+
+  /// Test function to compare with MLB API
+  Future<void> testApiComparison() async {
+    print('=== Balldontlie.io API Test ===');
+
+    try {
+      // Test fetching teams
+      print('\n1. Testing team fetch...');
+      final teams = await fetchAllTeams();
+      print('Found ${teams.length} teams');
+      print('Sample teams:');
+      for (int i = 0; i < teams.length.clamp(0, 5); i++) {
+        print('  - ${teams[i].displayName} (${teams[i].location})');
+      }
+
+      // Test fetching players
+      print('\n2. Testing player fetch...');
+      final players = await fetchAllPlayers();
+      print('Found ${players.length} players');
+      print('Sample players:');
+      for (int i = 0; i < players.length.clamp(0, 5); i++) {
+        final player = players[i];
+        print(
+            '  - ${player.displayName} (${player.position ?? 'N/A'}) - ${player.teamName ?? 'No Team'}');
+      }
+
+      // Test team-specific players
+      if (teams.isNotEmpty) {
+        print('\n3. Testing team-specific players...');
+        final firstTeam = teams.first;
+        final teamPlayers = await fetchTeamPlayers(firstTeam.id);
+        print('Found ${teamPlayers.length} players for ${firstTeam.name}');
+        print('Sample team players:');
+        for (int i = 0; i < teamPlayers.length.clamp(0, 3); i++) {
+          final player = teamPlayers[i];
+          print('  - ${player.displayName} (${player.position ?? 'N/A'})');
+        }
+      }
+    } catch (e) {
+      print('Error during API test: $e');
+    }
+  }
+}
