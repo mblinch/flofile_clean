@@ -53,7 +53,11 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   void _onThumbnailLoaded() {
     _loadedThumbnails++;
+    print(
+        'DEBUG: Thumbnail loaded: $_loadedThumbnails / ${widget.imagePaths.length}');
     if (_loadedThumbnails >= widget.imagePaths.length) {
+      print(
+          'DEBUG: All thumbnails loaded, setting _isLoadingThumbnails to false');
       setState(() {
         _isLoadingThumbnails = false;
       });
@@ -94,6 +98,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   Widget build(BuildContext context) {
     // Reset loading state when new images are loaded
     if (widget.imagePaths != _previousImagePaths) {
+      print('DEBUG: New images detected, resetting loading state');
+      print('DEBUG: Image count: ${widget.imagePaths.length}');
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
       _isLoadingThumbnails = true;
