@@ -121,7 +121,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Load images from the selected folder
     await _loadImagesFromFolder(folderPath);
 
-    // Only clear loading state after ensuring images are loaded
+    // Force a rebuild cycle to ensure ThumbnailGridWidget can render
+    if (mounted) {
+      setState(() {
+        // Trigger rebuild with populated imagePaths
+      });
+
+      // Wait one frame for widgets to build
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    // Now clear loading state - thumbnails should be ready to render
     setState(() {
       _isLoadingThumbnails = false;
     });
