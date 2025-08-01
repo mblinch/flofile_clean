@@ -467,6 +467,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             imagePaths: imagePaths,
                             currentIndex: currentIndex,
                             onImageSelected: _onImageSelected,
+                            loadingProgress: _isLoadingThumbnails
+                                ? _thumbnailLoadingProgress
+                                : null,
                           ),
                         ),
                       ],
@@ -652,6 +655,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
                       onImageSelected: _onImageSelected,
+                      loadingProgress: _isLoadingThumbnails
+                          ? _thumbnailLoadingProgress
+                          : null,
                     ),
                   ),
                 ],

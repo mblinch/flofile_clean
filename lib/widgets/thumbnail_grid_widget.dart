@@ -9,6 +9,7 @@ class ThumbnailGridWidget extends StatefulWidget {
   final int currentIndex;
   final Function(int) onImageSelected;
   final ScrollController? scrollController;
+  final double? loadingProgress; // Add loading progress parameter
 
   const ThumbnailGridWidget({
     super.key,
@@ -16,6 +17,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     required this.currentIndex,
     required this.onImageSelected,
     this.scrollController,
+    this.loadingProgress,
   });
 
   @override
@@ -504,11 +506,49 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             ),
           );
         } else {
-          // Loading state
+          // Loading state with progress bar
           return Container(
             color: Colors.grey.shade200,
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
+            child: Stack(
+              children: [
+                // Background placeholder
+                Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Progress overlay
+                if (widget.loadingProgress != null)
+                  Positioned(
+                    bottom: 4,
+                    left: 4,
+                    right: 4,
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: widget.loadingProgress!,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade600,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Loading indicator
+                const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
             ),
           );
         }
