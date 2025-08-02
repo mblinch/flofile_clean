@@ -217,11 +217,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             currentMetadata = data.first as Map<String, dynamic>;
           });
           print('Metadata loaded successfully');
-          print('DEBUG: Metadata keys: ${currentMetadata?.keys.toList()}');
-          print(
-              'DEBUG: DateTimeOriginal = ${currentMetadata?['DateTimeOriginal']}');
-          print('DEBUG: CreateDate = ${currentMetadata?['CreateDate']}');
-          print('DEBUG: ModifyDate = ${currentMetadata?['ModifyDate']}');
         }
       } else {
         print('Exiftool error: ${proc.stderr}');
@@ -459,39 +454,57 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       children: [
                         // BOTTOM LEFT BOX - Caption Fields
                         Expanded(
-                          child: CaptionFieldsWidget(
-                            metadata: currentMetadata,
-                            onMetadataUpdated: (metadata) {
-                              setState(() {
-                                currentMetadata = metadata;
-                              });
+                          child: Builder(
+                            builder: (context) {
+                              final currentPath = imagePaths.isNotEmpty
+                                  ? imagePaths[currentIndex]
+                                  : null;
+                              print(
+                                  'DEBUG: CaptionBuilderScreen - Creating CaptionFieldsWidget with currentPath: "$currentPath"');
+                              print(
+                                  'DEBUG: CaptionBuilderScreen - imagePaths.length: ${imagePaths.length}, currentIndex: $currentIndex');
+                              return CaptionFieldsWidget(
+                                metadata: currentMetadata,
+                                onMetadataUpdated: (metadata) {
+                                  setState(() {
+                                    currentMetadata = metadata;
+                                  });
+                                },
+                                homeTeam: selectedHomeTeam,
+                                awayTeam: selectedAwayTeam,
+                                onNextImage: () {
+                                  if (currentIndex < imagePaths.length - 1) {
+                                    _onImageSelected(currentIndex + 1);
+                                  }
+                                },
+                                onPreviousImage: () {
+                                  if (currentIndex > 0) {
+                                    _onImageSelected(currentIndex - 1);
+                                  }
+                                },
+                                onReset: _handleReset,
+                                personalityOverride: _personalityOverride,
+                                onImagesLoaded: (files) {
+                                  print(
+                                      'DEBUG: CaptionBuilderScreen - onImagesLoaded called with ${files.length} files');
+                                  setState(() {
+                                    imagePaths = files;
+                                    currentIndex = 0;
+                                  });
+                                  print(
+                                      'DEBUG: CaptionBuilderScreen - imagePaths.length: ${imagePaths.length}, currentIndex: $currentIndex');
+                                },
+                                preloadedHomeRoster:
+                                    _cachedHomeRoster.isNotEmpty
+                                        ? _cachedHomeRoster
+                                        : null,
+                                preloadedAwayRoster:
+                                    _cachedAwayRoster.isNotEmpty
+                                        ? _cachedAwayRoster
+                                        : null,
+                                currentImagePath: currentPath,
+                              );
                             },
-                            homeTeam: selectedHomeTeam,
-                            awayTeam: selectedAwayTeam,
-                            onNextImage: () {
-                              if (currentIndex < imagePaths.length - 1) {
-                                _onImageSelected(currentIndex + 1);
-                              }
-                            },
-                            onPreviousImage: () {
-                              if (currentIndex > 0) {
-                                _onImageSelected(currentIndex - 1);
-                              }
-                            },
-                            onReset: _handleReset,
-                            personalityOverride: _personalityOverride,
-                            onImagesLoaded: (files) {
-                              setState(() {
-                                imagePaths = files;
-                                currentIndex = 0;
-                              });
-                            },
-                            preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
-                                ? _cachedHomeRoster
-                                : null,
-                            preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
-                                ? _cachedAwayRoster
-                                : null,
                           ),
                         ),
 
@@ -679,6 +692,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           : null,
                       preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
                           ? _cachedAwayRoster
+                          : null,
+                      currentImagePath: imagePaths.isNotEmpty
+                          ? imagePaths[currentIndex]
                           : null,
                     ),
                   ),

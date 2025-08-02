@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../services/mlb_api_service.dart';
 import '../services/api_manager.dart';
+import '../services/ftpclient_service.dart';
 import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import 'package:collection/collection.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Custom button widget with cursor styling
 class CustomButton extends StatelessWidget {
@@ -49,6 +52,7 @@ class CaptionFieldsWidget extends StatefulWidget {
   final Function(List<String>)? onImagesLoaded;
   final List<Player>? preloadedHomeRoster;
   final List<Player>? preloadedAwayRoster;
+  final String? currentImagePath;
 
   const CaptionFieldsWidget({
     super.key,
@@ -63,6 +67,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onImagesLoaded,
     this.preloadedHomeRoster,
     this.preloadedAwayRoster,
+    this.currentImagePath,
   });
 
   @override
@@ -110,6 +115,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _removeAccent = true; // Default to true
   bool _disableFtp = false; // Default to false (FTP enabled)
   int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
+
+  // FTP Settings
+  String _ftpHost = 'ftp.photoshelter.com';
+  String _ftpUsername = 'mb1';
+  String _ftpPassword = '';
+  int _ftpPort = 21;
+  String _ftpRemotePath = '';
+  bool _ftpPassiveMode = true;
+
+  // FTP Profile Management
+  Map<String, Map<String, dynamic>> _ftpProfiles = {};
+  String? _currentFtpProfile;
   String? _selectedFieldingAction;
   String? _selectedBaseRunningAction;
   String? _selectedStealBase;
@@ -461,10 +478,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _initializeSampleData();
     if (widget.personalityOverride != null) {
       personalityController.text = widget.personalityOverride!;
-      print('DEBUG: personalityController.text set to: "' +
-          personalityController.text +
-          '" (override logic)');
     }
+    _loadFtpProfiles();
   }
 
   @override
@@ -501,11 +516,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final createDate = widget.metadata!['CreateDate']?.toString();
       final modifyDate = widget.metadata!['ModifyDate']?.toString();
 
-      print('DEBUG: Venue fetch - Image metadata date fields:');
-      print('DEBUG: DateTimeOriginal = $dateTimeOriginal');
-      print('DEBUG: CreateDate = $createDate');
-      print('DEBUG: ModifyDate = $modifyDate');
-
       // Try to parse the date from EXIF data
       final dateString = dateTimeOriginal ?? createDate ?? modifyDate;
       if (dateString != null && dateString.isNotEmpty) {
@@ -532,9 +542,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         print(
             'DEBUG: Venue fetch - No date string found in metadata, using current date');
       }
-    } else {
-      print('DEBUG: Venue fetch - No metadata available, using current date');
-    }
+    } else {}
 
     try {
       final venue = await _apiManager.fetchVenueForGame(
@@ -679,8 +687,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         selectedAwayPlayers.clear();
         _firstTeamSelected = null; // Reset first team selection
         _firstPlayerSelected = null; // Reset first player selection
-        print('DEBUG: Reset _firstTeamSelected to null (roster change)');
-        print('DEBUG: Reset _firstPlayerSelected to null (roster change)');
       });
 
       print(
@@ -711,9 +717,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (widget.personalityOverride != null &&
         widget.personalityOverride != oldWidget.personalityOverride) {
       personalityController.text = widget.personalityOverride!;
-      print('DEBUG: personalityController.text set to: "' +
-          personalityController.text +
-          '" (override logic)');
     }
     if (widget.metadata != oldWidget.metadata) {
       _loadMetadata();
@@ -731,8 +734,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         selectedAwayPlayers.clear();
         _firstTeamSelected = null; // Reset first team selection
         _firstPlayerSelected = null; // Reset first player selection
-        print('DEBUG: Reset _firstTeamSelected to null (team change)');
-        print('DEBUG: Reset _firstPlayerSelected to null (team change)');
+
         _homeRoster.clear();
         _awayRoster.clear();
       });
@@ -765,16 +767,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
-      print('DEBUG: personalityController.text set to: "' +
-          personalityController.text +
-          '" (metadata loading)');
 
       // Only set personality from metadata if the user hasn't manually reset.
       if (!_hasBeenReset) {
         personalityController.text = personInImageText;
-        print('DEBUG: personalityController.text set to: "' +
-            personalityController.text +
-            '" (_updatePersonalityField)');
       }
     });
   }
@@ -916,45 +912,82 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 12),
 
-                        // FTP button
-                        CustomButton(
-                          onTap: _disableFtp ? null : _onFtpPressed,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: _disableFtp
-                                  ? Colors.grey.shade300
-                                  : const Color(0xFF0052CC),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                  color: _disableFtp
-                                      ? Colors.grey.shade300
-                                      : const Color(0xFF0052CC)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.cloud_upload,
-                                    size: 20,
+                        // FTP buttons row
+                        Row(
+                          children: [
+                            // Main FTP button
+                            Expanded(
+                              child: CustomButton(
+                                onTap: _disableFtp ? null : _onFtpPressed,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
                                     color: _disableFtp
-                                        ? Colors.grey.shade600
-                                        : Colors.white),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _disableFtp ? 'FTP DISABLED' : 'FTP',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: _disableFtp
-                                        ? Colors.grey.shade600
-                                        : Colors.white,
-                                    fontWeight: FontWeight.w500,
+                                        ? Colors.grey.shade300
+                                        : const Color(0xFF0052CC),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: _disableFtp
+                                            ? Colors.grey.shade300
+                                            : const Color(0xFF0052CC)),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.cloud_upload,
+                                          size: 20,
+                                          color: _disableFtp
+                                              ? Colors.grey.shade600
+                                              : Colors.white),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _disableFtp ? 'FTP DISABLED' : 'FTP',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: _disableFtp
+                                              ? Colors.grey.shade600
+                                              : Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 6),
+                            // FTP Settings button
+                            CustomButton(
+                              onTap: _showFtpSettings,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.settings,
+                                        size: 16, color: Colors.grey.shade700),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Settings',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 8),
@@ -1612,8 +1645,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _sortPlayerObjects(filteredRosterUnsorted, sortOption, ascending);
 
     // Debug output
-    print(
-        '${isHome ? "HOME" : "AWAY"} Search: "$searchText", Roster: ${roster.length}, Filtered: ${filteredRoster.length}');
+    // print(
+    //     '${isHome ? "HOME" : "AWAY"} Search: "$searchText", Roster: ${roster.length}, Filtered: ${filteredRoster.length}');
 
     return Container(
       decoration: BoxDecoration(
@@ -1870,10 +1903,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           final player = filteredRoster[index];
                           final isSelected =
                               selectedPlayers.contains(player.displayName);
-                          print(
-                              'DEBUG: Checking if ${player.displayName} is selected: $isSelected');
-                          print(
-                              'DEBUG: selectedPlayers contains: $selectedPlayers');
 
                           return GestureDetector(
                             onTap: () {
@@ -1891,16 +1920,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   if (_firstTeamSelected == null) {
                                     _firstTeamSelected = isHome;
                                     _firstPlayerSelected = player.displayName;
-                                    print(
-                                        'DEBUG: First team selected: ${isHome ? "HOME" : "AWAY"}');
-                                    print(
-                                        'DEBUG: First player selected: ${player.displayName}');
-                                    print(
-                                        'DEBUG: _firstTeamSelected set to: $_firstTeamSelected');
-                                  } else {
-                                    print(
-                                        'DEBUG: _firstTeamSelected already set to: $_firstTeamSelected');
-                                  }
+                                  } else {}
                                   if (isHome) {
                                     selectedHomePlayers.add(player.displayName);
                                   } else {
@@ -2067,31 +2087,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                     ),
                                                                     onChanged:
                                                                         (value) {
-                                                                      print(
-                                                                          'DEBUG: Text field changed to: "$value"');
-                                                                      print(
-                                                                          'DEBUG: _isPlayerSearchMode: $_isPlayerSearchMode');
-                                                                      print(
-                                                                          'DEBUG: _isNumeric(value): ${_isNumeric(value)}');
+                                                                      // print(
+                                                                      //     'DEBUG: Text field changed to: "$value"');
+                                                                      // print(
+                                                                      //     'DEBUG: _isPlayerSearchMode: $_isPlayerSearchMode');
+                                                                      // print(
+                                                                      //     'DEBUG: _isNumeric(value): ${_isNumeric(value)}');
 
                                                                       setState(
                                                                           () {
                                                                         if (_isPlayerSearchMode &&
                                                                             _isNumeric(
                                                                                 value)) {
-                                                                          print(
-                                                                              'DEBUG: Calling _filterPlayersByNumber');
+                                                                          // print(
+                                                                          //     'DEBUG: Calling _filterPlayersByNumber');
                                                                           _filterPlayersByNumber(
                                                                               value);
                                                                         } else if (_isPlayerSearchMode &&
                                                                             value.isEmpty) {
-                                                                          print(
-                                                                              'DEBUG: Clearing filtered players');
+                                                                          // print(
+                                                                          //     'DEBUG: Clearing filtered players');
                                                                           _filteredPlayers
                                                                               .clear();
                                                                         } else if (!_isPlayerSearchMode) {
-                                                                          print(
-                                                                              'DEBUG: In custom verb mode');
+                                                                          // print(
+                                                                          //     'DEBUG: In custom verb mode');
                                                                           _showCustomTextInningSelector =
                                                                               value.isNotEmpty;
                                                                           _updateCaption();
@@ -3258,11 +3278,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _updateCaption() {
-    print('DEBUG: _updateCaption() called');
-    print('DEBUG: _selectedVerb = $_selectedVerb');
-    print('DEBUG: _selectedActionVerb = $_selectedActionVerb');
-    print('DEBUG: _isCelebratingScoring = $_isCelebratingScoring');
-
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
@@ -3275,11 +3290,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final dateTimeOriginal = widget.metadata!['DateTimeOriginal']?.toString();
       final createDate = widget.metadata!['CreateDate']?.toString();
       final modifyDate = widget.metadata!['ModifyDate']?.toString();
-
-      print('DEBUG: Image metadata date fields:');
-      print('DEBUG: DateTimeOriginal = $dateTimeOriginal');
-      print('DEBUG: CreateDate = $createDate');
-      print('DEBUG: ModifyDate = $modifyDate');
 
       // Try to parse the date from EXIF data
       final dateString = dateTimeOriginal ?? createDate ?? modifyDate;
@@ -3295,20 +3305,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               final month = int.parse(dateComponents[1]);
               final day = int.parse(dateComponents[2]);
               photoDate = DateTime(year, month, day);
-              print(
-                  'DEBUG: Parsed photo date: ${photoDate.toIso8601String().split('T')[0]}');
             }
           }
         } catch (e) {
           print('Error parsing photo date: $e');
           // Fallback to current date
         }
-      } else {
-        print('DEBUG: No date string found in metadata, using current date');
-      }
-    } else {
-      print('DEBUG: No metadata available, using current date');
-    }
+      } else {}
+    } else {}
 
     // Get date components
     final city = cityController.text;
@@ -3340,26 +3344,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else if (selectedHomePlayers.isNotEmpty &&
         selectedAwayPlayers.isNotEmpty) {
       // Both teams have players - use the first team selected as main focus
-      print('DEBUG: _firstTeamSelected = $_firstTeamSelected');
-      print('DEBUG: _firstPlayerSelected = $_firstPlayerSelected');
-      print('DEBUG: selectedHomePlayers count = ${selectedHomePlayers.length}');
-      print('DEBUG: selectedAwayPlayers count = ${selectedAwayPlayers.length}');
 
       if (_firstTeamSelected == true) {
         // Home team was selected first, so they're the main focus
-        print('DEBUG: Using home team as main focus');
+
         activePlayers = selectedHomePlayers;
         opponentPlayers = selectedAwayPlayers;
         opponentTeamName = selectedAwayTeam;
       } else if (_firstTeamSelected == false) {
         // Away team was selected first, so they're the main focus
-        print('DEBUG: Using away team as main focus');
+
         activePlayers = selectedAwayPlayers;
         opponentPlayers = selectedHomePlayers;
         opponentTeamName = selectedHomeTeam;
       } else {
         // Fallback: if _firstTeamSelected is null, use home team as default
-        print('DEBUG: _firstTeamSelected is null, using home team as default');
+
         activePlayers = selectedHomePlayers;
         opponentPlayers = selectedAwayPlayers;
         opponentTeamName = selectedAwayTeam;
@@ -3400,11 +3400,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           verbToUse == 'Celebrates Against');
       final hasMultiplePlayers = activePlayers.length > 1;
 
-      print('DEBUG: verbToUse = $verbToUse');
-      print(
-          'DEBUG: _isCelebratingWithTeammates = $_isCelebratingWithTeammates');
-      print(
-          'DEBUG: isHitInterface = $isHitInterface, isCelebrationInterface = $isCelebrationInterface, hasMultiplePlayers = $hasMultiplePlayers');
+      // print(
+      //     'DEBUG: _isCelebratingWithTeammates = $_isCelebratingWithTeammates');
+      // print(
+      //     'DEBUG: isHitInterface = $isHitInterface, isCelebrationInterface = $isCelebrationInterface, hasMultiplePlayers = $hasMultiplePlayers');
 
       if (_isCelebratingWithTeammates ||
           (isHitInterface && hasMultiplePlayers) ||
@@ -3415,11 +3414,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ? selectedHomeTeam
                 : selectedAwayTeam;
         playerName = '$_firstPlayerSelected of the $mainPlayerTeam';
-        print('DEBUG: Using main player only: $playerName');
       } else {
         // If "with teammates" is NOT selected and not a multi-player hit interface, use all active players
         playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
-        print('DEBUG: Using all players: $playerName');
       }
     } else {
       // For other actions, use all active players
@@ -3472,10 +3469,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (opponentPlayers.isNotEmpty) {
         final opponentNames =
             _combinePlayersWithSingleTeam(opponentPlayers.toList());
-        print('DEBUG: opponentTeamName: "$opponentTeamName"');
         opponentPart = ' against $opponentNames';
       } else if (opponentTeamName != null) {
-        print('DEBUG: opponentTeamName: "$opponentTeamName"');
         opponentPart = ' against the $opponentTeamName';
       }
     }
@@ -3513,11 +3508,159 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _updatePersonalityField();
   }
 
-  void _onFtpPressed() {
-    // ... your FTP logic here ...
-    setState(() {
-      _ftpPictureNumber++;
-    });
+  Future<void> _onFtpPressed() async {
+    // Check if FTP settings are configured
+    if (_ftpHost.isEmpty || _ftpUsername.isEmpty || _ftpPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please configure FTP settings first!'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // Check if an image is selected
+    print('DEBUG: FTP Upload - currentImagePath: "${widget.currentImagePath}"');
+    print(
+        'DEBUG: FTP Upload - currentImagePath is null: ${widget.currentImagePath == null}');
+    print(
+        'DEBUG: FTP Upload - currentImagePath is empty: ${widget.currentImagePath?.isEmpty}');
+
+    if (widget.currentImagePath == null || widget.currentImagePath!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an image first!'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // Use original filename
+    final originalFileName = p.basename(widget.currentImagePath!);
+    final remoteFileName = originalFileName;
+
+    // Build full remote path
+    final fullRemotePath = _ftpRemotePath.isNotEmpty
+        ? '${_ftpRemotePath.endsWith('/') ? _ftpRemotePath : '$_ftpRemotePath/'}$remoteFileName'
+        : remoteFileName;
+
+    print('FTP: Generated remote filename: $remoteFileName');
+    print('FTP: Remote path: $_ftpRemotePath');
+    print('FTP: Full remote path: $fullRemotePath');
+
+    // Show progress dialog with progress bar
+    double uploadProgress = 0.0;
+    String statusText = 'Connecting to FTP server...';
+    String? errorText;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Uploading Image...'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(
+                value: uploadProgress,
+                backgroundColor: Colors.grey[300],
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  errorText != null ? Colors.red : Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                statusText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: errorText != null ? Colors.red : Colors.black87,
+                  fontWeight:
+                      errorText != null ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              if (errorText != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    errorText!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final result = await FtpClientService.uploadFile(
+        host: _ftpHost,
+        username: _ftpUsername,
+        password: _ftpPassword,
+        localFilePath: widget.currentImagePath!,
+        remoteFilePath: fullRemotePath,
+        port: _ftpPort,
+        passiveMode: _ftpPassiveMode,
+        onProgress: (status, progress, error) {
+          uploadProgress = progress;
+          statusText = status;
+          errorText = error;
+          setState(() {});
+        },
+      );
+
+      // Wait a moment to show completion
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      Navigator.pop(context); // Close progress dialog
+
+      if (result.success) {
+        setState(() {
+          // No need to increment picture number when using original filenames
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully uploaded: $remoteFileName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: ${result.error}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close progress dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload error: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   // Folder picking functionality
@@ -3625,16 +3768,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Apply diacritic removal if enabled
     final processedPersonalityText = _removeDiacritics(personalityText);
 
-    print(
-        'DEBUG: _updatePersonalityField called - setting personality to: "$processedPersonalityText"');
-    print(
-        'DEBUG: _updatePersonalityField - allSelectedPlayers: $allSelectedPlayers');
-
     // Update the personality field
     personalityController.text = processedPersonalityText;
-    print('DEBUG: personalityController.text set to: "' +
-        personalityController.text +
-        '" (_updatePersonalityField)');
   }
 
   String _getTeamAbbreviation(String teamName) {
@@ -3673,8 +3808,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     };
 
     final abbreviation = teamAbbreviations[teamName];
-    print(
-        'DEBUG: Converting team name "$teamName" to abbreviation: "$abbreviation"');
+    // print('DEBUG: Converting team name "$teamName" to abbreviation: "$abbreviation"');
     return abbreviation ?? teamName;
   }
 
@@ -3895,16 +4029,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             if (_firstTeamSelected == null) {
                               _firstTeamSelected = isHome;
                               _firstPlayerSelected = player.displayName;
-                              print(
-                                  'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
-                              print(
-                                  'DEBUG: First player selected (dialog): ${player.displayName}');
-                              print(
-                                  'DEBUG: _firstTeamSelected set to: $_firstTeamSelected');
-                            } else {
-                              print(
-                                  'DEBUG: _firstTeamSelected already set to: $_firstTeamSelected');
-                            }
+                              // print(
+                              //     'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
+                              // print(
+                              //     'DEBUG: First player selected (dialog): ${player.displayName}');
+                            } else {}
                             if (isHome) {
                               selectedHomePlayers.add(player.displayName);
                             } else {
@@ -4025,45 +4154,82 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildActionButtons() {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _onCopyPressed,
-            icon: const Icon(Icons.copy, size: 14),
-            label: const Text('Copy', style: TextStyle(fontSize: 10)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _onCopyPressed,
+                icon: const Icon(Icons.copy, size: 14),
+                label: const Text('Copy', style: TextStyle(fontSize: 10)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _onPastePressed,
+                icon: const Icon(Icons.paste, size: 14),
+                label: const Text('Paste', style: TextStyle(fontSize: 10)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _resetCaption,
+                icon: const Icon(Icons.refresh, size: 14),
+                label: const Text('Reset', style: TextStyle(fontSize: 10)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _onPastePressed,
-            icon: const Icon(Icons.paste, size: 14),
-            label: const Text('Paste', style: TextStyle(fontSize: 10)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _onFtpPressed,
+                icon: const Icon(Icons.cloud_upload, size: 14),
+                label: const Text('FTP Upload', style: TextStyle(fontSize: 10)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _resetCaption,
-            icon: const Icon(Icons.refresh, size: 14),
-            label: const Text('Reset', style: TextStyle(fontSize: 10)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _showFtpSettings,
+                icon: const Icon(Icons.settings, size: 14),
+                label:
+                    const Text('FTP Settings', style: TextStyle(fontSize: 10)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()), // Empty space for alignment
+          ],
         ),
       ],
     );
@@ -4147,9 +4313,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         captionController.text = parts[0].trim();
         if (parts.length > 1) {
           personalityController.text = parts[1].trim();
-          print('DEBUG: personalityController.text set to: "' +
-              personalityController.text +
-              '" (paste logic)');
         }
       } else {
         captionController.text = text;
@@ -4227,6 +4390,409 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       const SnackBar(
         content: Text('Caption fields reset!'),
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // FTP Profile Management Methods
+  void _saveFtpProfile(String profileName) {
+    setState(() {
+      _ftpProfiles[profileName] = {
+        'host': _ftpHost,
+        'username': _ftpUsername,
+        'password': _ftpPassword,
+        'port': _ftpPort,
+        'remotePath': _ftpRemotePath,
+        'passiveMode': _ftpPassiveMode,
+      };
+      _currentFtpProfile = profileName;
+    });
+
+    // Save to persistent storage
+    _saveFtpProfilesToStorage();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('FTP profile "$profileName" saved successfully!'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _loadFtpProfile(String profileName) {
+    final profile = _ftpProfiles[profileName];
+    if (profile != null) {
+      setState(() {
+        _ftpHost = profile['host'] ?? '';
+        _ftpUsername = profile['username'] ?? '';
+        _ftpPassword = profile['password'] ?? '';
+        _ftpPort = profile['port'] ?? 21;
+        _ftpRemotePath = profile['remotePath'] ?? '';
+        _ftpPassiveMode = profile['passiveMode'] ?? true;
+        _currentFtpProfile = profileName;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('FTP profile "$profileName" loaded successfully!'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _deleteFtpProfile(String profileName) {
+    setState(() {
+      _ftpProfiles.remove(profileName);
+      if (_currentFtpProfile == profileName) {
+        _currentFtpProfile = null;
+      }
+    });
+
+    // Save to persistent storage
+    _saveFtpProfilesToStorage();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('FTP profile "$profileName" deleted successfully!'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // FTP Profile Persistence Methods
+  Future<void> _saveFtpProfilesToStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profilesJson = jsonEncode(_ftpProfiles);
+      final currentProfile = _currentFtpProfile;
+
+      await prefs.setString('ftp_profiles', profilesJson);
+      if (currentProfile != null) {
+        await prefs.setString('current_ftp_profile', currentProfile);
+      }
+    } catch (e) {
+      print('Error saving FTP profiles: $e');
+    }
+  }
+
+  Future<void> _loadFtpProfiles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final profilesJson = prefs.getString('ftp_profiles');
+      final currentProfile = prefs.getString('current_ftp_profile');
+
+      if (profilesJson != null) {
+        final profiles = jsonDecode(profilesJson) as Map<String, dynamic>;
+        setState(() {
+          _ftpProfiles = Map<String, Map<String, dynamic>>.from(profiles);
+          _currentFtpProfile = currentProfile;
+        });
+      }
+    } catch (e) {
+      print('Error loading FTP profiles: $e');
+    }
+  }
+
+  void _showFtpProfileManager() {
+    final profileNameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('FTP Profile Manager'),
+        content: SizedBox(
+          width: 500,
+          height: 400,
+          child: Column(
+            children: [
+              // Profile List
+              Expanded(
+                child: _ftpProfiles.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No saved profiles yet.\nCreate your first profile below.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _ftpProfiles.length,
+                        itemBuilder: (context, index) {
+                          final profileName =
+                              _ftpProfiles.keys.elementAt(index);
+                          final profile = _ftpProfiles[profileName]!;
+                          final isCurrent = _currentFtpProfile == profileName;
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            color:
+                                isCurrent ? Colors.blue.withOpacity(0.1) : null,
+                            child: ListTile(
+                              leading: Icon(
+                                isCurrent ? Icons.check_circle : Icons.storage,
+                                color: isCurrent ? Colors.blue : Colors.grey,
+                              ),
+                              title: Text(
+                                profileName,
+                                style: TextStyle(
+                                  fontWeight: isCurrent
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                              subtitle:
+                                  Text('${profile['host']}:${profile['port']}'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!isCurrent)
+                                    IconButton(
+                                      icon: const Icon(Icons.play_arrow),
+                                      onPressed: () =>
+                                          _loadFtpProfile(profileName),
+                                      tooltip: 'Load Profile',
+                                    ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: () =>
+                                        _deleteFtpProfile(profileName),
+                                    tooltip: 'Delete Profile',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              const Divider(),
+              // Create New Profile Section
+              const Text(
+                'Create New Profile',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: profileNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Profile Name',
+                        hintText: 'e.g., Work Server, Home Server',
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (value) {
+                        if (value.trim().isNotEmpty) {
+                          _saveFtpProfile(value.trim());
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      final profileName = profileNameController.text.trim();
+                      if (profileName.isNotEmpty) {
+                        _saveFtpProfile(profileName);
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: const Text('Save Current Settings'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // FTP Methods
+  void _showFtpSettings() {
+    final hostController = TextEditingController(text: _ftpHost);
+    final usernameController = TextEditingController(text: _ftpUsername);
+    final passwordController = TextEditingController(text: _ftpPassword);
+    final portController = TextEditingController(text: _ftpPort.toString());
+    final remotePathController = TextEditingController(text: _ftpRemotePath);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Text('FTP Server Settings'),
+            const Spacer(),
+            if (_currentFtpProfile != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Profile: $_currentFtpProfile',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        content: SizedBox(
+          width: 450,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Profile Management Row
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showFtpProfileManager,
+                      icon: const Icon(Icons.folder),
+                      label: const Text('Manage Profiles'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                        foregroundColor: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (_currentFtpProfile != null)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _saveFtpProfile(_currentFtpProfile!),
+                        icon: const Icon(Icons.save),
+                        label: const Text('Update Profile'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: hostController,
+                decoration: const InputDecoration(
+                  labelText: 'FTP Host',
+                  hintText: 'ftp.example.com',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: usernameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Username',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: portController,
+                      decoration: const InputDecoration(
+                        labelText: 'Port',
+                        hintText: '21',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: passwordController,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: remotePathController,
+                decoration: const InputDecoration(
+                  labelText: 'Remote Upload Path (optional)',
+                  hintText: 'Leave blank for root directory',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _ftpPassiveMode,
+                    onChanged: (value) {
+                      setState(() {
+                        _ftpPassiveMode = value ?? true;
+                      });
+                    },
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Use Passive Mode',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Files will be uploaded with the format: YYYY-MM-DD_001.jpg, 002.jpg, etc.\nLeave remote path blank to upload to root directory.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _ftpHost = hostController.text;
+                _ftpUsername = usernameController.text;
+                _ftpPassword = passwordController.text;
+                _ftpPort = int.tryParse(portController.text) ?? 21;
+                _ftpRemotePath = remotePathController.text;
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('FTP settings saved!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }
@@ -5401,8 +5967,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (_firstPlayerSelected == null) return false;
 
     final isFirst = _firstPlayerSelected == playerName;
-    print('DEBUG: _isFirstSelectedPlayer("$playerName") = $isFirst');
-    print('DEBUG: _firstPlayerSelected = "$_firstPlayerSelected"');
+
     return isFirst;
   }
 
@@ -6769,8 +7334,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (_firstPlayerSelected == null) {
           _firstPlayerSelected =
               cleanedPlayerName; // Use cleaned name for caption
-          print(
-              'DEBUG: First player selected from overlay: $cleanedPlayerName');
+          // print(
+          //     'DEBUG: First player selected from overlay: $cleanedPlayerName');
         }
       } else {
         selectedAwayPlayers
@@ -6779,8 +7344,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (_firstPlayerSelected == null) {
           _firstPlayerSelected =
               cleanedPlayerName; // Use cleaned name for caption
-          print(
-              'DEBUG: First player selected from overlay: $cleanedPlayerName');
+          // print(
+          //     'DEBUG: First player selected from overlay: $cleanedPlayerName');
         }
       }
 
@@ -7020,25 +7585,47 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
           ),
 
-          // FTP button - Right aligned
-          CustomButton(
-            onTap: _disableFtp ? null : _onFtpPressed,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color:
-                    _disableFtp ? Colors.grey.shade300 : Colors.blue.shade800,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
+          // FTP buttons - Right aligned
+          Row(
+            children: [
+              // FTP Settings button
+              CustomButton(
+                onTap: _showFtpSettings,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Icon(Icons.settings,
+                      size: 16, color: Colors.grey.shade700),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // FTP button
+              CustomButton(
+                onTap: _disableFtp ? null : _onFtpPressed,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
                     color: _disableFtp
                         ? Colors.grey.shade300
-                        : Colors.blue.shade800),
+                        : Colors.blue.shade800,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                        color: _disableFtp
+                            ? Colors.grey.shade300
+                            : Colors.blue.shade800),
+                  ),
+                  child: Icon(Icons.cloud_upload,
+                      size: 24,
+                      color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                ),
               ),
-              child: Icon(Icons.cloud_upload,
-                  size: 24,
-                  color: _disableFtp ? Colors.grey.shade600 : Colors.white),
-            ),
+            ],
           ),
         ],
       ),

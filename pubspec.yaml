@@ -40,6 +40,11 @@ dependencies:
   photo_view: ^0.14.0
   extended_image: ^10.0.1
 
+  # FTP connectivity - using raw sockets for reliability
+
+  # Local storage
+  shared_preferences: ^2.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
