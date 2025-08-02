@@ -2010,7 +2010,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _selectedVerb ==
                                                   'Runs Off Field' ||
                                               _selectedVerb ==
-                                                  'Takes the Field')
+                                                  'Takes the Field' ||
+                                              _selectedVerb ==
+                                                  'Post Game Win' ||
+                                              _selectedVerb == 'Post Game Loss')
                                           ? _buildInningOnlyInterface()
                                           : (_selectedVerb == 'Steals' ||
                                                   _selectedVerb == 'Slides' ||
@@ -3460,6 +3463,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Walks Off Field' ||
         verbToUse == 'Runs Off Field' ||
         verbToUse == 'Takes the Field' ||
+        verbToUse == 'Post Game Win' ||
+        verbToUse == 'Post Game Loss' ||
         customCelebrationController.text.isNotEmpty ||
         customDejectionController.text.isNotEmpty) {
       // For these actions, don't add opponent part here - it's handled in the action phrase
@@ -3475,14 +3480,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    // Add inning if specified
+    // Add inning if specified (but not for post-game verbs)
     String inningPart = '';
-    if (_selectedRbiInning != null) {
-      inningPart =
-          ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
-    } else if (_selectedCustomTextInning != null) {
-      inningPart =
-          ' during the ${_getOrdinalSuffix(_selectedCustomTextInning!)} inning';
+    final isPostGameVerb =
+        _selectedVerb == 'Post Game Win' || _selectedVerb == 'Post Game Loss';
+
+    if (!isPostGameVerb) {
+      if (_selectedRbiInning != null) {
+        inningPart =
+            ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
+      } else if (_selectedCustomTextInning != null) {
+        inningPart =
+            ' during the ${_getOrdinalSuffix(_selectedCustomTextInning!)} inning';
+      }
     }
 
     // Use home team stadium from API, fallback to controller if not available
@@ -4395,17 +4405,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   // FTP Profile Management Methods
-  void _saveFtpProfile(String profileName) {
+  void _saveFtpProfile(
+    String profileName, {
+    String? host,
+    String? username,
+    String? password,
+    int? port,
+    String? remotePath,
+    bool? passiveMode,
+  }) {
+    // Use provided values or fall back to current state values
+    final profileData = {
+      'host': host ?? _ftpHost,
+      'username': username ?? _ftpUsername,
+      'password': password ?? _ftpPassword,
+      'port': port ?? _ftpPort,
+      'remotePath': remotePath ?? _ftpRemotePath,
+      'passiveMode': passiveMode ?? _ftpPassiveMode,
+    };
+
     setState(() {
-      _ftpProfiles[profileName] = {
-        'host': _ftpHost,
-        'username': _ftpUsername,
-        'password': _ftpPassword,
-        'port': _ftpPort,
-        'remotePath': _ftpRemotePath,
-        'passiveMode': _ftpPassiveMode,
-      };
+      _ftpProfiles[profileName] = profileData;
       _currentFtpProfile = profileName;
+
+      // Update current state with the saved values
+      _ftpHost = profileData['host'] as String;
+      _ftpUsername = profileData['username'] as String;
+      _ftpPassword = profileData['password'] as String;
+      _ftpPort = profileData['port'] as int;
+      _ftpRemotePath = profileData['remotePath'] as String;
+      _ftpPassiveMode = profileData['passiveMode'] as bool;
     });
 
     // Save to persistent storage
@@ -4627,6 +4656,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final passwordController = TextEditingController(text: _ftpPassword);
     final portController = TextEditingController(text: _ftpPort.toString());
     final remotePathController = TextEditingController(text: _ftpRemotePath);
+    final profileNameController = TextEditingController();
 
     showDialog(
       context: context,
@@ -4676,7 +4706,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   if (_currentFtpProfile != null)
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () => _saveFtpProfile(_currentFtpProfile!),
+                        onPressed: () => _saveFtpProfile(
+                          _currentFtpProfile!,
+                          host: hostController.text,
+                          username: usernameController.text,
+                          password: passwordController.text,
+                          port: int.tryParse(portController.text) ?? 21,
+                          remotePath: remotePathController.text,
+                          passiveMode: _ftpPassiveMode,
+                        ),
                         icon: const Icon(Icons.save),
                         label: const Text('Update Profile'),
                         style: ElevatedButton.styleFrom(
@@ -4759,6 +4797,77 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              // Save Profile Section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Save as Profile',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: profileNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Profile Name',
+                              hintText: 'e.g., Work Server, Home Server',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            // Profile saving handled by button click
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            final profileName =
+                                profileNameController.text.trim();
+                            if (profileName.isNotEmpty) {
+                              _saveFtpProfile(
+                                profileName,
+                                host: hostController.text,
+                                username: usernameController.text,
+                                password: passwordController.text,
+                                port: int.tryParse(portController.text) ?? 21,
+                                remotePath: remotePathController.text,
+                                passiveMode: _ftpPassiveMode,
+                              );
+                              Navigator.pop(context);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please enter a profile name'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.save),
+                          label: const Text('Save Profile'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -5394,6 +5503,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           } else {
             return 'reacts with dejection against the $opposingTeam';
           }
+        }
+      case 'Post Game Win':
+        final opposingTeam = _getOpposingTeamName();
+        final activePlayerCount =
+            selectedHomePlayers.length + selectedAwayPlayers.length;
+        if (activePlayerCount > 1) {
+          return 'celebrate after their team defeated the $opposingTeam';
+        } else {
+          return 'celebrates their team defeating the $opposingTeam';
+        }
+      case 'Post Game Loss':
+        final opposingTeam2 = _getOpposingTeamName();
+        final activePlayerCount2 =
+            selectedHomePlayers.length + selectedAwayPlayers.length;
+        if (activePlayerCount2 > 1) {
+          return 'react to their team losing to the $opposingTeam2';
+        } else {
+          return 'reacts to their team losing to the $opposingTeam2';
         }
       case 'Stretches':
         if (activePlayerCount >= 2) {
@@ -8462,6 +8589,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Add this new function right before _buildAtBatInterface()
   Widget _buildInningOnlyInterface() {
+    // Check if this is a post-game verb that shouldn't show inning selector
+    final isPostGameVerb =
+        _selectedVerb == 'Post Game Win' || _selectedVerb == 'Post Game Loss';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -8484,15 +8615,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ),
         const SizedBox(height: 2),
 
-        // Inning section with reusable widget
+        // Inning section with reusable widget (only for non-post-game verbs)
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                height: 80, // Reduced height for compact layout
-                child: _buildReusableInningSelector(),
-              ),
+              if (!isPostGameVerb) ...[
+                SizedBox(
+                  height: 80, // Reduced height for compact layout
+                  child: _buildReusableInningSelector(),
+                ),
+              ],
 
               // Back button
               _buildBackButton(),
