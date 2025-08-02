@@ -60,13 +60,13 @@ class _ApiTestWidgetState extends State<ApiTestWidget> {
   Future<void> _testPlayers() async {
     setState(() {
       _isLoading = true;
-      _testResults = 'Testing players...\n';
+      _testResults = 'Testing active players...\n';
     });
 
     try {
-      final players = await _apiService.fetchAllPlayers();
+      final players = await _apiService.fetchAllActivePlayers();
       setState(() {
-        _testResults += 'Found ${players.length} players:\n';
+        _testResults += 'Found ${players.length} active players:\n';
         for (final player in players.take(10)) {
           _testResults +=
               '  - ${player.displayName} (${player.position ?? 'N/A'}) - ${player.teamName ?? 'No Team'}\n';

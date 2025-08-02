@@ -58,7 +58,7 @@ class ApiManager {
         );
 
         final balldontliePlayers =
-            await _balldontlieService.fetchTeamPlayers(team.id);
+            await _balldontlieService.fetchTeamActivePlayers(team.id);
         // Convert BalldontliePlayer to Player for compatibility
         return balldontliePlayers
             .map((player) => Player(

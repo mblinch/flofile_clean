@@ -1190,6 +1190,72 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 8),
 
+                        // Debug Roster button
+                        CustomButton(
+                          onTap: _debugRosters,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orange.shade300),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.bug_report,
+                                    size: 12, color: Colors.orange.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Debug Rosters',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.orange.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Test API button
+                        CustomButton(
+                          onTap: _testApiDirectly,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.api,
+                                    size: 12, color: Colors.red.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Test API Directly',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.red.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
                         // Options section
                         const Align(
                           alignment: Alignment.centerLeft,
@@ -1680,17 +1746,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       isHome: isHome,
                       selectedTeam:
                           isHome ? selectedHomeTeam : selectedAwayTeam,
-                      onTeamChanged: (String? newValue) {
+                      onTeamChanged: (String? newValue) async {
                         if (newValue == null) return;
                         setState(() {
                           if (isHome) {
                             selectedHomeTeam = newValue;
-                            _loadTeamRosters();
                           } else {
                             selectedAwayTeam = newValue;
-                            _loadTeamRosters();
                           }
                         });
+
+                        // Load rosters and show debug popup
+                        await _loadTeamRosters();
+                        _showTeamSelectionDebug(newValue, isHome);
                       },
                     ),
                   ),
@@ -2076,7 +2144,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                     decoration:
                                                                         InputDecoration(
                                                                       hintText: _isPlayerSearchMode
-                                                                          ? 'Magic Bar: Type player numbers (e.g., 75, 23)...'
+                                                                          ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...'
                                                                           : 'Magic Bar: Type custom action...',
                                                                       border: InputBorder
                                                                           .none,
@@ -2090,12 +2158,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                     ),
                                                                     onChanged:
                                                                         (value) {
-                                                                      // print(
-                                                                      //     'DEBUG: Text field changed to: "$value"');
-                                                                      // print(
-                                                                      //     'DEBUG: _isPlayerSearchMode: $_isPlayerSearchMode');
-                                                                      // print(
-                                                                      //     'DEBUG: _isNumeric(value): ${_isNumeric(value)}');
+                                                                      // Check for magic input format (e.g., "27 hr 1")
+                                                                      if (_isMagicInput(
+                                                                          value)) {
+                                                                        _parseMagicInput(
+                                                                            value);
+                                                                        return;
+                                                                      }
 
                                                                       setState(
                                                                           () {
@@ -3278,6 +3347,628 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       default:
         return '${number}th';
     }
+  }
+
+  // Magic input parsing methods
+  bool _isMagicInput(String input) {
+    if (input.isEmpty) return false;
+
+    final parts = input.trim().toLowerCase().split(' ');
+    if (parts.length < 2) return false;
+
+    // Check if first part is a number
+    if (!_isNumeric(parts[0])) return false;
+
+    // Check if there's an action word
+    final actionWords = [
+      'hr',
+      'homerun',
+      'homer',
+      'single',
+      '1b',
+      'double',
+      '2b',
+      'triple',
+      '3b',
+      'walks',
+      'walk',
+      'bb',
+      'strikeout',
+      'k',
+      'steals',
+      'steal',
+      'sb',
+      'catches',
+      'catch',
+      'throws',
+      'throw',
+      'tags',
+      'tag',
+      'pitches',
+      'pitch',
+      'pitching',
+      'swings',
+      'swing',
+      'bunts',
+      'bunt',
+      'hbp',
+      'hitbypitch',
+      'celebrates',
+      'celebrate',
+      'dejection',
+      'dejected',
+      'looks',
+      'look',
+      'runs',
+      'run',
+      'slides',
+      'slide',
+      'rounds',
+      'round',
+      'groundball',
+      'ground',
+      'doubleplay',
+      'dp',
+      'tripleplay',
+      'tp',
+      'atbat',
+      'at-bat',
+      'bat',
+      'fielding',
+      'field',
+      'warmup',
+      'warm',
+      'stretching',
+      'stretch',
+      'battingpractice',
+      'bp',
+      'fieldingpractice',
+      'fp',
+      'takesthefield',
+      'takesfield',
+      'comesofffield',
+      'offfield',
+      'nationalanthem',
+      'anthem',
+      'pitchingchange',
+      'pitchchange',
+      'postgamewin',
+      'win',
+      'postgameloss',
+      'loss',
+      'walksofffield',
+      'walksoff',
+      'runsofffield',
+      'runsoff'
+    ];
+
+    for (int i = 1; i < parts.length; i++) {
+      if (actionWords.contains(parts[i])) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  void _parseMagicInput(String input) {
+    if (input.isEmpty) return;
+
+    // Clear existing selections
+    setState(() {
+      selectedHomePlayers.clear();
+      selectedAwayPlayers.clear();
+      _selectedVerb = null;
+      _selectedActionVerb = null;
+      _rbiCount = null;
+      _selectedRbiInning = null;
+      _firstTeamSelected = null;
+      _firstPlayerSelected = null;
+    });
+
+    // Show a brief success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Processing magic input: "$input"'),
+        duration: const Duration(seconds: 1),
+        backgroundColor: Colors.blue,
+      ),
+    );
+
+    // Parse the magic input
+    final parts = input.trim().toLowerCase().split(' ');
+    if (parts.length < 2) return;
+
+    // Extract player number
+    final playerNumber = parts[0];
+    if (!_isNumeric(playerNumber)) return;
+
+    // Find player by number
+    Player? foundPlayer;
+    bool isHomePlayer = false;
+
+    // Search in home roster first
+    for (final player in _homeRoster) {
+      if (player.jerseyNumber == playerNumber) {
+        foundPlayer = player;
+        isHomePlayer = true;
+        break;
+      }
+    }
+
+    // If not found in home roster, search in away roster
+    if (foundPlayer == null) {
+      for (final player in _awayRoster) {
+        if (player.jerseyNumber == playerNumber) {
+          foundPlayer = player;
+          isHomePlayer = false;
+          break;
+        }
+      }
+    }
+
+    if (foundPlayer == null) return;
+
+    // Select the player
+    setState(() {
+      if (isHomePlayer) {
+        selectedHomePlayers.add(foundPlayer?.displayName ?? 'Unknown Player');
+        _firstTeamSelected = true;
+        _firstPlayerSelected = foundPlayer?.displayName ?? 'Unknown Player';
+      } else {
+        selectedAwayPlayers.add(foundPlayer?.displayName ?? 'Unknown Player');
+        _firstTeamSelected = false;
+        _firstPlayerSelected = foundPlayer?.displayName ?? 'Unknown Player';
+      }
+    });
+
+    // Parse action and inning
+    String action = '';
+    int? inning;
+
+    for (int i = 1; i < parts.length; i++) {
+      final part = parts[i];
+
+      // Check for inning number
+      if (_isNumeric(part)) {
+        inning = int.parse(part);
+        continue;
+      }
+
+      // Parse action
+      switch (part) {
+        case 'hr':
+        case 'homerun':
+        case 'homer':
+          action = 'Home Run';
+          break;
+        case 'single':
+        case '1b':
+          action = 'Single';
+          break;
+        case 'double':
+        case '2b':
+          action = 'Double';
+          break;
+        case 'triple':
+        case '3b':
+          action = 'Triple';
+          break;
+        case 'walks':
+        case 'walk':
+        case 'bb':
+          action = 'Walks';
+          break;
+        case 'strikeout':
+        case 'k':
+          action = 'Strikeout';
+          break;
+        case 'steals':
+        case 'steal':
+        case 'sb':
+          action = 'Steals';
+          break;
+        case 'catches':
+        case 'catch':
+          action = 'Catches';
+          break;
+        case 'throws':
+        case 'throw':
+          action = 'Throws';
+          break;
+        case 'tags':
+        case 'tag':
+          action = 'Tags';
+          break;
+        case 'pitches':
+        case 'pitch':
+        case 'pitching':
+          action = 'Pitching';
+          break;
+        case 'swings':
+        case 'swing':
+          action = 'Swings';
+          break;
+        case 'bunts':
+        case 'bunt':
+          action = 'Bunts';
+          break;
+        case 'hbp':
+        case 'hitbypitch':
+          action = 'Hit by Pitch';
+          break;
+        case 'celebrates':
+        case 'celebrate':
+          action = 'Celebrates';
+          break;
+        case 'dejection':
+        case 'dejected':
+          action = 'Dejection';
+          break;
+        case 'looks':
+        case 'look':
+          action = 'Looks On';
+          break;
+        case 'runs':
+        case 'run':
+          action = 'Runs';
+          break;
+        case 'slides':
+        case 'slide':
+          action = 'Slides';
+          break;
+        case 'rounds':
+        case 'round':
+          action = 'Rounds';
+          break;
+        case 'groundball':
+        case 'ground':
+          action = 'Groundball';
+          break;
+        case 'doubleplay':
+        case 'dp':
+          action = 'Double Play';
+          break;
+        case 'tripleplay':
+        case 'tp':
+          action = 'Triple Play';
+          break;
+        case 'atbat':
+        case 'at-bat':
+        case 'bat':
+          action = 'At Bat';
+          break;
+        case 'fielding':
+        case 'field':
+          action = 'Fielding Position';
+          break;
+        case 'warmup':
+        case 'warm':
+          action = 'Warm Ups';
+          break;
+        case 'stretching':
+        case 'stretch':
+          action = 'Stretching';
+          break;
+        case 'battingpractice':
+        case 'bp':
+          action = 'Batting Practice';
+          break;
+        case 'fieldingpractice':
+        case 'fp':
+          action = 'Fielding Practice';
+          break;
+        case 'takesthefield':
+        case 'takesfield':
+          action = 'Takes the Field';
+          break;
+        case 'comesofffield':
+        case 'offfield':
+          action = 'Comes Off the Field';
+          break;
+        case 'nationalanthem':
+        case 'anthem':
+          action = 'National Anthem';
+          break;
+        case 'pitchingchange':
+        case 'pitchchange':
+          action = 'Pitching Change';
+          break;
+        case 'postgamewin':
+        case 'win':
+          action = 'Post Game Win';
+          break;
+        case 'postgameloss':
+        case 'loss':
+          action = 'Post Game Loss';
+          break;
+        case 'walksofffield':
+        case 'walksoff':
+          action = 'Walks Off Field';
+          break;
+        case 'runsofffield':
+        case 'runsoff':
+          action = 'Runs Off Field';
+          break;
+      }
+    }
+
+    // Set the action and inning
+    if (action.isNotEmpty) {
+      setState(() {
+        _selectedVerb = action;
+        _selectedActionVerb = action;
+        _selectedRbiInning = inning;
+
+        // Set RBI count for hitting actions
+        if (action == 'Home Run' ||
+            action == 'Single' ||
+            action == 'Double' ||
+            action == 'Triple') {
+          _rbiCount = 1; // Default to 1 RBI for hits
+        }
+      });
+    }
+
+    // Update caption
+    _updateCaption();
+  }
+
+  void _showTeamSelectionDebug(String teamName, bool isHome) {
+    final roster = isHome ? _homeRoster : _awayRoster;
+    final teamType = isHome ? 'HOME' : 'AWAY';
+
+    String debugInfo = '=== TEAM SELECTION DEBUG ===\n\n';
+    debugInfo += 'TEAM: $teamName ($teamType)\n';
+    debugInfo += 'API: ${_apiManager.currentApi}\n';
+    debugInfo += 'TOTAL PLAYERS: ${roster.length}\n\n';
+
+    // Add API debugging info
+    debugInfo += '=== API DEBUG ===\n';
+    debugInfo += 'Current API: ${_apiManager.currentApi}\n';
+    debugInfo +=
+        'Connection Status: ${_apiManager.getConnectionStatusMessage()}\n\n';
+
+    // Count players with jersey numbers
+    int playersWithNumbers = 0;
+    int playersWithoutNumbers = 0;
+
+    // Sort roster by jersey number for easier reading
+    final sortedRoster = List<Player>.from(roster);
+    sortedRoster.sort((a, b) {
+      final aNum = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+      final bNum = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+      return aNum.compareTo(bNum);
+    });
+
+    debugInfo += 'ALL PLAYERS (sorted by jersey number):\n';
+    for (final player in sortedRoster) {
+      final hasNumber =
+          player.jerseyNumber != null && player.jerseyNumber!.isNotEmpty;
+      if (hasNumber) {
+        playersWithNumbers++;
+        debugInfo += '  #${player.jerseyNumber}: ${player.fullName}\n';
+      } else {
+        playersWithoutNumbers++;
+        debugInfo += '  #N/A: ${player.fullName}\n';
+      }
+    }
+
+    debugInfo += '\n=== SUMMARY ===\n';
+    debugInfo += 'Players WITH jersey numbers: $playersWithNumbers\n';
+    debugInfo += 'Players WITHOUT jersey numbers: $playersWithoutNumbers\n';
+    debugInfo += 'Total players: ${roster.length}\n';
+
+    // Show popup
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Team Selection: $teamName'),
+        content: SingleChildScrollView(
+          child: Text(
+            debugInfo,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Copy to clipboard
+              Clipboard.setData(ClipboardData(text: debugInfo));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Team info copied to clipboard!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _debugRosters() {
+    String debugInfo = '=== ROSTER DEBUG INFO ===\n\n';
+
+    // API info
+    debugInfo += 'CURRENT API: ${_apiManager.currentApi}\n';
+    debugInfo += 'API STATUS: ${_apiManager.getConnectionStatusMessage()}\n\n';
+
+    // Home team info
+    debugInfo += 'HOME TEAM: ${selectedHomeTeam ?? "Not selected"}\n';
+    debugInfo += 'Home roster count: ${_homeRoster.length}\n';
+    debugInfo += 'Home players with jersey numbers:\n';
+
+    // Sort home roster by jersey number for easier reading
+    final sortedHomeRoster = List<Player>.from(_homeRoster);
+    sortedHomeRoster.sort((a, b) {
+      final aNum = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+      final bNum = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+      return aNum.compareTo(bNum);
+    });
+
+    int homePlayersWithNumbers = 0;
+    for (final player in sortedHomeRoster) {
+      final hasNumber =
+          player.jerseyNumber != null && player.jerseyNumber!.isNotEmpty;
+      if (hasNumber) homePlayersWithNumbers++;
+      debugInfo += '  #${player.jerseyNumber ?? "N/A"}: ${player.fullName}\n';
+    }
+
+    debugInfo +=
+        '\nHome players WITH jersey numbers: $homePlayersWithNumbers\n';
+    debugInfo +=
+        'Home players WITHOUT jersey numbers: ${_homeRoster.length - homePlayersWithNumbers}\n';
+
+    debugInfo += '\nAWAY TEAM: ${selectedAwayTeam ?? "Not selected"}\n';
+    debugInfo += 'Away roster count: ${_awayRoster.length}\n';
+    debugInfo += 'Away players with jersey numbers:\n';
+
+    // Sort away roster by jersey number for easier reading
+    final sortedAwayRoster = List<Player>.from(_awayRoster);
+    sortedAwayRoster.sort((a, b) {
+      final aNum = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+      final bNum = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+      return aNum.compareTo(bNum);
+    });
+
+    int awayPlayersWithNumbers = 0;
+    for (final player in sortedAwayRoster) {
+      final hasNumber =
+          player.jerseyNumber != null && player.jerseyNumber!.isNotEmpty;
+      if (hasNumber) awayPlayersWithNumbers++;
+      debugInfo += '  #${player.jerseyNumber ?? "N/A"}: ${player.fullName}\n';
+    }
+
+    debugInfo +=
+        '\nAway players WITH jersey numbers: $awayPlayersWithNumbers\n';
+    debugInfo +=
+        'Away players WITHOUT jersey numbers: ${_awayRoster.length - awayPlayersWithNumbers}\n';
+
+    debugInfo += '\n=== END DEBUG INFO ===';
+
+    // Show debug info in a dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Roster Debug Info'),
+        content: SingleChildScrollView(
+          child: Text(
+            debugInfo,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Copy to clipboard
+              Clipboard.setData(ClipboardData(text: debugInfo));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Debug info copied to clipboard!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _testApiDirectly() async {
+    String debugInfo = '=== DIRECT API TEST ===\n\n';
+
+    try {
+      debugInfo += 'Testing API: ${_apiManager.currentApi}\n\n';
+
+      // Test fetching all teams
+      debugInfo += '1. Testing team fetch...\n';
+      final teams = await _apiManager.fetchTeams();
+      debugInfo += 'Found ${teams.length} teams\n';
+      debugInfo += 'Sample teams:\n';
+      for (int i = 0; i < teams.length.clamp(0, 5); i++) {
+        debugInfo += '  - ${teams[i].name}\n';
+      }
+
+      // Test fetching players for a specific team (Toronto Blue Jays)
+      debugInfo += '\n2. Testing player fetch for Toronto Blue Jays...\n';
+      try {
+        final players = await _apiManager.fetchTeamRoster('Toronto Blue Jays');
+        debugInfo += 'Found ${players.length} players for Toronto Blue Jays\n';
+        debugInfo += 'Players with jersey numbers:\n';
+
+        int playersWithNumbers = 0;
+        for (final player in players) {
+          if (player.jerseyNumber != null && player.jerseyNumber!.isNotEmpty) {
+            playersWithNumbers++;
+            debugInfo += '  #${player.jerseyNumber}: ${player.fullName}\n';
+          }
+        }
+
+        debugInfo += '\nSummary for Toronto Blue Jays:\n';
+        debugInfo += 'Players WITH jersey numbers: $playersWithNumbers\n';
+        debugInfo +=
+            'Players WITHOUT jersey numbers: ${players.length - playersWithNumbers}\n';
+        debugInfo += 'Total players: ${players.length}\n';
+
+        // Check for player #27 specifically
+        final player27 = players.where((p) => p.jerseyNumber == '27').toList();
+        if (player27.isNotEmpty) {
+          debugInfo += '\nPlayer #27 found: ${player27.first.fullName}\n';
+        } else {
+          debugInfo += '\nPlayer #27 NOT found in roster\n';
+        }
+      } catch (e) {
+        debugInfo += 'Error fetching Toronto Blue Jays players: $e\n';
+      }
+    } catch (e) {
+      debugInfo += 'Error during API test: $e\n';
+    }
+
+    // Show debug info in a dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Direct API Test Results'),
+        content: SingleChildScrollView(
+          child: Text(
+            debugInfo,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Copy to clipboard
+              Clipboard.setData(ClipboardData(text: debugInfo));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('API test results copied to clipboard!'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _updateCaption() {

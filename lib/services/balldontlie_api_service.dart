@@ -107,17 +107,17 @@ class BalldontlieApiService {
     }
   }
 
-  /// Fetches all players
-  Future<List<BalldontliePlayer>> fetchAllPlayers() async {
+  /// Fetches all active players
+  Future<List<BalldontliePlayer>> fetchAllActivePlayers() async {
     try {
-      final url = Uri.https(_baseUrl, '/mlb/v1/players');
+      final url = Uri.https(_baseUrl, '/mlb/v1/players/active');
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Player lookup failed: ${response.statusCode}');
+        throw Exception('Active player lookup failed: ${response.statusCode}');
       }
 
       final data = jsonDecode(response.body);
@@ -127,23 +127,24 @@ class BalldontlieApiService {
           .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
           .toList();
     } catch (e) {
-      print('Error fetching players: $e');
+      print('Error fetching active players: $e');
       rethrow;
     }
   }
 
-  /// Fetches players for a specific team
-  Future<List<BalldontliePlayer>> fetchTeamPlayers(String teamId) async {
+  /// Fetches active players for a specific team
+  Future<List<BalldontliePlayer>> fetchTeamActivePlayers(String teamId) async {
     try {
       final url =
-          Uri.https(_baseUrl, '/mlb/v1/players', {'team_ids[]': teamId});
+          Uri.https(_baseUrl, '/mlb/v1/players/active', {'team_ids[]': teamId});
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Team players lookup failed: ${response.statusCode}');
+        throw Exception(
+            'Team active players lookup failed: ${response.statusCode}');
       }
 
       final data = jsonDecode(response.body);
@@ -153,7 +154,7 @@ class BalldontlieApiService {
           .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
           .toList();
     } catch (e) {
-      print('Error fetching team players: $e');
+      print('Error fetching team active players: $e');
       rethrow;
     }
   }
@@ -282,10 +283,10 @@ class BalldontlieApiService {
         print('  - ${teams[i].displayName} (${teams[i].location})');
       }
 
-      // Test fetching players
-      print('\n2. Testing player fetch...');
-      final players = await fetchAllPlayers();
-      print('Found ${players.length} players');
+      // Test fetching active players
+      print('\n2. Testing active player fetch...');
+      final players = await fetchAllActivePlayers();
+      print('Found ${players.length} active players');
       print('Sample players:');
       for (int i = 0; i < players.length.clamp(0, 5); i++) {
         final player = players[i];
@@ -295,10 +296,11 @@ class BalldontlieApiService {
 
       // Test team-specific players
       if (teams.isNotEmpty) {
-        print('\n3. Testing team-specific players...');
+        print('\n3. Testing team-specific active players...');
         final firstTeam = teams.first;
-        final teamPlayers = await fetchTeamPlayers(firstTeam.id);
-        print('Found ${teamPlayers.length} players for ${firstTeam.name}');
+        final teamPlayers = await fetchTeamActivePlayers(firstTeam.id);
+        print(
+            'Found ${teamPlayers.length} active players for ${firstTeam.name}');
         print('Sample team players:');
         for (int i = 0; i < teamPlayers.length.clamp(0, 3); i++) {
           final player = teamPlayers[i];
