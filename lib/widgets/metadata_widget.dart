@@ -348,7 +348,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     Text(
                       label,
                       style: const TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
@@ -359,7 +359,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                           ? value // Show the actual code value, not the name
                           : 'Select $label',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color:
                             value != null ? Colors.black : Colors.grey.shade600,
                       ),
