@@ -312,51 +312,50 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         borderRadius: BorderRadius.circular(6),
         color: Colors.grey.shade50,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Floating label
-          Padding(
-            padding: const EdgeInsets.only(left: 8, top: 4),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+      child: PopupMenuButton<String>(
+        initialValue: value,
+        onSelected: onChanged,
+        constraints: const BoxConstraints(maxHeight: 300),
+        itemBuilder: (context) => items
+            .map(
+              (item) => PopupMenuItem<String>(
+                value: item['code'],
+                height: 32,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(
+                  item['name']!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
               ),
-            ),
-          ),
-          // Dropdown content
-          PopupMenuButton<String>(
-            initialValue: value,
-            onSelected: onChanged,
-            constraints: const BoxConstraints(maxHeight: 300),
-            itemBuilder: (context) => items
-                .map(
-                  (item) => PopupMenuItem<String>(
-                    value: item['code'],
-                    height: 32,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Text(
-                      item['name']!,
+            )
+            .toList(),
+        child: Container(
+          width: double.infinity,
+          height: 40, // Match the height of regular text fields
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Floating label (always visible)
+                    Text(
+                      label,
                       style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black,
-                        fontWeight: FontWeight.normal,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
                       ),
                     ),
-                  ),
-                )
-                .toList(),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
+                    // Value text
+                    Text(
                       value != null
                           ? items.firstWhere((item) => item['code'] == value,
                               orElse: () => {'name': 'Select'})['name']!
@@ -368,13 +367,13 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const Icon(Icons.arrow_drop_down, size: 16),
-                ],
+                  ],
+                ),
               ),
-            ),
+              const Icon(Icons.arrow_drop_down, size: 16),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
