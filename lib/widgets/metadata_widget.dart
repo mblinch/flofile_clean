@@ -144,7 +144,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       jobIdController.text = meta['TransmissionReference']?.toString() ?? '';
 
       // Load Description Writer from CaptionWriter (Photoshop XMP field)
-      descriptionWritersController.text = meta['CaptionWriter']?.toString() ?? '';
+      descriptionWritersController.text =
+          meta['CaptionWriter']?.toString() ?? '';
 
       headlineController.text = meta['Headline']?.toString() ?? '';
       keywordsController.text = meta['Keywords']?.toString() ?? '';
@@ -182,7 +183,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
       categoryController.text = meta['Category']?.toString() ?? '';
 
-      // Handle supplemental categories (could be a single string or array)
+      // Handle supplemental categories (could be a single string, comma-separated string, or array)
       final suppCats = meta['SupplementalCategories'];
       if (suppCats != null) {
         if (suppCats is List) {
@@ -196,8 +197,24 @@ class _MetadataWidgetState extends State<MetadataWidget> {
             suppCat3Controller.text = suppCats[2].toString();
           }
         } else {
-          // Single string, put in first field
-          suppCat1Controller.text = suppCats.toString();
+          // Single string - check if it's comma-separated
+          String suppCatsStr = suppCats.toString();
+          if (suppCatsStr.contains(',')) {
+            // Split comma-separated values
+            List<String> parts = suppCatsStr.split(',').map((s) => s.trim()).toList();
+            if (parts.isNotEmpty) {
+              suppCat1Controller.text = parts[0];
+            }
+            if (parts.length > 1) {
+              suppCat2Controller.text = parts[1];
+            }
+            if (parts.length > 2) {
+              suppCat3Controller.text = parts[2];
+            }
+          } else {
+            // Single value, put in first field
+            suppCat1Controller.text = suppCatsStr;
+          }
         }
       }
 
