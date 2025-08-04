@@ -148,7 +148,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           meta['CaptionWriter']?.toString() ?? '';
 
       headlineController.text = meta['Headline']?.toString() ?? '';
-      
+
       // Handle Keywords properly - convert arrays to comma-separated strings
       final keywords = meta['Keywords'];
       if (keywords is List) {
@@ -182,11 +182,15 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       }
 
       // Load IPTC metadata fields only if they exist
-      // Debug: Print all available keys to help troubleshoot urgency
-      print('Available metadata keys: ${meta.keys.toList()}');
-      print('Urgency value: ${meta['Urgency']}');
-      
-      urgencyController.text = meta['Urgency']?.toString() ?? '';
+      // Extract urgency number from descriptive text like "5 (normal urgency)"
+      final urgencyValue = meta['Urgency']?.toString() ?? '';
+      if (urgencyValue.isNotEmpty) {
+        // Extract just the number from "5 (normal urgency)" format
+        final match = RegExp(r'^(\d+)').firstMatch(urgencyValue);
+        urgencyController.text = match?.group(1) ?? '';
+      } else {
+        urgencyController.text = '';
+      }
       countryController.text = meta['Country']?.toString() ?? '';
       countryCodeController.text = meta['CountryCode']?.toString() ?? '';
 
