@@ -335,6 +335,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                           switch (state.extendedImageLoadState) {
                             case LoadState.loading:
                               return Container(
+                                width: double.infinity,
+                                height: double.infinity,
                                 color: Colors.grey.shade200,
                                 child: const Center(
                                     child: CircularProgressIndicator()),
@@ -343,6 +345,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                               return null; // Use default completed state
                             case LoadState.failed:
                               return Container(
+                                width: double.infinity,
+                                height: double.infinity,
                                 color: Colors.grey.shade200,
                                 child: const Center(
                                   child: Icon(Icons.error,
