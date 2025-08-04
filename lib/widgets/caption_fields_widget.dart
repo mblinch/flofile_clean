@@ -5112,14 +5112,87 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           .map((file) => file.path)
           .toList();
 
-      // Sort files by name
-      imageFiles.sort();
+      // Sort files by date taken (DateTimeOriginal from EXIF)
+      await _sortImagesByDateTaken(imageFiles);
 
       return imageFiles;
     } catch (e) {
       print('Error listing image files: $e');
       return [];
     }
+  }
+
+  // Sort images by date taken from EXIF DateTimeOriginal
+  Future<void> _sortImagesByDateTaken(List<String> imageFiles) async {
+    print('Sorting ${imageFiles.length} images by date taken...');
+    
+    // Create a list of maps with file path and date taken
+    List<Map<String, dynamic>> filesWithDates = [];
+    
+    for (String filePath in imageFiles) {
+      try {
+        final proc = await Process.run('exiftool', [
+          '-j',
+          '-DateTimeOriginal',
+          '-CreateDate',
+          '-ModifyDate',
+          filePath,
+        ]);
+        
+        DateTime? dateTime;
+        if (proc.exitCode == 0) {
+          final List data = jsonDecode(proc.stdout as String);
+          if (data.isNotEmpty) {
+            final meta = data.first as Map<String, dynamic>;
+            String? dateStr = meta['DateTimeOriginal']?.toString() ??
+                              meta['CreateDate']?.toString() ??
+                              meta['ModifyDate']?.toString();
+            
+            if (dateStr != null) {
+              try {
+                // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
+                dateTime = DateTime.parse(
+                  dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+              } catch (e) {
+                print('Error parsing date for $filePath: $e');
+              }
+            }
+          }
+        }
+        
+        // If no EXIF date found, use file modification date as fallback
+        if (dateTime == null) {
+          try {
+            final file = File(filePath);
+            dateTime = await file.lastModified();
+          } catch (e) {
+            print('Error getting file date for $filePath: $e');
+            dateTime = DateTime.now(); // Ultimate fallback
+          }
+        }
+        
+        filesWithDates.add({
+          'path': filePath,
+          'date': dateTime,
+        });
+      } catch (e) {
+        print('Error processing $filePath: $e');
+        // Add file with current date as fallback
+        filesWithDates.add({
+          'path': filePath,
+          'date': DateTime.now(),
+        });
+      }
+    }
+    
+    // Sort by date (earliest to latest)
+    filesWithDates.sort((a, b) => a['date'].compareTo(b['date']));
+    
+    // Update the imageFiles list with sorted paths
+    imageFiles.clear();
+    imageFiles.addAll(filesWithDates.map((item) => item['path'] as String));
+    
+    print('Images sorted by date taken (earliest to latest)');
   }
 
   void _updatePersonalityField() {
