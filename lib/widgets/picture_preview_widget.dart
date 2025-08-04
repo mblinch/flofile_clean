@@ -211,110 +211,106 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
       ),
       child: Column(
         children: [
-          // EXIF data section at top
-          if (_exifData != null || _isLoadingExif)
-            Container(
-              padding: const EdgeInsets.all(
-                  4), // Reduced from 8 to 4 for more compact display
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
+          // EXIF data section at top - Always reserve space to prevent layout shifts
+          Container(
+            height: 28, // Fixed height to prevent layout shifts (4px padding top/bottom + 20px content)
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
               ),
-              child: _isLoadingExif
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    )
-                  : Container(
-                      height:
-                          20, // Reduced from 24 to 20 for more compact display
-                      child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center, // Center the content
-                        children: [
-                          // Camera info
-                          if (_exifData!['Make'] != null ||
-                              _exifData!['Model'] != null)
-                            Text(
-                              '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
-                                  .trim(),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.normal,
-                                color: Colors.black87,
-                              ),
-                            ),
-
-                          // Settings
-                          if (_exifData!['ShutterSpeed'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                _formatShutterSpeed(_exifData!['ShutterSpeed']),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                          if (_exifData!['FNumber'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                _formatAperture(_exifData!['FNumber']),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                          if (_exifData!['ISO'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                'ISO ${_exifData!['ISO']}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                          if (_exifData!['FocalLength'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                '${_exifData!['FocalLength']}mm',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                          if (_exifData!['ImageWidth'] != null &&
-                              _exifData!['ImageHeight'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Text(
-                                '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
             ),
+            child: _isLoadingExif
+                ? const Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : _exifData != null
+                    ? Container(
+                        height: 20,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Camera info
+                            if (_exifData!['Make'] != null ||
+                                _exifData!['Model'] != null)
+                              Text(
+                                '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
+                                    .trim(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.normal,
+                                  color: Colors.black87,
+                                ),
+                              ),
+
+                            // Settings
+                            if (_exifData!['ShutterSpeed'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  _formatShutterSpeed(_exifData!['ShutterSpeed']),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            if (_exifData!['FNumber'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  _formatAperture(_exifData!['FNumber']),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            if (_exifData!['ISO'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  'ISO ${_exifData!['ISO']}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            if (_exifData!['FocalLength'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  '${_exifData!['FocalLength']}mm',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            if (_exifData!['ImageWidth'] != null &&
+                                _exifData!['ImageHeight'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                    : Container(height: 20), // Empty space when no EXIF data
+          ),
 
           // Image preview
           Expanded(
