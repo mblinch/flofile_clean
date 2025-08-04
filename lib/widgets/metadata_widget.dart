@@ -119,7 +119,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'Credit': creditController.text,
       'Copyright': copyrightController.text,
       'Source': sourceController.text,
-      'IPTC:Urgency': urgencyController.text,
+      'Urgency': urgencyController.text,
       'Country': countryController.text,
       'CountryCode': countryCodeController.text,
       'Sub-location': stadiumController.text,
@@ -148,7 +148,14 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           meta['CaptionWriter']?.toString() ?? '';
 
       headlineController.text = meta['Headline']?.toString() ?? '';
-      keywordsController.text = meta['Keywords']?.toString() ?? '';
+      
+      // Handle Keywords properly - convert arrays to comma-separated strings
+      final keywords = meta['Keywords'];
+      if (keywords is List) {
+        keywordsController.text = keywords.join(', ');
+      } else {
+        keywordsController.text = keywords?.toString() ?? '';
+      }
 
       final extractedCreator = meta['Creator']?.toString() ?? '';
       if (extractedCreator.isNotEmpty) {
@@ -174,9 +181,12 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         sourceController.text = extractedSource;
       }
 
-      // Load IPTC metadata fields only if they exist  
-      urgencyController.text = meta['IPTC:Urgency']?.toString() ?? 
-                               meta['Urgency']?.toString() ?? '';
+      // Load IPTC metadata fields only if they exist
+      // Debug: Print all available keys to help troubleshoot urgency
+      print('Available metadata keys: ${meta.keys.toList()}');
+      print('Urgency value: ${meta['Urgency']}');
+      
+      urgencyController.text = meta['Urgency']?.toString() ?? '';
       countryController.text = meta['Country']?.toString() ?? '';
       countryCodeController.text = meta['CountryCode']?.toString() ?? '';
 

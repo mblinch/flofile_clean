@@ -206,7 +206,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Sub-location',
         '-City',
         '-Province-State',
-        '-IPTC:Urgency',
+        '-Urgency',
         '-Country',
         '-CountryCode',
         '-DateTimeOriginal',
