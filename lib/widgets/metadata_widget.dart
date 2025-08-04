@@ -111,11 +111,11 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   Map<String, String> getCurrentValues() {
     return {
       'TransmissionReference': jobIdController.text,
-      'DescriptionWriter': descriptionWritersController.text,
+      'CaptionWriter': descriptionWritersController.text,
       'Headline': headlineController.text,
       'Keywords': keywordsController.text,
       'Creator': creatorController.text,
-                  'AuthorsPosition': creatorJobTitleController.text,
+      'AuthorsPosition': creatorJobTitleController.text,
       'Credit': creditController.text,
       'Copyright': copyrightController.text,
       'Source': sourceController.text,
@@ -143,11 +143,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       // Load Getty metadata fields
       jobIdController.text = meta['TransmissionReference']?.toString() ?? '';
 
-      final extractedDescriptionWriter =
-          meta['DescriptionWriter']?.toString() ?? '';
-      if (extractedDescriptionWriter.isNotEmpty) {
-        descriptionWritersController.text = extractedDescriptionWriter;
-      }
+      // Load Description Writer from CaptionWriter (Photoshop XMP field)
+      descriptionWritersController.text = meta['CaptionWriter']?.toString() ?? '';
 
       headlineController.text = meta['Headline']?.toString() ?? '';
       keywordsController.text = meta['Keywords']?.toString() ?? '';
@@ -158,7 +155,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       }
 
       // Load Creator's Job Title from AuthorsPosition (Photoshop XMP field)
-      creatorJobTitleController.text = meta['AuthorsPosition']?.toString() ?? '';
+      creatorJobTitleController.text =
+          meta['AuthorsPosition']?.toString() ?? '';
 
       final extractedCredit = meta['Credit']?.toString() ?? '';
       if (extractedCredit.isNotEmpty) {
@@ -405,8 +403,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                               descriptionWritersController)),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: _buildField(
-                              'Creator\'s Job Title', creatorJobTitleController)),
+                          child: _buildField('Creator\'s Job Title',
+                              creatorJobTitleController)),
                       const SizedBox(width: 8),
                       Expanded(
                           child: _buildField('Copyright', copyrightController)),

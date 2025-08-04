@@ -191,7 +191,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-ImageDescription',
         '-XMP-getty:Personality',
         '-TransmissionReference',
-        '-DescriptionWriter',
+        '-CaptionWriter',
         '-Headline',
         '-Keywords',
         '-Creator',
