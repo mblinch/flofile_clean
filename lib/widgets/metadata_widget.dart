@@ -39,10 +39,10 @@ class _MetadataWidgetState extends State<MetadataWidget> {
 
   // Location and categorization controllers
   final titleObjectNameController = TextEditingController();
-  final categoryController = TextEditingController(text: 'S');
-  final suppCat1Controller = TextEditingController(text: 'SPO');
-  final suppCat2Controller = TextEditingController(text: 'BBN');
-  final suppCat3Controller = TextEditingController(text: 'BBA');
+  final categoryController = TextEditingController();
+  final suppCat1Controller = TextEditingController();
+  final suppCat2Controller = TextEditingController();
+  final suppCat3Controller = TextEditingController();
   final specialInstructionsController = TextEditingController();
 
   // Country codes for dropdown
@@ -197,12 +197,19 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       // Load categorization metadata
       titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
 
+      // Clear category field first
+      categoryController.text = '';
       final extractedCategory = meta['Category']?.toString() ?? '';
       if (extractedCategory.isNotEmpty) {
         categoryController.text = extractedCategory;
       }
 
       // Handle supplemental categories (could be a single string or array)
+      // Clear existing values first
+      suppCat1Controller.text = '';
+      suppCat2Controller.text = '';
+      suppCat3Controller.text = '';
+      
       final suppCats = meta['SupplementalCategories'];
       if (suppCats != null) {
         if (suppCats is List) {
