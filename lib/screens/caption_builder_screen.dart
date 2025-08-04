@@ -48,6 +48,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   double _playerLoadingProgress = 0.0;
   double _thumbnailLoadingProgress = 0.0;
 
+  // Global keys for accessing widgets
+  final GlobalKey _metadataKey1 = GlobalKey();
+  final GlobalKey _metadataKey2 = GlobalKey();
+  final GlobalKey _captionFieldsKey1 = GlobalKey();
+  final GlobalKey _captionFieldsKey2 = GlobalKey();
+
   // Cached player data to prevent re-fetching
   List<Player> _cachedHomeRoster = [];
   List<Player> _cachedAwayRoster = [];
@@ -223,6 +229,92 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     } catch (e) {
       print('Error loading metadata: $e');
+    }
+  }
+
+  // Save IPTC metadata to the current image
+  Future<void> _saveIptcMetadata() async {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+
+    final imagePath = imagePaths[currentIndex];
+    print('Saving IPTC metadata to: $imagePath');
+
+    // Get values from both widgets
+    Map<String, String> allValues = {};
+
+    // Get metadata values from the metadata widget
+    dynamic metadataState =
+        _metadataKey1.currentState ?? _metadataKey2.currentState;
+    if (metadataState != null) {
+      Map<String, String> metadataValues = metadataState.getCurrentValues();
+      allValues.addAll(metadataValues);
+      print('Retrieved metadata values: $metadataValues');
+    }
+
+    // Get caption values from the caption fields widget
+    dynamic captionState =
+        _captionFieldsKey1.currentState ?? _captionFieldsKey2.currentState;
+    if (captionState != null) {
+      Map<String, String> captionValues =
+          captionState.getCurrentCaptionValues();
+      allValues.addAll(captionValues);
+      print('Retrieved caption values: $captionValues');
+    }
+
+    if (allValues.isEmpty) {
+      print('Could not access widget states');
+      return;
+    }
+
+    try {
+      // Build exiftool command arguments
+      List<String> args = [];
+
+      // Add each field that has a value
+      allValues.forEach((key, value) {
+        if (value.trim().isNotEmpty) {
+          args.add('-$key=$value');
+        }
+      });
+
+      // Handle supplemental categories specially (combine them into array)
+      List<String> suppCats = [];
+      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories1']!);
+      }
+      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories2']!);
+      }
+      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories3']!);
+      }
+
+      // Remove individual supplemental category args and add combined one
+      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
+      if (suppCats.isNotEmpty) {
+        args.add('-SupplementalCategories=${suppCats.join(',')}');
+      }
+
+      // Always overwrite original file
+      args.add('-overwrite_original');
+      args.add(imagePath);
+
+      // Only run exiftool if we have metadata to write
+      if (args.length > 2) {
+        // More than just -overwrite_original and path
+        print('Running exiftool with args: $args');
+        final proc = await Process.run('exiftool', args);
+
+        if (proc.exitCode == 0) {
+          print('IPTC metadata saved successfully');
+        } else {
+          print('Exiftool error saving metadata: ${proc.stderr}');
+        }
+      } else {
+        print('No metadata values to save');
+      }
+    } catch (e) {
+      print('Error saving IPTC metadata: $e');
     }
   }
 
@@ -430,6 +522,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                                 _onImageSelected(currentIndex - 1);
                               }
                             },
+                            onSaveIptc: _saveIptcMetadata,
                           ),
                         ),
 
@@ -464,6 +557,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                               print(
                                   'DEBUG: CaptionBuilderScreen - imagePaths.length: ${imagePaths.length}, currentIndex: $currentIndex');
                               return CaptionFieldsWidget(
+                                key: _captionFieldsKey1,
                                 metadata: currentMetadata,
                                 onMetadataUpdated: (metadata) {
                                   setState(() {
@@ -503,6 +597,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                                         ? _cachedAwayRoster
                                         : null,
                                 currentImagePath: currentPath,
+                                onSaveIptc: _saveIptcMetadata,
                               );
                             },
                           ),
@@ -511,6 +606,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         // BOTTOM RIGHT BOX - Metadata
                         Expanded(
                           child: MetadataWidget(
+                            key: _metadataKey1,
                             metadata: currentMetadata,
                             onMetadataUpdated: (metadata) {
                               setState(() {
@@ -636,6 +732,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           _onImageSelected(currentIndex - 1);
                         }
                       },
+                      onSaveIptc: _saveIptcMetadata,
                     ),
                   ),
 
@@ -661,6 +758,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   // BOTTOM LEFT BOX - Caption Fields
                   Expanded(
                     child: CaptionFieldsWidget(
+                      key: _captionFieldsKey2,
                       metadata: currentMetadata,
                       onMetadataUpdated: (metadata) {
                         setState(() {
@@ -696,12 +794,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       currentImagePath: imagePaths.isNotEmpty
                           ? imagePaths[currentIndex]
                           : null,
+                      onSaveIptc: _saveIptcMetadata,
                     ),
                   ),
 
                   // BOTTOM RIGHT BOX - Metadata
                   Expanded(
                     child: MetadataWidget(
+                      key: _metadataKey2,
                       metadata: currentMetadata,
                       onMetadataUpdated: (metadata) {
                         setState(() {

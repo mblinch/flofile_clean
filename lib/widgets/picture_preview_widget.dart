@@ -11,6 +11,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function(int) onImageSelected;
   final Function() onNextImage;
   final Function() onPreviousImage;
+  final Future<void> Function()? onSaveIptc;
 
   const PicturePreviewWidget({
     super.key,
@@ -19,6 +20,7 @@ class PicturePreviewWidget extends StatefulWidget {
     required this.onImageSelected,
     required this.onNextImage,
     required this.onPreviousImage,
+    this.onSaveIptc,
   });
 
   @override
@@ -398,7 +400,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                       // Previous button
                       IconButton(
                         onPressed: widget.currentIndex > 0
-                            ? widget.onPreviousImage
+                            ? () async {
+                                // Save IPTC metadata before navigating
+                                if (widget.onSaveIptc != null) {
+                                  await widget.onSaveIptc!();
+                                }
+                                widget.onPreviousImage();
+                              }
                             : null,
                         icon: Icon(
                           Icons.chevron_left,
@@ -458,7 +466,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                       // Next button
                       IconButton(
                         onPressed: widget.currentIndex < imageCount - 1
-                            ? widget.onNextImage
+                            ? () async {
+                                // Save IPTC metadata before navigating
+                                if (widget.onSaveIptc != null) {
+                                  await widget.onSaveIptc!();
+                                }
+                                widget.onNextImage();
+                              }
                             : null,
                         icon: Icon(
                           Icons.chevron_right,

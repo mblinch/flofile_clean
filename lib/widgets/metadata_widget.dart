@@ -108,6 +108,33 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     }
   }
 
+  // Method to get current values from all controllers
+  Map<String, String> getCurrentValues() {
+    return {
+      'TransmissionReference': jobIdController.text,
+      'DescriptionWriter': descriptionWritersController.text,
+      'Headline': headlineController.text,
+      'Keywords': keywordsController.text,
+      'Creator': creatorController.text,
+      'CreatorJobTitle': creatorJobTitleController.text,
+      'Credit': creditController.text,
+      'Copyright': copyrightController.text,
+      'Source': sourceController.text,
+      'Urgency': urgencyController.text,
+      'Country': countryController.text,
+      'CountryCode': countryCodeController.text,
+      'Sub-location': stadiumController.text,
+      'City': cityController.text,
+      'Province-State': provinceController.text,
+      'ObjectName': titleObjectNameController.text,
+      'Category': categoryController.text,
+      'SupplementalCategories1': suppCat1Controller.text,
+      'SupplementalCategories2': suppCat2Controller.text,
+      'SupplementalCategories3': suppCat3Controller.text,
+      'SpecialInstructions': specialInstructionsController.text,
+    };
+  }
+
   void _loadMetadata() {
     if (widget.metadata == null) return;
 
