@@ -119,7 +119,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'Credit': creditController.text,
       'Copyright': copyrightController.text,
       'Source': sourceController.text,
-      'Urgency': urgencyController.text,
+      'IPTC:Urgency': urgencyController.text,
       'Country': countryController.text,
       'CountryCode': countryCodeController.text,
       'Sub-location': stadiumController.text,
@@ -174,8 +174,9 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         sourceController.text = extractedSource;
       }
 
-      // Load IPTC metadata fields only if they exist
-      urgencyController.text = meta['Urgency']?.toString() ?? '';
+      // Load IPTC metadata fields only if they exist  
+      urgencyController.text = meta['IPTC:Urgency']?.toString() ?? 
+                               meta['Urgency']?.toString() ?? '';
       countryController.text = meta['Country']?.toString() ?? '';
       countryCodeController.text = meta['CountryCode']?.toString() ?? '';
 
@@ -201,7 +202,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           String suppCatsStr = suppCats.toString();
           if (suppCatsStr.contains(',')) {
             // Split comma-separated values
-            List<String> parts = suppCatsStr.split(',').map((s) => s.trim()).toList();
+            List<String> parts =
+                suppCatsStr.split(',').map((s) => s.trim()).toList();
             if (parts.isNotEmpty) {
               suppCat1Controller.text = parts[0];
             }
