@@ -115,7 +115,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'Headline': headlineController.text,
       'Keywords': keywordsController.text,
       'Creator': creatorController.text,
-      'CreatorJobTitle': creatorJobTitleController.text,
+                  'AuthorsPosition': creatorJobTitleController.text,
       'Credit': creditController.text,
       'Copyright': copyrightController.text,
       'Source': sourceController.text,
@@ -157,10 +157,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         creatorController.text = extractedCreator;
       }
 
-      final extractedJobTitle = meta['CreatorJobTitle']?.toString() ?? '';
-      if (extractedJobTitle.isNotEmpty) {
-        creatorJobTitleController.text = extractedJobTitle;
-      }
+      // Load Creator's Job Title from AuthorsPosition (Photoshop XMP field)
+      creatorJobTitleController.text = meta['AuthorsPosition']?.toString() ?? '';
 
       final extractedCredit = meta['Credit']?.toString() ?? '';
       if (extractedCredit.isNotEmpty) {
@@ -177,7 +175,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         sourceController.text = extractedSource;
       }
 
-            // Load IPTC metadata fields only if they exist
+      // Load IPTC metadata fields only if they exist
       urgencyController.text = meta['Urgency']?.toString() ?? '';
       countryController.text = meta['Country']?.toString() ?? '';
       countryCodeController.text = meta['CountryCode']?.toString() ?? '';
@@ -408,7 +406,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       const SizedBox(width: 8),
                       Expanded(
                           child: _buildField(
-                              'Job Title', creatorJobTitleController)),
+                              'Creator\'s Job Title', creatorJobTitleController)),
                       const SizedBox(width: 8),
                       Expanded(
                           child: _buildField('Copyright', copyrightController)),
