@@ -321,8 +321,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               (item) => PopupMenuItem<String>(
                 value: item['code'],
                 height: 32,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Text(
                   item['name']!,
                   style: const TextStyle(
@@ -357,8 +356,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     // Value text
                     Text(
                       value != null
-                          ? items.firstWhere((item) => item['code'] == value,
-                              orElse: () => {'name': 'Select'})['name']!
+                          ? value // Show the actual code value, not the name
                           : 'Select $label',
                       style: TextStyle(
                         fontSize: 12,
