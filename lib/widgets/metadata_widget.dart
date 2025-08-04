@@ -17,20 +17,19 @@ class MetadataWidget extends StatefulWidget {
 class _MetadataWidgetState extends State<MetadataWidget> {
   // Getty Images metadata controllers
   final jobIdController = TextEditingController();
-  final descriptionWritersController = TextEditingController(text: 'MB');
+  final descriptionWritersController = TextEditingController();
   final headlineController = TextEditingController();
   final keywordsController = TextEditingController();
-  final creatorController = TextEditingController(text: 'Mark Blinch');
-  final creatorJobTitleController = TextEditingController(text: 'Contributor');
-  final creditController = TextEditingController(text: 'Getty Images');
-  final copyrightController = TextEditingController(text: '2025 Mark Blinch');
-  final sourceController =
-      TextEditingController(text: 'Getty Images North America');
+  final creatorController = TextEditingController();
+  final creatorJobTitleController = TextEditingController();
+  final creditController = TextEditingController();
+  final copyrightController = TextEditingController();
+  final sourceController = TextEditingController();
 
   // IPTC metadata controllers
-  final urgencyController = TextEditingController(text: '5');
-  final countryController = TextEditingController(text: 'Canada');
-  final countryCodeController = TextEditingController(text: 'CAN');
+  final urgencyController = TextEditingController();
+  final countryController = TextEditingController();
+  final countryCodeController = TextEditingController();
 
   // Location controllers
   final stadiumController = TextEditingController();
@@ -178,38 +177,16 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         sourceController.text = extractedSource;
       }
 
-      // Load IPTC metadata fields
-      final extractedUrgency = meta['Urgency']?.toString() ?? '';
-      if (extractedUrgency.isNotEmpty) {
-        urgencyController.text = extractedUrgency;
-      }
-
-      final extractedCountry = meta['Country']?.toString() ?? '';
-      if (extractedCountry.isNotEmpty) {
-        countryController.text = extractedCountry;
-      }
-
-      final extractedCountryCode = meta['CountryCode']?.toString() ?? '';
-      if (extractedCountryCode.isNotEmpty) {
-        countryCodeController.text = extractedCountryCode;
-      }
+            // Load IPTC metadata fields only if they exist
+      urgencyController.text = meta['Urgency']?.toString() ?? '';
+      countryController.text = meta['Country']?.toString() ?? '';
+      countryCodeController.text = meta['CountryCode']?.toString() ?? '';
 
       // Load categorization metadata
       titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
-
-      // Clear category field first
-      categoryController.text = '';
-      final extractedCategory = meta['Category']?.toString() ?? '';
-      if (extractedCategory.isNotEmpty) {
-        categoryController.text = extractedCategory;
-      }
+      categoryController.text = meta['Category']?.toString() ?? '';
 
       // Handle supplemental categories (could be a single string or array)
-      // Clear existing values first
-      suppCat1Controller.text = '';
-      suppCat2Controller.text = '';
-      suppCat3Controller.text = '';
-      
       final suppCats = meta['SupplementalCategories'];
       if (suppCats != null) {
         if (suppCats is List) {
