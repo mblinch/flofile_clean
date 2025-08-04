@@ -726,6 +726,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ? extractedPersonality.join(';')
         : (extractedPersonality as String? ?? '');
 
+    // Load location fields from metadata
+    final extractedStadium = meta['Sub-location'] as String? ?? '';
+    final extractedCity = meta['City'] as String? ?? '';
+    final extractedProvince = meta['Province-State'] as String? ?? '';
+
     setState(() {
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
@@ -734,6 +739,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (!_hasBeenReset) {
         personalityController.text = personInImageText;
       }
+
+      // Load location fields from metadata
+      stadiumController.text = extractedStadium;
+      cityController.text = extractedCity;
+      provinceController.text = extractedProvince;
     });
   }
 
@@ -4573,6 +4583,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Format the main player(s)
     String playerName;
+
     if ((_selectedHittingAction == 'celebrates' ||
             _selectedHittingAction == 'celebrates_in_dugout' ||
             verbToUse == 'Celebration' ||
