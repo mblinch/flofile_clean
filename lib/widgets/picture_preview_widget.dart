@@ -4,7 +4,11 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:path/path.dart' as p;
-import 'context_menu_widget.dart';
+
+// Public interface for the picture preview widget state
+abstract class PicturePreviewWidgetState {
+  void refreshExifData();
+}
 
 class PicturePreviewWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -13,9 +17,6 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function() onNextImage;
   final Function() onPreviousImage;
   final Future<void> Function()? onSaveIptc;
-  final VoidCallback? onCopyIptc;
-  final VoidCallback? onPasteIptc;
-  final VoidCallback? onFtpImage;
 
   const PicturePreviewWidget({
     super.key,
@@ -25,23 +26,28 @@ class PicturePreviewWidget extends StatefulWidget {
     required this.onNextImage,
     required this.onPreviousImage,
     this.onSaveIptc,
-    this.onCopyIptc,
-    this.onPasteIptc,
-    this.onFtpImage,
   });
 
   @override
   State<PicturePreviewWidget> createState() => _PicturePreviewWidgetState();
 }
 
-class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
+class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
+    implements PicturePreviewWidgetState {
   // EXIF data state
   Map<String, dynamic>? _exifData;
   bool _isLoadingExif = false;
-  
-  // Context menu state
-  bool _showContextMenu = false;
-  Offset _contextMenuPosition = Offset.zero;
+
+  // Method to refresh EXIF data (can be called from parent)
+  void refreshExifData() {
+    if (mounted) {
+      setState(() {
+        _exifData = null;
+        _isLoadingExif = false;
+      });
+      _loadExifData();
+    }
+  }
 
   @override
   void initState() {
@@ -222,108 +228,110 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
       ),
       child: Column(
         children: [
-          // EXIF data section at top - Always reserve space to prevent layout shifts
-          Container(
-            height:
-                28, // Fixed height to prevent layout shifts (4px padding top/bottom + 20px content)
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+          // EXIF data section at top
+          if (_exifData != null || _isLoadingExif)
+            Container(
+              padding: const EdgeInsets.all(
+                  4), // Reduced from 8 to 4 for more compact display
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
               ),
-            ),
-            child: _isLoadingExif
-                ? const Center(
-                    child: SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : _exifData != null
-                    ? Container(
-                        height: 20,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Camera info
-                            if (_exifData!['Make'] != null ||
-                                _exifData!['Model'] != null)
-                              Text(
-                                '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
-                                    .trim(),
+              child: _isLoadingExif
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      height:
+                          20, // Reduced from 24 to 20 for more compact display
+                      child: Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.center, // Center the content
+                        children: [
+                          // Camera info
+                          if (_exifData!['Make'] != null ||
+                              _exifData!['Model'] != null)
+                            Text(
+                              '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
+                                  .trim(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.black87,
+                              ),
+                            ),
+
+                          // Settings
+                          if (_exifData!['ShutterSpeed'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                _formatShutterSpeed(_exifData!['ShutterSpeed']),
                                 style: const TextStyle(
                                   fontSize: 10,
-                                  fontWeight: FontWeight.normal,
-                                  color: Colors.black87,
+                                  color: Colors.grey,
                                 ),
                               ),
-
-                            // Settings
-                            if (_exifData!['ShutterSpeed'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  _formatShutterSpeed(
-                                      _exifData!['ShutterSpeed']),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
+                            ),
+                          if (_exifData!['FNumber'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                _formatAperture(_exifData!['FNumber']),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
                                 ),
                               ),
-                            if (_exifData!['FNumber'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  _formatAperture(_exifData!['FNumber']),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
+                            ),
+                          if (_exifData!['ISO'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                'ISO ${_exifData!['ISO']}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
                                 ),
                               ),
-                            if (_exifData!['ISO'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  'ISO ${_exifData!['ISO']}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
+                            ),
+                          if (_exifData!['FocalLength'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                '${_exifData!['FocalLength']}mm',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
                                 ),
                               ),
-                            if (_exifData!['FocalLength'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  '${_exifData!['FocalLength']}mm',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
+                            ),
+                          if (_exifData!['ImageWidth'] != null &&
+                              _exifData!['ImageHeight'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Text(
+                                '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
                                 ),
                               ),
-                            if (_exifData!['ImageWidth'] != null &&
-                                _exifData!['ImageHeight'] != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Text(
-                                  '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      )
-                    : Container(height: 20), // Empty space when no EXIF data
-          ),
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
 
           // Image preview
           Expanded(
@@ -333,53 +341,34 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                 Expanded(
                   child: Stack(
                     children: [
-                      // Main image with right-click context menu
-                      GestureDetector(
-                        onSecondaryTapDown: (details) {
-                          setState(() {
-                            _showContextMenu = true;
-                            _contextMenuPosition = details.globalPosition;
-                          });
-                        },
-                        onTap: () {
-                          if (_showContextMenu) {
-                            setState(() {
-                              _showContextMenu = false;
-                            });
+                      // Main image
+                      ExtendedImage.file(
+                        File(currentImagePath),
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        width: double.infinity,
+                        height: double.infinity,
+                        loadStateChanged: (ExtendedImageState state) {
+                          switch (state.extendedImageLoadState) {
+                            case LoadState.loading:
+                              return Container(
+                                color: Colors.grey.shade200,
+                                child: const Center(
+                                    child: CircularProgressIndicator()),
+                              );
+                            case LoadState.completed:
+                              return null; // Use default completed state
+                            case LoadState.failed:
+                              return Container(
+                                color: Colors.grey.shade200,
+                                child: const Center(
+                                  child: Icon(Icons.error,
+                                      color: Colors.red, size: 48),
+                                ),
+                              );
                           }
                         },
-                        child: ExtendedImage.file(
-                          File(currentImagePath),
-                          fit: BoxFit.contain,
-                          alignment: Alignment.center,
-                          width: double.infinity,
-                          height: double.infinity,
-                          loadStateChanged: (ExtendedImageState state) {
-                            switch (state.extendedImageLoadState) {
-                              case LoadState.loading:
-                                return Container(
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  color: Colors.grey.shade200,
-                                  child: const Center(
-                                      child: CircularProgressIndicator()),
-                                );
-                              case LoadState.completed:
-                                return null; // Use default completed state
-                              case LoadState.failed:
-                                return Container(
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  color: Colors.grey.shade200,
-                                  child: const Center(
-                                    child: Icon(Icons.error,
-                                        color: Colors.red, size: 48),
-                                  ),
-                                );
-                            }
-                          },
-                          mode: ExtendedImageMode.none, // No zoom/pan for speed
-                        ),
+                        mode: ExtendedImageMode.none, // No zoom/pan for speed
                       ),
 
                       // Zoom button
@@ -405,31 +394,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                           ),
                         ),
                       ),
-                      
-                      // Context menu overlay
-                      if (_showContextMenu)
-                        ContextMenuWidget(
-                          selectedCount: 1,
-                          position: _contextMenuPosition,
-                          onCopyIptc: () {
-                            setState(() {
-                              _showContextMenu = false;
-                            });
-                            widget.onCopyIptc?.call();
-                          },
-                          onPasteIptc: () {
-                            setState(() {
-                              _showContextMenu = false;
-                            });
-                            widget.onPasteIptc?.call();
-                          },
-                          onFtpImages: () {
-                            setState(() {
-                              _showContextMenu = false;
-                            });
-                            widget.onFtpImage?.call();
-                          },
-                        ),
                     ],
                   ),
                 ),

@@ -475,6 +475,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Map<String, String> getCurrentCaptionValues() {
     return {
       'Caption-Abstract': captionController.text,
+      'XMP:Description':
+          captionController.text, // Photo Mechanic compatible caption field
+      'ImageDescription': captionController.text, // EXIF description field
       'XMP-getty:Personality': personalityController.text,
       'Creator': creatorController.text,
       'Sub-location': stadiumController.text,
@@ -1002,7 +1005,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             // Paste button
                             Expanded(
                               child: CustomButton(
-                                onTap: _onPastePressed,
+                                onTap: _pasteMetadataToCaptionWidget,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 6),
@@ -5549,7 +5552,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _onCopyPressed,
+                onPressed: _copyMetadataFromCaptionWidget,
                 icon: const Icon(Icons.copy, size: 14),
                 label: const Text('Copy', style: TextStyle(fontSize: 10)),
                 style: ElevatedButton.styleFrom(
@@ -5562,7 +5565,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             const SizedBox(width: 8),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: _onPastePressed,
+                onPressed: _pasteMetadataToCaptionWidget,
                 icon: const Icon(Icons.paste, size: 14),
                 label: const Text('Paste', style: TextStyle(fontSize: 10)),
                 style: ElevatedButton.styleFrom(
@@ -5710,6 +5713,144 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Content pasted from clipboard!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Copy metadata from caption widget (excluding date/time)
+  void _copyMetadataFromCaptionWidget() {
+    print('DEBUG: Copy metadata called');
+    print('DEBUG: Widget metadata: ${widget.metadata}');
+
+    // Get metadata from the parent widget
+    if (widget.metadata != null) {
+      final metadataValues = Map<String, String>.from(widget.metadata!);
+
+      print('DEBUG: Metadata values before filtering: $metadataValues');
+
+      // Remove date and time fields
+      metadataValues.remove('Date');
+      metadataValues.remove('Time');
+      metadataValues.remove('DateTimeOriginal');
+      metadataValues.remove('CreateDate');
+      metadataValues.remove('ModifyDate');
+
+      print('DEBUG: Metadata values after filtering: $metadataValues');
+
+      final jsonString = jsonEncode(metadataValues);
+      print('DEBUG: JSON string: $jsonString');
+
+      Clipboard.setData(ClipboardData(text: jsonString));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Metadata copied (${metadataValues.length} fields)!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      print('DEBUG: No metadata available');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No metadata available to copy!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Paste metadata to caption widget (excluding date/time)
+  Future<void> _pasteMetadataToCaptionWidget() async {
+    print('DEBUG: Paste metadata called');
+
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      print('DEBUG: Clipboard data: ${clipboardData?.text}');
+
+      if (clipboardData != null && clipboardData.text != null) {
+        final Map<String, dynamic> metadataMap =
+            jsonDecode(clipboardData.text!);
+        print('DEBUG: Parsed metadata map: $metadataMap');
+
+        // Update the metadata in the parent widget
+        if (widget.onMetadataUpdated != null) {
+          final updatedMetadata =
+              Map<String, dynamic>.from(widget.metadata ?? {});
+          print('DEBUG: Current metadata: $updatedMetadata');
+
+          // Apply all fields except date and time
+          if (metadataMap['TransmissionReference'] != null)
+            updatedMetadata['TransmissionReference'] =
+                metadataMap['TransmissionReference'].toString();
+          if (metadataMap['CaptionWriter'] != null)
+            updatedMetadata['CaptionWriter'] =
+                metadataMap['CaptionWriter'].toString();
+          if (metadataMap['Headline'] != null)
+            updatedMetadata['Headline'] = metadataMap['Headline'].toString();
+          if (metadataMap['Keywords'] != null)
+            updatedMetadata['Keywords'] = metadataMap['Keywords'].toString();
+          if (metadataMap['Creator'] != null)
+            updatedMetadata['Creator'] = metadataMap['Creator'].toString();
+          if (metadataMap['AuthorsPosition'] != null)
+            updatedMetadata['AuthorsPosition'] =
+                metadataMap['AuthorsPosition'].toString();
+          if (metadataMap['Credit'] != null)
+            updatedMetadata['Credit'] = metadataMap['Credit'].toString();
+          if (metadataMap['Copyright'] != null)
+            updatedMetadata['Copyright'] = metadataMap['Copyright'].toString();
+          if (metadataMap['Source'] != null)
+            updatedMetadata['Source'] = metadataMap['Source'].toString();
+          if (metadataMap['Urgency'] != null)
+            updatedMetadata['Urgency'] = metadataMap['Urgency'].toString();
+          if (metadataMap['Country'] != null)
+            updatedMetadata['Country'] = metadataMap['Country'].toString();
+          if (metadataMap['CountryCode'] != null)
+            updatedMetadata['CountryCode'] =
+                metadataMap['CountryCode'].toString();
+          if (metadataMap['Sub-location'] != null)
+            updatedMetadata['Sub-location'] =
+                metadataMap['Sub-location'].toString();
+          if (metadataMap['City'] != null)
+            updatedMetadata['City'] = metadataMap['City'].toString();
+          if (metadataMap['Province-State'] != null)
+            updatedMetadata['Province-State'] =
+                metadataMap['Province-State'].toString();
+          if (metadataMap['ObjectName'] != null)
+            updatedMetadata['ObjectName'] =
+                metadataMap['ObjectName'].toString();
+          if (metadataMap['Category'] != null)
+            updatedMetadata['Category'] = metadataMap['Category'].toString();
+          if (metadataMap['SupplementalCategories1'] != null)
+            updatedMetadata['SupplementalCategories1'] =
+                metadataMap['SupplementalCategories1'].toString();
+          if (metadataMap['SupplementalCategories2'] != null)
+            updatedMetadata['SupplementalCategories2'] =
+                metadataMap['SupplementalCategories2'].toString();
+          if (metadataMap['SupplementalCategories3'] != null)
+            updatedMetadata['SupplementalCategories3'] =
+                metadataMap['SupplementalCategories3'].toString();
+          if (metadataMap['SpecialInstructions'] != null)
+            updatedMetadata['SpecialInstructions'] =
+                metadataMap['SpecialInstructions'].toString();
+
+          // Date and time are intentionally NOT pasted
+
+          widget.onMetadataUpdated!(updatedMetadata);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Metadata pasted (date/time preserved)!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error pasting metadata!'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -9395,16 +9536,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Copy button
                 CustomButton(
                   onTap: () {
-                    if (captionController.text.isNotEmpty) {
-                      Clipboard.setData(
-                          ClipboardData(text: captionController.text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Caption copied!'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    }
+                    // Copy metadata (excluding date/time) instead of caption
+                    _copyMetadataFromCaptionWidget();
                   },
                   child: Container(
                     width: 32,
@@ -9421,7 +9554,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 4),
                 // Paste button
                 CustomButton(
-                  onTap: _onPastePressed,
+                  onTap: _pasteMetadataToCaptionWidget,
                   child: Container(
                     width: 32,
                     height: 32,

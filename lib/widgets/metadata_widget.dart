@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
 
 class MetadataWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -35,6 +37,14 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   final stadiumController = TextEditingController();
   final cityController = TextEditingController();
   final provinceController = TextEditingController();
+
+  // Date and time controllers
+  final dateController = TextEditingController();
+  final timeController = TextEditingController();
+
+  // Track if original date/time has been modified
+  bool _hasModifiedOriginalDateTime = false;
+  String? _originalDateTimeString;
 
   // Location and categorization controllers
   final titleObjectNameController = TextEditingController();
@@ -109,7 +119,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
 
   // Method to get current values from all controllers
   Map<String, String> getCurrentValues() {
-    return {
+    final values = {
+      // IPTC fields
       'TransmissionReference': jobIdController.text,
       'CaptionWriter': descriptionWritersController.text,
       'Headline': headlineController.text,
@@ -125,13 +136,269 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'Sub-location': stadiumController.text,
       'City': cityController.text,
       'Province-State': provinceController.text,
+      'Date': dateController.text,
+      'Time': timeController.text,
       'ObjectName': titleObjectNameController.text,
       'Category': categoryController.text,
       'SupplementalCategories1': suppCat1Controller.text,
       'SupplementalCategories2': suppCat2Controller.text,
       'SupplementalCategories3': suppCat3Controller.text,
       'SpecialInstructions': specialInstructionsController.text,
+
+      // XMP equivalents for Photo Mechanic compatibility
+      'XMP:Title': headlineController.text,
+      'XMP:Subject': keywordsController.text,
+      'XMP:Creator': creatorController.text,
+      'XMP:Rights': copyrightController.text,
+      'XMP:Source': sourceController.text,
+      'XMP:Country': countryController.text,
+      'XMP:State': provinceController.text,
+      'XMP:City': cityController.text,
+      'XMP:Location': stadiumController.text,
+      'XMP:Instructions': specialInstructionsController.text,
     };
+
+    // If original date/time has been modified, include the EXIF fields
+    if (_hasModifiedOriginalDateTime &&
+        dateController.text.isNotEmpty &&
+        timeController.text.isNotEmpty) {
+      try {
+        // Convert back to EXIF format (YYYY:MM:DD HH:MM:SS)
+        final dateParts = dateController.text.split('-');
+        final timeParts = timeController.text.split(' ');
+        final timeComponent = timeParts[0];
+        final period = timeParts[1];
+        final hourMinute = timeComponent.split(':');
+
+        if (dateParts.length >= 3 && hourMinute.length >= 2) {
+          int hour = int.parse(hourMinute[0]);
+          final minute = hourMinute[1];
+          String second = '00';
+
+          // Extract seconds if available
+          if (hourMinute.length >= 3) {
+            second = hourMinute[2];
+          }
+
+          // Convert to 24-hour format
+          if (period == 'PM' && hour != 12) {
+            hour += 12;
+          } else if (period == 'AM' && hour == 12) {
+            hour = 0;
+          }
+
+          final exifDateTime =
+              '${dateParts[0]}:${dateParts[1]}:${dateParts[2]} ${hour.toString().padLeft(2, '0')}:${minute}:${second}';
+
+          // Add the original EXIF fields
+          values['DateTimeOriginal'] = exifDateTime;
+          values['CreateDate'] = exifDateTime;
+          values['ModifyDate'] = exifDateTime;
+        }
+      } catch (e) {
+        print('Error converting date/time to EXIF format: $e');
+      }
+    }
+
+    return values;
+  }
+
+  // Show calendar picker for date selection
+  Future<void> _showDatePicker() async {
+    DateTime? currentDate;
+
+    // Try to parse current date from controller
+    if (dateController.text.isNotEmpty) {
+      try {
+        currentDate = DateTime.parse(dateController.text);
+      } catch (e) {
+        print('Error parsing current date: $e');
+      }
+    }
+
+    // Default to today if no valid date
+    currentDate ??= DateTime.now();
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: currentDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Colors.blue.shade600,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      // Check if this would modify the original date/time
+      if (_originalDateTimeString != null && !_hasModifiedOriginalDateTime) {
+        final shouldProceed = await _showDateTimeModificationWarning();
+        if (!shouldProceed) {
+          return;
+        }
+      }
+
+      setState(() {
+        dateController.text =
+            '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+        _checkForOriginalDateTimeModification();
+      });
+    }
+  }
+
+  // Show warning dialog when modifying original capture date/time
+  Future<bool> _showDateTimeModificationWarning() async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Modify Original Capture Time?'),
+                ],
+              ),
+              content: const Text(
+                'You are about to change the original capture date and time of this image. '
+                'This will modify the EXIF data that records when the photo was actually taken. '
+                'Are you sure you want to proceed?',
+                style: TextStyle(fontSize: 14),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(false);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(true);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Yes, Modify Original'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  // Check if the date/time has been modified from original
+  void _checkForOriginalDateTimeModification() {
+    if (_originalDateTimeString != null) {
+      final currentDateTimeString =
+          '${dateController.text} ${timeController.text}';
+      if (currentDateTimeString != _originalDateTimeString) {
+        _hasModifiedOriginalDateTime = true;
+      }
+    }
+  }
+
+  // Show time picker
+  Future<void> _showTimePicker() async {
+    TimeOfDay? currentTime;
+    int currentSeconds = 0;
+
+    // Try to parse current time from controller
+    if (timeController.text.isNotEmpty) {
+      try {
+        final timeParts = timeController.text.split(' ');
+        if (timeParts.length >= 2) {
+          final timeComponent = timeParts[0];
+          final period = timeParts[1];
+          final hourMinuteSecond = timeComponent.split(':');
+
+          if (hourMinuteSecond.length >= 3) {
+            int hour = int.parse(hourMinuteSecond[0]);
+            final minute = int.parse(hourMinuteSecond[1]);
+            currentSeconds = int.parse(hourMinuteSecond[2]);
+
+            // Convert to 24-hour format for TimeOfDay
+            if (period == 'PM' && hour != 12) {
+              hour += 12;
+            } else if (period == 'AM' && hour == 12) {
+              hour = 0;
+            }
+
+            currentTime = TimeOfDay(hour: hour, minute: minute);
+          } else if (hourMinuteSecond.length >= 2) {
+            int hour = int.parse(hourMinuteSecond[0]);
+            final minute = int.parse(hourMinuteSecond[1]);
+
+            // Convert to 24-hour format for TimeOfDay
+            if (period == 'PM' && hour != 12) {
+              hour += 12;
+            } else if (period == 'AM' && hour == 12) {
+              hour = 0;
+            }
+
+            currentTime = TimeOfDay(hour: hour, minute: minute);
+          }
+        }
+      } catch (e) {
+        print('Error parsing current time: $e');
+      }
+    }
+
+    // Default to current time if no valid time
+    currentTime ??= TimeOfDay.now();
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: currentTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: Colors.blue.shade600,
+                ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedTime != null) {
+      // Check if this would modify the original date/time
+      if (_originalDateTimeString != null && !_hasModifiedOriginalDateTime) {
+        final shouldProceed = await _showDateTimeModificationWarning();
+        if (!shouldProceed) {
+          return;
+        }
+      }
+
+      setState(() {
+        final hour = pickedTime.hour;
+        final minute = pickedTime.minute.toString().padLeft(2, '0');
+        final second = currentSeconds.toString().padLeft(2, '0');
+        final period = hour >= 12 ? 'PM' : 'AM';
+
+        // Convert to 12-hour format
+        int displayHour = hour;
+        if (hour == 0) {
+          displayHour = 12;
+        } else if (hour > 12) {
+          displayHour = hour - 12;
+        }
+
+        timeController.text = '$displayHour:$minute:$second $period';
+        _checkForOriginalDateTimeModification();
+      });
+    }
   }
 
   void _loadMetadata() {
@@ -258,6 +525,75 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       if (extractedProvince.isNotEmpty) {
         provinceController.text = extractedProvince;
       }
+
+      // Load date and time from metadata
+      final dateTimeOriginal = meta['DateTimeOriginal']?.toString() ?? '';
+      final createDate = meta['CreateDate']?.toString() ?? '';
+      final modifyDate = meta['ModifyDate']?.toString() ?? '';
+      final timeDate = meta['TimeDate']?.toString() ?? '';
+
+      // Use the first available date/time field
+      final dateTimeString = dateTimeOriginal.isNotEmpty
+          ? dateTimeOriginal
+          : createDate.isNotEmpty
+              ? createDate
+              : modifyDate.isNotEmpty
+                  ? modifyDate
+                  : timeDate;
+
+      if (dateTimeString.isNotEmpty) {
+        try {
+          // Parse the date string (format: YYYY:MM:DD HH:MM:SS)
+          final parts = dateTimeString.split(' ');
+          if (parts.length >= 2) {
+            final datePart = parts[0].replaceAll(':', '-');
+            final timePart = parts[1];
+
+            // Convert 24-hour time to 12-hour format with AM/PM
+            final timeComponents = timePart.split(':');
+            if (timeComponents.length >= 3) {
+              int hour = int.parse(timeComponents[0]);
+              final minute = timeComponents[1];
+              final second = timeComponents[2];
+              final period = hour >= 12 ? 'PM' : 'AM';
+
+              // Convert to 12-hour format
+              if (hour == 0) {
+                hour = 12;
+              } else if (hour > 12) {
+                hour -= 12;
+              }
+
+              final formattedTime = '$hour:${minute}:${second} $period';
+              timeController.text = formattedTime;
+            } else if (timeComponents.length >= 2) {
+              int hour = int.parse(timeComponents[0]);
+              final minute = timeComponents[1];
+              final period = hour >= 12 ? 'PM' : 'AM';
+
+              // Convert to 12-hour format
+              if (hour == 0) {
+                hour = 12;
+              } else if (hour > 12) {
+                hour -= 12;
+              }
+
+              final formattedTime = '$hour:${minute}:00 $period';
+              timeController.text = formattedTime;
+            } else {
+              timeController.text = timePart;
+            }
+
+            dateController.text = datePart;
+
+            // Store original date/time for comparison
+            _originalDateTimeString = '$datePart ${timeController.text}';
+            _hasModifiedOriginalDateTime = false;
+          }
+        } catch (e) {
+          print('Error parsing date/time: $e');
+        }
+      }
     });
   }
 
@@ -336,7 +672,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         child: Container(
           width: double.infinity,
           height: 40, // Match the height of regular text fields
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             children: [
               Expanded(
@@ -348,7 +684,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     Text(
                       label,
                       style: const TextStyle(
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
@@ -359,7 +695,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                           ? value // Show the actual code value, not the name
                           : 'Select $label',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         color:
                             value != null ? Colors.black : Colors.grey.shade600,
                       ),
@@ -374,6 +710,218 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         ),
       ),
     );
+  }
+
+  Widget _buildDateField() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.grey.shade50,
+      ),
+      child: InkWell(
+        onTap: () async {
+          await _showDatePicker();
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: double.infinity,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Date',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      dateController.text.isNotEmpty
+                          ? dateController.text
+                          : 'Select Date',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: dateController.text.isNotEmpty
+                            ? Colors.black
+                            : Colors.grey.shade600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.calendar_today, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeField() {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.grey.shade50,
+      ),
+      child: InkWell(
+        onTap: () async {
+          await _showTimePicker();
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: double.infinity,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Time',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      timeController.text.isNotEmpty
+                          ? timeController.text
+                          : 'Select Time',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: timeController.text.isNotEmpty
+                            ? Colors.black
+                            : Colors.grey.shade600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.access_time, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Copy all metadata except date and time
+  void _copyMetadata() {
+    final metadataValues = getCurrentValues();
+
+    // Remove date and time fields
+    metadataValues.remove('Date');
+    metadataValues.remove('Time');
+    metadataValues.remove('DateTimeOriginal');
+    metadataValues.remove('CreateDate');
+    metadataValues.remove('ModifyDate');
+
+    final jsonString = jsonEncode(metadataValues);
+
+    Clipboard.setData(ClipboardData(text: jsonString));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Metadata copied (${metadataValues.length} fields)!'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Paste metadata from clipboard
+  Future<void> _pasteMetadata() async {
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData != null && clipboardData.text != null) {
+        final Map<String, dynamic> metadataMap =
+            jsonDecode(clipboardData.text!);
+
+        setState(() {
+          // Apply all fields except date and time
+          if (metadataMap['TransmissionReference'] != null)
+            jobIdController.text =
+                metadataMap['TransmissionReference'].toString();
+          if (metadataMap['CaptionWriter'] != null)
+            descriptionWritersController.text =
+                metadataMap['CaptionWriter'].toString();
+          if (metadataMap['Headline'] != null)
+            headlineController.text = metadataMap['Headline'].toString();
+          if (metadataMap['Keywords'] != null)
+            keywordsController.text = metadataMap['Keywords'].toString();
+          if (metadataMap['Creator'] != null)
+            creatorController.text = metadataMap['Creator'].toString();
+          if (metadataMap['AuthorsPosition'] != null)
+            creatorJobTitleController.text =
+                metadataMap['AuthorsPosition'].toString();
+          if (metadataMap['Credit'] != null)
+            creditController.text = metadataMap['Credit'].toString();
+          if (metadataMap['Copyright'] != null)
+            copyrightController.text = metadataMap['Copyright'].toString();
+          if (metadataMap['Source'] != null)
+            sourceController.text = metadataMap['Source'].toString();
+          if (metadataMap['Urgency'] != null)
+            urgencyController.text = metadataMap['Urgency'].toString();
+          if (metadataMap['Country'] != null)
+            countryController.text = metadataMap['Country'].toString();
+          if (metadataMap['CountryCode'] != null)
+            countryCodeController.text = metadataMap['CountryCode'].toString();
+          if (metadataMap['Sub-location'] != null)
+            stadiumController.text = metadataMap['Sub-location'].toString();
+          if (metadataMap['City'] != null)
+            cityController.text = metadataMap['City'].toString();
+          if (metadataMap['Province-State'] != null)
+            provinceController.text = metadataMap['Province-State'].toString();
+          if (metadataMap['ObjectName'] != null)
+            titleObjectNameController.text =
+                metadataMap['ObjectName'].toString();
+          if (metadataMap['Category'] != null)
+            categoryController.text = metadataMap['Category'].toString();
+          if (metadataMap['SupplementalCategories1'] != null)
+            suppCat1Controller.text =
+                metadataMap['SupplementalCategories1'].toString();
+          if (metadataMap['SupplementalCategories2'] != null)
+            suppCat2Controller.text =
+                metadataMap['SupplementalCategories2'].toString();
+          if (metadataMap['SupplementalCategories3'] != null)
+            suppCat3Controller.text =
+                metadataMap['SupplementalCategories3'].toString();
+          if (metadataMap['SpecialInstructions'] != null)
+            specialInstructionsController.text =
+                metadataMap['SpecialInstructions'].toString();
+
+          // Date and time are intentionally NOT pasted
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Metadata pasted (date/time preserved)!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error pasting metadata!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
@@ -407,6 +955,76 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color: Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                // Copy button
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blue.shade300),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      print('DEBUG: Copy button pressed!');
+                      _copyMetadata();
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.copy,
+                              size: 14, color: Colors.blue.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Copy',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Paste button
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.green.shade300),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      print('DEBUG: Paste button pressed!');
+                      _pasteMetadata();
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.paste,
+                              size: 14, color: Colors.green.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Paste',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -539,6 +1157,14 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                   ),
                   const SizedBox(height: 8),
                   _buildField('Stadium', stadiumController),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: _buildDateField()),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildTimeField()),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -565,6 +1191,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     stadiumController.dispose();
     cityController.dispose();
     provinceController.dispose();
+    dateController.dispose();
+    timeController.dispose();
     titleObjectNameController.dispose();
     categoryController.dispose();
     suppCat1Controller.dispose();

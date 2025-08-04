@@ -53,6 +53,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final GlobalKey _metadataKey2 = GlobalKey();
   final GlobalKey _captionFieldsKey1 = GlobalKey();
   final GlobalKey _captionFieldsKey2 = GlobalKey();
+  final GlobalKey _picturePreviewKey1 = GlobalKey();
+  final GlobalKey _picturePreviewKey2 = GlobalKey();
 
   // Cached player data to prevent re-fetching
   List<Player> _cachedHomeRoster = [];
@@ -209,6 +211,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Urgency',
         '-Country',
         '-CountryCode',
+        '-TimeDate',
         '-DateTimeOriginal',
         '-CreateDate',
         '-ModifyDate',
@@ -307,6 +310,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
         if (proc.exitCode == 0) {
           print('IPTC metadata saved successfully');
+
+          // Debug: Verify caption was actually written
+          final verifyProc =
+              await Process.run('exiftool', ['-Caption-Abstract', imagePath]);
+          print('DEBUG: Caption verification after save: ${verifyProc.stdout}');
+
+          // Force refresh EXIF data immediately
+          _refreshPicturePreviewExif();
         } else {
           print('Exiftool error saving metadata: ${proc.stderr}');
         }
@@ -318,40 +329,28 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Copy IPTC data from current image
-  void _copyIptcData() {
-    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
-    
-    final imagePath = imagePaths[currentIndex];
-    print('Copying IPTC data from: $imagePath');
-    
-    // TODO: Implement clipboard functionality
-    // For now, just print the current metadata
-    print('Current metadata to copy: $currentMetadata');
-  }
+  // Refresh the picture preview EXIF data
+  void _refreshPicturePreviewExif() {
+    print('DEBUG: Attempting to refresh picture preview EXIF data');
+    print('DEBUG: Current image index: $currentIndex');
+    print(
+        'DEBUG: Current image path: ${imagePaths.isNotEmpty ? imagePaths[currentIndex] : "none"}');
 
-  // Paste IPTC data to current image
-  void _pasteIptcData() {
-    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
-    
-    final imagePath = imagePaths[currentIndex];
-    print('Pasting IPTC data to: $imagePath');
-    
-    // TODO: Implement clipboard functionality
-    // For now, just print that we would paste
-    print('Would paste IPTC data to: $imagePath');
-  }
+    // Try to access the picture preview widget and refresh its EXIF data
+    final picturePreviewState1 =
+        _picturePreviewKey1.currentState as PicturePreviewWidgetState?;
+    final picturePreviewState2 =
+        _picturePreviewKey2.currentState as PicturePreviewWidgetState?;
 
-  // FTP current image
-  void _ftpImage() {
-    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
-    
-    final imagePath = imagePaths[currentIndex];
-    print('FTP image: $imagePath');
-    
-    // TODO: Implement FTP functionality
-    // For now, just print that we would FTP
-    print('Would FTP image: $imagePath');
+    if (picturePreviewState1 != null) {
+      print('DEBUG: Found picture preview state 1, refreshing EXIF data');
+      picturePreviewState1.refreshExifData();
+    } else if (picturePreviewState2 != null) {
+      print('DEBUG: Found picture preview state 2, refreshing EXIF data');
+      picturePreviewState2.refreshExifData();
+    } else {
+      print('DEBUG: No picture preview state found');
+    }
   }
 
   // Sort images by date taken from EXIF DateTimeOriginal
@@ -618,6 +617,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         // TOP LEFT BOX - Picture Preview
                         Expanded(
                           child: PicturePreviewWidget(
+                            key: _picturePreviewKey1,
                             imagePaths: imagePaths,
                             currentIndex: currentIndex,
                             onImageSelected: _onImageSelected,
@@ -632,9 +632,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                               }
                             },
                             onSaveIptc: _saveIptcMetadata,
-                            onCopyIptc: _copyIptcData,
-                            onPasteIptc: _pasteIptcData,
-                            onFtpImage: _ftpImage,
                           ),
                         ),
 
@@ -647,9 +644,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             loadingProgress: _isLoadingThumbnails
                                 ? _thumbnailLoadingProgress
                                 : null,
-                            onCopyIptc: _copyIptcData,
-                            onPasteIptc: _pasteIptcData,
-                            onFtpImages: _ftpImage,
                           ),
                         ),
                       ],
@@ -834,6 +828,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   // TOP LEFT BOX - Picture Preview
                   Expanded(
                     child: PicturePreviewWidget(
+                      key: _picturePreviewKey2,
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
                       onImageSelected: _onImageSelected,
@@ -848,9 +843,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         }
                       },
                       onSaveIptc: _saveIptcMetadata,
-                      onCopyIptc: _copyIptcData,
-                      onPasteIptc: _pasteIptcData,
-                      onFtpImage: _ftpImage,
                     ),
                   ),
 
@@ -863,9 +855,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       loadingProgress: _isLoadingThumbnails
                           ? _thumbnailLoadingProgress
                           : null,
-                      onCopyIptc: _copyIptcData,
-                      onPasteIptc: _pasteIptcData,
-                      onFtpImages: _ftpImage,
                     ),
                   ),
                 ],
