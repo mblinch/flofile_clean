@@ -9361,7 +9361,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               children: [
                 // Previous button
                 CustomButton(
-                  onTap: () {
+                  onTap: () async {
+                    // Save IPTC metadata before navigating
+                    if (widget.onSaveIptc != null) {
+                      await widget.onSaveIptc!();
+                    }
                     widget.onPreviousImage?.call();
                   },
                   child: Container(
@@ -9422,7 +9426,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 4),
                 // Next button
                 CustomButton(
-                  onTap: () {
+                  onTap: () async {
+                    // Save IPTC metadata before navigating
+                    if (widget.onSaveIptc != null) {
+                      await widget.onSaveIptc!();
+                    }
                     widget.onNextImage?.call();
                   },
                   child: Container(
