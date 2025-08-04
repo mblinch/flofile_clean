@@ -318,6 +318,42 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  // Copy IPTC data from current image
+  void _copyIptcData() {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+    
+    final imagePath = imagePaths[currentIndex];
+    print('Copying IPTC data from: $imagePath');
+    
+    // TODO: Implement clipboard functionality
+    // For now, just print the current metadata
+    print('Current metadata to copy: $currentMetadata');
+  }
+
+  // Paste IPTC data to current image
+  void _pasteIptcData() {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+    
+    final imagePath = imagePaths[currentIndex];
+    print('Pasting IPTC data to: $imagePath');
+    
+    // TODO: Implement clipboard functionality
+    // For now, just print that we would paste
+    print('Would paste IPTC data to: $imagePath');
+  }
+
+  // FTP current image
+  void _ftpImage() {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+    
+    final imagePath = imagePaths[currentIndex];
+    print('FTP image: $imagePath');
+    
+    // TODO: Implement FTP functionality
+    // For now, just print that we would FTP
+    print('Would FTP image: $imagePath');
+  }
+
   // Sort images by date taken from EXIF DateTimeOriginal
   Future<void> _sortImagesByDateTaken(List<String> imageFiles) async {
     print('Sorting ${imageFiles.length} images by date taken...');
@@ -596,6 +632,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                               }
                             },
                             onSaveIptc: _saveIptcMetadata,
+                            onCopyIptc: _copyIptcData,
+                            onPasteIptc: _pasteIptcData,
+                            onFtpImage: _ftpImage,
                           ),
                         ),
 
@@ -608,6 +647,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             loadingProgress: _isLoadingThumbnails
                                 ? _thumbnailLoadingProgress
                                 : null,
+                            onCopyIptc: _copyIptcData,
+                            onPasteIptc: _pasteIptcData,
+                            onFtpImages: _ftpImage,
                           ),
                         ),
                       ],
@@ -806,6 +848,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         }
                       },
                       onSaveIptc: _saveIptcMetadata,
+                      onCopyIptc: _copyIptcData,
+                      onPasteIptc: _pasteIptcData,
+                      onFtpImage: _ftpImage,
                     ),
                   ),
 
@@ -818,6 +863,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       loadingProgress: _isLoadingThumbnails
                           ? _thumbnailLoadingProgress
                           : null,
+                      onCopyIptc: _copyIptcData,
+                      onPasteIptc: _pasteIptcData,
+                      onFtpImages: _ftpImage,
                     ),
                   ),
                 ],

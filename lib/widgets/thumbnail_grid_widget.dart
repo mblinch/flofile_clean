@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
+import 'context_menu_widget.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -11,6 +12,9 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Function(int) onImageSelected;
   final ScrollController? scrollController;
   final double? loadingProgress; // Add loading progress parameter
+  final VoidCallback? onCopyIptc;
+  final VoidCallback? onPasteIptc;
+  final VoidCallback? onFtpImages;
 
   const ThumbnailGridWidget({
     super.key,
@@ -19,6 +23,9 @@ class ThumbnailGridWidget extends StatefulWidget {
     required this.onImageSelected,
     this.scrollController,
     this.loadingProgress,
+    this.onCopyIptc,
+    this.onPasteIptc,
+    this.onFtpImages,
   });
 
   @override
@@ -39,6 +46,11 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   bool _isLoadingThumbnails = false;
   int _loadedThumbnails = 0;
   List<String> _previousImagePaths = [];
+  
+  // Context menu state
+  bool _showContextMenu = false;
+  Offset _contextMenuPosition = Offset.zero;
+  int _selectedThumbnailIndex = -1;
 
   String _formatTime(String? dateTimeStr) {
     if (dateTimeStr == null) return '';
@@ -190,14 +202,16 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         ((containerWidth - _thumbSpacing) / (_thumbSize + _thumbSpacing))
             .floor();
 
-    return Container(
-      margin: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.0),
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
-      ),
-      child: Column(
+    return Stack(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300, width: 1.0),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+          ),
+          child: Column(
         children: [
           // Header with image count only
           Container(
@@ -247,7 +261,22 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 return MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
-                    onTap: () => widget.onImageSelected(index),
+                    onTap: () {
+                      if (_showContextMenu) {
+                        setState(() {
+                          _showContextMenu = false;
+                        });
+                      } else {
+                        widget.onImageSelected(index);
+                      }
+                    },
+                    onSecondaryTapDown: (details) {
+                      setState(() {
+                        _showContextMenu = true;
+                        _contextMenuPosition = details.globalPosition;
+                        _selectedThumbnailIndex = index;
+                      });
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       decoration: BoxDecoration(
@@ -429,6 +458,33 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           ),
         ],
       ),
+        ),
+        
+        // Context menu overlay
+        if (_showContextMenu)
+          ContextMenuWidget(
+            selectedCount: 1,
+            position: _contextMenuPosition,
+            onCopyIptc: () {
+              setState(() {
+                _showContextMenu = false;
+              });
+              widget.onCopyIptc?.call();
+            },
+            onPasteIptc: () {
+              setState(() {
+                _showContextMenu = false;
+              });
+              widget.onPasteIptc?.call();
+            },
+            onFtpImages: () {
+              setState(() {
+                _showContextMenu = false;
+              });
+              widget.onFtpImages?.call();
+            },
+          ),
+      ],
     );
   }
 

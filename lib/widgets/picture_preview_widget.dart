@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import 'context_menu_widget.dart';
 
 class PicturePreviewWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -12,6 +13,9 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function() onNextImage;
   final Function() onPreviousImage;
   final Future<void> Function()? onSaveIptc;
+  final VoidCallback? onCopyIptc;
+  final VoidCallback? onPasteIptc;
+  final VoidCallback? onFtpImage;
 
   const PicturePreviewWidget({
     super.key,
@@ -21,6 +25,9 @@ class PicturePreviewWidget extends StatefulWidget {
     required this.onNextImage,
     required this.onPreviousImage,
     this.onSaveIptc,
+    this.onCopyIptc,
+    this.onPasteIptc,
+    this.onFtpImage,
   });
 
   @override
@@ -31,6 +38,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
   // EXIF data state
   Map<String, dynamic>? _exifData;
   bool _isLoadingExif = false;
+  
+  // Context menu state
+  bool _showContextMenu = false;
+  Offset _contextMenuPosition = Offset.zero;
 
   @override
   void initState() {
@@ -213,7 +224,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
         children: [
           // EXIF data section at top - Always reserve space to prevent layout shifts
           Container(
-            height: 28, // Fixed height to prevent layout shifts (4px padding top/bottom + 20px content)
+            height:
+                28, // Fixed height to prevent layout shifts (4px padding top/bottom + 20px content)
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
@@ -254,7 +266,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                               Padding(
                                 padding: const EdgeInsets.only(left: 8),
                                 child: Text(
-                                  _formatShutterSpeed(_exifData!['ShutterSpeed']),
+                                  _formatShutterSpeed(
+                                      _exifData!['ShutterSpeed']),
                                   style: const TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey,
@@ -320,38 +333,53 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                 Expanded(
                   child: Stack(
                     children: [
-                      // Main image
-                      ExtendedImage.file(
-                        File(currentImagePath),
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                        width: double.infinity,
-                        height: double.infinity,
-                        loadStateChanged: (ExtendedImageState state) {
-                          switch (state.extendedImageLoadState) {
-                            case LoadState.loading:
-                              return Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                    child: CircularProgressIndicator()),
-                              );
-                            case LoadState.completed:
-                              return null; // Use default completed state
-                            case LoadState.failed:
-                              return Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                  child: Icon(Icons.error,
-                                      color: Colors.red, size: 48),
-                                ),
-                              );
+                      // Main image with right-click context menu
+                      GestureDetector(
+                        onSecondaryTapDown: (details) {
+                          setState(() {
+                            _showContextMenu = true;
+                            _contextMenuPosition = details.globalPosition;
+                          });
+                        },
+                        onTap: () {
+                          if (_showContextMenu) {
+                            setState(() {
+                              _showContextMenu = false;
+                            });
                           }
                         },
-                        mode: ExtendedImageMode.none, // No zoom/pan for speed
+                        child: ExtendedImage.file(
+                          File(currentImagePath),
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                          width: double.infinity,
+                          height: double.infinity,
+                          loadStateChanged: (ExtendedImageState state) {
+                            switch (state.extendedImageLoadState) {
+                              case LoadState.loading:
+                                return Container(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  color: Colors.grey.shade200,
+                                  child: const Center(
+                                      child: CircularProgressIndicator()),
+                                );
+                              case LoadState.completed:
+                                return null; // Use default completed state
+                              case LoadState.failed:
+                                return Container(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  color: Colors.grey.shade200,
+                                  child: const Center(
+                                    child: Icon(Icons.error,
+                                        color: Colors.red, size: 48),
+                                  ),
+                                );
+                            }
+                          },
+                          mode: ExtendedImageMode.none, // No zoom/pan for speed
+                        ),
                       ),
 
                       // Zoom button
@@ -377,6 +405,31 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget> {
                           ),
                         ),
                       ),
+                      
+                      // Context menu overlay
+                      if (_showContextMenu)
+                        ContextMenuWidget(
+                          selectedCount: 1,
+                          position: _contextMenuPosition,
+                          onCopyIptc: () {
+                            setState(() {
+                              _showContextMenu = false;
+                            });
+                            widget.onCopyIptc?.call();
+                          },
+                          onPasteIptc: () {
+                            setState(() {
+                              _showContextMenu = false;
+                            });
+                            widget.onPasteIptc?.call();
+                          },
+                          onFtpImages: () {
+                            setState(() {
+                              _showContextMenu = false;
+                            });
+                            widget.onFtpImage?.call();
+                          },
+                        ),
                     ],
                   ),
                 ),
