@@ -1673,9 +1673,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             const SizedBox(width: 8),
                             // Sort by options (only show when in List mode)
-                            if (!(isHome
-                                ? _homePlayerGridMode
-                                : _awayPlayerGridMode)) ...[
+                            if (true) ...[
                               Text(
                                 'Sort by: ',
                                 style: const TextStyle(
