@@ -964,7 +964,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.grey.shade300,
+                                        color: Colors.grey.shade400,
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
                                             color: Colors.grey.shade300),
@@ -986,7 +986,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 24),
                                   // Prev button
                                   CustomButton(
                                     onTap: () async {
@@ -9750,7 +9750,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: Colors.grey.shade400,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.grey.shade300),
               ),
@@ -9768,7 +9768,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 24),
           // Settings button
           CustomButton(
             onTap: _showFtpSettings,
