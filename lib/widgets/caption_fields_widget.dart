@@ -2055,6 +2055,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _selectedVerb ==
                                                   'Comes Off the Field' ||
                                               _selectedVerb ==
+                                                  'National Anthem' ||
+                                              _selectedVerb ==
                                                   'Post Game Win' ||
                                               _selectedVerb == 'Post Game Loss')
                                           ? _buildInningOnlyInterface()
@@ -4733,6 +4735,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Runs Off Field' ||
         verbToUse == 'Takes the Field' ||
         verbToUse == 'Comes Off the Field' ||
+        verbToUse == 'National Anthem' ||
         verbToUse == 'Post Game Win' ||
         verbToUse == 'Post Game Loss' ||
         verbToUse == 'Batting Practice' ||
@@ -6732,6 +6735,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return 'comes off the field';
         } else {
           return 'comes off the field against the ${_getOpposingTeamName()}';
+        }
+      case 'National Anthem':
+        // Check if multiple players are selected
+        final activePlayers = selectedHomePlayers.union(selectedAwayPlayers);
+        final isMultiplePlayers = activePlayers.length > 1;
+
+        if (_isPriorToGame) {
+          return isMultiplePlayers ? 'look on' : 'looks on';
+        } else {
+          final action = isMultiplePlayers ? 'look on' : 'looks on';
+          return '$action during the national anthem against the ${_getOpposingTeamName()}';
         }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
@@ -9886,10 +9900,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ],
               ),
 
-              // Prior to the game option (for "Looks On", "Takes the Field", and "Comes Off the Field" verbs) - placed below innings
+              // Prior to the game option (for "Looks On", "Takes the Field", "Comes Off the Field", and "National Anthem" verbs) - placed below innings
               if (_selectedVerb == 'Looks On' ||
                   _selectedVerb == 'Takes the Field' ||
-                  _selectedVerb == 'Comes Off the Field') ...[
+                  _selectedVerb == 'Comes Off the Field' ||
+                  _selectedVerb == 'National Anthem') ...[
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () {
