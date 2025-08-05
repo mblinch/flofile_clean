@@ -2187,11 +2187,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       : (_selectedVerb ==
                                                               'Dejection')
                                                           ? _buildDejectionInterface()
-                                                                                                                    : (_selectedVerb ==
-                                                              'National Anthem' ||
-                                                              _selectedVerb ==
-                                                              'Stretching')
-                                                          ? _buildNationalAnthemInterface()
+                                                          : (_selectedVerb ==
+                                                                      'National Anthem' ||
+                                                                  _selectedVerb ==
+                                                                      'Stretching')
+                                                              ? _buildNationalAnthemInterface()
                                                               : Column(
                                                                   crossAxisAlignment:
                                                                       CrossAxisAlignment
@@ -6802,14 +6802,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final isMultiplePlayers = activePlayers.length > 1;
 
         final action = isMultiplePlayers ? 'look on' : 'looks on';
-        return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
+        return '$action during the national anthem prior to play against the other team';
       case 'Stretching':
         // Check if multiple players are selected
-        final activePlayersStretching = selectedHomePlayers.union(selectedAwayPlayers);
+        final activePlayersStretching =
+            selectedHomePlayers.union(selectedAwayPlayers);
         final isMultiplePlayersStretching = activePlayersStretching.length > 1;
 
-        final actionStretching = isMultiplePlayersStretching ? 'stretch' : 'stretches';
-        return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
+        final actionStretching =
+            isMultiplePlayersStretching ? 'stretch' : 'stretches';
+        return '$actionStretching prior to play against the other team';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
