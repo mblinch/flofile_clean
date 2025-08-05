@@ -10806,7 +10806,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       height: 80,
                       child: _buildReusableInningSelector(),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: RichText(
