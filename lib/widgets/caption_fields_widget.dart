@@ -4804,8 +4804,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         teamName = opponentPart.replaceAll(' against ', '');
       }
 
-
-
       // If teamName is empty, try to get it from the opponent team
       if (teamName.isEmpty && opponentTeamName != null) {
         teamName = opponentTeamName;
@@ -6721,7 +6719,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Runs Off Field':
         return 'runs off the field against the ${_getOpposingTeamName()}';
       case 'Takes the Field':
-        return 'takes the field against the ${_getOpposingTeamName()}';
+        if (_isPriorToGame) {
+          return 'takes the field';
+        } else {
+          return 'takes the field against the ${_getOpposingTeamName()}';
+        }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
@@ -9875,8 +9877,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ],
               ),
 
-              // Prior to the game option (only for "Looks On" verb) - placed below innings
-              if (_selectedVerb == 'Looks On') ...[
+              // Prior to the game option (for "Looks On" and "Takes the Field" verbs) - placed below innings
+              if (_selectedVerb == 'Looks On' || _selectedVerb == 'Takes the Field') ...[
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () {
