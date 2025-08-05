@@ -9764,10 +9764,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildBackButtonWithWidth(double width, {VoidCallback? onPressed}) {
     return Column(
       children: [
-        const SizedBox(height: 8),
-        // Compact action buttons
-        _buildCompactActionButtons(),
-        const SizedBox(height: 8),
         // Back button
         Align(
           alignment: Alignment.centerLeft,
