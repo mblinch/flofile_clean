@@ -180,6 +180,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _awaySortOption = 'number';
   bool _homeSortAscending = true; // true = ascending, false = descending
   bool _awaySortAscending = true;
+
+  // Player display mode - list or grid
+  bool _homePlayerGridMode = false; // false = list, true = grid
+  bool _awayPlayerGridMode = false;
+
   String? selectedCaptionVerb;
 
   // Track which team was selected first (for determining main subject)
@@ -1180,15 +1185,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           // Left Team (Home or Away depending on _homeOnLeft)
           Expanded(
-            flex: 1,
+            flex: 2,
             child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
           ),
 
           const SizedBox(width: 4),
 
-          // Verbs (Center) - 55% of space
+          // Verbs (Center) - 54% of space
           Expanded(
-            flex: 4,
+            flex: 5,
             child: _buildCompactVerbColumn(),
           ),
 
@@ -1196,7 +1201,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           // Right Team (Away or Home depending on _homeOnLeft)
           Expanded(
-            flex: 1,
+            flex: 2,
             child: _buildCompactTeamColumn(_homeOnLeft ? false : true),
           ),
         ],
@@ -1681,6 +1686,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Grid/List toggle button
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (isHome) {
+                                    _homePlayerGridMode = !_homePlayerGridMode;
+                                  } else {
+                                    _awayPlayerGridMode = !_awayPlayerGridMode;
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(3),
+                                  border: Border.all(
+                                      color: Colors.grey.shade300, width: 0.5),
+                                ),
+                                child: Icon(
+                                  isHome
+                                      ? (_homePlayerGridMode
+                                          ? Icons.view_list
+                                          : Icons.grid_view)
+                                      : (_awayPlayerGridMode
+                                          ? Icons.view_list
+                                          : Icons.grid_view),
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1713,72 +1751,213 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: filteredRoster.length,
-                        itemBuilder: (context, index) {
-                          final player = filteredRoster[index];
-                          final isSelected =
-                              selectedPlayers.contains(player.displayName);
+                    : (isHome ? _homePlayerGridMode : _awayPlayerGridMode)
+                        ? _buildPlayerGrid(
+                            filteredRoster, selectedPlayers, isHome)
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filteredRoster.length,
+                            itemBuilder: (context, index) {
+                              final player = filteredRoster[index];
+                              final isSelected =
+                                  selectedPlayers.contains(player.displayName);
 
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isSelected) {
-                                  if (isHome) {
-                                    selectedHomePlayers
-                                        .remove(player.displayName);
-                                  } else {
-                                    selectedAwayPlayers
-                                        .remove(player.displayName);
-                                  }
-                                } else {
-                                  // Track which team was selected first
-                                  if (_firstTeamSelected == null) {
-                                    _firstTeamSelected = isHome;
-                                    _firstPlayerSelected = player.displayName;
-                                  } else {}
-                                  if (isHome) {
-                                    selectedHomePlayers.add(player.displayName);
-                                  } else {
-                                    selectedAwayPlayers.add(player.displayName);
-                                  }
-                                }
-                              });
-                              _updateCaption();
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (isSelected) {
+                                      if (isHome) {
+                                        selectedHomePlayers
+                                            .remove(player.displayName);
+                                      } else {
+                                        selectedAwayPlayers
+                                            .remove(player.displayName);
+                                      }
+                                    } else {
+                                      // Track which team was selected first
+                                      if (_firstTeamSelected == null) {
+                                        _firstTeamSelected = isHome;
+                                        _firstPlayerSelected =
+                                            player.displayName;
+                                      } else {}
+                                      if (isHome) {
+                                        selectedHomePlayers
+                                            .add(player.displayName);
+                                      } else {
+                                        selectedAwayPlayers
+                                            .add(player.displayName);
+                                      }
+                                    }
+                                  });
+                                  _updateCaption();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.grey.shade200
+                                        : Colors.transparent,
+                                    border: Border(
+                                      bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 0.5),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _getFormattedPlayerName(
+                                        player.displayName,
+                                        isHome
+                                            ? _homeSortOption
+                                            : _awaySortOption),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                      color: isSelected
+                                          ? Colors.grey.shade800
+                                          : Colors.black87,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              );
                             },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.grey.shade200
-                                    : Colors.transparent,
-                                border: Border(
-                                  bottom: BorderSide(
-                                      color: Colors.grey.shade200, width: 0.5),
-                                ),
-                              ),
-                              child: Text(
-                                _getFormattedPlayerName(player.displayName,
-                                    isHome ? _homeSortOption : _awaySortOption),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? Colors.grey.shade800
-                                      : Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                          ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlayerGrid(
+      List<Player> roster, Set<String> selectedPlayers, bool isHome) {
+    // Create a map to track which numbers have players
+    Map<int, Player> playersByNumber = {};
+    for (Player player in roster) {
+      int jerseyNum = int.tryParse(player.jerseyNumber ?? '0') ?? 0;
+      playersByNumber[jerseyNum] = player;
+    }
+
+    // Get sorted list of jersey numbers that have players
+    List<int> jerseyNumbers = playersByNumber.keys.toList()..sort();
+
+    // Create rows with 4 squares per row
+    List<Widget> rows = [];
+    List<Widget> currentRow = [];
+
+    for (int jerseyNum in jerseyNumbers) {
+      Player player = playersByNumber[jerseyNum]!;
+      bool isSelected = selectedPlayers.contains(player.displayName);
+
+      currentRow.add(
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isSelected) {
+                  if (isHome) {
+                    selectedHomePlayers.remove(player.displayName);
+                  } else {
+                    selectedAwayPlayers.remove(player.displayName);
+                  }
+                } else {
+                  // Track which team was selected first
+                  if (_firstTeamSelected == null) {
+                    _firstTeamSelected = isHome;
+                    _firstPlayerSelected = player.displayName;
+                  }
+                  if (isHome) {
+                    selectedHomePlayers.add(player.displayName);
+                  } else {
+                    selectedAwayPlayers.add(player.displayName);
+                  }
+                }
+              });
+              _updateCaption();
+            },
+            child: Container(
+              margin: const EdgeInsets.all(1),
+              height: 40,
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color:
+                      isSelected ? Colors.blue.shade300 : Colors.grey.shade300,
+                  width: 0.5,
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      jerseyNum.toString(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
+                        color:
+                            isSelected ? Colors.blue.shade700 : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      player.fullName.split(' ').last,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color:
+                            isSelected ? Colors.blue.shade700 : Colors.black54,
+                      ),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // When we have 4 items in the current row, add it to rows and start a new row
+      if (currentRow.length == 4) {
+        rows.add(Row(children: currentRow));
+        currentRow = [];
+      }
+    }
+
+    // Add any remaining items in the last row
+    if (currentRow.isNotEmpty) {
+      // Fill the remaining slots with empty containers to maintain 4-column layout
+      while (currentRow.length < 4) {
+        currentRow.add(
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.all(1),
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.transparent, width: 0.5),
+              ),
+            ),
+          ),
+        );
+      }
+      rows.add(Row(children: currentRow));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        children: rows,
       ),
     );
   }
@@ -2189,18 +2368,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                     ]),
                                                                                   ),
                                                                                   const SizedBox(width: 2),
-                                                                                  // Favorites column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Favorites', [
-                                                                                      '',
-                                                                                      '',
-                                                                                      '',
-                                                                                      '',
-                                                                                      '',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
                                                                                 ],
                                                                               ),
                                                                             ); // Close Container for Wrap
@@ -2463,7 +2630,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -2476,7 +2643,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         child: Text(
           verb,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
@@ -2726,8 +2893,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(child: _buildVerbChip('Running', 'Running')),
             const SizedBox(width: 2),
             Expanded(child: _buildVerbChip('Reactions', 'Reactions')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Non Game-Action', 'Favorites')),
             const SizedBox(width: 2),
             Expanded(child: _buildVerbChip('Magic', 'Magic')),
           ],
