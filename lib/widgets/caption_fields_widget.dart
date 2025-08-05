@@ -2394,9 +2394,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                 4), // Padding between Magic Bar and verb categories
 
                                                                         // Verb categories (hidden when custom text is being used or when certain verbs are selected)
-                                                                        if (!customBetweenPlayersController.text.isNotEmpty &&
-                                                                            _selectedVerb !=
-                                                                                'Home Run') ...[
+                                                                                                if (customBetweenPlayersController.text.isEmpty && _selectedVerb != 'Home Run') ...[
                                                                           Container(
                                                                             height:
                                                                                 500, // Increased height for verb area
@@ -2727,7 +2725,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedHomeRunType = null;
             _rbiCount = null;
             _selectedRbiInning = null;
-            
+
             // Clear magic bar text for Home Run to ensure verb categories are hidden
             if (verb == 'Home Run') {
               customBetweenPlayersController.clear();
