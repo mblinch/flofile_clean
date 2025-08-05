@@ -6856,14 +6856,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           if (_managerName.isNotEmpty) {
             if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.join(' and ');
+              final remainingPlayerNames = remainingPlayers.length == 1 
+                  ? remainingPlayers.first 
+                  : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
               return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
               return '$firstPlayerName is taken out of the game by manager $_managerName in a break in play$inningText against the ${_getOpposingTeamName()}';
             }
           } else {
             if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.join(' and ');
+              final remainingPlayerNames = remainingPlayers.length == 1 
+                  ? remainingPlayers.first 
+                  : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
               return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
               return '$firstPlayerName is taken out of the game in a break in play$inningText against the ${_getOpposingTeamName()}';
