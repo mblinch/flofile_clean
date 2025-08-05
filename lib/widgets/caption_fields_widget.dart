@@ -6817,10 +6817,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : 'takes part in warm ups';
         return '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
       case 'Pitching Change':
+        String inningText = '';
+        if (_selectedRbiInning != null) {
+          inningText = ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
+        }
+        
         if (_managerName.isNotEmpty) {
-          return 'pitcher taken out of the game by manager $_managerName during a break in play against the ${_getOpposingTeamName()}';
+          return 'pitcher taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
         } else {
-          return 'pitcher taken out of the game during a break in play against the ${_getOpposingTeamName()}';
+          return 'pitcher taken out of the game$inningText against the ${_getOpposingTeamName()}';
         }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
@@ -10729,13 +10734,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Manager:',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                      style:
+                          TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
                     TextField(
@@ -10743,7 +10750,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       decoration: const InputDecoration(
                         hintText: 'Enter manager name...',
                         border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         isDense: true,
                       ),
                       style: const TextStyle(fontSize: 11),
@@ -10753,6 +10761,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         });
                         _updateCaption();
                       },
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text(
+                          'Inning:',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _showCompactInningSelector,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              child: Text(
+                                _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : 'Select inning...',
+                                style: const TextStyle(fontSize: 11),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
