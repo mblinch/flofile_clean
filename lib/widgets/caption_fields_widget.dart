@@ -6830,17 +6830,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
 
         // Get selected players
-        final selectedPlayers = selectedHomePlayers.isNotEmpty 
-            ? selectedHomePlayers 
+        final selectedPlayers = selectedHomePlayers.isNotEmpty
+            ? selectedHomePlayers
             : selectedAwayPlayers;
-        
+
         if (selectedPlayers.isNotEmpty) {
-          final playerNames = selectedPlayers.map((name) => _getFormattedPlayerName(name, 'number')).join(', ');
+          final firstPlayer = selectedPlayers.first;
+          final firstPlayerName = _getFormattedPlayerName(firstPlayer, 'number');
+          
+          // Get remaining players for "stand on the mound" part
+          final remainingPlayers = selectedPlayers.skip(1).toList();
           
           if (_managerName.isNotEmpty) {
-            return '$playerNames taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+            if (remainingPlayers.isNotEmpty) {
+              final remainingPlayerNames = remainingPlayers
+                  .map((name) => _getFormattedPlayerName(name, 'number'))
+                  .join(' and ');
+              return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound$inningText against the ${_getOpposingTeamName()}';
+            } else {
+              return '$firstPlayerName is taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+            }
           } else {
-            return '$playerNames taken out of the game$inningText against the ${_getOpposingTeamName()}';
+            if (remainingPlayers.isNotEmpty) {
+              final remainingPlayerNames = remainingPlayers
+                  .map((name) => _getFormattedPlayerName(name, 'number'))
+                  .join(' and ');
+              return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound$inningText against the ${_getOpposingTeamName()}';
+            } else {
+              return '$firstPlayerName is taken out of the game$inningText against the ${_getOpposingTeamName()}';
+            }
           }
         } else {
           if (_managerName.isNotEmpty) {
