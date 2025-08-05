@@ -2733,7 +2733,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               customBetweenPlayersController.clear();
               print('DEBUG: Home Run selected - cleared magic bar text');
               print('DEBUG: _selectedVerb = $_selectedVerb');
-              print('DEBUG: customBetweenPlayersController.text = "${customBetweenPlayersController.text}"');
+              print(
+                  'DEBUG: customBetweenPlayersController.text = "${customBetweenPlayersController.text}"');
             }
           }
         });
@@ -7921,8 +7922,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Magic bar (always visible)
-        Container(
+        // Magic bar (always visible) - COMMENTED OUT for Home Run to hide magic bar
+        /* Container(
           width: double.infinity,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -8213,9 +8214,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
             ],
           ),
-        ),
+        ), */
 
-        const SizedBox(height: 4),
+        // const SizedBox(height: 4), // Commented out with magic bar
 
         // Selected home run type indicator
         Container(
