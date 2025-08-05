@@ -10815,15 +10815,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             TextSpan(
                               text: 'Protip: ',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 color: Colors.grey.shade600,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             TextSpan(
-                              text: 'Select other players that are on the mound',
+                              text:
+                                  'Select other players that are on the mound',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 color: Colors.grey.shade600,
                               ),
                             ),
