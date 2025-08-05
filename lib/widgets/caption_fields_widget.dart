@@ -10806,6 +10806,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       height: 80,
                       child: _buildReusableInningSelector(),
                     ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      child: Text(
+                        'Select other players that are on the mound',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     // Reset, Settings, and FTP buttons
                     _buildCompactActionButtons(),
