@@ -10808,6 +10808,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     const SizedBox(height: 8),
                     // Reset, Settings, and FTP buttons
                     _buildCompactActionButtons(),
+                    const SizedBox(height: 8),
+                    // Back button
+                    _buildVerbOptionsBackButton(),
                   ],
                 ),
               ),
