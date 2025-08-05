@@ -1673,7 +1673,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             const SizedBox(width: 8),
                             // Sort by options (only show when in List mode)
-                            if (!(isHome ? _homePlayerGridMode : _awayPlayerGridMode)) ...[
+                            if (!(isHome
+                                ? _homePlayerGridMode
+                                : _awayPlayerGridMode)) ...[
                               Text(
                                 'Sort by: ',
                                 style: const TextStyle(
@@ -1687,7 +1689,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       if (isHome) {
                                         if (_homeSortOption == 'number') {
                                           _homeSortOption = 'lastName';
-                                        } else if (_homeSortOption == 'lastName') {
+                                        } else if (_homeSortOption ==
+                                            'lastName') {
                                           _homeSortOption = 'firstName';
                                         } else {
                                           _homeSortOption = 'number';
@@ -1695,7 +1698,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       } else {
                                         if (_awaySortOption == 'number') {
                                           _awaySortOption = 'lastName';
-                                        } else if (_awaySortOption == 'lastName') {
+                                        } else if (_awaySortOption ==
+                                            'lastName') {
                                           _awaySortOption = 'firstName';
                                         } else {
                                           _awaySortOption = 'number';
@@ -1705,8 +1709,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   },
                                   child: Text(
                                     isHome
-                                        ? (_homeSortOption == 'number' ? 'Number' : _homeSortOption == 'lastName' ? 'Last Name' : 'First Name')
-                                        : (_awaySortOption == 'number' ? 'Number' : _awaySortOption == 'lastName' ? 'Last Name' : 'First Name'),
+                                        ? (_homeSortOption == 'number'
+                                            ? 'Number'
+                                            : _homeSortOption == 'lastName'
+                                                ? 'Last Name'
+                                                : 'First Name')
+                                        : (_awaySortOption == 'number'
+                                            ? 'Number'
+                                            : _awaySortOption == 'lastName'
+                                                ? 'Last Name'
+                                                : 'First Name'),
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.black87,
@@ -1817,7 +1829,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? Colors.grey.shade200
+                                        ? Colors.grey.shade300
                                         : Colors.transparent,
                                     border: Border(
                                       bottom: BorderSide(
