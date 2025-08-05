@@ -4747,8 +4747,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
       }
     } else {
-      // For other actions, use all active players
-      playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      // For Pitching Change, don't set playerName since it's handled in actionPhrase
+      if (verbToUse == 'Pitching Change') {
+        playerName = '';
+      } else {
+        // For other actions, use all active players
+        playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+      }
     }
 
     // Build the action phrase based on selected verb
@@ -6836,28 +6841,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         if (selectedPlayers.isNotEmpty) {
           final firstPlayer = selectedPlayers.first;
-          final firstPlayerName = _getFormattedPlayerName(firstPlayer, 'number');
-          
+          final firstPlayerName =
+              _getFormattedPlayerName(firstPlayer, 'number');
+
           // Get remaining players for "stand on the mound" part
           final remainingPlayers = selectedPlayers.skip(1).toList();
-          
+
           if (_managerName.isNotEmpty) {
             if (remainingPlayers.isNotEmpty) {
               final remainingPlayerNames = remainingPlayers
                   .map((name) => _getFormattedPlayerName(name, 'number'))
                   .join(' and ');
-              return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound$inningText against the ${_getOpposingTeamName()}';
+              return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
-              return '$firstPlayerName is taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+              return '$firstPlayerName is taken out of the game by manager $_managerName in a break in play$inningText against the ${_getOpposingTeamName()}';
             }
           } else {
             if (remainingPlayers.isNotEmpty) {
               final remainingPlayerNames = remainingPlayers
                   .map((name) => _getFormattedPlayerName(name, 'number'))
                   .join(' and ');
-              return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound$inningText against the ${_getOpposingTeamName()}';
+              return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
-              return '$firstPlayerName is taken out of the game$inningText against the ${_getOpposingTeamName()}';
+              return '$firstPlayerName is taken out of the game in a break in play$inningText against the ${_getOpposingTeamName()}';
             }
           }
         } else {
