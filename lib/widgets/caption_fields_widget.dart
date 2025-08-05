@@ -1672,6 +1672,50 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            // Sort by options (only show when in List mode)
+                            if (!(isHome ? _homePlayerGridMode : _awayPlayerGridMode)) ...[
+                              Text(
+                                'Sort by: ',
+                                style: const TextStyle(
+                                    fontSize: 10, color: Colors.grey),
+                              ),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      if (isHome) {
+                                        if (_homeSortOption == 'number') {
+                                          _homeSortOption = 'lastName';
+                                        } else if (_homeSortOption == 'lastName') {
+                                          _homeSortOption = 'firstName';
+                                        } else {
+                                          _homeSortOption = 'number';
+                                        }
+                                      } else {
+                                        if (_awaySortOption == 'number') {
+                                          _awaySortOption = 'lastName';
+                                        } else if (_awaySortOption == 'lastName') {
+                                          _awaySortOption = 'firstName';
+                                        } else {
+                                          _awaySortOption = 'number';
+                                        }
+                                      }
+                                    });
+                                  },
+                                  child: Text(
+                                    isHome
+                                        ? (_homeSortOption == 'number' ? 'Number' : _homeSortOption == 'lastName' ? 'Last Name' : 'First Name')
+                                        : (_awaySortOption == 'number' ? 'Number' : _awaySortOption == 'lastName' ? 'Last Name' : 'First Name'),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             // Ascending/Descending button
                             MouseRegion(
                               cursor: SystemMouseCursors.click,
