@@ -834,10 +834,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     flex: 8,
                     child: Column(
                       children: [
-                        // Caption Preview and Personality Box (Side by Side)
+                        // Caption and Personality boxes side by side
                         Row(
                           children: [
-                            // Caption Preview (Full width)
+                            // Caption Preview (Left side)
                             Expanded(
                               child: TextField(
                                 controller: captionController,
@@ -875,10 +875,295 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 12),
+                            // Personality Box (Right side)
+                            Expanded(
+                              child: TextField(
+                                controller: personalityController,
+                                maxLines: 3,
+                                style: const TextStyle(fontSize: 12),
+                                decoration: InputDecoration(
+                                  labelText: 'Personality',
+                                  floatingLabelBehavior:
+                                      FloatingLabelBehavior.always,
+                                  hintText: 'Personality tags...',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade400),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade400),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide(
+                                        color: Colors.blue.shade400, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.all(8),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade50,
+                                  labelStyle: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 1),
+
+                        // Action buttons row under caption box
+                        Row(
+                          children: [
+                            // FTP button
+                            CustomButton(
+                              onTap: _disableFtp ? null : _onFtpPressed,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _disableFtp
+                                      ? Colors.grey.shade300
+                                      : const Color(0xFF0052CC),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: _disableFtp
+                                          ? Colors.grey.shade300
+                                          : const Color(0xFF0052CC)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.cloud_upload,
+                                        size: 14,
+                                        color: _disableFtp
+                                            ? Colors.grey.shade600
+                                            : Colors.white),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      _disableFtp ? 'FTP OFF' : 'FTP',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _disableFtp
+                                            ? Colors.grey.shade600
+                                            : Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Settings button
+                            CustomButton(
+                              onTap: _showFtpSettings,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.settings,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Settings',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Copy button
+                            CustomButton(
+                              onTap: () {
+                                _copyMetadataFromCaptionWidget();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.copy,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Copy',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Paste button
+                            CustomButton(
+                              onTap: _pasteMetadataToCaptionWidget,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.paste,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Paste',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Previous button
+                            CustomButton(
+                              onTap: () async {
+                                // Save IPTC metadata before navigating
+                                if (widget.onSaveIptc != null) {
+                                  await widget.onSaveIptc!();
+                                }
+                                widget.onPreviousImage?.call();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.arrow_back,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Prev',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Next button
+                            CustomButton(
+                              onTap: () async {
+                                // Save IPTC metadata before navigating
+                                if (widget.onSaveIptc != null) {
+                                  await widget.onSaveIptc!();
+                                }
+                                widget.onNextImage?.call();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Next',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Icon(Icons.arrow_forward,
+                                        size: 12, color: Colors.grey.shade700),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            // Reset button
+                            CustomButton(
+                              onTap: _resetCaption,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.refresh,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Reset',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 2),
 
                         // Player chips row
                         Container(
@@ -894,7 +1179,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: _buildPlayerChipsHeader(),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 2),
 
                         // Player and Verb Selection Area
                         Expanded(
@@ -904,509 +1189,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                   ),
 
-                  const SizedBox(width: 12),
-
-                  // Action buttons on the side (30% width)
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        // Personality Box
-                        TextField(
-                          controller: personalityController,
-                          maxLines: 3,
-                          style: const TextStyle(fontSize: 12),
-                          decoration: InputDecoration(
-                            labelText: 'Personality',
-                            floatingLabelBehavior: FloatingLabelBehavior.always,
-                            hintText: 'Personality tags...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade400),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade400),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: BorderSide(
-                                  color: Colors.blue.shade400, width: 2),
-                            ),
-                            contentPadding: const EdgeInsets.all(8),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            labelStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // FTP buttons row
-                        Row(
-                          children: [
-                            // Main FTP button
-                            Expanded(
-                              child: CustomButton(
-                                onTap: _disableFtp ? null : _onFtpPressed,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: _disableFtp
-                                        ? Colors.grey.shade300
-                                        : const Color(0xFF0052CC),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(
-                                        color: _disableFtp
-                                            ? Colors.grey.shade300
-                                            : const Color(0xFF0052CC)),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.cloud_upload,
-                                          size: 20,
-                                          color: _disableFtp
-                                              ? Colors.grey.shade600
-                                              : Colors.white),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        _disableFtp ? 'FTP DISABLED' : 'FTP',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: _disableFtp
-                                              ? Colors.grey.shade600
-                                              : Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            // FTP Settings button
-                            CustomButton(
-                              onTap: _showFtpSettings,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.settings,
-                                        size: 16, color: Colors.grey.shade700),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Settings',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Copy and Paste buttons row
-                        Row(
-                          children: [
-                            // Copy button
-                            Expanded(
-                              child: CustomButton(
-                                onTap: () {
-                                  _copyMetadataFromCaptionWidget();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.copy,
-                                          size: 12,
-                                          color: Colors.grey.shade700),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Copy',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            // Paste button
-                            Expanded(
-                              child: CustomButton(
-                                onTap: _pasteMetadataToCaptionWidget,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.paste,
-                                          size: 12,
-                                          color: Colors.grey.shade700),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Paste',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Navigation buttons row
-                        Row(
-                          children: [
-                            // Previous button
-                            Expanded(
-                              child: CustomButton(
-                                onTap: () async {
-                                  // Save IPTC metadata before navigating
-                                  if (widget.onSaveIptc != null) {
-                                    await widget.onSaveIptc!();
-                                  }
-                                  widget.onPreviousImage?.call();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.arrow_back,
-                                          size: 12,
-                                          color: Colors.grey.shade700),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Prev',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            // Next button
-                            Expanded(
-                              child: CustomButton(
-                                onTap: () async {
-                                  // Save IPTC metadata before navigating
-                                  if (widget.onSaveIptc != null) {
-                                    await widget.onSaveIptc!();
-                                  }
-                                  widget.onNextImage?.call();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        'Next',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Icon(Icons.arrow_forward,
-                                          size: 12,
-                                          color: Colors.grey.shade700),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Reset button
-                        CustomButton(
-                          onTap: _resetCaption,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.refresh,
-                                    size: 12, color: Colors.grey.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Reset Caption',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Debug Roster button
-                        CustomButton(
-                          onTap: _debugRosters,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.orange.shade300),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.bug_report,
-                                    size: 12, color: Colors.orange.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Debug Rosters',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.orange.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Test API button
-                        CustomButton(
-                          onTap: _testApiDirectly,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.red.shade300),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.api,
-                                    size: 12, color: Colors.red.shade700),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Test API Directly',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.red.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Options section
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Options:',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-
-                        // Disable FTP checkbox
-                        Row(
-                          children: [
-                            Transform.scale(
-                              scale: 0.6,
-                              child: Checkbox(
-                                value: _disableFtp,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _disableFtp = value ?? false;
-                                  });
-                                },
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                                activeColor: Colors.grey.shade600,
-                                checkColor: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 0),
-                            const Text(
-                              'Disable FTP',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-
-                        // Remove Accent checkbox
-                        Row(
-                          children: [
-                            Transform.scale(
-                              scale: 0.6,
-                              child: Checkbox(
-                                value: _removeAccent,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _removeAccent = value ?? true;
-                                  });
-                                  // Update caption and personality when checkbox is toggled
-                                  _updateCaption();
-                                },
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                                activeColor: Colors.grey.shade600,
-                                checkColor: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 0),
-                            const Text(
-                              'Remove Diacritics (e.g., é → e)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Push folder picker to bottom
-                        const Spacer(),
-
-                        // Folder Picker button
-                        CustomButton(
-                          onTap: _pickFolder,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.orange.shade200),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.folder,
-                                    size: 12, color: Colors.orange.shade600),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Pick Images Folder',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.orange.shade600,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
+                  // Right side removed - personality box is now beside caption box
                 ],
               ),
             ),
@@ -1418,8 +1201,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCaptionBuildingSection() {
     return Container(
-      height: double.infinity,
-      padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(maxHeight: 300),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400, width: 1),
         borderRadius: BorderRadius.circular(8),
@@ -1433,15 +1216,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
           ),
 
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
 
-          // Verbs (Center)
+          // Verbs (Center) - 55% of space
           Expanded(
-            flex: 2,
+            flex: 4,
             child: _buildCompactVerbColumn(),
           ),
 
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
 
           // Right Team (Away or Home depending on _homeOnLeft)
           Expanded(
@@ -2328,14 +2111,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                 (constraints.maxWidth - 8) / 3; // Subtract spacing between columns (4px * 2 gaps)
 
                                                                             return Container(
-                                                                              // Removed debug background for cleaner appearance
-                                                                              child: Wrap(
-                                                                                spacing: 4,
-                                                                                runSpacing: 6,
+                                                                              // 6 columns in one row
+                                                                              child: Row(
+                                                                                crossAxisAlignment: CrossAxisAlignment.start,
                                                                                 children: [
-                                                                                  // First row - 3 columns
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
+                                                                                  // Offense column
+                                                                                  Expanded(
                                                                                     child: _buildVerbCategory('Offense', [
                                                                                       'Single',
                                                                                       'Double',
@@ -2349,8 +2130,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       'Hit by Pitch'
                                                                                     ]),
                                                                                   ),
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Defense column
+                                                                                  Expanded(
                                                                                     child: _buildVerbCategory('Defense', [
                                                                                       'Pitching',
                                                                                       'Catches',
@@ -2364,8 +2146,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       ''
                                                                                     ]),
                                                                                   ),
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Running column
+                                                                                  Expanded(
+                                                                                    child: _buildVerbCategory('Running', [
+                                                                                      'Steals',
+                                                                                      'Slides',
+                                                                                      'Runs',
+                                                                                      'Rounds',
+                                                                                      '',
+                                                                                      '',
+                                                                                      ''
+                                                                                    ]),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Reactions column
+                                                                                  Expanded(
+                                                                                    child: _buildVerbCategory('Reactions', [
+                                                                                      'Celebrates',
+                                                                                      'Dejection',
+                                                                                      'Post Game Win',
+                                                                                      'Post Game Loss',
+                                                                                      '',
+                                                                                      '',
+                                                                                      ''
+                                                                                    ]),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Non Game-Action column
+                                                                                  Expanded(
                                                                                     child: _buildVerbCategory('Non Game-Action', [
                                                                                       'Looks On',
                                                                                       'Batting Practice',
@@ -2379,33 +2188,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       ''
                                                                                     ]),
                                                                                   ),
-                                                                                  // Second row - 3 columns
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
-                                                                                    child: _buildVerbCategory('Reactions', [
-                                                                                      'Celebrates',
-                                                                                      'Dejection',
-                                                                                      'Post Game Win',
-                                                                                      'Post Game Loss',
-                                                                                      '',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
-                                                                                    child: _buildVerbCategory('Running', [
-                                                                                      'Steals',
-                                                                                      'Slides',
-                                                                                      'Runs',
-                                                                                      'Rounds',
-                                                                                      '',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  SizedBox(
-                                                                                    width: columnWidth,
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Favorites column
+                                                                                  Expanded(
                                                                                     child: _buildVerbCategory('Favorites', [
                                                                                       '',
                                                                                       '',
@@ -2931,17 +2716,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Main Action:',
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
+        const SizedBox(height: 2),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildVerbChip('hit', 'Hit'),
-            _buildVerbChip('swing', 'Swing'),
-            _buildVerbChip('pitch', 'Pitch'),
-            _buildVerbChip('field', 'Field'),
-            _buildVerbChip('run', 'Run'),
-            _buildVerbChip('celebrate', 'Celebrate'),
+            Expanded(child: _buildVerbChip('Offense', 'Offense')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Defense', 'Defense')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Running', 'Running')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Reactions', 'Reactions')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Non Game-Action', 'Favorites')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Magic', 'Magic')),
           ],
         ),
       ],
@@ -2975,7 +2764,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
           color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
@@ -2985,8 +2775,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ),
         child: Text(
           label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
           ),
