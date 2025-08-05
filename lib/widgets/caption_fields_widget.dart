@@ -2156,8 +2156,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _selectedVerb ==
                                                   'Comes Off the Field' ||
                                               _selectedVerb ==
-                                                  'National Anthem' ||
-                                              _selectedVerb ==
                                                   'Post Game Win' ||
                                               _selectedVerb == 'Post Game Loss')
                                           ? _buildInningOnlyInterface()
@@ -10009,8 +10007,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Prior to the game option (for "Looks On", "Takes the Field", "Comes Off the Field", and "National Anthem" verbs) - placed below innings
               if (_selectedVerb == 'Looks On' ||
                   _selectedVerb == 'Takes the Field' ||
-                  _selectedVerb == 'Comes Off the Field' ||
-                  _selectedVerb == 'National Anthem') ...[
+                  _selectedVerb == 'Comes Off the Field') ...[
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () {
