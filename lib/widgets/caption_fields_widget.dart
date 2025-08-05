@@ -923,7 +923,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ],
                         ),
 
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 6),
 
                         // Action buttons row (moved from verb column)
                         Row(
@@ -1152,7 +1152,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ],
                         ),
 
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 6),
 
                         // Player and Verb Selection Area
                         Expanded(
