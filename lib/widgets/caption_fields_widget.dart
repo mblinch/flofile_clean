@@ -6841,7 +6841,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         if (selectedPlayers.isNotEmpty) {
           final firstPlayer = selectedPlayers.first;
-          final firstPlayerName = firstPlayer; // Use player name as-is (number after name)
+          // Get team name for the first player
+          final isHomeTeamPlayer = selectedHomePlayers.contains(firstPlayer);
+          final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
+          final firstPlayerName = '$firstPlayer of the $teamName';
 
           // Get remaining players for "stand on the mound" part
           final remainingPlayers = selectedPlayers.skip(1).toList();
