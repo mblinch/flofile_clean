@@ -986,7 +986,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 16),
                                   // Prev button
                                   CustomButton(
                                     onTap: () async {
@@ -9768,7 +9768,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
           // Settings button
           CustomButton(
             onTap: _showFtpSettings,
