@@ -6802,7 +6802,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final isMultiplePlayers = activePlayers.length > 1;
 
         final action = isMultiplePlayers ? 'look on' : 'looks on';
-        return '$action during the national anthem prior to play against the other team';
+        return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
       case 'Stretching':
         // Check if multiple players are selected
         final activePlayersStretching =
@@ -6811,7 +6811,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         final actionStretching =
             isMultiplePlayersStretching ? 'stretch' : 'stretches';
-        return '$actionStretching prior to play against the other team';
+        return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
@@ -7435,7 +7435,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
 
     // Return the opposing team name
-    return isMainPlayerHome ? selectedAwayTeam : selectedHomeTeam;
+    final opposingTeam = isMainPlayerHome ? selectedAwayTeam : selectedHomeTeam;
+    
+    // Debug: Print the team names to see what's happening
+    print('DEBUG: _firstPlayerSelected: $_firstPlayerSelected');
+    print('DEBUG: isMainPlayerHome: $isMainPlayerHome');
+    print('DEBUG: selectedHomeTeam: $selectedHomeTeam');
+    print('DEBUG: selectedAwayTeam: $selectedAwayTeam');
+    print('DEBUG: opposingTeam: $opposingTeam');
+    
+    return opposingTeam;
   }
 
   String? _getSecondPlayer() {
