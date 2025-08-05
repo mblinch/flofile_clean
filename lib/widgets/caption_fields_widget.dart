@@ -10748,14 +10748,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     const SizedBox(height: 2),
                     TextField(
                       controller: _managerNameController,
-                      decoration: const InputDecoration(
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        labelText: 'Manager Name',
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
                         hintText: 'Enter manager name...',
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.all(8),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        labelStyle: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black87,
+                        ),
                       ),
-                      style: const TextStyle(fontSize: 11),
                       onChanged: (value) {
                         setState(() {
                           _managerName = value;
