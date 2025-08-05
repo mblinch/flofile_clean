@@ -1296,7 +1296,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Player selection area
         Container(
           width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 80),
+          height: 80,
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade400),
@@ -2097,10 +2097,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 Container(
                                                                   width: double
                                                                       .infinity,
-                                                                  constraints:
-                                                                      const BoxConstraints(
-                                                                          minHeight:
-                                                                              32),
+                                                                  height: 32,
                                                                   padding: const EdgeInsets
                                                                       .symmetric(
                                                                       horizontal:
@@ -2129,6 +2126,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 Container(
                                                                   width: double
                                                                       .infinity,
+                                                                  height: 32,
                                                                   decoration:
                                                                       BoxDecoration(
                                                                     color: Colors
