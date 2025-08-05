@@ -7434,17 +7434,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Determine which team the main player is from
     final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
 
-        // Return the opposing team name
+    // Return the opposing team name
     final opposingTeam = isMainPlayerHome ? selectedAwayTeam : selectedHomeTeam;
-    
-    // If the opposing team is the same as the main player's team, 
-    // we need to determine the actual opposing team
-    if (opposingTeam == (isMainPlayerHome ? selectedHomeTeam : selectedAwayTeam)) {
-      // Both teams are the same, so we need to use a different approach
-      // For now, return "the opposing team" as a fallback
-      return "the opposing team";
+    final mainTeam = isMainPlayerHome ? selectedHomeTeam : selectedAwayTeam;
+
+    // If the opposing team is the same as the main player's team,
+    // we need to find a different team from the teams list
+    if (opposingTeam == mainTeam || opposingTeam == null) {
+      // Find a team from the list that's not the main team
+      final alternativeTeam = teamsList.firstWhere(
+        (team) => team != mainTeam,
+        orElse: () => "the opposing team",
+      );
+      return alternativeTeam;
     }
-    
+
     return opposingTeam;
   }
 
