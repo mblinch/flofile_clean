@@ -1641,7 +1641,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                             // Type label
                             Text(
-                              'Type: ',
+                              'Display Type: ',
                               style: const TextStyle(
                                   fontSize: 10, color: Colors.grey),
                             ),
