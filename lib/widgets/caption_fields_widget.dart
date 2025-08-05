@@ -9626,11 +9626,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       size: 14,
                       color: _disableFtp ? Colors.grey.shade600 : Colors.white),
                   const SizedBox(width: 2),
-                  Text(_disableFtp
-                      ? 'FTP OFF'
-                      : (_currentFtpProfile != null
-                          ? 'FTP: $_currentFtpProfile'
-                          : 'FTP'),
+                  Text(
+                      _disableFtp
+                          ? 'FTP OFF'
+                          : (_currentFtpProfile != null
+                              ? 'FTP: $_currentFtpProfile'
+                              : 'FTP'),
                       style: TextStyle(
                           fontSize: 11,
                           color:
@@ -9656,7 +9657,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Align(
           alignment: Alignment.center,
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.4, // Half width
+            width: MediaQuery.of(context).size.width * 0.5, // 50% width
             margin: const EdgeInsets.symmetric(
                 horizontal: 5), // 5px padding from left and right
             child: CustomButton(
