@@ -1834,7 +1834,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         ? (isHomePlayer
                                             ? Colors.grey.shade700
                                             : Colors.white)
-                                        : Colors.transparent,
+                                        : Colors.grey.shade100,
                                     border: Border(
                                       bottom: BorderSide(
                                           color: isSelected
@@ -1857,7 +1857,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ? FontWeight.w600
                                           : FontWeight.normal,
                                       color: isSelected
-                                          ? (isHomePlayer ? Colors.white : Colors.grey.shade800)
+                                          ? (isHomePlayer
+                                              ? Colors.white
+                                              : Colors.grey.shade800)
                                           : Colors.black87,
                                     ),
                                     overflow: TextOverflow.ellipsis,
