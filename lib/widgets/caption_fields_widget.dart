@@ -6724,6 +6724,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else {
           return 'takes the field against the ${_getOpposingTeamName()}';
         }
+      case 'Comes Off the Field':
+        if (_isPriorToGame) {
+          return 'comes off the field';
+        } else {
+          return 'comes off the field against the ${_getOpposingTeamName()}';
+        }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
@@ -9877,8 +9883,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ],
               ),
 
-              // Prior to the game option (for "Looks On" and "Takes the Field" verbs) - placed below innings
-              if (_selectedVerb == 'Looks On' || _selectedVerb == 'Takes the Field') ...[
+              // Prior to the game option (for "Looks On", "Takes the Field", and "Comes Off the Field" verbs) - placed below innings
+              if (_selectedVerb == 'Looks On' ||
+                  _selectedVerb == 'Takes the Field' ||
+                  _selectedVerb == 'Comes Off the Field') ...[
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () {
