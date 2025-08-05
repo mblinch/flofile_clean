@@ -2184,9 +2184,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                           _selectedVerb ==
                                                               'Celebrates Against')
                                                       ? _buildCelebrationInterface()
-                                                      : (_selectedVerb ==
+                                                                                                                : (_selectedVerb ==
                                                               'Dejection')
                                                           ? _buildDejectionInterface()
+                                                          : (_selectedVerb ==
+                                                              'National Anthem')
+                                                          ? _buildNationalAnthemInterface()
                                                           : Column(
                                                               crossAxisAlignment:
                                                                   CrossAxisAlignment
@@ -10661,6 +10664,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         // Back button
         _buildVerbOptionsBackButton(),
+      ],
+    );
+  }
+
+  // National Anthem interface
+  Widget _buildNationalAnthemInterface() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected verb indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Back button with compact action buttons
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Back button
+              _buildVerbOptionsBackButton(),
+            ],
+          ),
+        ),
       ],
     );
   }
