@@ -10023,8 +10023,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         : null,
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 36,
+                      height: 36,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage > 0
@@ -10036,7 +10036,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Text(
                         '-',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: currentPage > 0
                               ? Colors.grey.shade700
@@ -10061,8 +10061,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         : null,
                     child: Container(
-                      width: 28,
-                      height: 28,
+                      width: 36,
+                      height: 36,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage < 2
@@ -10074,7 +10074,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Text(
                         '+',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                           color: currentPage < 2
                               ? Colors.grey.shade700
