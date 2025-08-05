@@ -837,8 +837,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Caption and Personality boxes side by side
                         Row(
                           children: [
-                            // Caption Preview (Left side)
+                            // Caption Preview (Left side) - 80%
                             Expanded(
+                              flex: 8,
                               child: TextField(
                                 controller: captionController,
                                 maxLines: 3,
@@ -876,8 +877,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Personality Box (Right side)
+                            // Personality Box (Right side) - 20%
                             Expanded(
+                              flex: 2,
                               child: TextField(
                                 controller: personalityController,
                                 maxLines: 3,
