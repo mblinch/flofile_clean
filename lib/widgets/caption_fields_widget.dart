@@ -9594,8 +9594,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           CustomButton(
             onTap: _showFtpSettings,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFF4A90E2),
                 borderRadius: BorderRadius.circular(4),
@@ -9609,8 +9608,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           CustomButton(
             onTap: _disableFtp ? null : _onFtpPressed,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: _disableFtp
                     ? Colors.grey.shade300
@@ -9626,16 +9624,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 children: [
                   Icon(Icons.cloud_upload,
                       size: 14,
-                      color: _disableFtp
-                          ? Colors.grey.shade600
-                          : Colors.white),
+                      color: _disableFtp ? Colors.grey.shade600 : Colors.white),
                   const SizedBox(width: 2),
-                  Text(_disableFtp ? 'FTP OFF' : 'FTP',
+                  Text(_disableFtp
+                      ? 'FTP OFF'
+                      : (_currentFtpProfile != null
+                          ? 'FTP: $_currentFtpProfile'
+                          : 'FTP'),
                       style: TextStyle(
                           fontSize: 11,
-                          color: _disableFtp
-                              ? Colors.grey.shade600
-                              : Colors.white,
+                          color:
+                              _disableFtp ? Colors.grey.shade600 : Colors.white,
                           fontWeight: FontWeight.w500)),
                 ],
               ),
