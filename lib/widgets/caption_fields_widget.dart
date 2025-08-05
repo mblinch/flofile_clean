@@ -1654,9 +1654,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     if (isHome) {
                                       _homePlayerGridMode =
                                           !_homePlayerGridMode;
+                                      // Reset sort order when switching to grid mode
+                                      if (_homePlayerGridMode) {
+                                        _homeSortOption = 'number';
+                                        _homeSortAscending = true;
+                                      }
                                     } else {
                                       _awayPlayerGridMode =
                                           !_awayPlayerGridMode;
+                                      // Reset sort order when switching to grid mode
+                                      if (_awayPlayerGridMode) {
+                                        _awaySortOption = 'number';
+                                        _awaySortAscending = true;
+                                      }
                                     }
                                   });
                                 },
