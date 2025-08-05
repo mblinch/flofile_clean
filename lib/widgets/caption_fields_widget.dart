@@ -6838,13 +6838,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final activePlayers = selectedHomePlayers.union(selectedAwayPlayers);
         final isMultiplePlayers = activePlayers.length > 1;
 
-        if (_isPriorToGame) {
-          final action = isMultiplePlayers ? 'look on' : 'looks on';
-          return '$action during the national anthem against the ${_getOpposingTeamName()}';
-        } else {
-          final action = isMultiplePlayers ? 'look on' : 'looks on';
-          return '$action during the national anthem against the ${_getOpposingTeamName()}';
-        }
+        final action = isMultiplePlayers ? 'look on' : 'looks on';
+        return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
