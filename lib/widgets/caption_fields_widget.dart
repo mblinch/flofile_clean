@@ -918,253 +918,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ],
                         ),
 
-                        const SizedBox(height: 1),
-
-                        // Action buttons row under caption box
-                        Row(
-                          children: [
-                            // FTP button
-                            CustomButton(
-                              onTap: _disableFtp ? null : _onFtpPressed,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: _disableFtp
-                                      ? Colors.grey.shade300
-                                      : const Color(0xFF0052CC),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                      color: _disableFtp
-                                          ? Colors.grey.shade300
-                                          : const Color(0xFF0052CC)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.cloud_upload,
-                                        size: 14,
-                                        color: _disableFtp
-                                            ? Colors.grey.shade600
-                                            : Colors.white),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      _disableFtp ? 'FTP OFF' : 'FTP',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: _disableFtp
-                                            ? Colors.grey.shade600
-                                            : Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Settings button
-                            CustomButton(
-                              onTap: _showFtpSettings,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.settings,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Settings',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Copy button
-                            CustomButton(
-                              onTap: () {
-                                _copyMetadataFromCaptionWidget();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.copy,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Copy',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Paste button
-                            CustomButton(
-                              onTap: _pasteMetadataToCaptionWidget,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.paste,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Paste',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Previous button
-                            CustomButton(
-                              onTap: () async {
-                                // Save IPTC metadata before navigating
-                                if (widget.onSaveIptc != null) {
-                                  await widget.onSaveIptc!();
-                                }
-                                widget.onPreviousImage?.call();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.arrow_back,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Prev',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Next button
-                            CustomButton(
-                              onTap: () async {
-                                // Save IPTC metadata before navigating
-                                if (widget.onSaveIptc != null) {
-                                  await widget.onSaveIptc!();
-                                }
-                                widget.onNextImage?.call();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Next',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Icon(Icons.arrow_forward,
-                                        size: 12, color: Colors.grey.shade700),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Reset button
-                            CustomButton(
-                              onTap: _resetCaption,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.refresh,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Reset',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
                         const SizedBox(height: 2),
 
                         // Player chips row
@@ -1899,6 +1652,232 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   CrossAxisAlignment
                                                                       .start,
                                                               children: [
+                                                                // Action buttons row above magic bar
+                                                                Row(
+                                                                  mainAxisAlignment:
+                                                                      MainAxisAlignment
+                                                                          .spaceBetween,
+                                                                  children: [
+                                                                    // Reset button (aligned to left)
+                                                                    CustomButton(
+                                                                      onTap:
+                                                                          _resetCaption,
+                                                                      child:
+                                                                          Container(
+                                                                        padding: const EdgeInsets
+                                                                            .symmetric(
+                                                                            horizontal:
+                                                                                6,
+                                                                            vertical:
+                                                                                4),
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade100,
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(4),
+                                                                          border:
+                                                                              Border.all(color: Colors.grey.shade300),
+                                                                        ),
+                                                                        child:
+                                                                            Row(
+                                                                          mainAxisAlignment:
+                                                                              MainAxisAlignment.center,
+                                                                          children: [
+                                                                            Icon(Icons.refresh,
+                                                                                size: 12,
+                                                                                color: Colors.grey.shade700),
+                                                                            const SizedBox(width: 2),
+                                                                            Text('Reset',
+                                                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    // Center buttons: Prev, Copy, Paste, Next
+                                                                    Row(
+                                                                      children: [
+                                                                        // Prev button
+                                                                        CustomButton(
+                                                                          onTap:
+                                                                              () async {
+                                                                            if (widget.onSaveIptc !=
+                                                                                null) {
+                                                                              await widget.onSaveIptc!();
+                                                                            }
+                                                                            widget.onPreviousImage?.call();
+                                                                          },
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: Colors.grey.shade100,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                            ),
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              children: [
+                                                                                Icon(Icons.arrow_back, size: 12, color: Colors.grey.shade700),
+                                                                                const SizedBox(width: 2),
+                                                                                Text('Prev', style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                4),
+                                                                        // Copy button
+                                                                        CustomButton(
+                                                                          onTap:
+                                                                              () {
+                                                                            _copyMetadataFromCaptionWidget();
+                                                                          },
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: Colors.grey.shade100,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                            ),
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              children: [
+                                                                                Icon(Icons.copy, size: 12, color: Colors.grey.shade700),
+                                                                                const SizedBox(width: 2),
+                                                                                Text('Copy', style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                4),
+                                                                        // Paste button
+                                                                        CustomButton(
+                                                                          onTap:
+                                                                              _pasteMetadataToCaptionWidget,
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: Colors.grey.shade100,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                            ),
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              children: [
+                                                                                Icon(Icons.paste, size: 12, color: Colors.grey.shade700),
+                                                                                const SizedBox(width: 2),
+                                                                                Text('Paste', style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                4),
+                                                                        // Next button
+                                                                        CustomButton(
+                                                                          onTap:
+                                                                              () async {
+                                                                            if (widget.onSaveIptc !=
+                                                                                null) {
+                                                                              await widget.onSaveIptc!();
+                                                                            }
+                                                                            widget.onNextImage?.call();
+                                                                          },
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: Colors.grey.shade100,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                            ),
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              children: [
+                                                                                Text('Next', style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                                const SizedBox(width: 2),
+                                                                                Icon(Icons.arrow_forward, size: 12, color: Colors.grey.shade700),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                    // FTP and Settings buttons (aligned to right)
+                                                                    Row(
+                                                                      children: [
+                                                                        CustomButton(
+                                                                          onTap:
+                                                                              _showFtpSettings,
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: const Color(0xFF4A90E2),
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: const Color(0xFF4A90E2)),
+                                                                            ),
+                                                                            child: Icon(Icons.settings,
+                                                                                size: 14,
+                                                                                color: Colors.white),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                4),
+                                                                        CustomButton(
+                                                                          onTap: _disableFtp
+                                                                              ? null
+                                                                              : _onFtpPressed,
+                                                                          child:
+                                                                              Container(
+                                                                            padding:
+                                                                                const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
+                                                                              color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC),
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC)),
+                                                                            ),
+                                                                            child:
+                                                                                Row(
+                                                                              mainAxisAlignment: MainAxisAlignment.center,
+                                                                              children: [
+                                                                                Icon(Icons.cloud_upload, size: 14, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                                                                                const SizedBox(width: 2),
+                                                                                Text(_disableFtp ? 'FTP OFF' : 'FTP', style: TextStyle(fontSize: 11, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 4),
                                                                 // Custom text field for between players
                                                                 Container(
                                                                   width: double
@@ -2215,7 +2194,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                                                 const SizedBox(
                                                                     height: 4),
-
                                                                 // Third row: Dynamic content
                                                                 Expanded(
                                                                   // Fills remaining space after verb area takes what it needs
@@ -3450,11 +3428,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'loss':
           action = 'Post Game Loss';
           break;
-        case 'walksofffield':
+        case 'walksoffield':
         case 'walksoff':
           action = 'Walks Off Field';
           break;
-        case 'runsofffield':
+        case 'runsoffield':
         case 'runsoff':
           action = 'Runs Off Field';
           break;
@@ -3965,11 +3943,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'loss':
           action = 'Post Game Loss';
           break;
-        case 'walksofffield':
+        case 'walksoffield':
         case 'walksoff':
           action = 'Walks Off Field';
           break;
-        case 'runsofffield':
+        case 'runsoffield':
         case 'runsoff':
           action = 'Runs Off Field';
           break;
@@ -5346,42 +5324,118 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Column(
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _copyMetadataFromCaptionWidget,
-                icon: const Icon(Icons.copy, size: 14),
-                label: const Text('Copy', style: TextStyle(fontSize: 10)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+            // Prev button
+            CustomButton(
+              onTap: () async {
+                if (widget.onSaveIptc != null) {
+                  await widget.onSaveIptc!();
+                }
+                widget.onPreviousImage?.call();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.arrow_back,
+                        size: 12, color: Colors.grey.shade700),
+                    const SizedBox(width: 2),
+                    Text('Prev',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _pasteMetadataToCaptionWidget,
-                icon: const Icon(Icons.paste, size: 14),
-                label: const Text('Paste', style: TextStyle(fontSize: 10)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+            const SizedBox(width: 4),
+            // Copy button
+            CustomButton(
+              onTap: () {
+                _copyMetadataFromCaptionWidget();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.copy, size: 12, color: Colors.grey.shade700),
+                    const SizedBox(width: 2),
+                    Text('Copy',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _resetCaption,
-                icon: const Icon(Icons.refresh, size: 14),
-                label: const Text('Reset', style: TextStyle(fontSize: 10)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.shade600,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+            const SizedBox(width: 4),
+            // Paste button
+            CustomButton(
+              onTap: _pasteMetadataToCaptionWidget,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.paste, size: 12, color: Colors.grey.shade700),
+                    const SizedBox(width: 2),
+                    Text('Paste',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Next button
+            CustomButton(
+              onTap: () async {
+                if (widget.onSaveIptc != null) {
+                  await widget.onSaveIptc!();
+                }
+                widget.onNextImage?.call();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('Next',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 2),
+                    Icon(Icons.arrow_forward,
+                        size: 12, color: Colors.grey.shade700),
+                  ],
                 ),
               ),
             ),
@@ -9348,147 +9402,82 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Reset button - Left aligned
+          // Reset button (aligned to left)
           CustomButton(
             onTap: _resetCaption,
             child: Container(
-              width: 32,
-              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.grey.shade300),
               ),
-              child: Icon(Icons.refresh, size: 16, color: Colors.grey.shade700),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
+                  const SizedBox(width: 2),
+                  Text('Reset',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
           ),
-
-          // Center section with arrows and copy/paste buttons
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Previous button
-                CustomButton(
-                  onTap: () async {
-                    // Save IPTC metadata before navigating
-                    if (widget.onSaveIptc != null) {
-                      await widget.onSaveIptc!();
-                    }
-                    widget.onPreviousImage?.call();
-                  },
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Icon(Icons.arrow_back,
-                        size: 16, color: Colors.grey.shade700),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Copy button
-                CustomButton(
-                  onTap: () {
-                    // Copy metadata (excluding date/time) instead of caption
-                    _copyMetadataFromCaptionWidget();
-                  },
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child:
-                        Icon(Icons.copy, size: 16, color: Colors.grey.shade700),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Paste button
-                CustomButton(
-                  onTap: _pasteMetadataToCaptionWidget,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Icon(Icons.paste,
-                        size: 16, color: Colors.grey.shade700),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                // Next button
-                CustomButton(
-                  onTap: () async {
-                    // Save IPTC metadata before navigating
-                    if (widget.onSaveIptc != null) {
-                      await widget.onSaveIptc!();
-                    }
-                    widget.onNextImage?.call();
-                  },
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Icon(Icons.arrow_forward,
-                        size: 16, color: Colors.grey.shade700),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // FTP buttons - Right aligned
+          // FTP and Settings buttons (aligned to right)
           Row(
             children: [
-              // FTP Settings button
               CustomButton(
                 onTap: _showFtpSettings,
                 child: Container(
-                  width: 32,
-                  height: 32,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: const Color(0xFF4A90E2),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(color: const Color(0xFF4A90E2)),
                   ),
-                  child: Icon(Icons.settings,
-                      size: 16, color: Colors.grey.shade700),
+                  child: Icon(Icons.settings, size: 14, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 4),
-              // FTP button
               CustomButton(
                 onTap: _disableFtp ? null : _onFtpPressed,
                 child: Container(
-                  width: 32,
-                  height: 32,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   decoration: BoxDecoration(
                     color: _disableFtp
                         ? Colors.grey.shade300
-                        : Colors.blue.shade800,
+                        : const Color(0xFF0052CC),
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                         color: _disableFtp
                             ? Colors.grey.shade300
-                            : Colors.blue.shade800),
+                            : const Color(0xFF0052CC)),
                   ),
-                  child: Icon(Icons.cloud_upload,
-                      size: 24,
-                      color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.cloud_upload,
+                          size: 14,
+                          color: _disableFtp
+                              ? Colors.grey.shade600
+                              : Colors.white),
+                      const SizedBox(width: 2),
+                      Text(_disableFtp ? 'FTP OFF' : 'FTP',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: _disableFtp
+                                  ? Colors.grey.shade600
+                                  : Colors.white,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
                 ),
               ),
             ],
