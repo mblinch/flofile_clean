@@ -10740,12 +10740,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Manager:',
-                      style:
-                          TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
+
                     SizedBox(
                       width: MediaQuery.of(context).size.width * 0.10,
                       child: TextField(
