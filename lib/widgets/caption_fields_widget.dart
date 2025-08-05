@@ -1692,7 +1692,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   style: TextStyle(
                                       fontSize: 10,
                                       color: Colors.black87,
-                                      fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
