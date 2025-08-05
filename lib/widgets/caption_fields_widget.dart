@@ -2164,7 +2164,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   _selectedVerb ==
                                                       'Fielding Practice')
                                               ? _buildPracticeInterface()
-                                              : (_selectedVerb == 'Steals' ||
+                                              : (_selectedVerb ==
+                                                          'Steals' ||
                                                       _selectedVerb ==
                                                           'Slides' ||
                                                       _selectedVerb == 'Runs' ||
@@ -2187,13 +2188,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       : (_selectedVerb ==
                                                               'Dejection')
                                                           ? _buildDejectionInterface()
-                                                                                                                    : (_selectedVerb ==
-                                                              'National Anthem' ||
-                                                              _selectedVerb ==
-                                                              'Stretching' ||
-                                                              _selectedVerb ==
-                                                              'Warm Ups')
-                                                          ? _buildNationalAnthemInterface()
+                                                          : (_selectedVerb ==
+                                                                      'National Anthem' ||
+                                                                  _selectedVerb ==
+                                                                      'Stretching' ||
+                                                                  _selectedVerb ==
+                                                                      'Warm Ups')
+                                                              ? _buildNationalAnthemInterface()
                                                               : Column(
                                                                   crossAxisAlignment:
                                                                       CrossAxisAlignment
@@ -2440,21 +2441,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         ]),
                                                                                       ),
                                                                                       const SizedBox(width: 2),
-                                                                                      // Defense column
-                                                                                      Expanded(
-                                                                                        child: _buildVerbCategory('Defense', [
-                                                                                          'Pitching',
-                                                                                          'Catches',
-                                                                                          'Throws',
-                                                                                          'Tags',
-                                                                                          'Groundball',
-                                                                                          'Fielding Position',
-                                                                                          'Double Play',
-                                                                                          'Triple Play',
-                                                                                          '',
-                                                                                          ''
-                                                                                        ]),
-                                                                                      ),
+                                                                                                                                            // Defense column
+                                                      Expanded(
+                                                        child: _buildVerbCategory('Defense', [
+                                                          'Pitching',
+                                                          'Pitching Change',
+                                                          'Catches',
+                                                          'Throws',
+                                                          'Tags',
+                                                          'Groundball',
+                                                          'Fielding Position',
+                                                          'Double Play',
+                                                          'Triple Play',
+                                                          ''
+                                                        ]),
+                                                      ),
                                                                                       const SizedBox(width: 2),
                                                                                       // Running column
                                                                                       Expanded(
@@ -2482,21 +2483,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         ]),
                                                                                       ),
                                                                                       const SizedBox(width: 2),
-                                                                                      // Non Game-Action column
-                                                                                      Expanded(
-                                                                                        child: _buildVerbCategory('Non Game-Action', [
-                                                                                          'Looks On',
-                                                                                          'Batting Practice',
-                                                                                          'Fielding Practice',
-                                                                                          'Takes the Field',
-                                                                                          'Comes Off the Field',
-                                                                                          'National Anthem',
-                                                                                          'Stretching',
-                                                                                          'Warm Ups',
-                                                                                          'Pitching Change',
-                                                                                          ''
-                                                                                        ]),
-                                                                                      ),
+                                                                                                                                            // Non Game-Action column
+                                                      Expanded(
+                                                        child: _buildVerbCategory('Non Game-Action', [
+                                                          'Looks On',
+                                                          'Batting Practice',
+                                                          'Fielding Practice',
+                                                          'Takes the Field',
+                                                          'Comes Off the Field',
+                                                          'National Anthem',
+                                                          'Stretching',
+                                                          'Warm Ups',
+                                                          '',
+                                                          ''
+                                                        ]),
+                                                      ),
                                                                                       const SizedBox(width: 2),
                                                                                     ],
                                                                                   ),
@@ -6816,10 +6817,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
       case 'Warm Ups':
         // Check if multiple players are selected
-        final activePlayersWarmUps = selectedHomePlayers.union(selectedAwayPlayers);
+        final activePlayersWarmUps =
+            selectedHomePlayers.union(selectedAwayPlayers);
         final isMultiplePlayersWarmUps = activePlayersWarmUps.length > 1;
 
-        final actionWarmUps = isMultiplePlayersWarmUps ? 'take part in warm ups' : 'takes part in warm ups';
+        final actionWarmUps = isMultiplePlayersWarmUps
+            ? 'take part in warm ups'
+            : 'takes part in warm ups';
         return '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
