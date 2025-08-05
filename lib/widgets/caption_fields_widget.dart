@@ -10805,12 +10805,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       height: 80,
                       child: _buildReusableInningSelector(),
                     ),
+                    const SizedBox(height: 8),
+                    // Reset, Settings, and FTP buttons
+                    _buildCompactActionButtons(),
                   ],
                 ),
               ),
-              const Spacer(),
-              // Back button
-              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
