@@ -5224,6 +5224,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return playerName.replaceAll(RegExp(r'\s*[#\d]+\s*'), '').trim();
     }).toList();
 
+    // Add manager name if available and Pitching Change is selected
+    if (_selectedVerb == 'Pitching Change' && _managerName.isNotEmpty) {
+      cleanPlayerNames.add(_managerName);
+    }
+
     // Join players with semicolons, no semicolon after the last player
     final personalityText = cleanPlayerNames.join(';');
 
