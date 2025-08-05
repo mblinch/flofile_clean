@@ -4819,12 +4819,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    // Add inning if specified (but not for post-game verbs)
+    // Add inning if specified (but not for post-game verbs or Pitching Change)
     String inningPart = '';
     final isPostGameVerb =
         _selectedVerb == 'Post Game Win' || _selectedVerb == 'Post Game Loss';
+    final isPitchingChange = _selectedVerb == 'Pitching Change';
 
-    if (!isPostGameVerb) {
+    if (!isPostGameVerb && !isPitchingChange) {
       if (_selectedRbiInning != null) {
         inningPart =
             ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
@@ -6856,8 +6857,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           if (_managerName.isNotEmpty) {
             if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.length == 1 
-                  ? remainingPlayers.first 
+              final remainingPlayerNames = remainingPlayers.length == 1
+                  ? remainingPlayers.first
                   : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
               return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
@@ -6865,8 +6866,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           } else {
             if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.length == 1 
-                  ? remainingPlayers.first 
+              final remainingPlayerNames = remainingPlayers.length == 1
+                  ? remainingPlayers.first
                   : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
               return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
             } else {
