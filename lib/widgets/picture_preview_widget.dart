@@ -233,6 +233,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           // EXIF data section at top
           if (_exifData != null || _isLoadingExif)
             Container(
+              height: 28, // Fixed height to prevent resizing
               padding: const EdgeInsets.all(
                   4), // Reduced from 8 to 4 for more compact display
               decoration: BoxDecoration(

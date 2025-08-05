@@ -1848,13 +1848,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   child: Row(
                                     children: [
                                       // Red star for first selected player
-                                      if (isSelected && _isFirstSelectedPlayer(player.displayName))
+                                      if (isSelected &&
+                                          _isFirstSelectedPlayer(
+                                              player.displayName))
                                         Container(
-                                          margin: const EdgeInsets.only(right: 4),
+                                          margin:
+                                              const EdgeInsets.only(right: 4),
                                           padding: const EdgeInsets.all(1),
                                           decoration: BoxDecoration(
                                             color: Colors.red,
-                                            borderRadius: BorderRadius.circular(2),
+                                            borderRadius:
+                                                BorderRadius.circular(2),
                                           ),
                                           child: Icon(
                                             Icons.star,
