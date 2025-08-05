@@ -136,7 +136,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
-  bool _removeAccent = true; // Default to true
+  bool _removeAccent = false; // Disabled diacritic removal
   bool _disableFtp = false; // Default to false (FTP enabled)
   int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
 
@@ -862,9 +862,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Caption and Personality boxes side by side
                         Row(
                           children: [
-                            // Caption Preview (Left side) - 75%
+                            // Caption Preview (Left side) - Moderate width
                             Expanded(
-                              flex: 3,
+                              flex: 5,
                               child: TextField(
                                 controller: captionController,
                                 maxLines: 3,
@@ -901,8 +901,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            // Personality Box (Right side) - 25%
+                            const SizedBox(width: 9),
+                            // Personality Box (Right side) - Reduced to make room for caption
                             Expanded(
                               flex: 1,
                               child: TextField(
@@ -945,12 +945,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 6),
 
-                        // Action buttons row (moved from verb column)
+                        // Action buttons row (aligned with caption box)
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.start,
                           children: [
-                            // Center buttons: Prev, Copy, Paste, Next (centered)
+                            // Navigation buttons: Prev, Copy, Paste, Next (aligned with caption box)
                             Expanded(
+                              flex: 5, // Match caption box width
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -1092,99 +1093,105 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ],
                               ),
                             ),
-                            // Reset, Settings, and FTP buttons (right aligned)
-                            Row(
-                              children: [
-                                // Reset button
-                                CustomButton(
-                                  onTap: _resetCaption,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.refresh,
-                                            size: 12,
-                                            color: Colors.grey.shade700),
-                                        const SizedBox(width: 2),
-                                        Text('Reset',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500)),
-                                      ],
+                            const SizedBox(
+                                width: 9), // Match caption/personality spacing
+                            // Reset, Settings, and FTP buttons (aligned with personality box)
+                            Expanded(
+                              flex: 1, // Match personality box width
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  // Reset button
+                                  CustomButton(
+                                    onTap: _resetCaption,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.refresh,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                          const SizedBox(width: 2),
+                                          Text('Reset',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 4),
-                                // Settings button (now between reset and FTP)
-                                CustomButton(
-                                  onTap: _showFtpSettings,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF4A90E2),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: const Color(0xFF4A90E2)),
+                                  const SizedBox(width: 4),
+                                  // Settings button (now between reset and FTP)
+                                  CustomButton(
+                                    onTap: _showFtpSettings,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4A90E2),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: const Color(0xFF4A90E2)),
+                                      ),
+                                      child: Icon(Icons.settings,
+                                          size: 14, color: Colors.white),
                                     ),
-                                    child: Icon(Icons.settings,
-                                        size: 14, color: Colors.white),
                                   ),
-                                ),
-                                const SizedBox(width: 4),
-                                // FTP button
-                                CustomButton(
-                                  onTap: _disableFtp ? null : _onFtpPressed,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: _disableFtp
-                                          ? Colors.grey.shade300
-                                          : const Color(0xFF0052CC),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: _disableFtp
-                                              ? Colors.grey.shade300
-                                              : const Color(0xFF0052CC)),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.cloud_upload,
-                                            size: 14,
+                                  const SizedBox(width: 4),
+                                  // FTP button
+                                  CustomButton(
+                                    onTap: _disableFtp ? null : _onFtpPressed,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _disableFtp
+                                            ? Colors.grey.shade300
+                                            : const Color(0xFF0052CC),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
                                             color: _disableFtp
-                                                ? Colors.grey.shade600
-                                                : Colors.white),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                            _disableFtp
-                                                ? 'FTP OFF'
-                                                : (_currentFtpProfile != null
-                                                    ? 'FTP: $_currentFtpProfile'
-                                                    : 'FTP'),
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: _disableFtp
-                                                    ? Colors.grey.shade600
-                                                    : Colors.white,
-                                                fontWeight: FontWeight.w500)),
-                                      ],
+                                                ? Colors.grey.shade300
+                                                : const Color(0xFF0052CC)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.cloud_upload,
+                                              size: 14,
+                                              color: _disableFtp
+                                                  ? Colors.grey.shade600
+                                                  : Colors.white),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                              _disableFtp
+                                                  ? 'FTP OFF'
+                                                  : (_currentFtpProfile != null
+                                                      ? 'FTP: $_currentFtpProfile'
+                                                      : 'FTP'),
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: _disableFtp
+                                                      ? Colors.grey.shade600
+                                                      : Colors.white,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -4811,9 +4818,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         '$playerName${customTextPart}${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified$inningPart '
         '$gamePart at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
-    // Apply diacritic removal if enabled
-    final processedCaption = _removeDiacritics(caption);
-    captionController.text = processedCaption;
+    // Set caption text directly (no diacritic removal)
+    captionController.text = caption;
 
     // Update personality field with all selected players (always call to handle empty case)
     _updatePersonalityField();
@@ -5154,11 +5160,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Join players with semicolons, no semicolon after the last player
     final personalityText = cleanPlayerNames.join(';');
 
-    // Apply diacritic removal if enabled
-    final processedPersonalityText = _removeDiacritics(personalityText);
-
-    // Update the personality field
-    personalityController.text = processedPersonalityText;
+    // Update the personality field directly (no diacritic removal)
+    personalityController.text = personalityText;
   }
 
   String _getTeamAbbreviation(String teamName) {
@@ -5199,78 +5202,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final abbreviation = teamAbbreviations[teamName];
     // print('DEBUG: Converting team name "$teamName" to abbreviation: "$abbreviation"');
     return abbreviation ?? teamName;
-  }
-
-  String _removeDiacritics(String text) {
-    if (!_removeAccent) return text;
-
-    // Map of accented characters to their non-accented equivalents
-    const Map<String, String> diacriticMap = {
-      'à': 'a',
-      'á': 'a',
-      'â': 'a',
-      'ã': 'a',
-      'ä': 'a',
-      'å': 'a',
-      'æ': 'ae',
-      'è': 'e',
-      'é': 'e',
-      'ê': 'e',
-      'ë': 'e',
-      'ì': 'i',
-      'í': 'i',
-      'î': 'i',
-      'ï': 'i',
-      'ò': 'o',
-      'ó': 'o',
-      'ô': 'o',
-      'õ': 'o',
-      'ö': 'o',
-      'ø': 'o',
-      'ù': 'u',
-      'ú': 'u',
-      'û': 'u',
-      'ü': 'u',
-      'ý': 'y',
-      'ÿ': 'y',
-      'ñ': 'n',
-      'ç': 'c',
-      'À': 'A',
-      'Á': 'A',
-      'Â': 'A',
-      'Ã': 'A',
-      'Ä': 'A',
-      'Å': 'A',
-      'Æ': 'AE',
-      'È': 'E',
-      'É': 'E',
-      'Ê': 'E',
-      'Ë': 'E',
-      'Ì': 'I',
-      'Í': 'I',
-      'Î': 'I',
-      'Ï': 'I',
-      'Ò': 'O',
-      'Ó': 'O',
-      'Ô': 'O',
-      'Õ': 'O',
-      'Ö': 'O',
-      'Ø': 'O',
-      'Ù': 'U',
-      'Ú': 'U',
-      'Û': 'U',
-      'Ü': 'U',
-      'Ý': 'Y',
-      'Ñ': 'N',
-      'Ç': 'C',
-    };
-
-    String result = text;
-    diacriticMap.forEach((accented, plain) {
-      result = result.replaceAll(accented, plain);
-    });
-
-    return result;
   }
 
   Widget _buildPlayerChip(String playerName, bool isHome) {
