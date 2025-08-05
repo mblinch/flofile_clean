@@ -964,7 +964,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.grey.shade200,
+                                        color: Colors.grey.shade300,
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
                                             color: Colors.grey.shade300),
@@ -9750,7 +9750,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
+                color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.grey.shade300),
               ),
