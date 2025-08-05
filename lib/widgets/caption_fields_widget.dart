@@ -2393,10 +2393,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             height:
                                                                                 4), // Padding between Magic Bar and verb categories
 
-                                                                                // Verb categories (hidden when custom text is being used or when certain verbs are selected)
-        if (!customBetweenPlayersController
-            .text
-            .isNotEmpty && _selectedVerb != 'Home Run') ...[
+                                                                                                // Verb categories (hidden when custom text is being used or when certain verbs are selected)
+                        if (!customBetweenPlayersController.text.isNotEmpty && _selectedVerb != 'Home Run') ...[
                                                                           Container(
                                                                             height:
                                                                                 500, // Increased height for verb area
