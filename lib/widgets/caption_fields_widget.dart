@@ -10729,25 +10729,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Manager Name:',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      'Manager:',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     TextField(
                       controller: _managerNameController,
                       decoration: const InputDecoration(
                         hintText: 'Enter manager name...',
                         border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        isDense: true,
                       ),
-                      style: const TextStyle(fontSize: 12),
+                      style: const TextStyle(fontSize: 11),
                       onChanged: (value) {
                         setState(() {
                           _managerName = value;
