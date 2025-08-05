@@ -7431,40 +7431,58 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String? _getOpposingTeamName() {
+    // Debug prints to see what's happening
+    print('DEBUG: _firstPlayerSelected: $_firstPlayerSelected');
+    print('DEBUG: selectedHomeTeam: $selectedHomeTeam');
+    print('DEBUG: selectedAwayTeam: $selectedAwayTeam');
+    print('DEBUG: selectedHomePlayers: $selectedHomePlayers');
+    print('DEBUG: selectedAwayPlayers: $selectedAwayPlayers');
+    
     // Get the opposing team name based on the main player's team
     if (_firstPlayerSelected == null) {
       // Fallback: if no main player is selected, use the first team logic
       if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+        print('DEBUG: Using selectedAwayTeam as fallback: $selectedAwayTeam');
         return selectedAwayTeam;
       } else if (selectedAwayPlayers.isNotEmpty &&
           selectedHomePlayers.isEmpty) {
+        print('DEBUG: Using selectedHomeTeam as fallback: $selectedHomeTeam');
         return selectedHomeTeam;
       } else if (_firstTeamSelected == true) {
+        print('DEBUG: Using selectedAwayTeam as fallback (firstTeamSelected): $selectedAwayTeam');
         return selectedAwayTeam;
       } else if (_firstTeamSelected == false) {
+        print('DEBUG: Using selectedHomeTeam as fallback (firstTeamSelected): $selectedHomeTeam');
         return selectedHomeTeam;
       }
+      print('DEBUG: Using final fallback selectedAwayTeam: $selectedAwayTeam');
       return selectedAwayTeam; // Final fallback
     }
 
     // Determine which team the main player is from
     final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
+    print('DEBUG: isMainPlayerHome: $isMainPlayerHome');
 
     // Return the opposing team name
     final opposingTeam = isMainPlayerHome ? selectedAwayTeam : selectedHomeTeam;
     final mainTeam = isMainPlayerHome ? selectedHomeTeam : selectedAwayTeam;
+    print('DEBUG: opposingTeam: $opposingTeam');
+    print('DEBUG: mainTeam: $mainTeam');
 
     // If the opposing team is the same as the main player's team,
     // we need to find a different team from the teams list
     if (opposingTeam == mainTeam || opposingTeam == null) {
+      print('DEBUG: Teams are the same or null, finding alternative');
       // Find a team from the list that's not the main team
       final alternativeTeam = teamsList.firstWhere(
         (team) => team != mainTeam,
         orElse: () => "the opposing team",
       );
+      print('DEBUG: alternativeTeam: $alternativeTeam');
       return alternativeTeam;
     }
 
+    print('DEBUG: Returning opposingTeam: $opposingTeam');
     return opposingTeam;
   }
 
@@ -10740,7 +10758,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     SizedBox(
                       width: MediaQuery.of(context).size.width * 0.10,
                       child: TextField(
