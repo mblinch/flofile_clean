@@ -10746,40 +10746,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    TextField(
-                      controller: _managerNameController,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        labelText: 'Manager Name',
-                        floatingLabelBehavior: FloatingLabelBehavior.always,
-                        hintText: 'Enter manager name...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey.shade400),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.25,
+                      child: TextField(
+                        controller: _managerNameController,
+                        style: const TextStyle(fontSize: 12),
+                        decoration: InputDecoration(
+                          labelText: 'Manager Name',
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
+                          hintText: 'Enter manager name...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide:
+                                BorderSide(color: Colors.blue.shade400, width: 2),
+                          ),
+                          contentPadding: const EdgeInsets.all(8),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          labelStyle: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey.shade400),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
-                        ),
-                        contentPadding: const EdgeInsets.all(8),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        labelStyle: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black87,
-                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _managerName = value;
+                          });
+                          _updateCaption();
+                        },
                       ),
-                      onChanged: (value) {
-                        setState(() {
-                          _managerName = value;
-                        });
-                        _updateCaption();
-                      },
                     ),
                     const SizedBox(height: 4),
                     SizedBox(
