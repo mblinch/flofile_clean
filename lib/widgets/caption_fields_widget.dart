@@ -8166,8 +8166,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -8479,8 +8479,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   child: _buildReusableInningSelector(),
                 ),
 
-                                        // Back button
-                        _buildVerbOptionsBackButton(),
+                // Back button
+                _buildVerbOptionsBackButton(),
               ],
             ),
           ),
@@ -8935,8 +8935,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Runs to first base option
               _buildSubOption('Runs to First Base', 'runs to first base'),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -9064,8 +9064,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               if (_selectedVerb != 'Single')
                 _buildSubOption('Slides into Base', 'slides_into_base'),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -9654,7 +9654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         const SizedBox(height: 8),
         // Back button
         Align(
-          alignment: Alignment.center,
+          alignment: Alignment.centerLeft,
           child: Container(
             width: width, // Use passed width parameter
             margin: const EdgeInsets.symmetric(
@@ -10050,8 +10050,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -10275,8 +10275,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -10417,8 +10417,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -10711,8 +10711,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
@@ -10812,8 +10812,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
-                                      // Back button
-                        _buildVerbOptionsBackButton(),
+              // Back button
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
