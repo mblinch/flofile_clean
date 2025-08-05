@@ -99,8 +99,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     if (widget.imagePaths != _previousImagePaths) {
       _previousImagePaths = List.from(widget.imagePaths);
       _loadedThumbnails = 0;
-      _isLoadingThumbnails =
-          false; // Start with false, let grid show immediately
+      _isLoadingThumbnails = false;
     }
 
     // Mark loading as complete when all thumbnails are loaded
@@ -515,33 +514,24 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                // Progress overlay
-                if (widget.loadingProgress != null)
-                  Positioned(
-                    bottom: 4,
-                    left: 4,
-                    right: 4,
-                    child: Container(
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: widget.loadingProgress!,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade600,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+
+                // Loading indicator with order number
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(strokeWidth: 2),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${widget.imagePaths.indexOf(imagePath) + 1}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                // Loading indicator
-                const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ],
             ),

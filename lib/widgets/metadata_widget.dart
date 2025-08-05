@@ -424,9 +424,24 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         keywordsController.text = keywords?.toString() ?? '';
       }
 
-      final extractedCreator = meta['Creator']?.toString() ?? '';
-      if (extractedCreator.isNotEmpty) {
-        creatorController.text = extractedCreator;
+      // Handle Creator field - could be String or List
+      final creatorValue = meta['Creator'];
+      if (creatorValue != null) {
+        if (creatorValue is List) {
+          // If it's a list, take the first value only to avoid duplication
+          final firstValue =
+              creatorValue.isNotEmpty ? creatorValue.first.toString() : '';
+          creatorController.text = firstValue;
+          print(
+              'DEBUG: Creator field loaded from List, using first value: "$firstValue"');
+        } else {
+          creatorController.text = creatorValue.toString();
+          print(
+              'DEBUG: Creator field loaded from String: "${creatorController.text}"');
+        }
+      } else {
+        creatorController.text = '';
+        print('DEBUG: Creator field is null or empty');
       }
 
       // Load Creator's Job Title from AuthorsPosition (Photoshop XMP field)

@@ -17,6 +17,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function() onNextImage;
   final Function() onPreviousImage;
   final Future<void> Function()? onSaveIptc;
+  final Future<void> Function()? onSaveIptcBackground;
 
   const PicturePreviewWidget({
     super.key,
@@ -26,6 +27,7 @@ class PicturePreviewWidget extends StatefulWidget {
     required this.onNextImage,
     required this.onPreviousImage,
     this.onSaveIptc,
+    this.onSaveIptcBackground,
   });
 
   @override
@@ -417,10 +419,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       // Previous button
                       IconButton(
                         onPressed: widget.currentIndex > 0
-                            ? () async {
-                                // Save IPTC metadata before navigating
-                                if (widget.onSaveIptc != null) {
-                                  await widget.onSaveIptc!();
+                            ? () {
+                                // Save in background without waiting
+                                if (widget.onSaveIptcBackground != null) {
+                                  widget.onSaveIptcBackground!()
+                                      .catchError((e) {
+                                    print('Background save error: $e');
+                                  });
                                 }
                                 widget.onPreviousImage();
                               }
@@ -483,10 +488,17 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       // Next button
                       IconButton(
                         onPressed: widget.currentIndex < imageCount - 1
-                            ? () async {
-                                // Save IPTC metadata before navigating
-                                if (widget.onSaveIptc != null) {
-                                  await widget.onSaveIptc!();
+                            ? () {
+                                // Save in background without waiting
+                                print(
+                                    'DEBUG: Next button pressed - calling background save');
+                                if (widget.onSaveIptcBackground != null) {
+                                  widget.onSaveIptcBackground!()
+                                      .catchError((e) {
+                                    print('Background save error: $e');
+                                  });
+                                } else {
+                                  print('DEBUG: onSaveIptcBackground is null');
                                 }
                                 widget.onNextImage();
                               }

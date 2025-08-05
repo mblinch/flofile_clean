@@ -56,6 +56,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final GlobalKey _picturePreviewKey1 = GlobalKey();
   final GlobalKey _picturePreviewKey2 = GlobalKey();
 
+  // Scroll controller for thumbnail grid
+  final ScrollController _thumbnailScrollController = ScrollController();
+
   // Cached player data to prevent re-fetching
   List<Player> _cachedHomeRoster = [];
   List<Player> _cachedAwayRoster = [];
@@ -64,6 +67,30 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     setState(() {
       _personalityOverride = '';
     });
+  }
+
+  // Scroll to current thumbnail
+  void _scrollToCurrentThumbnail() {
+    if (_thumbnailScrollController.hasClients && imagePaths.isNotEmpty) {
+      // Calculate the position of the current thumbnail
+      final containerWidth = MediaQuery.of(context).size.width * 0.4;
+      final thumbSize = 140.0;
+      final thumbSpacing = 14.0;
+      final columns =
+          ((containerWidth - thumbSpacing) / (thumbSize + thumbSpacing))
+              .floor();
+
+      if (columns > 0) {
+        final row = currentIndex ~/ columns;
+        final scrollPosition = row * (thumbSize + thumbSpacing);
+
+        _thumbnailScrollController.animateTo(
+          scrollPosition,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
   }
 
   void _handleStartupComplete(
@@ -235,7 +262,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Save IPTC metadata to the current image
+  // Save IPTC metadata to the current image (with UI refresh)
   Future<void> _saveIptcMetadata() async {
     if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
 
@@ -252,6 +279,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       Map<String, String> metadataValues = metadataState.getCurrentValues();
       allValues.addAll(metadataValues);
       print('Retrieved metadata values: $metadataValues');
+      print('DEBUG: Creator field value: "${metadataValues['Creator']}"');
     }
 
     // Get caption values from the caption fields widget
@@ -277,6 +305,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       allValues.forEach((key, value) {
         if (value.trim().isNotEmpty) {
           args.add('-$key=$value');
+          if (key == 'Creator') {
+            print('DEBUG: Adding Creator to exiftool args: -$key=$value');
+          }
         }
       });
 
@@ -316,8 +347,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               await Process.run('exiftool', ['-Caption-Abstract', imagePath]);
           print('DEBUG: Caption verification after save: ${verifyProc.stdout}');
 
-          // Force refresh EXIF data immediately
-          _refreshPicturePreviewExif();
+          // Don't refresh EXIF data for background saves to avoid UI glitches
         } else {
           print('Exiftool error saving metadata: ${proc.stderr}');
         }
@@ -326,6 +356,95 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     } catch (e) {
       print('Error saving IPTC metadata: $e');
+    }
+  }
+
+  // Save IPTC metadata in background (no UI refresh)
+  Future<void> _saveIptcMetadataBackground() async {
+    print('DEBUG: Background save function called');
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) {
+      print('DEBUG: No images or invalid index');
+      return;
+    }
+
+    final imagePath = imagePaths[currentIndex];
+    print('DEBUG: Saving IPTC metadata in background to: $imagePath');
+
+    // Get values from both widgets
+    Map<String, String> allValues = {};
+
+    // Get metadata values from the metadata widget
+    dynamic metadataState =
+        _metadataKey1.currentState ?? _metadataKey2.currentState;
+    if (metadataState != null) {
+      Map<String, String> metadataValues = metadataState.getCurrentValues();
+      allValues.addAll(metadataValues);
+    }
+
+    // Get caption values from the caption fields widget
+    dynamic captionState =
+        _captionFieldsKey1.currentState ?? _captionFieldsKey2.currentState;
+    if (captionState != null) {
+      Map<String, String> captionValues =
+          captionState.getCurrentCaptionValues();
+      allValues.addAll(captionValues);
+    }
+
+    if (allValues.isEmpty) {
+      print('DEBUG: Could not access widget states for background save');
+      return;
+    }
+
+    print('DEBUG: Background save - allValues: $allValues');
+
+    try {
+      // Build exiftool command arguments
+      List<String> args = [];
+
+      // Add each field that has a value
+      allValues.forEach((key, value) {
+        if (value.trim().isNotEmpty) {
+          args.add('-$key=$value');
+        }
+      });
+
+      // Handle supplemental categories specially (combine them into array)
+      List<String> suppCats = [];
+      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories1']!);
+      }
+      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories2']!);
+      }
+      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories3']!);
+      }
+
+      // Remove individual supplemental category args and add combined one
+      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
+      if (suppCats.isNotEmpty) {
+        args.add('-SupplementalCategories=${suppCats.join(',')}');
+      }
+
+      // Always overwrite original file
+      args.add('-overwrite_original');
+      args.add(imagePath);
+
+      // Only run exiftool if we have metadata to write
+      print('DEBUG: Background save - args: $args');
+      if (args.length > 2) {
+        print('DEBUG: Running exiftool for background save');
+        final proc = await Process.run('exiftool', args);
+        if (proc.exitCode == 0) {
+          print('DEBUG: Background IPTC metadata saved successfully');
+        } else {
+          print('DEBUG: Background exiftool error: ${proc.stderr}');
+        }
+      } else {
+        print('DEBUG: No metadata to save in background');
+      }
+    } catch (e) {
+      print('Background save error: $e');
     }
   }
 
@@ -432,6 +551,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       currentIndex = index;
     });
     _loadMetadata();
+    // Scroll to current thumbnail after a short delay to ensure the widget is built
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _scrollToCurrentThumbnail();
+    });
+  }
+
+  @override
+  void dispose() {
+    _thumbnailScrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -632,6 +761,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                               }
                             },
                             onSaveIptc: _saveIptcMetadata,
+                            onSaveIptcBackground: _saveIptcMetadataBackground,
                           ),
                         ),
 
@@ -641,6 +771,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             imagePaths: imagePaths,
                             currentIndex: currentIndex,
                             onImageSelected: _onImageSelected,
+                            scrollController: _thumbnailScrollController,
                             loadingProgress: _isLoadingThumbnails
                                 ? _thumbnailLoadingProgress
                                 : null,
@@ -707,6 +838,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                                         : null,
                                 currentImagePath: currentPath,
                                 onSaveIptc: _saveIptcMetadata,
+                                onSaveIptcBackground:
+                                    _saveIptcMetadataBackground,
                               );
                             },
                           ),
@@ -843,6 +976,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         }
                       },
                       onSaveIptc: _saveIptcMetadata,
+                      onSaveIptcBackground: _saveIptcMetadataBackground,
                     ),
                   ),
 
@@ -852,6 +986,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
                       onImageSelected: _onImageSelected,
+                      scrollController: _thumbnailScrollController,
                       loadingProgress: _isLoadingThumbnails
                           ? _thumbnailLoadingProgress
                           : null,

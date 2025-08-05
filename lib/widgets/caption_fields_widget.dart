@@ -54,6 +54,7 @@ class CaptionFieldsWidget extends StatefulWidget {
   final List<Player>? preloadedAwayRoster;
   final String? currentImagePath;
   final Future<void> Function()? onSaveIptc;
+  final Future<void> Function()? onSaveIptcBackground;
 
   const CaptionFieldsWidget({
     super.key,
@@ -70,6 +71,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.preloadedAwayRoster,
     this.currentImagePath,
     this.onSaveIptc,
+    this.onSaveIptcBackground,
   });
 
   @override
@@ -85,7 +87,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController cityController = TextEditingController();
   final TextEditingController provinceController = TextEditingController();
   final TextEditingController stadiumController = TextEditingController();
-  final TextEditingController creatorController = TextEditingController();
+  // Creator field is now handled by metadata widget only
   final TextEditingController customCelebrationController =
       TextEditingController();
   final TextEditingController customDejectionController =
@@ -479,7 +481,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           captionController.text, // Photo Mechanic compatible caption field
       'ImageDescription': captionController.text, // EXIF description field
       'XMP-getty:Personality': personalityController.text,
-      'Creator': creatorController.text,
       'Sub-location': stadiumController.text,
       'City': cityController.text,
       'Province-State': provinceController.text,
@@ -681,6 +682,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.text = widget.personalityOverride!;
     }
     if (widget.metadata != oldWidget.metadata) {
+      // Reset selections when metadata changes (new image loaded)
+      resetCaptionSelections();
       _loadMetadata();
     }
 
@@ -716,20 +719,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final meta = widget.metadata!;
 
     // Load Caption: Prefer IPTC "Caption-Abstract", fallback to EXIF "ImageDescription"
-    final extractedCaption = meta['Caption-Abstract'] as String? ??
-        meta['ImageDescription'] as String? ??
-        '';
+    final dynamic captionAbstract = meta['Caption-Abstract'];
+    final dynamic imageDescription = meta['ImageDescription'];
+    final extractedCaption =
+        (captionAbstract is String ? captionAbstract : '') ??
+            (imageDescription is String ? imageDescription : '') ??
+            '';
 
     // Load Personality: Read from XMP-getty:Personality
-    final dynamic extractedPersonality = meta['Personality'];
+    final dynamic extractedPersonality =
+        meta['XMP-getty:Personality'] ?? meta['Personality'];
     final personInImageText = (extractedPersonality is List)
         ? extractedPersonality.join(';')
-        : (extractedPersonality as String? ?? '');
+        : (extractedPersonality is String ? extractedPersonality : '');
 
     // Load location fields from metadata
-    final extractedStadium = meta['Sub-location'] as String? ?? '';
-    final extractedCity = meta['City'] as String? ?? '';
-    final extractedProvince = meta['Province-State'] as String? ?? '';
+    final dynamic subLocation = meta['Sub-location'];
+    final dynamic city = meta['City'];
+    final dynamic province = meta['Province-State'];
+    final extractedStadium = subLocation is String ? subLocation : '';
+    final extractedCity = city is String ? city : '';
+    final extractedProvince = province is String ? province : '';
+
+    // Creator field is now handled by metadata widget only
 
     setState(() {
       captionController.text = extractedCaption;
@@ -744,7 +756,60 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       stadiumController.text = extractedStadium;
       cityController.text = extractedCity;
       provinceController.text = extractedProvince;
+
+      // Creator field is now handled by metadata widget only
     });
+  }
+
+  // Reset all caption building selections when navigating to a new image
+  void resetCaptionSelections() {
+    setState(() {
+      // Clear player selections
+      selectedHomePlayers.clear();
+      selectedAwayPlayers.clear();
+      _firstPlayerSelected = null;
+      _firstTeamSelected = null;
+
+      // Clear verb selections
+      _selectedVerb = null;
+      _selectedActionVerb = null;
+      _selectedHittingAction = null;
+
+      // Clear celebration settings
+      _isCelebratingWithTeammates = false;
+
+      // Clear other selections
+      _rbiCount = null;
+      _selectedRbiInning = null;
+      _selectedCustomTextInning = null;
+
+      // Clear search states
+      _filteredPlayers.clear();
+      _noPlayersFound = false;
+      _isPlayerSearchMode = false;
+      _magicInputMatchingPlayers.clear();
+      _magicInputActionText = '';
+      _waitingForHomeVisitorChoice = false;
+
+      // Clear custom text fields
+      customCelebrationController.clear();
+      customDejectionController.clear();
+      customBetweenPlayersController.clear();
+
+      // Clear search bars
+      _homeSearchController.clear();
+      _awaySearchController.clear();
+      _homeSearchText = '';
+      _awaySearchText = '';
+
+      // Reset hasBeenReset flag to allow metadata loading
+      _hasBeenReset = false;
+    });
+  }
+
+  // Public method to reset caption selections (can be called from parent)
+  void resetSelections() {
+    resetCaptionSelections();
   }
 
   @override
@@ -4698,7 +4763,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
-    final photoBy = creatorController.text;
+    // Get creator from metadata widget or use default
+    final creatorValue = widget.metadata?['Creator'];
+    String photoBy;
+    if (creatorValue is List) {
+      // If it's a list, take the first value only
+      photoBy = creatorValue.isNotEmpty
+          ? creatorValue.first.toString()
+          : 'Mark Blinch';
+    } else {
+      photoBy = creatorValue?.toString() ?? 'Mark Blinch';
+    }
 
     // Add custom text between players if provided (but not magic input)
     String customTextPart = '';
@@ -5657,7 +5732,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (widget.metadata != null) {
       // Convert all values to strings to handle int/string mixed types
       widget.metadata!.forEach((key, value) {
-        allMetadata[key] = value.toString();
+        if (value is String) {
+          allMetadata[key] = value;
+        } else if (value is List) {
+          // For Keywords field, preserve commas; for other fields, use semicolons
+          if (key == 'Keywords') {
+            allMetadata[key] = value.join(', ');
+          } else {
+            allMetadata[key] = value.join(';');
+          }
+        } else if (value != null) {
+          allMetadata[key] = value.toString();
+        } else {
+          allMetadata[key] = '';
+        }
       });
     }
 
@@ -5666,10 +5754,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     allMetadata['XMP:Description'] = captionController.text;
     allMetadata['ImageDescription'] = captionController.text;
     allMetadata['XMP-getty:Personality'] = personalityController.text;
-    allMetadata['Creator'] = creatorController.text;
     allMetadata['Sub-location'] = stadiumController.text;
     allMetadata['City'] = cityController.text;
     allMetadata['Province-State'] = provinceController.text;
+
+    print(
+        'DEBUG: personalityController.text = "${personalityController.text}"');
+    print(
+        'DEBUG: allMetadata["XMP-getty:Personality"] = "${allMetadata['XMP-getty:Personality']}"');
+    print(
+        'DEBUG: personalityController.text length: ${personalityController.text.length}');
+    print(
+        'DEBUG: personalityController.text isEmpty: ${personalityController.text.isEmpty}');
 
     print('DEBUG: All metadata before filtering: $allMetadata');
 
@@ -5720,11 +5816,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             updatedMetadata['Headline'] = metadataMap['Headline'].toString();
           if (metadataMap['Keywords'] != null)
             updatedMetadata['Keywords'] = metadataMap['Keywords'].toString();
-          if (metadataMap['Creator'] != null) {
-            updatedMetadata['Creator'] = metadataMap['Creator'].toString();
-            // Update the creator controller directly
-            creatorController.text = metadataMap['Creator'].toString();
-          }
+
           if (metadataMap['AuthorsPosition'] != null)
             updatedMetadata['AuthorsPosition'] =
                 metadataMap['AuthorsPosition'].toString();
@@ -5742,21 +5834,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             updatedMetadata['CountryCode'] =
                 metadataMap['CountryCode'].toString();
           if (metadataMap['Sub-location'] != null) {
-            updatedMetadata['Sub-location'] =
-                metadataMap['Sub-location'].toString();
+            final stadiumValue = metadataMap['Sub-location'].toString();
+            updatedMetadata['Sub-location'] = stadiumValue;
             // Update the stadium controller directly
-            stadiumController.text = metadataMap['Sub-location'].toString();
+            stadiumController.text = stadiumValue;
           }
           if (metadataMap['City'] != null) {
-            updatedMetadata['City'] = metadataMap['City'].toString();
+            final cityValue = metadataMap['City'].toString();
+            updatedMetadata['City'] = cityValue;
             // Update the city controller directly
-            cityController.text = metadataMap['City'].toString();
+            cityController.text = cityValue;
           }
           if (metadataMap['Province-State'] != null) {
-            updatedMetadata['Province-State'] =
-                metadataMap['Province-State'].toString();
+            final provinceValue = metadataMap['Province-State'].toString();
+            updatedMetadata['Province-State'] = provinceValue;
             // Update the province controller directly
-            provinceController.text = metadataMap['Province-State'].toString();
+            provinceController.text = provinceValue;
           }
           if (metadataMap['ObjectName'] != null)
             updatedMetadata['ObjectName'] =
@@ -5778,10 +5871,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           // Caption and personality fields
           if (metadataMap['Caption-Abstract'] != null) {
-            updatedMetadata['Caption-Abstract'] =
-                metadataMap['Caption-Abstract'].toString();
+            final captionValue = metadataMap['Caption-Abstract'].toString();
+            updatedMetadata['Caption-Abstract'] = captionValue;
             // Update the caption controller directly
-            captionController.text = metadataMap['Caption-Abstract'].toString();
+            captionController.text = captionValue;
           }
           if (metadataMap['XMP:Description'] != null)
             updatedMetadata['XMP:Description'] =
@@ -5790,11 +5883,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             updatedMetadata['ImageDescription'] =
                 metadataMap['ImageDescription'].toString();
           if (metadataMap['XMP-getty:Personality'] != null) {
-            updatedMetadata['XMP-getty:Personality'] =
+            final personalityValue =
                 metadataMap['XMP-getty:Personality'].toString();
+            updatedMetadata['XMP-getty:Personality'] = personalityValue;
             // Update the personality controller directly
-            personalityController.text =
-                metadataMap['XMP-getty:Personality'].toString();
+            personalityController.text = personalityValue;
+            print('DEBUG: Pasting personality value: "$personalityValue"');
+            print(
+                'DEBUG: Updated personalityController.text to: "${personalityController.text}"');
+          } else {
+            print('DEBUG: No XMP-getty:Personality found in metadataMap');
+            print(
+                'DEBUG: Available keys in metadataMap: ${metadataMap.keys.toList()}');
           }
 
           // Date and time are intentionally NOT pasted
