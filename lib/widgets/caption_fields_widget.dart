@@ -1845,24 +1845,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           width: 0.5),
                                     ),
                                   ),
-                                  child: Text(
-                                    _getFormattedPlayerName(
-                                        player.displayName,
-                                        isHome
-                                            ? _homeSortOption
-                                            : _awaySortOption),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
-                                      color: isSelected
-                                          ? (isHomePlayer
-                                              ? Colors.white
-                                              : Colors.grey.shade800)
-                                          : Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                                  child: Row(
+                                    children: [
+                                      // Red star for first selected player
+                                      if (isSelected && _isFirstSelectedPlayer(player.displayName))
+                                        Container(
+                                          margin: const EdgeInsets.only(right: 4),
+                                          padding: const EdgeInsets.all(1),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                          child: Icon(
+                                            Icons.star,
+                                            size: 8,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      Expanded(
+                                        child: Text(
+                                          _getFormattedPlayerName(
+                                              player.displayName,
+                                              isHome
+                                                  ? _homeSortOption
+                                                  : _awaySortOption),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                            color: isSelected
+                                                ? (isHomePlayer
+                                                    ? Colors.white
+                                                    : Colors.grey.shade800)
+                                                : Colors.black87,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );
