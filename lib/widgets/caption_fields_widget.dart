@@ -4732,6 +4732,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Takes the Field' ||
         verbToUse == 'Post Game Win' ||
         verbToUse == 'Post Game Loss' ||
+        verbToUse == 'Batting Practice' ||
+        verbToUse == 'Fielding Practice' ||
+        verbToUse == 'Warm Ups' ||
+        verbToUse == 'Walks On Field' ||
+        verbToUse == 'Runs On Field' ||
+        verbToUse == 'Stretching' ||
         customCelebrationController.text.isNotEmpty ||
         customDejectionController.text.isNotEmpty) {
       // For these actions, don't add opponent part here - it's handled in the action phrase
@@ -4798,17 +4804,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         teamName = opponentPart.replaceAll(' against ', '');
       }
 
-      // Debug: print the opponentPart to see what it contains
-      print('DEBUG: opponentPart = "$opponentPart"');
-      print('DEBUG: teamName = "$teamName"');
+
 
       // If teamName is empty, try to get it from the opponent team
       if (teamName.isEmpty && opponentTeamName != null) {
         teamName = opponentTeamName;
-        print('DEBUG: Using opponentTeamName = "$teamName"');
       }
 
-      opponentPartModified = ' prior to play against the $teamName';
+      // Check if action phrase already contains "against" or "playing" to avoid duplication
+      if (actionPhrase.contains('against') ||
+          actionPhrase.contains('playing')) {
+        opponentPartModified = ' prior to play';
+      } else {
+        opponentPartModified = ' prior to play against the $teamName';
+      }
     } else {
       gamePart = 'in their MLB game';
       opponentPartModified = opponentPart;
