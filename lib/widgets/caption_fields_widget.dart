@@ -8279,7 +8279,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 4),
+                                horizontal: 8, vertical: 5),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? Colors.grey.shade300
@@ -8293,7 +8293,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               hrType,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.grey.shade700,
                               ),
@@ -9274,14 +9274,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         margin: const EdgeInsets.only(bottom: 2),
         child: Row(
           children: [
             Expanded(
               flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color:
                       isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -9294,7 +9294,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: isSelected
                         ? Colors.grey.shade800
