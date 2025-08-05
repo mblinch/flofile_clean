@@ -4732,6 +4732,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Walks Off Field' ||
         verbToUse == 'Runs Off Field' ||
         verbToUse == 'Takes the Field' ||
+        verbToUse == 'Comes Off the Field' ||
         verbToUse == 'Post Game Win' ||
         verbToUse == 'Post Game Loss' ||
         verbToUse == 'Batting Practice' ||
