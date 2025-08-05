@@ -9979,8 +9979,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         _updateCaption();
                       },
                       child: Container(
-                        width: 28,
-                        height: 28,
+                        width: 36,
+                        height: 36,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: isSelected
@@ -9995,7 +9995,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Text(
                           '$inning',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: isSelected
                                 ? Colors.white
