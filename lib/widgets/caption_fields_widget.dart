@@ -2053,6 +2053,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _selectedVerb ==
                                                   'Takes the Field' ||
                                               _selectedVerb ==
+                                                  'Comes Off the Field' ||
+                                              _selectedVerb ==
                                                   'Post Game Win' ||
                                               _selectedVerb == 'Post Game Loss')
                                           ? _buildInningOnlyInterface()
