@@ -2028,7 +2028,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   : _selectedVerb == 'RBI Sacrifice Fly'
                       ? _buildSacrificeFlySubOptions()
                       : _selectedVerb == 'Home Run'
-                          ? _buildHomeRunSubOptions()
+                          ? _buildInningOnlyInterface()
                           : _selectedVerb == 'Tags'
                               ? _buildTagsSubOptions()
                               : _selectedVerb == 'Catches'
