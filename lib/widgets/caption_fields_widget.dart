@@ -964,10 +964,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.shade100,
+                                        color: Colors.grey.shade200,
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
-                                            color: Colors.orange.shade300),
+                                            color: Colors.grey.shade300),
                                       ),
                                       child: Row(
                                         mainAxisAlignment:
@@ -975,12 +975,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         children: [
                                           Icon(Icons.refresh,
                                               size: 12,
-                                              color: Colors.orange.shade700),
+                                              color: Colors.grey.shade700),
                                           const SizedBox(width: 2),
                                           Text('Reset',
                                               style: TextStyle(
                                                   fontSize: 11,
-                                                  color: Colors.orange.shade700,
+                                                  color: Colors.grey.shade700,
                                                   fontWeight: FontWeight.w500)),
                                         ],
                                       ),
@@ -9750,19 +9750,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.orange.shade100,
+                color: Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.orange.shade300),
+                border: Border.all(color: Colors.grey.shade300),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.refresh, size: 12, color: Colors.orange.shade700),
+                  Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
                   const SizedBox(width: 2),
                   Text('Reset',
                       style: TextStyle(
                           fontSize: 11,
-                          color: Colors.orange.shade700,
+                          color: Colors.grey.shade700,
                           fontWeight: FontWeight.w500)),
                 ],
               ),
