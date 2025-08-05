@@ -7437,7 +7437,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     print('DEBUG: selectedAwayTeam: $selectedAwayTeam');
     print('DEBUG: selectedHomePlayers: $selectedHomePlayers');
     print('DEBUG: selectedAwayPlayers: $selectedAwayPlayers');
-    
+
     // Get the opposing team name based on the main player's team
     if (_firstPlayerSelected == null) {
       // Fallback: if no main player is selected, use the first team logic
@@ -7449,10 +7449,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         print('DEBUG: Using selectedHomeTeam as fallback: $selectedHomeTeam');
         return selectedHomeTeam;
       } else if (_firstTeamSelected == true) {
-        print('DEBUG: Using selectedAwayTeam as fallback (firstTeamSelected): $selectedAwayTeam');
+        print(
+            'DEBUG: Using selectedAwayTeam as fallback (firstTeamSelected): $selectedAwayTeam');
         return selectedAwayTeam;
       } else if (_firstTeamSelected == false) {
-        print('DEBUG: Using selectedHomeTeam as fallback (firstTeamSelected): $selectedHomeTeam');
+        print(
+            'DEBUG: Using selectedHomeTeam as fallback (firstTeamSelected): $selectedHomeTeam');
         return selectedHomeTeam;
       }
       print('DEBUG: Using final fallback selectedAwayTeam: $selectedAwayTeam');
@@ -10758,6 +10760,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: MediaQuery.of(context).size.width * 0.10,
                       child: TextField(
