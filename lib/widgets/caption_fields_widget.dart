@@ -2441,63 +2441,69 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         ]),
                                                                                       ),
                                                                                       const SizedBox(width: 2),
-                                                                                                                                            // Defense column
-                                                      Expanded(
-                                                        child: _buildVerbCategory('Defense', [
-                                                          'Pitching',
-                                                          'Pitching Change',
-                                                          'Catches',
-                                                          'Throws',
-                                                          'Tags',
-                                                          'Groundball',
-                                                          'Fielding Position',
-                                                          'Double Play',
-                                                          'Triple Play',
-                                                          ''
-                                                        ]),
-                                                      ),
-                                                                                      const SizedBox(width: 2),
-                                                                                      // Running column
+                                                                                      // Defense column
                                                                                       Expanded(
-                                                                                        child: _buildVerbCategory('Running', [
-                                                                                          'Steals',
-                                                                                          'Slides',
-                                                                                          'Runs',
-                                                                                          'Rounds',
-                                                                                          '',
-                                                                                          '',
+                                                                                        child: _buildVerbCategory('Defense', [
+                                                                                          'Pitching',
+                                                                                          'Pitching Change',
+                                                                                          'Catches',
+                                                                                          'Throws',
+                                                                                          'Tags',
+                                                                                          'Groundball',
+                                                                                          'Fielding Position',
+                                                                                          'Double Play',
+                                                                                          'Triple Play',
                                                                                           ''
                                                                                         ]),
                                                                                       ),
                                                                                       const SizedBox(width: 2),
-                                                                                      // Reactions column
-                                                                                      Expanded(
-                                                                                        child: _buildVerbCategory('Reactions', [
-                                                                                          'Celebrates',
-                                                                                          'Dejection',
-                                                                                          'Post Game Win',
-                                                                                          'Post Game Loss',
-                                                                                          '',
-                                                                                          '',
-                                                                                          ''
-                                                                                        ]),
-                                                                                      ),
-                                                                                      const SizedBox(width: 2),
-                                                                                                                                            // Non Game-Action column
+                                                                                                                                            // Running column
                                                       Expanded(
-                                                        child: _buildVerbCategory('Non Game-Action', [
-                                                          'Looks On',
-                                                          'Batting Practice',
-                                                          'Fielding Practice',
-                                                          'Takes the Field',
-                                                          'Comes Off the Field',
-                                                          'National Anthem',
-                                                          'Stretching',
-                                                          'Warm Ups',
+                                                        child: _buildVerbCategory('Running', [
+                                                          'Steals',
+                                                          'Slides',
+                                                          'Runs',
+                                                          'Rounds',
+                                                          '',
+                                                          '',
+                                                          '',
+                                                          '',
                                                           '',
                                                           ''
                                                         ]),
                                                       ),
+                                                                                      const SizedBox(width: 2),
+                                                                                                                                            // Reactions column
+                                                      Expanded(
+                                                        child: _buildVerbCategory('Reactions', [
+                                                          'Celebrates',
+                                                          'Dejection',
+                                                          'Post Game Win',
+                                                          'Post Game Loss',
+                                                          '',
+                                                          '',
+                                                          '',
+                                                          '',
+                                                          '',
+                                                          ''
+                                                        ]),
+                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                      // Non Game-Action column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Non Game-Action', [
+                                                                                          'Looks On',
+                                                                                          'Batting Practice',
+                                                                                          'Fielding Practice',
+                                                                                          'Takes the Field',
+                                                                                          'Comes Off the Field',
+                                                                                          'National Anthem',
+                                                                                          'Stretching',
+                                                                                          'Warm Ups',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
                                                                                       const SizedBox(width: 2),
                                                                                     ],
                                                                                   ),
