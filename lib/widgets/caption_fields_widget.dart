@@ -114,8 +114,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       TextEditingController();
   final TextEditingController customBetweenPlayersController =
       TextEditingController();
+  final TextEditingController _managerNameController = TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
+  String _managerName = '';
 
   // Date
   DateTime selectedDate = DateTime.now();
@@ -2188,13 +2190,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       : (_selectedVerb ==
                                                               'Dejection')
                                                           ? _buildDejectionInterface()
+                                                                                                                    : (_selectedVerb ==
+                                                              'National Anthem' ||
+                                                              _selectedVerb ==
+                                                              'Stretching' ||
+                                                              _selectedVerb ==
+                                                              'Warm Ups')
+                                                          ? _buildNationalAnthemInterface()
                                                           : (_selectedVerb ==
-                                                                      'National Anthem' ||
-                                                                  _selectedVerb ==
-                                                                      'Stretching' ||
-                                                                  _selectedVerb ==
-                                                                      'Warm Ups')
-                                                              ? _buildNationalAnthemInterface()
+                                                              'Pitching Change')
+                                                          ? _buildPitchingChangeInterface()
                                                               : Column(
                                                                   crossAxisAlignment:
                                                                       CrossAxisAlignment
@@ -2457,37 +2462,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         ]),
                                                                                       ),
                                                                                       const SizedBox(width: 2),
-                                                                                                                                            // Running column
-                                                      Expanded(
-                                                        child: _buildVerbCategory('Running', [
-                                                          'Steals',
-                                                          'Slides',
-                                                          'Runs',
-                                                          'Rounds',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          ''
-                                                        ]),
-                                                      ),
+                                                                                      // Running column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Running', [
+                                                                                          'Steals',
+                                                                                          'Slides',
+                                                                                          'Runs',
+                                                                                          'Rounds',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
                                                                                       const SizedBox(width: 2),
-                                                                                                                                            // Reactions column
-                                                      Expanded(
-                                                        child: _buildVerbCategory('Reactions', [
-                                                          'Celebrates',
-                                                          'Dejection',
-                                                          'Post Game Win',
-                                                          'Post Game Loss',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          '',
-                                                          ''
-                                                        ]),
-                                                      ),
+                                                                                      // Reactions column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Reactions', [
+                                                                                          'Celebrates',
+                                                                                          'Dejection',
+                                                                                          'Post Game Win',
+                                                                                          'Post Game Loss',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
                                                                                       const SizedBox(width: 2),
                                                                                       // Non Game-Action column
                                                                                       Expanded(
@@ -6831,6 +6836,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ? 'take part in warm ups'
             : 'takes part in warm ups';
         return '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
+      case 'Pitching Change':
+        if (_managerName.isNotEmpty) {
+          return 'pitcher taken out of the game by manager $_managerName during a break in play against the ${_getOpposingTeamName()}';
+        } else {
+          return 'pitcher taken out of the game during a break in play against the ${_getOpposingTeamName()}';
+        }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
@@ -10699,6 +10710,72 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Back button
+              _buildVerbOptionsBackButton(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Pitching Change interface
+  Widget _buildPitchingChangeInterface() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Selected verb indicator
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            _selectedVerb ?? '',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+
+        // Manager name input
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Manager Name:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _managerNameController,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter manager name...',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                      onChanged: (value) {
+                        setState(() {
+                          _managerName = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
               // Back button
               _buildVerbOptionsBackButton(),
             ],
