@@ -8344,6 +8344,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: _buildReusableInningSelector(),
               ),
 
+              const SizedBox(height: 8),
+              
+              // Compact action buttons
+              _buildCompactActionButtons(),
+              
+              const SizedBox(height: 8),
+              
               // Back button
               _buildVerbOptionsBackButton(),
             ],
