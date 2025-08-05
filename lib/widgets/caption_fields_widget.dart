@@ -11,8 +11,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Custom button widget with cursor styling
-class CustomButton extends StatelessWidget {
+// Custom button widget with cursor styling and press feedback
+class CustomButton extends StatefulWidget {
   final VoidCallback? onTap;
   final Widget child;
   final Color? backgroundColor;
@@ -29,12 +29,32 @@ class CustomButton extends StatelessWidget {
   });
 
   @override
+  State<CustomButton> createState() => _CustomButtonState();
+}
+
+class _CustomButtonState extends State<CustomButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: onTap,
-        child: child,
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          transform: _isPressed
+              ? Matrix4.translationValues(0, 2, 0)
+              : Matrix4.translationValues(0, 0, 0),
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 100),
+            opacity: _isPressed ? 0.8 : 1.0,
+            child: widget.child,
+          ),
+        ),
       ),
     );
   }
@@ -182,8 +202,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _awaySortAscending = true;
 
   // Player display mode - list or grid
-  bool _homePlayerGridMode = false; // false = list, true = grid
-  bool _awayPlayerGridMode = false;
+  bool _homePlayerGridMode = true; // false = list, true = grid
+  bool _awayPlayerGridMode = true;
 
   String? selectedCaptionVerb;
 
@@ -842,9 +862,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Caption and Personality boxes side by side
                         Row(
                           children: [
-                            // Caption Preview (Left side) - 80%
+                            // Caption Preview (Left side) - 75%
                             Expanded(
-                              flex: 8,
+                              flex: 3,
                               child: TextField(
                                 controller: captionController,
                                 maxLines: 3,
@@ -882,9 +902,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Personality Box (Right side) - 20%
+                            // Personality Box (Right side) - 25%
                             Expanded(
-                              flex: 2,
+                              flex: 1,
                               child: TextField(
                                 controller: personalityController,
                                 maxLines: 3,
@@ -929,44 +949,151 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            // Reset button (aligned to left)
-                            CustomButton(
-                              onTap: _resetCaption,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.refresh,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text('Reset',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
+                            // Center buttons: Prev, Copy, Paste, Next (centered)
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // Prev button
+                                  CustomButton(
+                                    onTap: () async {
+                                      if (widget.onSaveIptc != null) {
+                                        await widget.onSaveIptc!();
+                                      }
+                                      widget.onPreviousImage?.call();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.arrow_back,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                          const SizedBox(width: 2),
+                                          Text('Prev',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Copy button
+                                  CustomButton(
+                                    onTap: () {
+                                      _copyMetadataFromCaptionWidget();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.copy,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                          const SizedBox(width: 2),
+                                          Text('Copy',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Paste button
+                                  CustomButton(
+                                    onTap: _pasteMetadataToCaptionWidget,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.paste,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                          const SizedBox(width: 2),
+                                          Text('Paste',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Next button
+                                  CustomButton(
+                                    onTap: () async {
+                                      if (widget.onSaveIptc != null) {
+                                        await widget.onSaveIptc!();
+                                      }
+                                      widget.onNextImage?.call();
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text('Next',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                          const SizedBox(width: 2),
+                                          Icon(Icons.arrow_forward,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            // Center buttons: Prev, Copy, Paste, Next
+                            // Reset, Settings, and FTP buttons (right aligned)
                             Row(
                               children: [
-                                // Prev button
+                                // Reset button
                                 CustomButton(
-                                  onTap: () async {
-                                    if (widget.onSaveIptc != null) {
-                                      await widget.onSaveIptc!();
-                                    }
-                                    widget.onPreviousImage?.call();
-                                  },
+                                  onTap: _resetCaption,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 6, vertical: 4),
@@ -980,11 +1107,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.arrow_back,
+                                        Icon(Icons.refresh,
                                             size: 12,
                                             color: Colors.grey.shade700),
                                         const SizedBox(width: 2),
-                                        Text('Prev',
+                                        Text('Reset',
                                             style: TextStyle(
                                                 fontSize: 11,
                                                 color: Colors.grey.shade700,
@@ -994,107 +1121,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
-                                // Copy button
-                                CustomButton(
-                                  onTap: () {
-                                    _copyMetadataFromCaptionWidget();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.copy,
-                                            size: 12,
-                                            color: Colors.grey.shade700),
-                                        const SizedBox(width: 2),
-                                        Text('Copy',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                // Paste button
-                                CustomButton(
-                                  onTap: _pasteMetadataToCaptionWidget,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.paste,
-                                            size: 12,
-                                            color: Colors.grey.shade700),
-                                        const SizedBox(width: 2),
-                                        Text('Paste',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                // Next button
-                                CustomButton(
-                                  onTap: () async {
-                                    if (widget.onSaveIptc != null) {
-                                      await widget.onSaveIptc!();
-                                    }
-                                    widget.onNextImage?.call();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text('Next',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500)),
-                                        const SizedBox(width: 2),
-                                        Icon(Icons.arrow_forward,
-                                            size: 12,
-                                            color: Colors.grey.shade700),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            // FTP and Settings buttons (aligned to right)
-                            Row(
-                              children: [
+                                // Settings button (now between reset and FTP)
                                 CustomButton(
                                   onTap: _showFtpSettings,
                                   child: Container(
@@ -1111,11 +1138,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
+                                // FTP button
                                 CustomButton(
                                   onTap: _disableFtp ? null : _onFtpPressed,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 4),
+                                        horizontal: 12, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: _disableFtp
                                           ? Colors.grey.shade300
@@ -1135,8 +1163,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             color: _disableFtp
                                                 ? Colors.grey.shade600
                                                 : Colors.white),
-                                        const SizedBox(width: 2),
-                                        Text(_disableFtp ? 'FTP OFF' : 'FTP',
+                                        const SizedBox(width: 4),
+                                        Text(
+                                            _disableFtp
+                                                ? 'FTP OFF'
+                                                : (_currentFtpProfile != null
+                                                    ? 'FTP: $_currentFtpProfile'
+                                                    : 'FTP'),
                                             style: TextStyle(
                                                 fontSize: 11,
                                                 color: _disableFtp
@@ -1191,9 +1224,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           const SizedBox(width: 4),
 
-          // Verbs (Center) - 54% of space
+          // Verbs (Center) - 80% of space
           Expanded(
-            flex: 5,
+            flex: 8,
             child: _buildCompactVerbColumn(),
           ),
 
@@ -1595,127 +1628,60 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Controls row
                         Row(
                           children: [
-                            // Sort label
+                            // Type label
                             Text(
-                              'Sort: ',
+                              'Type: ',
                               style: const TextStyle(
                                   fontSize: 10, color: Colors.grey),
                             ),
-                            // Sort button
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (isHome) {
-                                    switch (_homeSortOption) {
-                                      case 'number':
-                                        _homeSortOption = 'lastName';
-                                        break;
-                                      case 'lastName':
-                                        _homeSortOption = 'firstName';
-                                        break;
-                                      case 'firstName':
-                                        _homeSortOption = 'number';
-                                        break;
+                            // Type button
+                            MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (isHome) {
+                                      _homePlayerGridMode =
+                                          !_homePlayerGridMode;
+                                    } else {
+                                      _awayPlayerGridMode =
+                                          !_awayPlayerGridMode;
                                     }
-                                  } else {
-                                    switch (_awaySortOption) {
-                                      case 'number':
-                                        _awaySortOption = 'lastName';
-                                        break;
-                                      case 'lastName':
-                                        _awaySortOption = 'firstName';
-                                        break;
-                                      case 'firstName':
-                                        _awaySortOption = 'number';
-                                        break;
-                                    }
-                                  }
-                                });
-                              },
-                              child: Container(
-                                width:
-                                    80, // Fixed width to prevent size changes
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                      color: Colors.grey.shade300, width: 0.5),
-                                ),
+                                  });
+                                },
                                 child: Text(
-                                  _getSortText(isHome
-                                      ? _homeSortOption
-                                      : _awaySortOption),
-                                  style: const TextStyle(
-                                      fontSize: 10, color: Colors.black87),
-                                  textAlign: TextAlign.center,
+                                  isHome
+                                      ? (_homePlayerGridMode ? 'Grid' : 'List')
+                                      : (_awayPlayerGridMode ? 'Grid' : 'List'),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w500),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             // Ascending/Descending button
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (isHome) {
-                                    _homeSortAscending = !_homeSortAscending;
-                                  } else {
-                                    _awaySortAscending = !_awaySortAscending;
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                      color: Colors.grey.shade300, width: 0.5),
-                                ),
-                                child: Icon(
+                            MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (isHome) {
+                                      _homeSortAscending = !_homeSortAscending;
+                                    } else {
+                                      _awaySortAscending = !_awaySortAscending;
+                                    }
+                                  });
+                                },
+                                child: Text(
                                   isHome
-                                      ? (_homeSortAscending
-                                          ? Icons.arrow_upward
-                                          : Icons.arrow_downward)
-                                      : (_awaySortAscending
-                                          ? Icons.arrow_upward
-                                          : Icons.arrow_downward),
-                                  size: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Grid/List toggle button
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  if (isHome) {
-                                    _homePlayerGridMode = !_homePlayerGridMode;
-                                  } else {
-                                    _awayPlayerGridMode = !_awayPlayerGridMode;
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(3),
-                                  border: Border.all(
-                                      color: Colors.grey.shade300, width: 0.5),
-                                ),
-                                child: Icon(
-                                  isHome
-                                      ? (_homePlayerGridMode
-                                          ? Icons.view_list
-                                          : Icons.grid_view)
-                                      : (_awayPlayerGridMode
-                                          ? Icons.view_list
-                                          : Icons.grid_view),
-                                  size: 12,
-                                  color: Colors.grey.shade600,
+                                      ? (_homeSortAscending ? '↑' : '↓')
+                                      : (_awaySortAscending ? '↑' : '↓'),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w500),
                                 ),
                               ),
                             ),
@@ -1840,8 +1806,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       playersByNumber[jerseyNum] = player;
     }
 
-    // Get sorted list of jersey numbers that have players
-    List<int> jerseyNumbers = playersByNumber.keys.toList()..sort();
+    // Get sorted list based on current sort option
+    List<int> jerseyNumbers;
+    final sortOption = isHome ? _homeSortOption : _awaySortOption;
+    final ascending = isHome ? _homeSortAscending : _awaySortAscending;
+
+    if (sortOption == 'number') {
+      // Sort by jersey number
+      jerseyNumbers = playersByNumber.keys.toList();
+      if (ascending) {
+        jerseyNumbers.sort();
+      } else {
+        jerseyNumbers.sort((a, b) => b.compareTo(a));
+      }
+    } else {
+      // For lastName and firstName, sort the roster first, then get jersey numbers in that order
+      List<Player> sortedRoster = List.from(roster);
+      if (sortOption == 'lastName') {
+        sortedRoster.sort((a, b) {
+          String lastNameA = a.fullName.split(' ').skip(1).join(' ');
+          String lastNameB = b.fullName.split(' ').skip(1).join(' ');
+          return ascending
+              ? lastNameA.compareTo(lastNameB)
+              : lastNameB.compareTo(lastNameA);
+        });
+      } else if (sortOption == 'firstName') {
+        sortedRoster.sort((a, b) {
+          String firstNameA = a.fullName.split(' ').first;
+          String firstNameB = b.fullName.split(' ').first;
+          return ascending
+              ? firstNameA.compareTo(firstNameB)
+              : firstNameB.compareTo(firstNameA);
+        });
+      }
+
+      // Get jersey numbers in the sorted order
+      jerseyNumbers = sortedRoster.map((player) {
+        return int.tryParse(player.jerseyNumber ?? '0') ?? 0;
+      }).toList();
+    }
 
     // Create rows with 4 squares per row
     List<Widget> rows = [];
@@ -1850,6 +1853,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     for (int jerseyNum in jerseyNumbers) {
       Player player = playersByNumber[jerseyNum]!;
       bool isSelected = selectedPlayers.contains(player.displayName);
+      bool isHomePlayer = selectedHomePlayers.contains(player.displayName);
 
       currentRow.add(
         Expanded(
@@ -1881,45 +1885,75 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               margin: const EdgeInsets.all(1),
               height: 40,
               decoration: BoxDecoration(
-                color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
+                color: isSelected
+                    ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
+                    : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color:
-                      isSelected ? Colors.blue.shade300 : Colors.grey.shade300,
+                  color: isSelected
+                      ? (isHomePlayer
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade400)
+                      : Colors.grey.shade300,
                   width: 0.5,
                 ),
               ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      jerseyNum.toString(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500,
-                        color:
-                            isSelected ? Colors.blue.shade700 : Colors.black87,
+              child: Stack(
+                children: [
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          jerseyNum.toString(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected
+                                ? (isHomePlayer ? Colors.white : Colors.black87)
+                                : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          player.fullName.split(' ').skip(1).join(' '),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? (isHomePlayer ? Colors.white : Colors.black87)
+                                : Colors.black54,
+                          ),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Red star for first selected player
+                  if (isSelected && _isFirstSelectedPlayer(player.displayName))
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Icon(
+                          Icons.star,
+                          size: 8,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      player.fullName.split(' ').last,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color:
-                            isSelected ? Colors.blue.shade700 : Colors.black54,
-                      ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),
@@ -2055,7 +2089,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   padding: const EdgeInsets
                                                                       .symmetric(
                                                                       horizontal:
-                                                                          8,
+                                                                          12,
                                                                       vertical:
                                                                           6),
                                                                   decoration:
@@ -9142,46 +9176,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _formatChipName(String playerName) {
-    // Example: "Anthony Banda #43" -> "43 Banda"
-    final nameMatch =
-        RegExp(r'^(.*?)\s+([A-Za-z\-]+)\s*#(\d+)').firstMatch(playerName);
-    if (nameMatch != null) {
-      final lastName = nameMatch.group(2);
-      final number = nameMatch.group(3);
+    // Extract jersey number
+    final numberMatch = RegExp(r'#(\d+)').firstMatch(playerName);
+    final number = numberMatch?.group(1) ?? '';
 
-      // Handle Jr. in the last name
-      if (lastName != null && lastName.contains('Jr.')) {
-        // Extract the name before Jr.
-        final nameBeforeJr = lastName.replaceAll(' Jr.', '');
-        return '#$number $nameBeforeJr';
-      }
+    // Remove jersey number from name for processing
+    final nameWithoutNumber = playerName.replaceAll(RegExp(r'\s*#\d+'), '');
 
+    // Split by spaces and get everything after first name
+    final nameParts = nameWithoutNumber.split(' ');
+    if (nameParts.length > 1) {
+      final lastName = nameParts.skip(1).join(' ');
       return '#$number $lastName';
     }
 
-    // Fallback: just return the last word and any trailing number
-    final parts = playerName.split(' ');
-    if (parts.length > 1 && parts.last.startsWith('#')) {
-      final secondToLast = parts[parts.length - 2];
-
-      // Handle Jr. in the second-to-last part
-      if (secondToLast.contains('Jr.')) {
-        final nameBeforeJr = secondToLast.replaceAll(' Jr.', '');
-        return parts.last.substring(1) + ' ' + nameBeforeJr;
-      }
-
-      return parts.last.substring(1) + ' ' + secondToLast;
-    }
-
-    // Handle cases where Jr. might be in the last part
-    if (parts.isNotEmpty) {
-      final lastPart = parts.last;
-      if (lastPart.contains('Jr.')) {
-        final nameBeforeJr = lastPart.replaceAll(' Jr.', '');
-        return nameBeforeJr;
-      }
-    }
-
+    // Fallback if no last name found
     return playerName;
   }
 

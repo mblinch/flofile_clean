@@ -745,6 +745,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       children: [
                         // TOP LEFT BOX - Picture Preview
                         Expanded(
+                          flex: 7,
                           child: PicturePreviewWidget(
                             key: _picturePreviewKey1,
                             imagePaths: imagePaths,
@@ -767,6 +768,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
                         // TOP RIGHT BOX - Thumbnail Grid (rendering)
                         Expanded(
+                          flex: 3,
                           child: ThumbnailGridWidget(
                             imagePaths: imagePaths,
                             currentIndex: currentIndex,
@@ -787,6 +789,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       children: [
                         // BOTTOM LEFT BOX - Caption Fields
                         Expanded(
+                          flex: 7,
                           child: Builder(
                             builder: (context) {
                               final currentPath = imagePaths.isNotEmpty
@@ -847,6 +850,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
                         // BOTTOM RIGHT BOX - Metadata
                         Expanded(
+                          flex: 3,
                           child: MetadataWidget(
                             key: _metadataKey1,
                             metadata: currentMetadata,
@@ -960,6 +964,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 children: [
                   // TOP LEFT BOX - Picture Preview
                   Expanded(
+                    flex: 6,
                     child: PicturePreviewWidget(
                       key: _picturePreviewKey2,
                       imagePaths: imagePaths,
@@ -982,6 +987,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
                   // TOP RIGHT BOX - Thumbnail Grid
                   Expanded(
+                    flex: 4,
                     child: ThumbnailGridWidget(
                       imagePaths: imagePaths,
                       currentIndex: currentIndex,
@@ -1002,6 +1008,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 children: [
                   // BOTTOM LEFT BOX - Caption Fields
                   Expanded(
+                    flex: 6,
                     child: CaptionFieldsWidget(
                       key: _captionFieldsKey2,
                       metadata: currentMetadata,
@@ -1045,6 +1052,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
                   // BOTTOM RIGHT BOX - Metadata
                   Expanded(
+                    flex: 4,
                     child: MetadataWidget(
                       key: _metadataKey2,
                       metadata: currentMetadata,
