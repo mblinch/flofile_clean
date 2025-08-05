@@ -9092,14 +9092,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         margin: const EdgeInsets.only(bottom: 2),
         child: Row(
-          children: [
-            Icon(
-              Icons.chevron_right,
-              size: 14,
-              color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
-            ),
-            const SizedBox(width: 4),
-            Expanded(
+                      children: [
+              Expanded(
               flex: 1,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -9647,7 +9641,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBackButton({VoidCallback? onPressed}) {
-    return _buildBackButtonWithWidth(MediaQuery.of(context).size.width * 0.5, onPressed: onPressed);
+    return _buildBackButtonWithWidth(MediaQuery.of(context).size.width * 0.5,
+        onPressed: onPressed);
   }
 
   Widget _buildBackButtonWithWidth(double width, {VoidCallback? onPressed}) {
@@ -9739,7 +9734,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildVerbOptionsBackButton({VoidCallback? onPressed}) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return _buildBackButtonWithWidth(constraints.maxWidth * 0.5, onPressed: onPressed);
+        return _buildBackButtonWithWidth(constraints.maxWidth * 0.5,
+            onPressed: onPressed);
       },
     );
   }
