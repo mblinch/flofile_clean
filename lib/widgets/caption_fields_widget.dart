@@ -9647,6 +9647,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBackButton({VoidCallback? onPressed}) {
+    return _buildBackButtonWithWidth(MediaQuery.of(context).size.width * 0.5, onPressed: onPressed);
+  }
+
+  Widget _buildBackButtonWithWidth(double width, {VoidCallback? onPressed}) {
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -9657,7 +9661,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Align(
           alignment: Alignment.center,
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.5, // 50% width
+            width: width, // Use passed width parameter
             margin: const EdgeInsets.symmetric(
                 horizontal: 5), // 5px padding from left and right
             child: CustomButton(
@@ -9729,6 +9733,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildVerbOptionsBackButton({VoidCallback? onPressed}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return _buildBackButtonWithWidth(constraints.maxWidth * 0.5, onPressed: onPressed);
+      },
     );
   }
 
@@ -10607,7 +10619,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ],
 
               // Back button
-              _buildBackButton(),
+              _buildVerbOptionsBackButton(),
             ],
           ),
         ),
