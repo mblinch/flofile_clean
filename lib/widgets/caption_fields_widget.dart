@@ -6069,6 +6069,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _magicInputActionText = '';
       _waitingForHomeVisitorChoice = false;
 
+      // Clear manager name for Pitching Change
+      _managerName = '';
+      _managerNameController.clear();
+
       _updatePersonalityField();
     });
 
@@ -6843,7 +6847,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final firstPlayer = selectedPlayers.first;
           // Get team name for the first player
           final isHomeTeamPlayer = selectedHomePlayers.contains(firstPlayer);
-          final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
+          final teamName =
+              isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
           final firstPlayerName = '$firstPlayer of the $teamName';
 
           // Get remaining players for "stand on the mound" part
