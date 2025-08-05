@@ -6742,7 +6742,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final isMultiplePlayers = activePlayers.length > 1;
 
         if (_isPriorToGame) {
-          return isMultiplePlayers ? 'look on' : 'looks on';
+          final action = isMultiplePlayers ? 'look on' : 'looks on';
+          return '$action during the national anthem against the ${_getOpposingTeamName()}';
         } else {
           final action = isMultiplePlayers ? 'look on' : 'looks on';
           return '$action during the national anthem against the ${_getOpposingTeamName()}';
