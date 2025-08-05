@@ -10810,7 +10810,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Text(
-                        'Select other players that are on the mound',
+                        'Protip: Select other players that are on the mound',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey.shade600,
