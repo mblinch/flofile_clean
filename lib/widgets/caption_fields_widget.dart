@@ -2184,538 +2184,498 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                           _selectedVerb ==
                                                               'Celebrates Against')
                                                       ? _buildCelebrationInterface()
-                                                                                                                : (_selectedVerb ==
+                                                      : (_selectedVerb ==
                                                               'Dejection')
                                                           ? _buildDejectionInterface()
-                                                          : (_selectedVerb ==
-                                                              'National Anthem')
+                                                                                                                    : (_selectedVerb ==
+                                                              'National Anthem' ||
+                                                              _selectedVerb ==
+                                                              'Stretching')
                                                           ? _buildNationalAnthemInterface()
-                                                          : Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                                // Player chips row (moved from above caption building section)
-                                                                Container(
-                                                                  width: double
-                                                                      .infinity,
-                                                                  height: 32,
-                                                                  padding: const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          12,
-                                                                      vertical:
-                                                                          6),
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade50,
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(6),
-                                                                    border: Border.all(
+                                                              : Column(
+                                                                  crossAxisAlignment:
+                                                                      CrossAxisAlignment
+                                                                          .start,
+                                                                  children: [
+                                                                    // Player chips row (moved from above caption building section)
+                                                                    Container(
+                                                                      width: double
+                                                                          .infinity,
+                                                                      height:
+                                                                          32,
+                                                                      padding: const EdgeInsets
+                                                                          .symmetric(
+                                                                          horizontal:
+                                                                              12,
+                                                                          vertical:
+                                                                              6),
+                                                                      decoration:
+                                                                          BoxDecoration(
                                                                         color: Colors
                                                                             .grey
-                                                                            .shade300),
-                                                                  ),
-                                                                  child:
-                                                                      _buildPlayerChipsHeader(),
-                                                                ),
-                                                                const SizedBox(
-                                                                    height: 4),
-                                                                // Custom text field for between players
-                                                                Container(
-                                                                  width: double
-                                                                      .infinity,
-                                                                  height: 32,
-                                                                  decoration:
-                                                                      BoxDecoration(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(2),
-                                                                    border: Border.all(
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade300),
-                                                                  ),
-                                                                  child: Column(
-                                                                    children: [
-                                                                      // Text field
-                                                                      TextField(
-                                                                        controller:
-                                                                            customBetweenPlayersController,
-                                                                        cursorWidth:
-                                                                            1.5,
-                                                                        cursorHeight:
-                                                                            16,
-                                                                        style: const TextStyle(
-                                                                            fontSize:
-                                                                                12,
-                                                                            height:
-                                                                                2.3),
-                                                                        decoration:
-                                                                            InputDecoration(
-                                                                          hintText: _isPlayerSearchMode
-                                                                              ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...'
-                                                                              : 'Magic Bar: Type custom action...',
-                                                                          border:
-                                                                              InputBorder.none,
-                                                                          contentPadding: EdgeInsets.symmetric(
-                                                                              horizontal: 8,
-                                                                              vertical: 2),
-                                                                          isDense:
-                                                                              true,
-                                                                        ),
-                                                                        onChanged:
-                                                                            (value) {
-                                                                          // Check for magic input format (e.g., "27 hr 1")
-                                                                          if (_isMagicInput(
-                                                                              value)) {
-                                                                            _parseMagicInput(value);
-                                                                            // Don't return - let the text stay in the field
-                                                                          }
-
-                                                                          setState(
-                                                                              () {
-                                                                            if (_isPlayerSearchMode &&
-                                                                                _isNumeric(value)) {
-                                                                              // print(
-                                                                              //     'DEBUG: Calling _filterPlayersByNumber');
-                                                                              _filterPlayersByNumber(value);
-                                                                            } else if (_isPlayerSearchMode && value.isEmpty) {
-                                                                              // print(
-                                                                              //     'DEBUG: Clearing filtered players');
-                                                                              _filteredPlayers.clear();
-                                                                            } else if (!_isPlayerSearchMode) {
-                                                                              // print(
-                                                                              //     'DEBUG: In custom verb mode');
-                                                                              _showCustomTextInningSelector = value.isNotEmpty;
-                                                                              _updateCaption();
-                                                                            }
-                                                                          });
-                                                                        },
+                                                                            .shade50,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(6),
+                                                                        border: Border.all(
+                                                                            color:
+                                                                                Colors.grey.shade300),
                                                                       ),
-                                                                      // Player selection overlay
-                                                                      if (_filteredPlayers
-                                                                              .isNotEmpty ||
-                                                                          _noPlayersFound)
-                                                                        Material(
-                                                                          elevation:
-                                                                              8,
-                                                                          borderRadius:
-                                                                              BorderRadius.circular(4),
-                                                                          child:
-                                                                              Container(
+                                                                      child:
+                                                                          _buildPlayerChipsHeader(),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        height:
+                                                                            4),
+                                                                    // Custom text field for between players
+                                                                    Container(
+                                                                      width: double
+                                                                          .infinity,
+                                                                      height:
+                                                                          32,
+                                                                      decoration:
+                                                                          BoxDecoration(
+                                                                        color: Colors
+                                                                            .white,
+                                                                        borderRadius:
+                                                                            BorderRadius.circular(2),
+                                                                        border: Border.all(
+                                                                            color:
+                                                                                Colors.grey.shade300),
+                                                                      ),
+                                                                      child:
+                                                                          Column(
+                                                                        children: [
+                                                                          // Text field
+                                                                          TextField(
+                                                                            controller:
+                                                                                customBetweenPlayersController,
+                                                                            cursorWidth:
+                                                                                1.5,
+                                                                            cursorHeight:
+                                                                                16,
+                                                                            style:
+                                                                                const TextStyle(fontSize: 12, height: 2.3),
                                                                             decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              borderRadius: BorderRadius.circular(4),
-                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                                InputDecoration(
+                                                                              hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'Magic Bar: Type custom action...',
+                                                                              border: InputBorder.none,
+                                                                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                                              isDense: true,
                                                                             ),
-                                                                            child:
-                                                                                Column(
-                                                                              mainAxisSize: MainAxisSize.min,
-                                                                              children: [
-                                                                                if (_noPlayersFound)
-                                                                                  Container(
-                                                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                                                                    child: Row(
-                                                                                      children: [
-                                                                                        Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
-                                                                                        const SizedBox(width: 8),
-                                                                                        Text(
-                                                                                          'No player with number ${_playerSearchText}',
-                                                                                          style: TextStyle(
-                                                                                            fontSize: 12,
-                                                                                            color: Colors.orange.shade700,
-                                                                                            fontWeight: FontWeight.w500,
-                                                                                          ),
-                                                                                        ),
-                                                                                      ],
-                                                                                    ),
-                                                                                  )
-                                                                                else ...[
-                                                                                  ..._filteredPlayers.map(
-                                                                                    (player) => GestureDetector(
-                                                                                      onTap: () => _selectPlayer(player),
-                                                                                      child: Container(
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                            onChanged:
+                                                                                (value) {
+                                                                              // Check for magic input format (e.g., "27 hr 1")
+                                                                              if (_isMagicInput(value)) {
+                                                                                _parseMagicInput(value);
+                                                                                // Don't return - let the text stay in the field
+                                                                              }
+
+                                                                              setState(() {
+                                                                                if (_isPlayerSearchMode && _isNumeric(value)) {
+                                                                                  // print(
+                                                                                  //     'DEBUG: Calling _filterPlayersByNumber');
+                                                                                  _filterPlayersByNumber(value);
+                                                                                } else if (_isPlayerSearchMode && value.isEmpty) {
+                                                                                  // print(
+                                                                                  //     'DEBUG: Clearing filtered players');
+                                                                                  _filteredPlayers.clear();
+                                                                                } else if (!_isPlayerSearchMode) {
+                                                                                  // print(
+                                                                                  //     'DEBUG: In custom verb mode');
+                                                                                  _showCustomTextInningSelector = value.isNotEmpty;
+                                                                                  _updateCaption();
+                                                                                }
+                                                                              });
+                                                                            },
+                                                                          ),
+                                                                          // Player selection overlay
+                                                                          if (_filteredPlayers.isNotEmpty ||
+                                                                              _noPlayersFound)
+                                                                            Material(
+                                                                              elevation: 8,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              child: Container(
+                                                                                decoration: BoxDecoration(
+                                                                                  color: Colors.white,
+                                                                                  borderRadius: BorderRadius.circular(4),
+                                                                                  border: Border.all(color: Colors.grey.shade300),
+                                                                                ),
+                                                                                child: Column(
+                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                  children: [
+                                                                                    if (_noPlayersFound)
+                                                                                      Container(
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                                                                         child: Row(
                                                                                           children: [
+                                                                                            Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
+                                                                                            const SizedBox(width: 8),
                                                                                             Text(
-                                                                                              '#${player.jerseyNumber}',
-                                                                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-                                                                                            ),
-                                                                                            const SizedBox(width: 4),
-                                                                                            Text(
-                                                                                              _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
-                                                                                              style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
-                                                                                            ),
-                                                                                            const SizedBox(width: 2),
-                                                                                            Icon(
-                                                                                              _isHomePlayer(player) ? Icons.home : Icons.flight,
-                                                                                              size: 10,
-                                                                                              color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
-                                                                                            ),
-                                                                                            const SizedBox(width: 4),
-                                                                                            Expanded(
-                                                                                              child: Text(
-                                                                                                _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
-                                                                                                style: const TextStyle(fontSize: 10),
-                                                                                                overflow: TextOverflow.ellipsis,
+                                                                                              'No player with number ${_playerSearchText}',
+                                                                                              style: TextStyle(
+                                                                                                fontSize: 12,
+                                                                                                color: Colors.orange.shade700,
+                                                                                                fontWeight: FontWeight.w500,
                                                                                               ),
                                                                                             ),
                                                                                           ],
                                                                                         ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                ],
-                                                                                if (_selectedPlayerNumbers.isNotEmpty)
-                                                                                  GestureDetector(
-                                                                                    onTap: _finishPlayerSelection,
-                                                                                    child: Container(
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: Colors.blue.shade50,
-                                                                                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                                                                                      ),
-                                                                                      child: Row(
-                                                                                        children: [
-                                                                                          Icon(Icons.check, size: 16, color: Colors.blue.shade700),
-                                                                                          const SizedBox(width: 8),
-                                                                                          Text(
-                                                                                            'Done selecting players (${_selectedPlayerNumbers.length})',
-                                                                                            style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                                                                                      )
+                                                                                    else ...[
+                                                                                      ..._filteredPlayers.map(
+                                                                                        (player) => GestureDetector(
+                                                                                          onTap: () => _selectPlayer(player),
+                                                                                          child: Container(
+                                                                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                            child: Row(
+                                                                                              children: [
+                                                                                                Text(
+                                                                                                  '#${player.jerseyNumber}',
+                                                                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                                                                                                ),
+                                                                                                const SizedBox(width: 4),
+                                                                                                Text(
+                                                                                                  _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
+                                                                                                  style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                                                                                                ),
+                                                                                                const SizedBox(width: 2),
+                                                                                                Icon(
+                                                                                                  _isHomePlayer(player) ? Icons.home : Icons.flight,
+                                                                                                  size: 10,
+                                                                                                  color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
+                                                                                                ),
+                                                                                                const SizedBox(width: 4),
+                                                                                                Expanded(
+                                                                                                  child: Text(
+                                                                                                    _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
+                                                                                                    style: const TextStyle(fontSize: 10),
+                                                                                                    overflow: TextOverflow.ellipsis,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ],
+                                                                                            ),
                                                                                           ),
-                                                                                        ],
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                              ],
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      // Inning selector
-                                                                      if (_showCustomTextInningSelector)
-                                                                        Container(
-                                                                          height:
-                                                                              80,
-                                                                          child:
-                                                                              _buildCustomTextInningSelector(),
-                                                                        ),
-                                                                    ],
-                                                                  ),
-                                                                ),
-
-                                                                const SizedBox(
-                                                                    height:
-                                                                        4), // Padding between Magic Bar and verb categories
-
-                                                                // Verb categories (hidden when custom text is being used, except for Pre Game verbs)
-                                                                if (!customBetweenPlayersController
-                                                                    .text
-                                                                    .isNotEmpty) ...[
-                                                                  Container(
-                                                                    height:
-                                                                        500, // Increased height for verb area
-                                                                    // Removed debug background for cleaner appearance
-                                                                    child:
-                                                                        SingleChildScrollView(
-                                                                      child:
-                                                                          Padding(
-                                                                        padding: const EdgeInsets
-                                                                            .all(
-                                                                            4),
-                                                                        child:
-                                                                            LayoutBuilder(
-                                                                          builder:
-                                                                              (context, constraints) {
-                                                                            // Calculate width for exactly 3 columns
-                                                                            final columnWidth =
-                                                                                (constraints.maxWidth - 8) / 3; // Subtract spacing between columns (4px * 2 gaps)
-
-                                                                            return Container(
-                                                                              // 6 columns in one row
-                                                                              child: Row(
-                                                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                children: [
-                                                                                  // Offense column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Offense', [
-                                                                                      'Single',
-                                                                                      'Double',
-                                                                                      'Triple',
-                                                                                      'Home Run',
-                                                                                      'RBI Sacrifice Fly',
-                                                                                      'At Bat',
-                                                                                      'Swings',
-                                                                                      'Bunts',
-                                                                                      'Walks',
-                                                                                      'Hit by Pitch'
-                                                                                    ]),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Defense column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Defense', [
-                                                                                      'Pitching',
-                                                                                      'Catches',
-                                                                                      'Throws',
-                                                                                      'Tags',
-                                                                                      'Groundball',
-                                                                                      'Fielding Position',
-                                                                                      'Double Play',
-                                                                                      'Triple Play',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Running column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Running', [
-                                                                                      'Steals',
-                                                                                      'Slides',
-                                                                                      'Runs',
-                                                                                      'Rounds',
-                                                                                      '',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Reactions column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Reactions', [
-                                                                                      'Celebrates',
-                                                                                      'Dejection',
-                                                                                      'Post Game Win',
-                                                                                      'Post Game Loss',
-                                                                                      '',
-                                                                                      '',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Non Game-Action column
-                                                                                  Expanded(
-                                                                                    child: _buildVerbCategory('Non Game-Action', [
-                                                                                      'Looks On',
-                                                                                      'Batting Practice',
-                                                                                      'Fielding Practice',
-                                                                                      'Takes the Field',
-                                                                                      'Comes Off the Field',
-                                                                                      'National Anthem',
-                                                                                      'Stretching',
-                                                                                      'Warm Ups',
-                                                                                      'Pitching Change',
-                                                                                      ''
-                                                                                    ]),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                ],
-                                                                              ),
-                                                                            ); // Close Container for Wrap
-                                                                          },
-                                                                        ),
-                                                                      ),
-                                                                    ), // Close SingleChildScrollView
-                                                                  ),
-                                                                ],
-
-                                                                const SizedBox(
-                                                                    height: 4),
-                                                                // Third row: Dynamic content
-                                                                Expanded(
-                                                                  // Fills remaining space after verb area takes what it needs
-                                                                  child: Row(
-                                                                    children: [
-                                                                      Expanded(
-                                                                        child:
-                                                                            Container(), // Empty space
-                                                                      ),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              1),
-                                                                      Expanded(
-                                                                        child:
-                                                                            Container(), // Empty space
-                                                                      ),
-                                                                      const SizedBox(
-                                                                          width:
-                                                                              1),
-                                                                      Expanded(
-                                                                        child:
-                                                                            Column(
-                                                                          crossAxisAlignment:
-                                                                              CrossAxisAlignment.start,
-                                                                          children: [
-                                                                            // Home run types (when home run is selected)
-                                                                            if (_selectedVerb ==
-                                                                                'Home Run')
-                                                                              _buildVerbCategory('Home Run Types', [
-                                                                                'Solo',
-                                                                                'Two-Run',
-                                                                                'Three-Run',
-                                                                                'Grand Slam'
-                                                                              ]),
-
-                                                                            // Inning only (when simple verbs are selected)
-                                                                            if (_selectedVerb == 'At Bat' ||
-                                                                                _selectedVerb == 'Pitching' ||
-                                                                                _selectedVerb == 'Swings' ||
-                                                                                _selectedVerb == 'Catches' ||
-                                                                                _selectedVerb == 'Throws' ||
-                                                                                _selectedVerb == 'Groundball' ||
-                                                                                _selectedVerb == 'Fielding Position') ...[
-                                                                              const SizedBox(height: 1),
-                                                                              Container(
-                                                                                decoration: BoxDecoration(
-                                                                                  border: Border.all(color: Colors.grey.shade400),
-                                                                                  borderRadius: BorderRadius.circular(2),
-                                                                                ),
-                                                                                child: Column(
-                                                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                  children: [
-                                                                                    Container(
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                                                      child: const Text(
-                                                                                        'INN',
-                                                                                        style: TextStyle(
-                                                                                          fontSize: 8,
-                                                                                          fontWeight: FontWeight.w500,
-                                                                                          color: Colors.grey,
                                                                                         ),
                                                                                       ),
-                                                                                    ),
-                                                                                    GestureDetector(
-                                                                                      onTap: _showCompactInningSelector,
-                                                                                      child: Container(
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                                                                                        child: Text(
-                                                                                          _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
-                                                                                          style: const TextStyle(fontSize: 8),
-                                                                                          textAlign: TextAlign.center,
+                                                                                    ],
+                                                                                    if (_selectedPlayerNumbers.isNotEmpty)
+                                                                                      GestureDetector(
+                                                                                        onTap: _finishPlayerSelection,
+                                                                                        child: Container(
+                                                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                          decoration: BoxDecoration(
+                                                                                            color: Colors.blue.shade50,
+                                                                                            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                                                                          ),
+                                                                                          child: Row(
+                                                                                            children: [
+                                                                                              Icon(Icons.check, size: 16, color: Colors.blue.shade700),
+                                                                                              const SizedBox(width: 8),
+                                                                                              Text(
+                                                                                                'Done selecting players (${_selectedPlayerNumbers.length})',
+                                                                                                style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                                                                                              ),
+                                                                                            ],
+                                                                                          ),
                                                                                         ),
                                                                                       ),
-                                                                                    ),
                                                                                   ],
                                                                                 ),
                                                                               ),
-                                                                            ],
+                                                                            ),
+                                                                          // Inning selector
+                                                                          if (_showCustomTextInningSelector)
+                                                                            Container(
+                                                                              height: 80,
+                                                                              child: _buildCustomTextInningSelector(),
+                                                                            ),
+                                                                        ],
+                                                                      ),
+                                                                    ),
 
-                                                                            // RBI & Inning (when any hitting verb is selected)
-                                                                            if (_selectedVerb == 'Single' ||
-                                                                                _selectedVerb == 'Double' ||
-                                                                                _selectedVerb == 'Triple' ||
-                                                                                _selectedVerb == 'Home Run' ||
-                                                                                _selectedVerb == 'Grand Slam' ||
-                                                                                _selectedVerb == 'Walks') ...[
-                                                                              const SizedBox(height: 1),
-                                                                              Row(
-                                                                                children: [
-                                                                                  Expanded(
-                                                                                    child: Container(
-                                                                                      decoration: BoxDecoration(
-                                                                                        border: Border.all(color: Colors.grey.shade400),
-                                                                                        borderRadius: BorderRadius.circular(2),
+                                                                    const SizedBox(
+                                                                        height:
+                                                                            4), // Padding between Magic Bar and verb categories
+
+                                                                    // Verb categories (hidden when custom text is being used, except for Pre Game verbs)
+                                                                    if (!customBetweenPlayersController
+                                                                        .text
+                                                                        .isNotEmpty) ...[
+                                                                      Container(
+                                                                        height:
+                                                                            500, // Increased height for verb area
+                                                                        // Removed debug background for cleaner appearance
+                                                                        child:
+                                                                            SingleChildScrollView(
+                                                                          child:
+                                                                              Padding(
+                                                                            padding:
+                                                                                const EdgeInsets.all(4),
+                                                                            child:
+                                                                                LayoutBuilder(
+                                                                              builder: (context, constraints) {
+                                                                                // Calculate width for exactly 3 columns
+                                                                                final columnWidth = (constraints.maxWidth - 8) / 3; // Subtract spacing between columns (4px * 2 gaps)
+
+                                                                                return Container(
+                                                                                  // 6 columns in one row
+                                                                                  child: Row(
+                                                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                    children: [
+                                                                                      // Offense column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Offense', [
+                                                                                          'Single',
+                                                                                          'Double',
+                                                                                          'Triple',
+                                                                                          'Home Run',
+                                                                                          'RBI Sacrifice Fly',
+                                                                                          'At Bat',
+                                                                                          'Swings',
+                                                                                          'Bunts',
+                                                                                          'Walks',
+                                                                                          'Hit by Pitch'
+                                                                                        ]),
                                                                                       ),
-                                                                                      child: Column(
-                                                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                        children: [
-                                                                                          Container(
-                                                                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                                                            child: const Text(
-                                                                                              'RBI',
-                                                                                              style: TextStyle(
-                                                                                                fontSize: 8,
-                                                                                                fontWeight: FontWeight.w500,
-                                                                                                color: Colors.grey,
-                                                                                              ),
-                                                                                            ),
-                                                                                          ),
-                                                                                          DropdownButtonFormField<int>(
-                                                                                            value: _rbiCount,
-                                                                                            decoration: const InputDecoration(
-                                                                                              isDense: true,
-                                                                                              contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                                                                                              border: InputBorder.none,
-                                                                                              labelText: null,
-                                                                                            ),
-                                                                                            items: [
-                                                                                              0,
-                                                                                              1,
-                                                                                              2,
-                                                                                              3,
-                                                                                              4
-                                                                                            ].map((rbi) {
-                                                                                              return DropdownMenuItem(
-                                                                                                value: rbi,
-                                                                                                child: Text(rbi == 0 ? '0' : '$rbi', style: const TextStyle(fontSize: 8)),
-                                                                                              );
-                                                                                            }).toList(),
-                                                                                            onChanged: (value) {
-                                                                                              setState(() {
-                                                                                                _rbiCount = value;
-                                                                                              });
-                                                                                              _updateCaption();
-                                                                                            },
-                                                                                          ),
-                                                                                        ],
+                                                                                      const SizedBox(width: 2),
+                                                                                      // Defense column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Defense', [
+                                                                                          'Pitching',
+                                                                                          'Catches',
+                                                                                          'Throws',
+                                                                                          'Tags',
+                                                                                          'Groundball',
+                                                                                          'Fielding Position',
+                                                                                          'Double Play',
+                                                                                          'Triple Play',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
                                                                                       ),
-                                                                                    ),
+                                                                                      const SizedBox(width: 2),
+                                                                                      // Running column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Running', [
+                                                                                          'Steals',
+                                                                                          'Slides',
+                                                                                          'Runs',
+                                                                                          'Rounds',
+                                                                                          '',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                      // Reactions column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Reactions', [
+                                                                                          'Celebrates',
+                                                                                          'Dejection',
+                                                                                          'Post Game Win',
+                                                                                          'Post Game Loss',
+                                                                                          '',
+                                                                                          '',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                      // Non Game-Action column
+                                                                                      Expanded(
+                                                                                        child: _buildVerbCategory('Non Game-Action', [
+                                                                                          'Looks On',
+                                                                                          'Batting Practice',
+                                                                                          'Fielding Practice',
+                                                                                          'Takes the Field',
+                                                                                          'Comes Off the Field',
+                                                                                          'National Anthem',
+                                                                                          'Stretching',
+                                                                                          'Warm Ups',
+                                                                                          'Pitching Change',
+                                                                                          ''
+                                                                                        ]),
+                                                                                      ),
+                                                                                      const SizedBox(width: 2),
+                                                                                    ],
                                                                                   ),
-                                                                                  const SizedBox(width: 1),
-                                                                                  Expanded(
-                                                                                    child: Container(
-                                                                                      decoration: BoxDecoration(
-                                                                                        border: Border.all(color: Colors.grey.shade400),
-                                                                                        borderRadius: BorderRadius.circular(2),
-                                                                                      ),
-                                                                                      child: Column(
-                                                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                        children: [
-                                                                                          Container(
-                                                                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                                                            child: const Text(
-                                                                                              'INN',
-                                                                                              style: TextStyle(
-                                                                                                fontSize: 8,
-                                                                                                fontWeight: FontWeight.w500,
-                                                                                                color: Colors.grey,
-                                                                                              ),
+                                                                                ); // Close Container for Wrap
+                                                                              },
+                                                                            ),
+                                                                          ),
+                                                                        ), // Close SingleChildScrollView
+                                                                      ),
+                                                                    ],
+
+                                                                    const SizedBox(
+                                                                        height:
+                                                                            4),
+                                                                    // Third row: Dynamic content
+                                                                    Expanded(
+                                                                      // Fills remaining space after verb area takes what it needs
+                                                                      child:
+                                                                          Row(
+                                                                        children: [
+                                                                          Expanded(
+                                                                            child:
+                                                                                Container(), // Empty space
+                                                                          ),
+                                                                          const SizedBox(
+                                                                              width: 1),
+                                                                          Expanded(
+                                                                            child:
+                                                                                Container(), // Empty space
+                                                                          ),
+                                                                          const SizedBox(
+                                                                              width: 1),
+                                                                          Expanded(
+                                                                            child:
+                                                                                Column(
+                                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                                              children: [
+                                                                                // Home run types (when home run is selected)
+                                                                                if (_selectedVerb == 'Home Run')
+                                                                                  _buildVerbCategory('Home Run Types', [
+                                                                                    'Solo',
+                                                                                    'Two-Run',
+                                                                                    'Three-Run',
+                                                                                    'Grand Slam'
+                                                                                  ]),
+
+                                                                                // Inning only (when simple verbs are selected)
+                                                                                if (_selectedVerb == 'At Bat' || _selectedVerb == 'Pitching' || _selectedVerb == 'Swings' || _selectedVerb == 'Catches' || _selectedVerb == 'Throws' || _selectedVerb == 'Groundball' || _selectedVerb == 'Fielding Position') ...[
+                                                                                  const SizedBox(height: 1),
+                                                                                  Container(
+                                                                                    decoration: BoxDecoration(
+                                                                                      border: Border.all(color: Colors.grey.shade400),
+                                                                                      borderRadius: BorderRadius.circular(2),
+                                                                                    ),
+                                                                                    child: Column(
+                                                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                      children: [
+                                                                                        Container(
+                                                                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                          child: const Text(
+                                                                                            'INN',
+                                                                                            style: TextStyle(
+                                                                                              fontSize: 8,
+                                                                                              fontWeight: FontWeight.w500,
+                                                                                              color: Colors.grey,
                                                                                             ),
                                                                                           ),
-                                                                                          GestureDetector(
-                                                                                            onTap: _showCompactInningSelector,
-                                                                                            child: Container(
-                                                                                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                                                                                              child: Text(
-                                                                                                _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
-                                                                                                style: const TextStyle(fontSize: 8),
-                                                                                                textAlign: TextAlign.center,
-                                                                                              ),
+                                                                                        ),
+                                                                                        GestureDetector(
+                                                                                          onTap: _showCompactInningSelector,
+                                                                                          child: Container(
+                                                                                            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                            child: Text(
+                                                                                              _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
+                                                                                              style: const TextStyle(fontSize: 8),
+                                                                                              textAlign: TextAlign.center,
                                                                                             ),
                                                                                           ),
-                                                                                        ],
-                                                                                      ),
+                                                                                        ),
+                                                                                      ],
                                                                                     ),
                                                                                   ),
                                                                                 ],
-                                                                              ),
-                                                                            ],
-                                                                          ],
-                                                                        ),
+
+                                                                                // RBI & Inning (when any hitting verb is selected)
+                                                                                if (_selectedVerb == 'Single' || _selectedVerb == 'Double' || _selectedVerb == 'Triple' || _selectedVerb == 'Home Run' || _selectedVerb == 'Grand Slam' || _selectedVerb == 'Walks') ...[
+                                                                                  const SizedBox(height: 1),
+                                                                                  Row(
+                                                                                    children: [
+                                                                                      Expanded(
+                                                                                        child: Container(
+                                                                                          decoration: BoxDecoration(
+                                                                                            border: Border.all(color: Colors.grey.shade400),
+                                                                                            borderRadius: BorderRadius.circular(2),
+                                                                                          ),
+                                                                                          child: Column(
+                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                            children: [
+                                                                                              Container(
+                                                                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                                child: const Text(
+                                                                                                  'RBI',
+                                                                                                  style: TextStyle(
+                                                                                                    fontSize: 8,
+                                                                                                    fontWeight: FontWeight.w500,
+                                                                                                    color: Colors.grey,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                              DropdownButtonFormField<int>(
+                                                                                                value: _rbiCount,
+                                                                                                decoration: const InputDecoration(
+                                                                                                  isDense: true,
+                                                                                                  contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                                  border: InputBorder.none,
+                                                                                                  labelText: null,
+                                                                                                ),
+                                                                                                items: [0, 1, 2, 3, 4].map((rbi) {
+                                                                                                  return DropdownMenuItem(
+                                                                                                    value: rbi,
+                                                                                                    child: Text(rbi == 0 ? '0' : '$rbi', style: const TextStyle(fontSize: 8)),
+                                                                                                  );
+                                                                                                }).toList(),
+                                                                                                onChanged: (value) {
+                                                                                                  setState(() {
+                                                                                                    _rbiCount = value;
+                                                                                                  });
+                                                                                                  _updateCaption();
+                                                                                                },
+                                                                                              ),
+                                                                                            ],
+                                                                                          ),
+                                                                                        ),
+                                                                                      ),
+                                                                                      const SizedBox(width: 1),
+                                                                                      Expanded(
+                                                                                        child: Container(
+                                                                                          decoration: BoxDecoration(
+                                                                                            border: Border.all(color: Colors.grey.shade400),
+                                                                                            borderRadius: BorderRadius.circular(2),
+                                                                                          ),
+                                                                                          child: Column(
+                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                            children: [
+                                                                                              Container(
+                                                                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                                child: const Text(
+                                                                                                  'INN',
+                                                                                                  style: TextStyle(
+                                                                                                    fontSize: 8,
+                                                                                                    fontWeight: FontWeight.w500,
+                                                                                                    color: Colors.grey,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                              GestureDetector(
+                                                                                                onTap: _showCompactInningSelector,
+                                                                                                child: Container(
+                                                                                                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                                  child: Text(
+                                                                                                    _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
+                                                                                                    style: const TextStyle(fontSize: 8),
+                                                                                                    textAlign: TextAlign.center,
+                                                                                                  ),
+                                                                                                ),
+                                                                                              ),
+                                                                                            ],
+                                                                                          ),
+                                                                                        ),
+                                                                                      ),
+                                                                                    ],
+                                                                                  ),
+                                                                                ],
+                                                                              ],
+                                                                            ),
+                                                                          ),
+                                                                        ],
                                                                       ),
-                                                                    ],
-                                                                  ),
+                                                                    ),
+                                                                  ],
                                                                 ),
-                                                              ],
-                                                            ),
             ),
           ),
         ],
@@ -6843,6 +6803,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         final action = isMultiplePlayers ? 'look on' : 'looks on';
         return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
+      case 'Stretching':
+        // Check if multiple players are selected
+        final activePlayersStretching = selectedHomePlayers.union(selectedAwayPlayers);
+        final isMultiplePlayersStretching = activePlayersStretching.length > 1;
+
+        final actionStretching = isMultiplePlayersStretching ? 'stretch' : 'stretches';
+        return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
