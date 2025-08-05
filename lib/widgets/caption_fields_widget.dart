@@ -4798,6 +4798,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         verbToUse == 'Walks On Field' ||
         verbToUse == 'Runs On Field' ||
         verbToUse == 'Stretching' ||
+        verbToUse == 'Pitching Change' ||
         customCelebrationController.text.isNotEmpty ||
         customDejectionController.text.isNotEmpty) {
       // For these actions, don't add opponent part here - it's handled in the action phrase
