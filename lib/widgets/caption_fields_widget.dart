@@ -1673,7 +1673,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             const SizedBox(width: 8),
                             // Sort by options (only show when in List mode)
-                            if (true) ...[
+                            if (!(isHome
+                                ? _homePlayerGridMode
+                                : _awayPlayerGridMode)) ...[
                               Text(
                                 'Sort by: ',
                                 style: const TextStyle(
@@ -1792,6 +1794,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               final player = filteredRoster[index];
                               final isSelected =
                                   selectedPlayers.contains(player.displayName);
+                              final isHomePlayer = selectedHomePlayers.contains(player.displayName);
 
                               return GestureDetector(
                                 onTap: () {
@@ -1827,11 +1830,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? Colors.grey.shade300
+                                        ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
                                         : Colors.transparent,
                                     border: Border(
                                       bottom: BorderSide(
-                                          color: Colors.grey.shade200,
+                                          color: isSelected
+                                              ? (isHomePlayer ? Colors.grey.shade700 : Colors.grey.shade400)
+                                              : Colors.grey.shade200,
                                           width: 0.5),
                                     ),
                                   ),
