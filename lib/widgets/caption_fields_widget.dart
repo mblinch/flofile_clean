@@ -957,6 +957,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  // Reset button
+                                  CustomButton(
+                                    onTap: _resetCaption,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.refresh,
+                                              size: 12,
+                                              color: Colors.grey.shade700),
+                                          const SizedBox(width: 2),
+                                          Text('Reset',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
                                   // Prev button
                                   CustomButton(
                                     onTap: () async {
@@ -1097,42 +1127,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             const SizedBox(
                                 width: 9), // Match caption/personality spacing
-                            // Reset, Settings, and FTP buttons (aligned with personality box)
+                            // Settings and FTP buttons (aligned with personality box)
                             Expanded(
                               flex: 1, // Match personality box width
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  // Reset button
-                                  CustomButton(
-                                    onTap: _resetCaption,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.refresh,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Reset',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
                                   // Settings button (now between reset and FTP)
                                   CustomButton(
                                     onTap: _showFtpSettings,
