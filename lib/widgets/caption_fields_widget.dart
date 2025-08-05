@@ -10747,7 +10747,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     const SizedBox(height: 2),
                     SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.25,
+                      width: MediaQuery.of(context).size.width * 0.10,
                       child: TextField(
                         controller: _managerNameController,
                         style: const TextStyle(fontSize: 12),
@@ -10765,8 +10765,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(6),
-                            borderSide:
-                                BorderSide(color: Colors.blue.shade400, width: 2),
+                            borderSide: BorderSide(
+                                color: Colors.blue.shade400, width: 2),
                           ),
                           contentPadding: const EdgeInsets.all(8),
                           filled: true,
