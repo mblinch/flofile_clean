@@ -9563,7 +9563,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           // Reset button (aligned to left)
           CustomButton(
@@ -9589,59 +9589,57 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          // FTP and Settings buttons (aligned to right)
-          Row(
-            children: [
-              CustomButton(
-                onTap: _showFtpSettings,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4A90E2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF4A90E2)),
-                  ),
-                  child: Icon(Icons.settings, size: 14, color: Colors.white),
-                ),
+          const SizedBox(width: 4),
+          // Settings button
+          CustomButton(
+            onTap: _showFtpSettings,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4A90E2),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0xFF4A90E2)),
               ),
-              const SizedBox(width: 4),
-              CustomButton(
-                onTap: _disableFtp ? null : _onFtpPressed,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  decoration: BoxDecoration(
+              child: Icon(Icons.settings, size: 14, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // FTP button
+          CustomButton(
+            onTap: _disableFtp ? null : _onFtpPressed,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: _disableFtp
+                    ? Colors.grey.shade300
+                    : const Color(0xFF0052CC),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
                     color: _disableFtp
                         ? Colors.grey.shade300
-                        : const Color(0xFF0052CC),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                        color: _disableFtp
-                            ? Colors.grey.shade300
-                            : const Color(0xFF0052CC)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.cloud_upload,
-                          size: 14,
+                        : const Color(0xFF0052CC)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.cloud_upload,
+                      size: 14,
+                      color: _disableFtp
+                          ? Colors.grey.shade600
+                          : Colors.white),
+                  const SizedBox(width: 2),
+                  Text(_disableFtp ? 'FTP OFF' : 'FTP',
+                      style: TextStyle(
+                          fontSize: 11,
                           color: _disableFtp
                               ? Colors.grey.shade600
-                              : Colors.white),
-                      const SizedBox(width: 2),
-                      Text(_disableFtp ? 'FTP OFF' : 'FTP',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: _disableFtp
-                                  ? Colors.grey.shade600
-                                  : Colors.white,
-                              fontWeight: FontWeight.w500)),
-                    ],
-                  ),
-                ),
+                              : Colors.white,
+                          fontWeight: FontWeight.w500)),
+                ],
               ),
-            ],
+            ),
           ),
         ],
       ),
