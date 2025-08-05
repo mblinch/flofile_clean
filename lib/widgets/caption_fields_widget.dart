@@ -2028,7 +2028,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   : _selectedVerb == 'RBI Sacrifice Fly'
                       ? _buildSacrificeFlySubOptions()
                       : _selectedVerb == 'Home Run'
-                          ? _buildInningOnlyInterface()
+                          ? _buildHomeRunSubOptions()
                           : _selectedVerb == 'Tags'
                               ? _buildTagsSubOptions()
                               : _selectedVerb == 'Catches'
@@ -9092,8 +9092,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         margin: const EdgeInsets.only(bottom: 2),
         child: Row(
-                      children: [
-              Expanded(
+          children: [
+            Expanded(
               flex: 1,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
