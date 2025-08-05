@@ -6829,10 +6829,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
         }
 
-        if (_managerName.isNotEmpty) {
-          return 'pitcher taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+        // Get selected players
+        final selectedPlayers = selectedHomePlayers.isNotEmpty 
+            ? selectedHomePlayers 
+            : selectedAwayPlayers;
+        
+        if (selectedPlayers.isNotEmpty) {
+          final playerNames = selectedPlayers.map((name) => _getFormattedPlayerName(name, 'number')).join(', ');
+          
+          if (_managerName.isNotEmpty) {
+            return '$playerNames taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+          } else {
+            return '$playerNames taken out of the game$inningText against the ${_getOpposingTeamName()}';
+          }
         } else {
-          return 'pitcher taken out of the game$inningText against the ${_getOpposingTeamName()}';
+          if (_managerName.isNotEmpty) {
+            return 'pitcher taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+          } else {
+            return 'pitcher taken out of the game$inningText against the ${_getOpposingTeamName()}';
+          }
         }
       case 'Catches':
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
