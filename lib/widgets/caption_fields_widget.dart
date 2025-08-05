@@ -957,9 +957,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   // Prev button
                                   CustomButton(
                                     onTap: () async {
+                                      // Save metadata to current image in background (don't await)
                                       if (widget.onSaveIptc != null) {
-                                        await widget.onSaveIptc!();
+                                        widget.onSaveIptc!();
                                       }
+                                      // Move to previous image immediately
                                       widget.onPreviousImage?.call();
                                     },
                                     child: Container(
@@ -1054,9 +1056,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   // Next button
                                   CustomButton(
                                     onTap: () async {
+                                      // Save metadata to current image in background (don't await)
                                       if (widget.onSaveIptc != null) {
-                                        await widget.onSaveIptc!();
+                                        widget.onSaveIptc!();
                                       }
+                                      // Move to next image immediately
                                       widget.onNextImage?.call();
                                     },
                                     child: Container(
