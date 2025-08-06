@@ -2438,31 +2438,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             ),
                                                                           ),
                                                                         // Inning selector - moved outside the magic bar container
-                                                                        if (_showCustomTextInningSelector)
+                                                                        if (_showCustomTextInningSelector) ...[
                                                                           Container(
-                                                                            margin:
-                                                                                EdgeInsets.only(top: 4),
-                                                                            decoration:
-                                                                                BoxDecoration(
-                                                                              color: Colors.white,
-                                                                              borderRadius: BorderRadius.circular(4),
-                                                                              border: Border.all(color: Colors.grey.shade300),
-                                                                            ),
                                                                             height:
-                                                                                120,
+                                                                                100,
                                                                             child:
-                                                                                Column(
-                                                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                                                              children: [
-                                                                                // Action buttons (Reset, Settings, FTP)
-                                                                                _buildCompactActionButtons(),
-                                                                                // Inning selector
-                                                                                Expanded(
-                                                                                  child: _buildReusableInningSelector(),
-                                                                                ),
-                                                                              ],
-                                                                            ),
+                                                                                _buildReusableInningSelector(),
                                                                           ),
+                                                                          const SizedBox(
+                                                                              height: 4),
+                                                                          // Action buttons (Reset, Settings, FTP)
+                                                                          _buildCompactActionButtons(),
+                                                                        ],
 
                                                                         const SizedBox(
                                                                             height:
