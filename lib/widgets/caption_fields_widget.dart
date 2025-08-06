@@ -6466,6 +6466,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final portController = TextEditingController(text: _ftpPort.toString());
     final remotePathController = TextEditingController(text: _ftpRemotePath);
     final profileNameController = TextEditingController();
+    bool showProfileManager = false; // Track which view to show
 
     showDialog(
       context: context,
@@ -6487,10 +6488,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Header
                 Row(
                   children: [
-                    Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
+                    Icon(showProfileManager ? Icons.folder : Icons.settings,
+                        size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 6),
                     Text(
-                      'FTP Server Settings',
+                      showProfileManager
+                          ? 'FTP Profile Manager'
+                          : 'FTP Server Settings',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -6531,7 +6535,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         const SizedBox(width: 8),
                         GestureDetector(
-                          onTap: _showFtpProfileManager,
+                          onTap: () {
+                            setDialogState(() {
+                              showProfileManager = !showProfileManager;
+                            });
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
@@ -6543,11 +6551,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.folder,
-                                    size: 12, color: Colors.grey.shade600),
+                                Icon(
+                                    showProfileManager
+                                        ? Icons.settings
+                                        : Icons.folder,
+                                    size: 12,
+                                    color: Colors.grey.shade600),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Manage Profiles',
+                                  showProfileManager
+                                      ? 'Back to Settings'
+                                      : 'Manage Profiles',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey.shade700,
@@ -6564,355 +6578,480 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 const SizedBox(height: 12),
 
-                // Profile Selection
-                Text(
-                  'Select Profile',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: DropdownButtonFormField<String>(
-                    value: _currentFtpProfile,
-                    decoration: InputDecoration(
-                      border: InputBorder.none,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      isDense: false,
+                // Content - either settings or profile manager
+                if (!showProfileManager) ...[
+                  // Profile Selection
+                  Text(
+                    'Select Profile',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
                     ),
-                    items: [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        child: Text(
-                          'No Profile Selected',
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      value: _currentFtpProfile,
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        isDense: false,
+                      ),
+                      items: [
+                        DropdownMenuItem<String>(
+                          value: null,
+                          child: Text(
+                            'No Profile Selected',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade500),
+                          ),
+                        ),
+                        ..._ftpProfiles.keys
+                            .map((profileName) => DropdownMenuItem<String>(
+                                  value: profileName,
+                                  child: Text(
+                                    profileName,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade700),
+                                  ),
+                                ))
+                            .toList(),
+                      ],
+                      onChanged: (String? newValue) {
+                        setDialogState(() {
+                          if (newValue != null) {
+                            _loadFtpProfile(newValue);
+                            // Update the text controllers with loaded profile data
+                            hostController.text = _ftpHost;
+                            usernameController.text = _ftpUsername;
+                            passwordController.text = _ftpPassword;
+                            portController.text = _ftpPort.toString();
+                            remotePathController.text = _ftpRemotePath;
+                          } else {
+                            _currentFtpProfile = null;
+                          }
+                        });
+                      },
+                      icon: Icon(Icons.arrow_drop_down,
+                          size: 16, color: Colors.grey.shade600),
+                      dropdownColor: Colors.white,
+                      style:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Server Settings
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Server Settings',
                           style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade500),
-                        ),
-                      ),
-                      ..._ftpProfiles.keys
-                          .map((profileName) => DropdownMenuItem<String>(
-                                value: profileName,
-                                child: Text(
-                                  profileName,
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade700),
-                                ),
-                              ))
-                          .toList(),
-                    ],
-                    onChanged: (String? newValue) {
-                      setDialogState(() {
-                        if (newValue != null) {
-                          _loadFtpProfile(newValue);
-                          // Update the text controllers with loaded profile data
-                          hostController.text = _ftpHost;
-                          usernameController.text = _ftpUsername;
-                          passwordController.text = _ftpPassword;
-                          portController.text = _ftpPort.toString();
-                          remotePathController.text = _ftpRemotePath;
-                        } else {
-                          _currentFtpProfile = null;
-                        }
-                      });
-                    },
-                    icon: Icon(Icons.arrow_drop_down,
-                        size: 16, color: Colors.grey.shade600),
-                    dropdownColor: Colors.white,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Server Settings
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Server Settings',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Host field
-                      TextField(
-                        controller: hostController,
-                        style: const TextStyle(fontSize: 12, height: 2.3),
-                        decoration: InputDecoration(
-                          hintText: 'ftp.example.com',
-                          hintStyle: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          isDense: true,
-                          labelText: 'FTP Host',
-                          labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
-                          floatingLabelBehavior: FloatingLabelBehavior.auto,
                         ),
-                      ),
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
 
-                      // Username and Port row
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: usernameController,
-                              style: const TextStyle(fontSize: 12, height: 2.3),
-                              decoration: InputDecoration(
-                                hintText: 'username',
-                                hintStyle: TextStyle(
-                                    color: Colors.grey.shade500, fontSize: 11),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                        // Host field
+                        TextField(
+                          controller: hostController,
+                          style: const TextStyle(fontSize: 12, height: 2.3),
+                          decoration: InputDecoration(
+                            hintText: 'ftp.example.com',
+                            hintStyle: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 11),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide: BorderSide(
+                                  color: Colors.grey.shade400, width: 1.5),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            isDense: true,
+                            labelText: 'FTP Host',
+                            labelStyle: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                            floatingLabelBehavior: FloatingLabelBehavior.auto,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Username and Port row
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: usernameController,
+                                style:
+                                    const TextStyle(fontSize: 12, height: 2.3),
+                                decoration: InputDecoration(
+                                  hintText: 'username',
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 11),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade400,
+                                        width: 1.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  isDense: true,
+                                  labelText: 'Username',
+                                  labelStyle: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade600),
+                                  floatingLabelBehavior:
+                                      FloatingLabelBehavior.auto,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.5),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                isDense: true,
-                                labelText: 'Username',
-                                labelStyle: TextStyle(
-                                    fontSize: 10, color: Colors.grey.shade600),
-                                floatingLabelBehavior:
-                                    FloatingLabelBehavior.auto,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: portController,
-                              style: const TextStyle(fontSize: 12, height: 2.3),
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                hintText: '21',
-                                hintStyle: TextStyle(
-                                    color: Colors.grey.shade500, fontSize: 11),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: portController,
+                                style:
+                                    const TextStyle(fontSize: 12, height: 2.3),
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  hintText: '21',
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 11),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(2),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade400,
+                                        width: 1.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 6),
+                                  isDense: true,
+                                  labelText: 'Port',
+                                  labelStyle: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade600),
+                                  floatingLabelBehavior:
+                                      FloatingLabelBehavior.auto,
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(2),
-                                  borderSide: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.5),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                isDense: true,
-                                labelText: 'Port',
-                                labelStyle: TextStyle(
-                                    fontSize: 10, color: Colors.grey.shade600),
-                                floatingLabelBehavior:
-                                    FloatingLabelBehavior.auto,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-
-                      // Password field
-                      TextField(
-                        controller: passwordController,
-                        style: const TextStyle(fontSize: 12, height: 2.3),
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          isDense: true,
-                          labelText: 'Password',
-                          labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
-                          floatingLabelBehavior: FloatingLabelBehavior.always,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 6),
 
-                      // Remote path field
-                      TextField(
-                        controller: remotePathController,
-                        style: const TextStyle(fontSize: 12, height: 2.3),
-                        decoration: InputDecoration(
-                          hintText: 'Leave blank for root directory',
-                          hintStyle: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+                        // Password field
+                        TextField(
+                          controller: passwordController,
+                          style: const TextStyle(fontSize: 12, height: 2.3),
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide: BorderSide(
+                                  color: Colors.grey.shade400, width: 1.5),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            isDense: true,
+                            labelText: 'Password',
+                            labelStyle: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(2),
-                            borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          isDense: true,
-                          labelText: 'Remote Path (optional)',
-                          labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
-                          floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
-                      ),
-                      const SizedBox(height: 8),
+                        const SizedBox(height: 8),
 
-                      // Passive mode checkbox
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: Transform.scale(
-                              scale: 0.8,
-                              child: Checkbox(
-                                value: _ftpPassiveMode,
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    _ftpPassiveMode = value ?? true;
-                                  });
-                                },
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                activeColor: Colors.grey.shade600,
-                                checkColor: Colors.white,
+                        // Remote path field
+                        TextField(
+                          controller: remotePathController,
+                          style: const TextStyle(fontSize: 12, height: 2.3),
+                          decoration: InputDecoration(
+                            hintText: 'Leave blank for root directory',
+                            hintStyle: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 11),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(2),
+                              borderSide: BorderSide(
+                                  color: Colors.grey.shade400, width: 1.5),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            isDense: true,
+                            labelText: 'Remote Path (optional)',
+                            labelStyle: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade600),
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Passive mode checkbox
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: Transform.scale(
+                                scale: 0.8,
+                                child: Checkbox(
+                                  value: _ftpPassiveMode,
+                                  onChanged: (value) {
+                                    setDialogState(() {
+                                      _ftpPassiveMode = value ?? true;
+                                    });
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  activeColor: Colors.grey.shade600,
+                                  checkColor: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Use Passive Mode',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.w500,
+                            const SizedBox(width: 4),
+                            Text(
+                              'Use Passive Mode',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Update Profile Button
-                if (_currentFtpProfile != null)
-                  GestureDetector(
-                    onTap: () => _saveFtpProfile(
-                      _currentFtpProfile!,
-                      host: hostController.text,
-                      username: usernameController.text,
-                      password: passwordController.text,
-                      port: int.tryParse(portController.text) ?? 21,
-                      remotePath: remotePathController.text,
-                      passiveMode: _ftpPassiveMode,
-                    ),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.save,
-                              size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Update Profile: $_currentFtpProfile',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+
+                  // Update Profile Button
+                  if (_currentFtpProfile != null)
+                    GestureDetector(
+                      onTap: () => _saveFtpProfile(
+                        _currentFtpProfile!,
+                        host: hostController.text,
+                        username: usernameController.text,
+                        password: passwordController.text,
+                        port: int.tryParse(portController.text) ?? 21,
+                        remotePath: remotePathController.text,
+                        passiveMode: _ftpPassiveMode,
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.save,
+                                size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Update Profile: $_currentFtpProfile',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  // Profile Manager View
+                  Text(
+                    'Profile Manager',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Profile List
+                  Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: _ftpProfiles.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No saved profiles yet.\nCreate your first profile using the settings above.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _ftpProfiles.length,
+                            itemBuilder: (context, index) {
+                              final profileName =
+                                  _ftpProfiles.keys.elementAt(index);
+                              final profile = _ftpProfiles[profileName]!;
+                              final isCurrent =
+                                  _currentFtpProfile == profileName;
+
+                              return Card(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                color: isCurrent
+                                    ? Colors.blue.withOpacity(0.1)
+                                    : null,
+                                child: ListTile(
+                                  leading: Icon(
+                                    isCurrent
+                                        ? Icons.check_circle
+                                        : Icons.storage,
+                                    color:
+                                        isCurrent ? Colors.blue : Colors.grey,
+                                    size: 16,
+                                  ),
+                                  title: Text(
+                                    profileName,
+                                    style: TextStyle(
+                                      fontWeight: isCurrent
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    '${profile['host']}:${profile['port']}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (!isCurrent)
+                                        IconButton(
+                                          icon: const Icon(Icons.play_arrow,
+                                              size: 16),
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              _loadFtpProfile(profileName);
+                                              // Update the text controllers with loaded profile data
+                                              hostController.text = _ftpHost;
+                                              usernameController.text =
+                                                  _ftpUsername;
+                                              passwordController.text =
+                                                  _ftpPassword;
+                                              portController.text =
+                                                  _ftpPort.toString();
+                                              remotePathController.text =
+                                                  _ftpRemotePath;
+                                            });
+                                          },
+                                          tooltip: 'Load Profile',
+                                        ),
+                                      IconButton(
+                                        icon:
+                                            const Icon(Icons.delete, size: 16),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            _deleteFtpProfile(profileName);
+                                          });
+                                        },
+                                        tooltip: 'Delete Profile',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // Action buttons
                 Row(
