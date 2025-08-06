@@ -171,7 +171,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Custom text inning selector
   bool _showCustomTextInningSelector = false;
-  int? _selectedCustomTextInning;
   String? _originalCaptionBeforeCustomVerb; // Store original caption
 
   // Smart custom text field state
@@ -809,7 +808,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Clear other selections
       _rbiCount = null;
       _selectedRbiInning = null;
-      _selectedCustomTextInning = null;
 
       // Clear search states
       _filteredPlayers.clear();
@@ -2001,7 +1999,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                   // Switch to custom verb mode when a player is selected
                   _isPlayerSearchMode = false;
-
                 }
               });
               _updateCaption();
@@ -2244,7 +2241,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         const SizedBox(
                                                                             height:
                                                                                 4),
-                                                                        // Custom text field for between players
+                                                                                                                                                  // Custom text field for between players
                                                                         Container(
                                                                           width:
                                                                               double.infinity,
@@ -2260,9 +2257,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                 Border.all(color: Colors.grey.shade300),
                                                                           ),
                                                                           child:
-                                                                              Column(
-                                                                            children: [
-                                                                              // Text field
                                                                               TextField(
                                                                                 controller: customBetweenPlayersController,
                                                                                 cursorWidth: 1.5,
@@ -2275,7 +2269,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                   isDense: true,
                                                                                 ),
                                                                                 onChanged: (value) {
-                                                                
                                                                                   // Check for magic input format (e.g., "27 hr 1")
                                                                                   if (_isMagicInput(value)) {
                                                                                     _parseMagicInput(value);
@@ -2292,8 +2285,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       //     'DEBUG: Clearing filtered players');
                                                                                       _filteredPlayers.clear();
                                                                                     } else if (!_isPlayerSearchMode) {
-                                                                                      // When in custom verb mode, update caption with custom verb
-                                                                                                                                                                            if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
+                                                                                      // When in custom verb mode, show inning selector
+                                                                                      if (value.isNotEmpty) {
+                                                                                        setState(() {
+                                                                                          _showCustomTextInningSelector = true;
+                                                                                        });
+                                                                                      } else {
+                                                                                        setState(() {
+                                                                                          _showCustomTextInningSelector = false;
+                                                                                        });
+                                                                                      }
+
+                                                                                      // Update caption with custom verb if we have the original caption
+                                                                                      if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
                                                                                         String originalCaption = _originalCaptionBeforeCustomVerb!;
                                                                                         List<String> allSelectedPlayers = [];
                                                                                         allSelectedPlayers.addAll(selectedHomePlayers);
@@ -2327,19 +2331,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                   });
                                                                                 },
                                                                               ),
-                                                                              // Player selection overlay
-                                                                              if (_filteredPlayers.isNotEmpty || _noPlayersFound)
-                                                                                Material(
-                                                                                  elevation: 8,
-                                                                                  borderRadius: BorderRadius.circular(4),
-                                                                                  child: Container(
-                                                                                    decoration: BoxDecoration(
-                                                                                      color: Colors.white,
-                                                                                      borderRadius: BorderRadius.circular(4),
-                                                                                      border: Border.all(color: Colors.grey.shade300),
-                                                                                    ),
-                                                                                    child: Column(
-                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                          ),
+                                                                        
+                                                                        // Player selection overlay
+                                                                        if (_filteredPlayers.isNotEmpty || _noPlayersFound)
+                                                                          Material(
+                                                                            elevation: 8,
+                                                                            borderRadius: BorderRadius.circular(4),
+                                                                            child: Container(
+                                                                              decoration: BoxDecoration(
+                                                                                color: Colors.white,
+                                                                                borderRadius: BorderRadius.circular(4),
+                                                                                border: Border.all(color: Colors.grey.shade300),
+                                                                              ),
+                                                                              child: Column(
+                                                                                mainAxisSize: MainAxisSize.min,
                                                                                       children: [
                                                                                         if (_noPlayersFound)
                                                                                           Container(
@@ -2421,15 +2427,52 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                     ),
                                                                                   ),
                                                                                 ),
-                                                                              // Inning selector
-                                                                              if (_showCustomTextInningSelector)
+                                                                        // Inning selector - moved outside the magic bar container
+                                                                        if (_showCustomTextInningSelector)
+                                                                          Container(
+                                                                            margin: EdgeInsets.only(top: 4),
+                                                                            decoration: BoxDecoration(
+                                                                              color: Colors.white,
+                                                                              borderRadius: BorderRadius.circular(4),
+                                                                              border: Border.all(color: Colors.grey.shade300),
+                                                                            ),
+                                                                            height: 120,
+                                                                            child: Column(
+                                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                                              children: [
+                                                                                // Back button
                                                                                 Container(
-                                                                                  height: 80,
-                                                                                  child: _buildCustomTextInningSelector(),
+                                                                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                  child: GestureDetector(
+                                                                                    onTap: () {
+                                                                                      setState(() {
+                                                                                        _showCustomTextInningSelector = false;
+                                                                                      });
+                                                                                    },
+                                                                                    child: Row(
+                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                                      children: [
+                                                                                        Icon(Icons.arrow_back, size: 12, color: Colors.grey.shade700),
+                                                                                        SizedBox(width: 4),
+                                                                                        Text(
+                                                                                          'Back',
+                                                                                          style: TextStyle(
+                                                                                            fontSize: 10,
+                                                                                            color: Colors.grey.shade700,
+                                                                                            fontWeight: FontWeight.w500,
+                                                                                          ),
+                                                                                        ),
+                                                                                      ],
+                                                                                    ),
+                                                                                  ),
                                                                                 ),
-                                                                            ],
+                                                                                // Inning selector
+                                                                                Expanded(
+                                                                                  child: _buildReusableInningSelector(),
+                                                                                ),
+                                                                              ],
+                                                                            ),
                                                                           ),
-                                                                        ),
 
                                                                         const SizedBox(
                                                                             height:
@@ -4881,9 +4924,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (_selectedRbiInning != null) {
         inningPart =
             ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
-      } else if (_selectedCustomTextInning != null) {
-        inningPart =
-            ' during the ${_getOrdinalSuffix(_selectedCustomTextInning!)} inning';
+      } else if (_isPriorToGame) {
+        inningPart = ' prior to the game';
       }
       // Note: _isPriorToGame is handled separately in the gamePart logic
     }
@@ -6059,7 +6101,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.clear();
       customCelebrationController.clear();
       customBetweenPlayersController.clear();
-      _selectedCustomTextInning = null;
       _showCustomTextInningSelector = false;
 
       // Reset all verb-related state
@@ -8322,10 +8363,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
               // Inning selector
               if (_showCustomTextInningSelector)
-                Container(
-                  height: 80,
-                  child: _buildCustomTextInningSelector(),
-                ),
+
             ],
           ),
         ), */
@@ -9692,7 +9730,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _selectPlayer(Player player) {
-
     setState(() {
       if (player.jerseyNumber != null) {
         _selectedPlayerNumbers.add(player.jerseyNumber!);
@@ -9730,7 +9767,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Automatically switch to custom verb writer mode when a player is selected
       _isPlayerSearchMode = false;
-
     });
 
     // Update caption when player is selected from Magic Bar
@@ -9745,7 +9781,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _isPlayerSearchMode = false;
       customBetweenPlayersController.text = '';
       // Clear any existing inning selection when switching to custom verb mode
-      _selectedCustomTextInning = null;
       _showCustomTextInningSelector = false;
     });
   }
@@ -9758,7 +9793,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _playerSearchText = '';
       customBetweenPlayersController.clear();
       // Clear custom verb mode state
-      _selectedCustomTextInning = null;
       _showCustomTextInningSelector = false;
       _originalCaptionBeforeCustomVerb = null; // Clear stored caption
     });
@@ -9771,153 +9805,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _removeJerseyNumberFromName(String playerName) {
     // Remove jersey number patterns like "#23" or " #23" from the end of the name
     return playerName.replaceAll(RegExp(r'\s*#\d+\s*$'), '').trim();
-  }
-
-  // Reusable back button widget
-  Widget _buildCustomTextInningSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      child: Column(
-        children: [
-          // Header row with back button
-          Container(
-            height: 24,
-            child: Row(
-              children: [
-                // Back button
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showCustomTextInningSelector = false;
-                      customBetweenPlayersController.clear();
-                      _isPlayerSearchMode = true;
-                    });
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.arrow_back,
-                            size: 12, color: Colors.grey.shade700),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Back',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Select Inning',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          // Innings 1-9
-          Expanded(
-            child: Row(
-              children: List.generate(9, (index) {
-                final inning = index + 1;
-                final isSelected = _selectedCustomTextInning == inning;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCustomTextInning = inning;
-                        _updateCaption();
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.all(1),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.blue.shade100
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(2),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.blue.shade300
-                              : Colors.grey.shade300,
-                          width: 0.5,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$inning',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: isSelected
-                                ? Colors.blue.shade700
-                                : Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-          // Navigation and extras row
-          Expanded(
-            child: Row(
-              children: [
-                // Clear button
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedCustomTextInning = null;
-                        _updateCaption();
-                      });
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.all(1),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(2),
-                        border:
-                            Border.all(color: Colors.grey.shade300, width: 0.5),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Clear',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildCompactActionButtons() {
@@ -10268,10 +10155,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ],
               ),
 
-              // Prior to the game option (for "Looks On", "Takes the Field", "Comes Off the Field", and "National Anthem" verbs) - placed below innings
+              // Prior to the game option (for "Looks On", "Takes the Field", "Comes Off the Field", and custom text) - placed below innings
               if (_selectedVerb == 'Looks On' ||
                   _selectedVerb == 'Takes the Field' ||
-                  _selectedVerb == 'Comes Off the Field') ...[
+                  _selectedVerb == 'Comes Off the Field' ||
+                  _showCustomTextInningSelector) ...[
                 const SizedBox(height: 4),
                 GestureDetector(
                   onTap: () {
