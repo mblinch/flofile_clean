@@ -172,6 +172,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Custom text inning selector
   bool _showCustomTextInningSelector = false;
   int? _selectedCustomTextInning;
+  String? _originalCaptionBeforeCustomVerb; // Store original caption
 
   // Smart custom text field state
   bool _isPlayerSearchMode = true;
@@ -813,7 +814,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Clear search states
       _filteredPlayers.clear();
       _noPlayersFound = false;
-      _isPlayerSearchMode = false;
+      _isPlayerSearchMode = true; // Reset to player search mode
+      _showCustomTextInningSelector = false; // Hide inning selector
       _magicInputMatchingPlayers.clear();
       _magicInputActionText = '';
       _waitingForHomeVisitorChoice = false;
@@ -1834,6 +1836,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         selectedAwayPlayers
                                             .add(player.displayName);
                                       }
+
+                                      // Switch to custom verb mode when a player is selected
+                                      _isPlayerSearchMode = false;
+                                      print(
+                                          'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
                                     }
                                   });
                                   _updateCaption();
@@ -1991,9 +1998,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   } else {
                     selectedAwayPlayers.add(player.displayName);
                   }
+
+                  // Switch to custom verb mode when a player is selected
+                  _isPlayerSearchMode = false;
+
                 }
               });
               _updateCaption();
+
+              // Store the original caption AFTER it's been updated (for grid selection)
+              _originalCaptionBeforeCustomVerb = captionController.text;
             },
             child: Container(
               margin: const EdgeInsets.all(1),
@@ -2255,12 +2269,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                 cursorHeight: 16,
                                                                                 style: const TextStyle(fontSize: 12, height: 2.3),
                                                                                 decoration: InputDecoration(
-                                                                                  hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'Magic Bar: Type custom action...',
+                                                                                  hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
                                                                                   border: InputBorder.none,
                                                                                   contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                                                   isDense: true,
                                                                                 ),
                                                                                 onChanged: (value) {
+                                                                
                                                                                   // Check for magic input format (e.g., "27 hr 1")
                                                                                   if (_isMagicInput(value)) {
                                                                                     _parseMagicInput(value);
@@ -2277,10 +2292,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       //     'DEBUG: Clearing filtered players');
                                                                                       _filteredPlayers.clear();
                                                                                     } else if (!_isPlayerSearchMode) {
-                                                                                      // print(
-                                                                                      //     'DEBUG: In custom verb mode');
-                                                                                      _showCustomTextInningSelector = value.isNotEmpty;
-                                                                                      _updateCaption();
+                                                                                      // When in custom verb mode, update caption with custom verb
+                                                                                                                                                                            if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
+                                                                                        String originalCaption = _originalCaptionBeforeCustomVerb!;
+                                                                                        List<String> allSelectedPlayers = [];
+                                                                                        allSelectedPlayers.addAll(selectedHomePlayers);
+                                                                                        allSelectedPlayers.addAll(selectedAwayPlayers);
+
+                                                                                        if (allSelectedPlayers.isNotEmpty) {
+                                                                                          String playerName = allSelectedPlayers.first;
+
+                                                                                          // Find the player in the caption and insert custom verb after team
+                                                                                          if (originalCaption.contains(playerName)) {
+                                                                                            int playerIndex = originalCaption.indexOf(playerName);
+                                                                                            if (playerIndex != -1) {
+                                                                                              String beforePlayer = originalCaption.substring(0, playerIndex);
+                                                                                              String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
+
+                                                                                              // Find "against" to insert before it
+                                                                                              int againstIndex = afterPlayer.indexOf(' against ');
+                                                                                              if (againstIndex != -1) {
+                                                                                                String beforeAgainst = afterPlayer.substring(0, againstIndex);
+                                                                                                String afterAgainst = afterPlayer.substring(againstIndex);
+                                                                                                captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
+                                                                                              } else {
+                                                                                                // Fallback
+                                                                                                captionController.text = '$beforePlayer$playerName $value';
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
                                                                                     }
                                                                                   });
                                                                                 },
@@ -2393,8 +2435,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             height:
                                                                                 4), // Padding between Magic Bar and verb categories
 
-                                                                        // Verb categories (hidden when custom text is being used or when certain verbs are selected)
+                                                                        // Verb categories (hidden when custom text is being used, when inning selector is shown, or when certain verbs are selected)
                                                                         if (customBetweenPlayersController.text.isEmpty &&
+                                                                            !_showCustomTextInningSelector &&
                                                                             _selectedVerb !=
                                                                                 'Home Run') ...[
                                                                           Container(
@@ -7945,7 +7988,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ? '🏠 Type H for Home or 🚍 V for Visitor 🏠'
                       : _isPlayerSearchMode
                           ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...'
-                          : 'Magic Bar: Type custom action...',
+                          : 'write custom verb here',
                   border: InputBorder.none,
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -7998,10 +8041,81 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     } else if (_isPlayerSearchMode && value.isEmpty) {
                       _filteredPlayers.clear();
                     } else if (!_isPlayerSearchMode) {
-                      _showCustomTextInningSelector = value.isNotEmpty;
-                      _updateCaption();
+                      print('FUCK: In custom verb mode, typing: "$value"');
+                      // When in custom verb mode, update caption with custom verb
+                      if (value.isNotEmpty) {
+                        print('FUCK: value.isNotEmpty = true, value = "$value"');
+                        String currentCaption = captionController.text;
+                        List<String> allSelectedPlayers = [];
+                        allSelectedPlayers.addAll(selectedHomePlayers);
+                        allSelectedPlayers.addAll(selectedAwayPlayers);
+                        
+                        print('FUCK: currentCaption = "$currentCaption"');
+                        print('FUCK: allSelectedPlayers = $allSelectedPlayers');
+                        
+                        if (allSelectedPlayers.isNotEmpty) {
+                          String playerName = allSelectedPlayers.first;
+                          print('FUCK: playerName = "$playerName"');
+                          
+                          // Find the player in the caption and insert custom verb after team
+                          if (currentCaption.contains(playerName)) {
+                            int playerIndex = currentCaption.indexOf(playerName);
+                            if (playerIndex != -1) {
+                              String beforePlayer = currentCaption.substring(0, playerIndex);
+                              String afterPlayer = currentCaption.substring(playerIndex + playerName.length);
+                              
+                              // Find "against" to insert before it
+                              int againstIndex = afterPlayer.indexOf(' against ');
+                              if (againstIndex != -1) {
+                                String beforeAgainst = afterPlayer.substring(0, againstIndex);
+                                String afterAgainst = afterPlayer.substring(againstIndex);
+                                captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
+                              } else {
+                                // Fallback
+                                captionController.text = '$beforePlayer$playerName $value';
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   });
+                },
+                onEditingComplete: () {
+                  // Update caption when editing is complete
+                  if (!_isPlayerSearchMode && customBetweenPlayersController.text.isNotEmpty) {
+                    String customText = customBetweenPlayersController.text;
+                    String currentCaption = captionController.text;
+                    
+                    // Find the selected player name
+                    List<String> allSelectedPlayers = [];
+                    allSelectedPlayers.addAll(selectedHomePlayers);
+                    allSelectedPlayers.addAll(selectedAwayPlayers);
+                    
+                    if (allSelectedPlayers.isNotEmpty) {
+                      String playerName = allSelectedPlayers.first;
+                      
+                      // Find where the player name is in the caption
+                      if (currentCaption.contains(playerName)) {
+                        int playerIndex = currentCaption.indexOf(playerName);
+                        if (playerIndex != -1) {
+                          String beforePlayer = currentCaption.substring(0, playerIndex);
+                          String afterPlayer = currentCaption.substring(playerIndex + playerName.length);
+                          
+                          // Find where the team name ends
+                          int ofTheIndex = afterPlayer.indexOf(' of the ');
+                          if (ofTheIndex != -1) {
+                            int againstIndex = afterPlayer.indexOf(' against ');
+                            if (againstIndex != -1) {
+                              String beforeTeam = afterPlayer.substring(0, againstIndex);
+                              String afterTeam = afterPlayer.substring(againstIndex);
+                              captionController.text = '$beforePlayer$playerName$beforeTeam $customText$afterTeam';
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 },
               ),
 
@@ -9578,6 +9692,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _selectPlayer(Player player) {
+
     setState(() {
       if (player.jerseyNumber != null) {
         _selectedPlayerNumbers.add(player.jerseyNumber!);
@@ -9612,16 +9727,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _playerSearchText = '';
       customBetweenPlayersController.clear();
       _filteredPlayers.clear();
+
+      // Automatically switch to custom verb writer mode when a player is selected
+      _isPlayerSearchMode = false;
+
     });
 
     // Update caption when player is selected from Magic Bar
     _updateCaption();
+
+    // Store the original caption AFTER it's been updated
+    _originalCaptionBeforeCustomVerb = captionController.text;
   }
 
   void _finishPlayerSelection() {
     setState(() {
       _isPlayerSearchMode = false;
       customBetweenPlayersController.text = '';
+      // Clear any existing inning selection when switching to custom verb mode
+      _selectedCustomTextInning = null;
+      _showCustomTextInningSelector = false;
     });
   }
 
@@ -9632,6 +9757,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedPlayerNumbers.clear();
       _playerSearchText = '';
       customBetweenPlayersController.clear();
+      // Clear custom verb mode state
+      _selectedCustomTextInning = null;
+      _showCustomTextInningSelector = false;
+      _originalCaptionBeforeCustomVerb = null; // Clear stored caption
     });
   }
 
@@ -9650,6 +9779,59 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       padding: const EdgeInsets.all(4),
       child: Column(
         children: [
+          // Header row with back button
+          Container(
+            height: 24,
+            child: Row(
+              children: [
+                // Back button
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showCustomTextInningSelector = false;
+                      customBetweenPlayersController.clear();
+                      _isPlayerSearchMode = true;
+                    });
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back,
+                            size: 12, color: Colors.grey.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Back',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Select Inning',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
           // Innings 1-9
           Expanded(
             child: Row(
