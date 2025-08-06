@@ -2241,7 +2241,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         const SizedBox(
                                                                             height:
                                                                                 4),
-                                                                                                                                                  // Custom text field for between players
+                                                                        // Custom text field for between players
                                                                         Container(
                                                                           width:
                                                                               double.infinity,
@@ -2258,87 +2258,97 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                           ),
                                                                           child:
                                                                               TextField(
-                                                                                controller: customBetweenPlayersController,
-                                                                                cursorWidth: 1.5,
-                                                                                cursorHeight: 16,
-                                                                                style: const TextStyle(fontSize: 12, height: 2.3),
-                                                                                decoration: InputDecoration(
-                                                                                  hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
-                                                                                  border: InputBorder.none,
-                                                                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                                                  isDense: true,
-                                                                                ),
-                                                                                onChanged: (value) {
-                                                                                  // Check for magic input format (e.g., "27 hr 1")
-                                                                                  if (_isMagicInput(value)) {
-                                                                                    _parseMagicInput(value);
-                                                                                    // Don't return - let the text stay in the field
+                                                                            controller:
+                                                                                customBetweenPlayersController,
+                                                                            cursorWidth:
+                                                                                1.5,
+                                                                            cursorHeight:
+                                                                                16,
+                                                                            style:
+                                                                                const TextStyle(fontSize: 12, height: 2.3),
+                                                                            decoration:
+                                                                                InputDecoration(
+                                                                              hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
+                                                                              border: InputBorder.none,
+                                                                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                                              isDense: true,
+                                                                            ),
+                                                                            onChanged:
+                                                                                (value) {
+                                                                              // Check for magic input format (e.g., "27 hr 1")
+                                                                              if (_isMagicInput(value)) {
+                                                                                _parseMagicInput(value);
+                                                                                // Don't return - let the text stay in the field
+                                                                              }
+
+                                                                              setState(() {
+                                                                                if (_isPlayerSearchMode && _isNumeric(value)) {
+                                                                                  // print(
+                                                                                  //     'DEBUG: Calling _filterPlayersByNumber');
+                                                                                  _filterPlayersByNumber(value);
+                                                                                } else if (_isPlayerSearchMode && value.isEmpty) {
+                                                                                  // print(
+                                                                                  //     'DEBUG: Clearing filtered players');
+                                                                                  _filteredPlayers.clear();
+                                                                                } else if (!_isPlayerSearchMode) {
+                                                                                  // When in custom verb mode, show inning selector
+                                                                                  if (value.isNotEmpty) {
+                                                                                    setState(() {
+                                                                                      _showCustomTextInningSelector = true;
+                                                                                    });
+                                                                                  } else {
+                                                                                    setState(() {
+                                                                                      _showCustomTextInningSelector = false;
+                                                                                    });
                                                                                   }
 
-                                                                                  setState(() {
-                                                                                    if (_isPlayerSearchMode && _isNumeric(value)) {
-                                                                                      // print(
-                                                                                      //     'DEBUG: Calling _filterPlayersByNumber');
-                                                                                      _filterPlayersByNumber(value);
-                                                                                    } else if (_isPlayerSearchMode && value.isEmpty) {
-                                                                                      // print(
-                                                                                      //     'DEBUG: Clearing filtered players');
-                                                                                      _filteredPlayers.clear();
-                                                                                    } else if (!_isPlayerSearchMode) {
-                                                                                      // When in custom verb mode, show inning selector
-                                                                                      if (value.isNotEmpty) {
-                                                                                        setState(() {
-                                                                                          _showCustomTextInningSelector = true;
-                                                                                        });
-                                                                                      } else {
-                                                                                        setState(() {
-                                                                                          _showCustomTextInningSelector = false;
-                                                                                        });
-                                                                                      }
+                                                                                  // Update caption with custom verb if we have the original caption
+                                                                                  if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
+                                                                                    String originalCaption = _originalCaptionBeforeCustomVerb!;
+                                                                                    List<String> allSelectedPlayers = [];
+                                                                                    allSelectedPlayers.addAll(selectedHomePlayers);
+                                                                                    allSelectedPlayers.addAll(selectedAwayPlayers);
 
-                                                                                      // Update caption with custom verb if we have the original caption
-                                                                                      if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
-                                                                                        String originalCaption = _originalCaptionBeforeCustomVerb!;
-                                                                                        List<String> allSelectedPlayers = [];
-                                                                                        allSelectedPlayers.addAll(selectedHomePlayers);
-                                                                                        allSelectedPlayers.addAll(selectedAwayPlayers);
+                                                                                    if (allSelectedPlayers.isNotEmpty) {
+                                                                                      String playerName = allSelectedPlayers.first;
 
-                                                                                        if (allSelectedPlayers.isNotEmpty) {
-                                                                                          String playerName = allSelectedPlayers.first;
+                                                                                      // Find the player in the caption and insert custom verb after team
+                                                                                      if (originalCaption.contains(playerName)) {
+                                                                                        int playerIndex = originalCaption.indexOf(playerName);
+                                                                                        if (playerIndex != -1) {
+                                                                                          String beforePlayer = originalCaption.substring(0, playerIndex);
+                                                                                          String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
 
-                                                                                          // Find the player in the caption and insert custom verb after team
-                                                                                          if (originalCaption.contains(playerName)) {
-                                                                                            int playerIndex = originalCaption.indexOf(playerName);
-                                                                                            if (playerIndex != -1) {
-                                                                                              String beforePlayer = originalCaption.substring(0, playerIndex);
-                                                                                              String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
-
-                                                                                              // Find "against" to insert before it
-                                                                                              int againstIndex = afterPlayer.indexOf(' against ');
-                                                                                              if (againstIndex != -1) {
-                                                                                                String beforeAgainst = afterPlayer.substring(0, againstIndex);
-                                                                                                String afterAgainst = afterPlayer.substring(againstIndex);
-                                                                                                captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
-                                                                                              } else {
-                                                                                                // Fallback
-                                                                                                captionController.text = '$beforePlayer$playerName $value';
-                                                                                              }
-                                                                                            }
+                                                                                          // Find "against" to insert before it
+                                                                                          int againstIndex = afterPlayer.indexOf(' against ');
+                                                                                          if (againstIndex != -1) {
+                                                                                            String beforeAgainst = afterPlayer.substring(0, againstIndex);
+                                                                                            String afterAgainst = afterPlayer.substring(againstIndex);
+                                                                                            captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
+                                                                                          } else {
+                                                                                            // Fallback
+                                                                                            captionController.text = '$beforePlayer$playerName $value';
                                                                                           }
                                                                                         }
                                                                                       }
                                                                                     }
-                                                                                  });
-                                                                                },
-                                                                              ),
+                                                                                  }
+                                                                                }
+                                                                              });
+                                                                            },
                                                                           ),
-                                                                        
+                                                                        ),
+
                                                                         // Player selection overlay
-                                                                        if (_filteredPlayers.isNotEmpty || _noPlayersFound)
+                                                                        if (_filteredPlayers.isNotEmpty ||
+                                                                            _noPlayersFound)
                                                                           Material(
-                                                                            elevation: 8,
-                                                                            borderRadius: BorderRadius.circular(4),
-                                                                            child: Container(
+                                                                            elevation:
+                                                                                8,
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(4),
+                                                                            child:
+                                                                                Container(
                                                                               decoration: BoxDecoration(
                                                                                 color: Colors.white,
                                                                                 borderRadius: BorderRadius.circular(4),
@@ -2346,126 +2356,106 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                               ),
                                                                               child: Column(
                                                                                 mainAxisSize: MainAxisSize.min,
-                                                                                      children: [
-                                                                                        if (_noPlayersFound)
-                                                                                          Container(
-                                                                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                                                                            child: Row(
-                                                                                              children: [
-                                                                                                Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
-                                                                                                const SizedBox(width: 8),
-                                                                                                Text(
-                                                                                                  'No player with number ${_playerSearchText}',
-                                                                                                  style: TextStyle(
-                                                                                                    fontSize: 12,
-                                                                                                    color: Colors.orange.shade700,
-                                                                                                    fontWeight: FontWeight.w500,
-                                                                                                  ),
-                                                                                                ),
-                                                                                              ],
-                                                                                            ),
-                                                                                          )
-                                                                                        else ...[
-                                                                                          ..._filteredPlayers.map(
-                                                                                            (player) => GestureDetector(
-                                                                                              onTap: () => _selectPlayer(player),
-                                                                                              child: Container(
-                                                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                                                                child: Row(
-                                                                                                  children: [
-                                                                                                    Text(
-                                                                                                      '#${player.jerseyNumber}',
-                                                                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-                                                                                                    ),
-                                                                                                    const SizedBox(width: 4),
-                                                                                                    Text(
-                                                                                                      _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
-                                                                                                      style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
-                                                                                                    ),
-                                                                                                    const SizedBox(width: 2),
-                                                                                                    Icon(
-                                                                                                      _isHomePlayer(player) ? Icons.home : Icons.flight,
-                                                                                                      size: 10,
-                                                                                                      color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
-                                                                                                    ),
-                                                                                                    const SizedBox(width: 4),
-                                                                                                    Expanded(
-                                                                                                      child: Text(
-                                                                                                        _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
-                                                                                                        style: const TextStyle(fontSize: 10),
-                                                                                                        overflow: TextOverflow.ellipsis,
-                                                                                                      ),
-                                                                                                    ),
-                                                                                                  ],
-                                                                                                ),
-                                                                                              ),
+                                                                                children: [
+                                                                                  if (_noPlayersFound)
+                                                                                    Container(
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                                                      child: Row(
+                                                                                        children: [
+                                                                                          Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
+                                                                                          const SizedBox(width: 8),
+                                                                                          Text(
+                                                                                            'No player with number ${_playerSearchText}',
+                                                                                            style: TextStyle(
+                                                                                              fontSize: 12,
+                                                                                              color: Colors.orange.shade700,
+                                                                                              fontWeight: FontWeight.w500,
                                                                                             ),
                                                                                           ),
                                                                                         ],
-                                                                                        if (_selectedPlayerNumbers.isNotEmpty)
-                                                                                          GestureDetector(
-                                                                                            onTap: _finishPlayerSelection,
-                                                                                            child: Container(
-                                                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                                                              decoration: BoxDecoration(
-                                                                                                color: Colors.blue.shade50,
-                                                                                                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                                                                      ),
+                                                                                    )
+                                                                                  else ...[
+                                                                                    ..._filteredPlayers.map(
+                                                                                      (player) => GestureDetector(
+                                                                                        onTap: () => _selectPlayer(player),
+                                                                                        child: Container(
+                                                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                          child: Row(
+                                                                                            children: [
+                                                                                              Text(
+                                                                                                '#${player.jerseyNumber}',
+                                                                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
                                                                                               ),
-                                                                                              child: Row(
-                                                                                                children: [
-                                                                                                  Icon(Icons.check, size: 16, color: Colors.blue.shade700),
-                                                                                                  const SizedBox(width: 8),
-                                                                                                  Text(
-                                                                                                    'Done selecting players (${_selectedPlayerNumbers.length})',
-                                                                                                    style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
-                                                                                                  ),
-                                                                                                ],
+                                                                                              const SizedBox(width: 4),
+                                                                                              Text(
+                                                                                                _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
+                                                                                                style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
                                                                                               ),
-                                                                                            ),
+                                                                                              const SizedBox(width: 2),
+                                                                                              Icon(
+                                                                                                _isHomePlayer(player) ? Icons.home : Icons.flight,
+                                                                                                size: 10,
+                                                                                                color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
+                                                                                              ),
+                                                                                              const SizedBox(width: 4),
+                                                                                              Expanded(
+                                                                                                child: Text(
+                                                                                                  _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
+                                                                                                  style: const TextStyle(fontSize: 10),
+                                                                                                  overflow: TextOverflow.ellipsis,
+                                                                                                ),
+                                                                                              ),
+                                                                                            ],
                                                                                           ),
-                                                                                      ],
+                                                                                        ),
+                                                                                      ),
                                                                                     ),
-                                                                                  ),
-                                                                                ),
+                                                                                  ],
+                                                                                  if (_selectedPlayerNumbers.isNotEmpty)
+                                                                                    GestureDetector(
+                                                                                      onTap: _finishPlayerSelection,
+                                                                                      child: Container(
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: Colors.blue.shade50,
+                                                                                          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                                                                        ),
+                                                                                        child: Row(
+                                                                                          children: [
+                                                                                            Icon(Icons.check, size: 16, color: Colors.blue.shade700),
+                                                                                            const SizedBox(width: 8),
+                                                                                            Text(
+                                                                                              'Done selecting players (${_selectedPlayerNumbers.length})',
+                                                                                              style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                                                                                            ),
+                                                                                          ],
+                                                                                        ),
+                                                                                      ),
+                                                                                    ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ),
                                                                         // Inning selector - moved outside the magic bar container
                                                                         if (_showCustomTextInningSelector)
                                                                           Container(
-                                                                            margin: EdgeInsets.only(top: 4),
-                                                                            decoration: BoxDecoration(
+                                                                            margin:
+                                                                                EdgeInsets.only(top: 4),
+                                                                            decoration:
+                                                                                BoxDecoration(
                                                                               color: Colors.white,
                                                                               borderRadius: BorderRadius.circular(4),
                                                                               border: Border.all(color: Colors.grey.shade300),
                                                                             ),
-                                                                            height: 120,
-                                                                            child: Column(
+                                                                            height:
+                                                                                120,
+                                                                            child:
+                                                                                Column(
                                                                               crossAxisAlignment: CrossAxisAlignment.start,
                                                                               children: [
-                                                                                // Back button
-                                                                                Container(
-                                                                                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                                                  child: GestureDetector(
-                                                                                    onTap: () {
-                                                                                      setState(() {
-                                                                                        _showCustomTextInningSelector = false;
-                                                                                      });
-                                                                                    },
-                                                                                    child: Row(
-                                                                                      mainAxisSize: MainAxisSize.min,
-                                                                                      children: [
-                                                                                        Icon(Icons.arrow_back, size: 12, color: Colors.grey.shade700),
-                                                                                        SizedBox(width: 4),
-                                                                                        Text(
-                                                                                          'Back',
-                                                                                          style: TextStyle(
-                                                                                            fontSize: 10,
-                                                                                            color: Colors.grey.shade700,
-                                                                                            fontWeight: FontWeight.w500,
-                                                                                          ),
-                                                                                        ),
-                                                                                      ],
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
+                                                                                // Action buttons (Reset, Settings, FTP)
+                                                                                _buildCompactActionButtons(),
                                                                                 // Inning selector
                                                                                 Expanded(
                                                                                   child: _buildReusableInningSelector(),
