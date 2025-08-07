@@ -73,6 +73,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final List<Player>? preloadedHomeRoster;
   final List<Player>? preloadedAwayRoster;
   final String? currentImagePath;
+  final int? currentIndex;
+  final int? totalImages;
   final Future<void> Function()? onSaveIptc;
   final Future<void> Function()? onSaveIptcBackground;
 
@@ -90,6 +92,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.preloadedHomeRoster,
     this.preloadedAwayRoster,
     this.currentImagePath,
+    this.currentIndex,
+    this.totalImages,
     this.onSaveIptc,
     this.onSaveIptcBackground,
   });
@@ -948,254 +952,379 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         const SizedBox(height: 6),
 
                         // Action buttons row (aligned with caption box)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            // Navigation buttons: Prev, Copy, Paste, Next (aligned with caption box)
-                            Expanded(
-                              flex: 5, // Match caption box width
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  // Reset button
-                                  CustomButton(
-                                    onTap: _resetCaption,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.refresh,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Reset',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 24),
-                                  // Prev button
-                                  CustomButton(
-                                    onTap: () async {
-                                      // Save metadata to current image in background (don't await)
-                                      if (widget.onSaveIptc != null) {
-                                        widget.onSaveIptc!();
-                                      }
-                                      // Move to previous image immediately
-                                      widget.onPreviousImage?.call();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.arrow_back,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Prev',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8, horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              // Navigation buttons: Prev, Copy, Paste, Next (aligned with caption box)
+                              Expanded(
+                                flex: 5, // Match caption box width
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // Reset button
+                                    CustomButton(
+                                      onTap: _resetCaption,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade200,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.refresh,
+                                                size: 12,
+                                                color: Colors.grey.shade700),
+                                            const SizedBox(width: 2),
+                                            Text('Reset',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  // Copy button
-                                  CustomButton(
-                                    onTap: () {
-                                      _copyMetadataFromCaptionWidget();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.copy,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Copy',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  // Paste button
-                                  CustomButton(
-                                    onTap: _pasteMetadataToCaptionWidget,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.paste,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Paste',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
+                                    const SizedBox(width: 24),
+                                    // Prev button
+                                    CustomButton(
+                                      onTap: (widget.currentIndex != null &&
+                                              widget.currentIndex! > 0)
+                                          ? () async {
+                                              // Save metadata to current image in background (don't await)
+                                              if (widget.onSaveIptc != null) {
+                                                widget.onSaveIptc!();
+                                              }
+                                              // Move to previous image immediately
+                                              widget.onPreviousImage?.call();
+                                            }
+                                          : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: (widget.currentIndex != null &&
+                                                  widget.currentIndex! > 0)
+                                              ? Colors.grey.shade100
+                                              : Colors.grey.shade200,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: (widget.currentIndex !=
+                                                          null &&
+                                                      widget.currentIndex! > 0)
+                                                  ? Colors.grey.shade300
+                                                  : Colors.grey.shade400),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.arrow_back,
+                                                size: 12,
+                                                color: (widget.currentIndex !=
+                                                            null &&
+                                                        widget.currentIndex! >
+                                                            0)
+                                                    ? Colors.grey.shade700
+                                                    : Colors.grey.shade500),
+                                            const SizedBox(width: 2),
+                                            Text('Prev',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: (widget.currentIndex !=
+                                                                null &&
+                                                            widget.currentIndex! >
+                                                                0)
+                                                        ? Colors.grey.shade700
+                                                        : Colors.grey.shade500,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  // Next button
-                                  CustomButton(
-                                    onTap: () async {
-                                      // Save metadata to current image in background (don't await)
-                                      if (widget.onSaveIptc != null) {
-                                        widget.onSaveIptc!();
-                                      }
-                                      // Move to next image immediately
-                                      widget.onNextImage?.call();
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text('Next',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                          const SizedBox(width: 2),
-                                          Icon(Icons.arrow_forward,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                        ],
+                                    const SizedBox(width: 4),
+                                    // Copy button
+                                    CustomButton(
+                                      onTap: () {
+                                        _copyMetadataFromCaptionWidget();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.copy,
+                                                size: 12,
+                                                color: Colors.grey.shade700),
+                                            const SizedBox(width: 2),
+                                            Text('Copy',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    // Paste button
+                                    CustomButton(
+                                      onTap: _pasteMetadataToCaptionWidget,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.paste,
+                                                size: 12,
+                                                color: Colors.grey.shade700),
+                                            const SizedBox(width: 2),
+                                            Text('Paste',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    // Next button
+                                    CustomButton(
+                                      onTap: (widget.currentIndex != null &&
+                                              widget.totalImages != null &&
+                                              widget.currentIndex! <
+                                                  widget.totalImages! - 1)
+                                          ? () async {
+                                              // Save metadata to current image in background (don't await)
+                                              if (widget.onSaveIptc != null) {
+                                                widget.onSaveIptc!();
+                                              }
+                                              // Move to next image immediately
+                                              widget.onNextImage?.call();
+                                            }
+                                          : null,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: (widget.currentIndex != null &&
+                                                  widget.totalImages != null &&
+                                                  widget.currentIndex! <
+                                                      widget.totalImages! - 1)
+                                              ? Colors.grey.shade100
+                                              : Colors.grey.shade200,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: (widget.currentIndex !=
+                                                          null &&
+                                                      widget.totalImages !=
+                                                          null &&
+                                                      widget.currentIndex! <
+                                                          widget.totalImages! -
+                                                              1)
+                                                  ? Colors.grey.shade300
+                                                  : Colors.grey.shade400),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text('Next',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: (widget.currentIndex != null &&
+                                                            widget.totalImages !=
+                                                                null &&
+                                                            widget.currentIndex! <
+                                                                widget.totalImages! -
+                                                                    1)
+                                                        ? Colors.grey.shade700
+                                                        : Colors.grey.shade500,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                            const SizedBox(width: 2),
+                                            Icon(Icons.arrow_forward,
+                                                size: 12,
+                                                color: (widget.currentIndex !=
+                                                            null &&
+                                                        widget.totalImages !=
+                                                            null &&
+                                                        widget.currentIndex! <
+                                                            widget.totalImages! -
+                                                                1)
+                                                    ? Colors.grey.shade700
+                                                    : Colors.grey.shade500),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    // Team switch button
+                                    CustomButton(
+                                      onTap: () {
+                                        setState(() {
+                                          _homeOnLeft = !_homeOnLeft;
+                                        });
+                                        _updateCaption();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              _homeOnLeft
+                                                  ? Icons.home
+                                                  : Icons.flight,
+                                              size: 12,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Icon(
+                                              Icons.swap_horiz,
+                                              size: 12,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Icon(
+                                              _homeOnLeft
+                                                  ? Icons.flight
+                                                  : Icons.home,
+                                              size: 12,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(
-                                width: 9), // Match caption/personality spacing
-                            // Settings and FTP buttons (aligned with personality box)
-                            Expanded(
-                              flex: 1, // Match personality box width
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  // Settings button (now between reset and FTP)
-                                  CustomButton(
-                                    onTap: _showFtpSettings,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF4A90E2),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: const Color(0xFF4A90E2)),
+                              const SizedBox(
+                                  width:
+                                      9), // Match caption/personality spacing
+                              // Settings and FTP buttons (aligned with personality box)
+                              Expanded(
+                                flex: 1, // Match personality box width
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    // Settings button (now between reset and FTP)
+                                    CustomButton(
+                                      onTap: _showFtpSettings,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF4A90E2),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: const Color(0xFF4A90E2)),
+                                        ),
+                                        child: Icon(Icons.settings,
+                                            size: 14, color: Colors.white),
                                       ),
-                                      child: Icon(Icons.settings,
-                                          size: 14, color: Colors.white),
                                     ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  // FTP button
-                                  CustomButton(
-                                    onTap: _disableFtp ? null : _onFtpPressed,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: _disableFtp
-                                            ? Colors.grey.shade300
-                                            : const Color(0xFF0052CC),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: _disableFtp
-                                                ? Colors.grey.shade300
-                                                : const Color(0xFF0052CC)),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.cloud_upload,
-                                              size: 14,
+                                    const SizedBox(width: 4),
+                                    // FTP button
+                                    CustomButton(
+                                      onTap: _disableFtp ? null : _onFtpPressed,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: _disableFtp
+                                              ? Colors.grey.shade300
+                                              : const Color(0xFF0052CC),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
                                               color: _disableFtp
-                                                  ? Colors.grey.shade600
-                                                  : Colors.white),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                              _disableFtp
-                                                  ? 'FTP OFF'
-                                                  : (_currentFtpProfile != null
-                                                      ? 'FTP: $_currentFtpProfile'
-                                                      : 'FTP'),
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: _disableFtp
-                                                      ? Colors.grey.shade600
-                                                      : Colors.white,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
+                                                  ? Colors.grey.shade300
+                                                  : const Color(0xFF0052CC)),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.cloud_upload,
+                                                size: 14,
+                                                color: _disableFtp
+                                                    ? Colors.grey.shade600
+                                                    : Colors.white),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                                _disableFtp
+                                                    ? 'FTP OFF'
+                                                    : (_currentFtpProfile !=
+                                                            null
+                                                        ? 'FTP: $_currentFtpProfile'
+                                                        : 'FTP'),
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: _disableFtp
+                                                        ? Colors.grey.shade600
+                                                        : Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
 
                         const SizedBox(height: 6),
@@ -1223,7 +1352,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       constraints: const BoxConstraints(maxHeight: 300),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400, width: 1),
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
       ),
@@ -2123,6 +2251,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCompactVerbColumn() {
     return Container(
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(6),
@@ -2217,6 +2346,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                               .start,
                                                                       children: [
                                                                         // Player chips row (moved from above caption building section)
+                                                                        // TODO: Player chips bar temporarily removed - keep code for later
+                                                                        // Container(
+                                                                        //   width:
+                                                                        //       double.infinity,
+                                                                        //   height:
+                                                                        //       32,
+                                                                        //   padding: const EdgeInsets
+                                                                        //       .symmetric(
+                                                                        //       horizontal: 12,
+                                                                        //       vertical: 6),
+                                                                        //   decoration:
+                                                                        //       BoxDecoration(
+                                                                        //     color:
+                                                                        //         Colors.grey.shade50,
+                                                                        //     borderRadius:
+                                                                        //         BorderRadius.circular(6),
+                                                                        //     border:
+                                                                        //         Border.all(color: Colors.grey.shade300),
+                                                                        //   ),
+                                                                        //   child:
+                                                                        //       _buildPlayerChipsHeader(),
+                                                                        // ),
+                                                                        // TODO: Player chips bar temporarily removed - keep code for later
+                                                                        // const SizedBox(
+                                                                        //     height:
+                                                                        //         4),
+                                                                        // // Custom text field for between players
                                                                         Container(
                                                                           width:
                                                                               double.infinity,
@@ -2224,29 +2380,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                               32,
                                                                           padding: const EdgeInsets
                                                                               .symmetric(
-                                                                              horizontal: 12,
-                                                                              vertical: 6),
-                                                                          decoration:
-                                                                              BoxDecoration(
-                                                                            color:
-                                                                                Colors.grey.shade50,
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(6),
-                                                                            border:
-                                                                                Border.all(color: Colors.grey.shade300),
-                                                                          ),
-                                                                          child:
-                                                                              _buildPlayerChipsHeader(),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            height:
-                                                                                4),
-                                                                        // Custom text field for between players
-                                                                        Container(
-                                                                          width:
-                                                                              double.infinity,
-                                                                          height:
-                                                                              32,
+                                                                              horizontal: 4),
                                                                           decoration:
                                                                               BoxDecoration(
                                                                             color:
@@ -8990,51 +9124,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildPlayerChipsHeader() {
     if (selectedHomePlayers.isEmpty && selectedAwayPlayers.isEmpty) {
       return Center(
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _homeOnLeft = !_homeOnLeft;
-              });
-              _updateCaption();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: Colors.grey.shade400,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Left icon (switches based on _homeOnLeft)
-                  Icon(
-                    _homeOnLeft ? Icons.home : Icons.flight,
-                    size: 12,
-                    color: Colors.black87,
-                  ),
-                  const SizedBox(width: 4),
-                  // Arrow in the middle
-                  Icon(
-                    Icons.swap_horiz,
-                    size: 16,
-                    color: Colors.black87,
-                  ),
-                  const SizedBox(width: 4),
-                  // Right icon (switches based on _homeOnLeft)
-                  Icon(
-                    _homeOnLeft ? Icons.flight : Icons.home,
-                    size: 12,
-                    color: Colors.black87,
-                  ),
-                ],
-              ),
-            ),
+        child: Text(
+          'No players selected',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade500,
+            fontStyle: FontStyle.italic,
           ),
         ),
       );

@@ -836,6 +836,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       currentImagePath: imagePaths.isNotEmpty
                           ? imagePaths[currentIndex]
                           : null,
+                      currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                      totalImages: imagePaths.length,
                       onSaveIptc: _saveIptcMetadata,
                     ),
                   ),
