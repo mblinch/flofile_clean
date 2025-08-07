@@ -44,9 +44,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Loading states
   bool _isLoadingPlayers = false;
-  bool _isLoadingThumbnails = false;
   double _playerLoadingProgress = 0.0;
-  double _thumbnailLoadingProgress = 0.0;
 
   // Global keys for accessing widgets
   final GlobalKey _metadataKey1 = GlobalKey();
@@ -147,19 +145,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _isLoadingPlayers = false;
     });
 
-    // Step 2: Load thumbnails
-    setState(() {
-      _isLoadingThumbnails = true;
-      _thumbnailLoadingProgress = 0.0;
-    });
-
     // Load images from the selected folder
     await _loadImagesFromFolder(folderPath);
-
-    // Go straight to app - no thumbnail loading screen
-    setState(() {
-      _isLoadingThumbnails = false;
-    });
 
     print('Images loaded: ${imagePaths.length} - going straight to app');
   }
@@ -727,200 +714,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       );
     }
 
-    // For thumbnail loading, show the main app with a loading overlay
-    if (_isLoadingThumbnails) {
-      return Stack(
-        children: [
-          // Main app with thumbnails rendering
-          Scaffold(
-            backgroundColor: Colors.grey.shade100,
-            body: Padding(
-              padding: const EdgeInsets.fromLTRB(8.0, 2.0, 8.0, 8.0),
-              child: Column(
-                children: [
-                  // TOP ROW - Reduced height (43% instead of 50%)
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.43,
-                    child: Row(
-                      children: [
-                        // TOP LEFT BOX - Picture Preview
-                        Expanded(
-                          flex: 7,
-                          child: PicturePreviewWidget(
-                            key: _picturePreviewKey1,
-                            imagePaths: imagePaths,
-                            currentIndex: currentIndex,
-                            onImageSelected: _onImageSelected,
-                            onNextImage: () {
-                              if (currentIndex < imagePaths.length - 1) {
-                                _onImageSelected(currentIndex + 1);
-                              }
-                            },
-                            onPreviousImage: () {
-                              if (currentIndex > 0) {
-                                _onImageSelected(currentIndex - 1);
-                              }
-                            },
-                            onSaveIptc: _saveIptcMetadata,
-                            onSaveIptcBackground: _saveIptcMetadataBackground,
-                          ),
-                        ),
-
-                        // TOP RIGHT BOX - Thumbnail Grid (rendering)
-                        Expanded(
-                          flex: 3,
-                          child: ThumbnailGridWidget(
-                            imagePaths: imagePaths,
-                            currentIndex: currentIndex,
-                            onImageSelected: _onImageSelected,
-                            scrollController: _thumbnailScrollController,
-                            loadingProgress: _isLoadingThumbnails
-                                ? _thumbnailLoadingProgress
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // BOTTOM ROW - Increased height (60% instead of 50%)
-                  Expanded(
-                    child: Row(
-                      children: [
-                        // BOTTOM LEFT BOX - Caption Fields
-                        Expanded(
-                          flex: 7,
-                          child: Builder(
-                            builder: (context) {
-                              final currentPath = imagePaths.isNotEmpty
-                                  ? imagePaths[currentIndex]
-                                  : null;
-                              print(
-                                  'DEBUG: CaptionBuilderScreen - Creating CaptionFieldsWidget with currentPath: "$currentPath"');
-                              print(
-                                  'DEBUG: CaptionBuilderScreen - imagePaths.length: ${imagePaths.length}, currentIndex: $currentIndex');
-                              return CaptionFieldsWidget(
-                                key: _captionFieldsKey1,
-                                metadata: currentMetadata,
-                                onMetadataUpdated: (metadata) {
-                                  setState(() {
-                                    currentMetadata = metadata;
-                                  });
-                                },
-                                homeTeam: selectedHomeTeam,
-                                awayTeam: selectedAwayTeam,
-                                onNextImage: () {
-                                  if (currentIndex < imagePaths.length - 1) {
-                                    _onImageSelected(currentIndex + 1);
-                                  }
-                                },
-                                onPreviousImage: () {
-                                  if (currentIndex > 0) {
-                                    _onImageSelected(currentIndex - 1);
-                                  }
-                                },
-                                onReset: _handleReset,
-                                personalityOverride: _personalityOverride,
-                                onImagesLoaded: (files) {
-                                  print(
-                                      'DEBUG: CaptionBuilderScreen - onImagesLoaded called with ${files.length} files');
-                                  setState(() {
-                                    imagePaths = files;
-                                    currentIndex = 0;
-                                  });
-                                  print(
-                                      'DEBUG: CaptionBuilderScreen - imagePaths.length: ${imagePaths.length}, currentIndex: $currentIndex');
-                                },
-                                preloadedHomeRoster:
-                                    _cachedHomeRoster.isNotEmpty
-                                        ? _cachedHomeRoster
-                                        : null,
-                                preloadedAwayRoster:
-                                    _cachedAwayRoster.isNotEmpty
-                                        ? _cachedAwayRoster
-                                        : null,
-                                currentImagePath: currentPath,
-                                onSaveIptc: _saveIptcMetadata,
-                                onSaveIptcBackground:
-                                    _saveIptcMetadataBackground,
-                              );
-                            },
-                          ),
-                        ),
-
-                        // BOTTOM RIGHT BOX - Metadata
-                        Expanded(
-                          flex: 3,
-                          child: MetadataWidget(
-                            key: _metadataKey1,
-                            metadata: currentMetadata,
-                            onMetadataUpdated: (metadata) {
-                              setState(() {
-                                currentMetadata = metadata;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Semi-transparent loading overlay
-          Container(
-            color: Colors.black.withOpacity(0.3),
-            child: Center(
-              child: Container(
-                width: 300,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Loading Thumbnails...',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: _thumbnailLoadingProgress,
-                      backgroundColor: Colors.grey.shade200,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.green.shade600),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_thumbnailLoadingProgress * 100).toInt()}%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
     return Scaffold(
       appBar: AppHeaderWidget(
         onImagesLoaded: (images) {
@@ -993,9 +786,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       currentIndex: currentIndex,
                       onImageSelected: _onImageSelected,
                       scrollController: _thumbnailScrollController,
-                      loadingProgress: _isLoadingThumbnails
-                          ? _thumbnailLoadingProgress
-                          : null,
                     ),
                   ),
                 ],
