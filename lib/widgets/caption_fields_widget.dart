@@ -1654,7 +1654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Team header with symbol and search bar
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: const BorderRadius.only(
@@ -1698,31 +1698,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       children: [
                         // Team name row
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Icon(
-                              isHome ? Icons.home : Icons.flight,
-                              size: 12,
-                              color: Colors.black87,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _getTeamAbbreviation(isHome
-                                  ? selectedHomeTeam!
-                                  : selectedAwayTeam!),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black87,
+                            SizedBox(
+                              height: 37,
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isHome ? Icons.home : Icons.flight,
+                                      size: 12,
+                                      color: Colors.black87,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _getTeamAbbreviation(isHome
+                                          ? selectedHomeTeam!
+                                          : selectedAwayTeam!),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             // Search field on top line
                             Expanded(
                               child: SizedBox(
-                                height: 24,
+                                height: 42,
                                 child: TextField(
                                   controller: searchController,
-                                  style: const TextStyle(fontSize: 10),
+                                  cursorWidth: 1.5,
+                                  cursorHeight: 16,
+                                  style: const TextStyle(
+                                      fontSize: 12, height: 2.3),
                                   onChanged: (value) {
                                     setState(() {
                                       if (isHome) {
@@ -1735,12 +1749,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   decoration: InputDecoration(
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 0),
-                                    hintText: 'Search',
+                                        horizontal: 8, vertical: 2),
                                     prefixIcon: Icon(Icons.search,
                                         size: 14, color: Colors.grey),
                                     prefixIconConstraints: BoxConstraints(
-                                        minWidth: 20, minHeight: 20),
+                                        minWidth: 28, minHeight: 20),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(4),
                                       borderSide: BorderSide(
@@ -1767,98 +1780,55 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         const SizedBox(height: 2),
                         // Controls row
-                        Row(
-                          children: [
-                            // Type label
-                            Text(
-                              'Display Type: ',
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.grey),
-                            ),
-                            // Type button
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (isHome) {
-                                      _homePlayerGridMode =
-                                          !_homePlayerGridMode;
-                                      // Reset sort order when switching to grid mode
-                                      if (_homePlayerGridMode) {
-                                        _homeSortOption = 'number';
-                                        _homeSortAscending = true;
-                                      }
-                                    } else {
-                                      _awayPlayerGridMode =
-                                          !_awayPlayerGridMode;
-                                      // Reset sort order when switching to grid mode
-                                      if (_awayPlayerGridMode) {
-                                        _awaySortOption = 'number';
-                                        _awaySortAscending = true;
-                                      }
-                                    }
-                                  });
-                                },
-                                child: Text(
-                                  isHome
-                                      ? (_homePlayerGridMode ? 'Grid' : 'List')
-                                      : (_awayPlayerGridMode ? 'Grid' : 'List'),
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Sort by options (only show when in List mode)
-                            if (!(isHome
-                                ? _homePlayerGridMode
-                                : _awayPlayerGridMode)) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Row(
+                            children: [
+                              // Type label
                               Text(
-                                'Sort by: ',
+                                'Display Type: ',
                                 style: const TextStyle(
                                     fontSize: 10, color: Colors.grey),
                               ),
+                              // Type button
                               MouseRegion(
                                 cursor: SystemMouseCursors.click,
                                 child: GestureDetector(
                                   onTap: () {
                                     setState(() {
                                       if (isHome) {
-                                        if (_homeSortOption == 'number') {
-                                          _homeSortOption = 'lastName';
-                                        } else if (_homeSortOption ==
-                                            'lastName') {
-                                          _homeSortOption = 'firstName';
-                                        } else {
+                                        _homePlayerGridMode =
+                                            !_homePlayerGridMode;
+                                        // Reset sort order when switching to grid mode
+                                        if (_homePlayerGridMode) {
                                           _homeSortOption = 'number';
+                                          _homeSortAscending = true;
                                         }
                                       } else {
-                                        if (_awaySortOption == 'number') {
-                                          _awaySortOption = 'lastName';
-                                        } else if (_awaySortOption ==
-                                            'lastName') {
-                                          _awaySortOption = 'firstName';
-                                        } else {
+                                        _awayPlayerGridMode =
+                                            !_awayPlayerGridMode;
+                                        // Reset sort order when switching to grid mode
+                                        if (_awayPlayerGridMode) {
                                           _awaySortOption = 'number';
+                                          _awaySortAscending = true;
                                         }
                                       }
                                     });
                                   },
                                   child: Text(
                                     isHome
-                                        ? (_homeSortOption == 'number'
-                                            ? 'Number'
-                                            : _homeSortOption == 'lastName'
-                                                ? 'Last Name'
-                                                : 'First Name')
-                                        : (_awaySortOption == 'number'
-                                            ? 'Number'
-                                            : _awaySortOption == 'lastName'
-                                                ? 'Last Name'
-                                                : 'First Name'),
+                                        ? (_homePlayerGridMode
+                                            ? 'Grid'
+                                            : 'List')
+                                        : (_awayPlayerGridMode
+                                            ? 'Grid'
+                                            : 'List'),
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.black87,
@@ -1867,32 +1837,90 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                            ],
-                            // Ascending/Descending button
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (isHome) {
-                                      _homeSortAscending = !_homeSortAscending;
-                                    } else {
-                                      _awaySortAscending = !_awaySortAscending;
-                                    }
-                                  });
-                                },
-                                child: Text(
-                                  isHome
-                                      ? (_homeSortAscending ? '↑' : '↓')
-                                      : (_awaySortAscending ? '↑' : '↓'),
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.bold),
+                              // Sort by options (only show when in List mode)
+                              if (!(isHome
+                                  ? _homePlayerGridMode
+                                  : _awayPlayerGridMode)) ...[
+                                Text(
+                                  'Sort by: ',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.grey),
+                                ),
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        if (isHome) {
+                                          if (_homeSortOption == 'number') {
+                                            _homeSortOption = 'lastName';
+                                          } else if (_homeSortOption ==
+                                              'lastName') {
+                                            _homeSortOption = 'firstName';
+                                          } else {
+                                            _homeSortOption = 'number';
+                                          }
+                                        } else {
+                                          if (_awaySortOption == 'number') {
+                                            _awaySortOption = 'lastName';
+                                          } else if (_awaySortOption ==
+                                              'lastName') {
+                                            _awaySortOption = 'firstName';
+                                          } else {
+                                            _awaySortOption = 'number';
+                                          }
+                                        }
+                                      });
+                                    },
+                                    child: Text(
+                                      isHome
+                                          ? (_homeSortOption == 'number'
+                                              ? 'Number'
+                                              : _homeSortOption == 'lastName'
+                                                  ? 'Last Name'
+                                                  : 'First Name')
+                                          : (_awaySortOption == 'number'
+                                              ? 'Number'
+                                              : _awaySortOption == 'lastName'
+                                                  ? 'Last Name'
+                                                  : 'First Name'),
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              // Ascending/Descending button
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      if (isHome) {
+                                        _homeSortAscending =
+                                            !_homeSortAscending;
+                                      } else {
+                                        _awaySortAscending =
+                                            !_awaySortAscending;
+                                      }
+                                    });
+                                  },
+                                  child: Text(
+                                    isHome
+                                        ? (_homeSortAscending ? '↑' : '↓')
+                                        : (_awaySortAscending ? '↑' : '↓'),
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.bold),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -2897,7 +2925,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 14),
           // Verb options
           ...verbs.map((verb) => _buildVerbOption(verb)).toList(),
         ],
