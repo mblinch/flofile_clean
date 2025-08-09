@@ -188,7 +188,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           }
 
           final exifDateTime =
-              '${dateParts[0]}:${dateParts[1]}:${dateParts[2]} ${hour.toString().padLeft(2, '0')}:${minute}:${second}';
+              '${dateParts[0]}:${dateParts[1]}:${dateParts[2]} ${hour.toString().padLeft(2, '0')}:$minute:$second';
 
           // Add the original EXIF fields
           values['DateTimeOriginal'] = exifDateTime;
@@ -579,7 +579,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                 hour -= 12;
               }
 
-              final formattedTime = '$hour:${minute}:${second} $period';
+              final formattedTime = '$hour:$minute:$second $period';
               timeController.text = formattedTime;
             } else if (timeComponents.length >= 2) {
               int hour = int.parse(timeComponents[0]);
@@ -593,7 +593,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                 hour -= 12;
               }
 
-              final formattedTime = '$hour:${minute}:00 $period';
+              final formattedTime = '$hour:$minute:00 $period';
               timeController.text = formattedTime;
             } else {
               timeController.text = timePart;
@@ -706,9 +706,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     ),
                     // Value text
                     Text(
-                      value != null
-                          ? value // Show the actual code value, not the name
-                          : 'Select $label',
+                      value ?? 'Select $label',
                       style: TextStyle(
                         fontSize: 10,
                         color:
@@ -750,9 +748,9 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
+                    const Text(
                       'Date',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 8,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
@@ -804,9 +802,9 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
+                    const Text(
                       'Time',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 8,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
@@ -856,11 +854,11 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                 topRight: Radius.circular(8),
               ),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: Colors.black87),
-                const SizedBox(width: 8),
-                const Text(
+                Icon(Icons.info_outline, size: 16, color: Colors.black87),
+                SizedBox(width: 8),
+                Text(
                   'Metadata',
                   style: TextStyle(
                     fontSize: 14,

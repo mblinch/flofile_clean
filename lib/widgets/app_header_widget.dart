@@ -35,8 +35,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   String? selectedAwayTeam;
   String? selectedHomeTeam;
   String selectedApi = 'Balldontlie.io API'; // API selection
-  bool _isConnectedToApi = false; // This would be connected to your API service
-  Set<String> _favoriteTeams = {}; // This would be loaded from preferences
+  final bool _isConnectedToApi =
+      false; // This would be connected to your API service
+  final Set<String> _favoriteTeams =
+      {}; // This would be loaded from preferences
 
   // Folder picking state
   String? _selectedFolderPath;
@@ -284,23 +286,21 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           'Auto-fill Metadata?',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        content: Column(
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Would you like to auto-fill the following location fields for this team?',
               style: TextStyle(fontSize: 15),
             ),
-            const SizedBox(height: 12),
-            Text('• City: Toronto', style: const TextStyle(fontSize: 13)),
-            Text('• Province/State: Ontario',
-                style: const TextStyle(fontSize: 13)),
-            Text('• Country: Canada', style: const TextStyle(fontSize: 13)),
-            Text('• Country Code: CAN', style: const TextStyle(fontSize: 13)),
-            Text('• Stadium: Rogers Centre',
-                style: const TextStyle(fontSize: 13)),
+            SizedBox(height: 12),
+            Text('• City: Toronto', style: TextStyle(fontSize: 13)),
+            Text('• Province/State: Ontario', style: TextStyle(fontSize: 13)),
+            Text('• Country: Canada', style: TextStyle(fontSize: 13)),
+            Text('• Country Code: CAN', style: TextStyle(fontSize: 13)),
+            Text('• Stadium: Rogers Centre', style: TextStyle(fontSize: 13)),
           ],
         ),
         actionsPadding:

@@ -106,8 +106,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Controllers
   final TextEditingController captionController = TextEditingController();
   final TextEditingController personalityController = TextEditingController();
-  TextEditingController _homeSearchController = TextEditingController();
-  TextEditingController _awaySearchController = TextEditingController();
+  final TextEditingController _homeSearchController = TextEditingController();
+  final TextEditingController _awaySearchController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
   final TextEditingController provinceController = TextEditingController();
   final TextEditingController stadiumController = TextEditingController();
@@ -142,9 +142,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
-  bool _removeAccent = false; // Disabled diacritic removal
-  bool _disableFtp = false; // Default to false (FTP enabled)
-  int _ftpPictureNumber = 1; // Counter for FTP picture number, starting at 001
+  final bool _removeAccent = false; // Disabled diacritic removal
+  final bool _disableFtp = false; // Default to false (FTP enabled)
+  final int _ftpPictureNumber =
+      1; // Counter for FTP picture number, starting at 001
 
   // FTP Settings
   String _ftpHost = 'ftp.photoshelter.com';
@@ -180,7 +181,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Smart custom text field state
   bool _isPlayerSearchMode = true;
   List<Player> _filteredPlayers = [];
-  Set<String> _selectedPlayerNumbers = {};
+  final Set<String> _selectedPlayerNumbers = {};
   String _playerSearchText = '';
   bool _noPlayersFound = false;
 
@@ -191,7 +192,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _waitingForHomeVisitorChoice = false;
 
   // Team data
-  bool _isConnectedToApi = false;
+  final bool _isConnectedToApi = false;
   String? homeTeamStadium;
   String? awayTeamStadium;
 
@@ -272,7 +273,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final Map<String, bool?> _batterRunningByHit = {};
 
   // Caption state
-  String _lastCaption = '';
+  final String _lastCaption = '';
 
   // Verb categories
   final Map<String, List<String>> verbCategories = {
@@ -311,7 +312,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
-  bool _isResetting = false;
+  final bool _isResetting = false;
 
   // Add a flag to track if the user has manually reset the fields.
   bool _hasBeenReset = false;
@@ -574,7 +575,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         try {
           // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
           final parts = dateString.split(' ');
-          if (parts.length >= 1) {
+          if (parts.isNotEmpty) {
             final datePart = parts[0];
             final dateComponents = datePart.split(':');
             if (dateComponents.length >= 3) {
@@ -951,381 +952,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         const SizedBox(height: 6),
 
-                        // Action buttons row (aligned with caption box)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8, horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              // Navigation buttons: Prev, Copy, Paste, Next (aligned with caption box)
-                              Expanded(
-                                flex: 5, // Match caption box width
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // Reset button
-                                    CustomButton(
-                                      onTap: _resetCaption,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade200,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.refresh,
-                                                size: 12,
-                                                color: Colors.grey.shade700),
-                                            const SizedBox(width: 2),
-                                            Text('Reset',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey.shade700,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 24),
-                                    // Prev button
-                                    CustomButton(
-                                      onTap: (widget.currentIndex != null &&
-                                              widget.currentIndex! > 0)
-                                          ? () async {
-                                              // Save metadata to current image in background (don't await)
-                                              if (widget.onSaveIptc != null) {
-                                                widget.onSaveIptc!();
-                                              }
-                                              // Move to previous image immediately
-                                              widget.onPreviousImage?.call();
-                                            }
-                                          : null,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: (widget.currentIndex != null &&
-                                                  widget.currentIndex! > 0)
-                                              ? Colors.grey.shade100
-                                              : Colors.grey.shade200,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: (widget.currentIndex !=
-                                                          null &&
-                                                      widget.currentIndex! > 0)
-                                                  ? Colors.grey.shade300
-                                                  : Colors.grey.shade400),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.arrow_back,
-                                                size: 12,
-                                                color: (widget.currentIndex !=
-                                                            null &&
-                                                        widget.currentIndex! >
-                                                            0)
-                                                    ? Colors.grey.shade700
-                                                    : Colors.grey.shade500),
-                                            const SizedBox(width: 2),
-                                            Text('Prev',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: (widget.currentIndex !=
-                                                                null &&
-                                                            widget.currentIndex! >
-                                                                0)
-                                                        ? Colors.grey.shade700
-                                                        : Colors.grey.shade500,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Copy button
-                                    CustomButton(
-                                      onTap: () {
-                                        _copyMetadataFromCaptionWidget();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.copy,
-                                                size: 12,
-                                                color: Colors.grey.shade700),
-                                            const SizedBox(width: 2),
-                                            Text('Copy',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey.shade700,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Paste button
-                                    CustomButton(
-                                      onTap: _pasteMetadataToCaptionWidget,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.paste,
-                                                size: 12,
-                                                color: Colors.grey.shade700),
-                                            const SizedBox(width: 2),
-                                            Text('Paste',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey.shade700,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Next button
-                                    CustomButton(
-                                      onTap: (widget.currentIndex != null &&
-                                              widget.totalImages != null &&
-                                              widget.currentIndex! <
-                                                  widget.totalImages! - 1)
-                                          ? () async {
-                                              // Save metadata to current image in background (don't await)
-                                              if (widget.onSaveIptc != null) {
-                                                widget.onSaveIptc!();
-                                              }
-                                              // Move to next image immediately
-                                              widget.onNextImage?.call();
-                                            }
-                                          : null,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: (widget.currentIndex != null &&
-                                                  widget.totalImages != null &&
-                                                  widget.currentIndex! <
-                                                      widget.totalImages! - 1)
-                                              ? Colors.grey.shade100
-                                              : Colors.grey.shade200,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: (widget.currentIndex !=
-                                                          null &&
-                                                      widget.totalImages !=
-                                                          null &&
-                                                      widget.currentIndex! <
-                                                          widget.totalImages! -
-                                                              1)
-                                                  ? Colors.grey.shade300
-                                                  : Colors.grey.shade400),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text('Next',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: (widget.currentIndex != null &&
-                                                            widget.totalImages !=
-                                                                null &&
-                                                            widget.currentIndex! <
-                                                                widget.totalImages! -
-                                                                    1)
-                                                        ? Colors.grey.shade700
-                                                        : Colors.grey.shade500,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                            const SizedBox(width: 2),
-                                            Icon(Icons.arrow_forward,
-                                                size: 12,
-                                                color: (widget.currentIndex !=
-                                                            null &&
-                                                        widget.totalImages !=
-                                                            null &&
-                                                        widget.currentIndex! <
-                                                            widget.totalImages! -
-                                                                1)
-                                                    ? Colors.grey.shade700
-                                                    : Colors.grey.shade500),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Team switch button
-                                    CustomButton(
-                                      onTap: () {
-                                        setState(() {
-                                          _homeOnLeft = !_homeOnLeft;
-                                        });
-                                        _updateCaption();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              _homeOnLeft
-                                                  ? Icons.home
-                                                  : Icons.flight,
-                                              size: 12,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Icon(
-                                              Icons.swap_horiz,
-                                              size: 12,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Icon(
-                                              _homeOnLeft
-                                                  ? Icons.flight
-                                                  : Icons.home,
-                                              size: 12,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(
-                                  width:
-                                      9), // Match caption/personality spacing
-                              // Settings and FTP buttons (aligned with personality box)
-                              Expanded(
-                                flex: 1, // Match personality box width
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    // Settings button (now between reset and FTP)
-                                    CustomButton(
-                                      onTap: _showFtpSettings,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF4A90E2),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: const Color(0xFF4A90E2)),
-                                        ),
-                                        child: Icon(Icons.settings,
-                                            size: 14, color: Colors.white),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // FTP button
-                                    CustomButton(
-                                      onTap: _disableFtp ? null : _onFtpPressed,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: _disableFtp
-                                              ? Colors.grey.shade300
-                                              : const Color(0xFF0052CC),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: _disableFtp
-                                                  ? Colors.grey.shade300
-                                                  : const Color(0xFF0052CC)),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.cloud_upload,
-                                                size: 14,
-                                                color: _disableFtp
-                                                    ? Colors.grey.shade600
-                                                    : Colors.white),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                                _disableFtp
-                                                    ? 'FTP OFF'
-                                                    : (_currentFtpProfile !=
-                                                            null
-                                                        ? 'FTP: $_currentFtpProfile'
-                                                        : 'FTP'),
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: _disableFtp
-                                                        ? Colors.grey.shade600
-                                                        : Colors.white,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        // Action buttons are now beside the magic bar
+                        // (Old action button container removed)
 
                         const SizedBox(height: 6),
 
@@ -1566,11 +1194,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.edit_note, size: 16, color: Colors.black87),
-              const SizedBox(width: 8),
-              const Text(
+              Icon(Icons.edit_note, size: 16, color: Colors.black87),
+              SizedBox(width: 8),
+              Text(
                 'Generated Caption:',
                 style: TextStyle(
                   fontSize: 12,
@@ -1606,7 +1234,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
           if (captionController.text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Row(
+            const Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [],
             ),
@@ -1655,9 +1283,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(6),
                 topRight: Radius.circular(6),
               ),
@@ -1750,9 +1378,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 2),
-                                    prefixIcon: Icon(Icons.search,
+                                    prefixIcon: const Icon(Icons.search,
                                         size: 14, color: Colors.grey),
-                                    prefixIconConstraints: BoxConstraints(
+                                    prefixIconConstraints: const BoxConstraints(
                                         minWidth: 28, minHeight: 20),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(4),
@@ -1776,6 +1404,48 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Team switch button
+                            CustomButton(
+                              onTap: () {
+                                setState(() {
+                                  _homeOnLeft = !_homeOnLeft;
+                                });
+                                _updateCaption();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      _homeOnLeft ? Icons.home : Icons.flight,
+                                      size: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    const Icon(
+                                      Icons.swap_horiz,
+                                      size: 12,
+                                      color: Colors.black54,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Icon(
+                                      _homeOnLeft ? Icons.flight : Icons.home,
+                                      size: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -1791,10 +1461,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             children: [
                               // Type label
-                              Text(
+                              const Text(
                                 'Display Type: ',
-                                style: const TextStyle(
-                                    fontSize: 10, color: Colors.grey),
+                                style:
+                                    TextStyle(fontSize: 10, color: Colors.grey),
                               ),
                               // Type button
                               MouseRegion(
@@ -1829,7 +1499,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         : (_awayPlayerGridMode
                                             ? 'Grid'
                                             : 'List'),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                         fontSize: 11,
                                         color: Colors.black87,
                                         fontWeight: FontWeight.w500),
@@ -1841,9 +1511,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               if (!(isHome
                                   ? _homePlayerGridMode
                                   : _awayPlayerGridMode)) ...[
-                                Text(
+                                const Text(
                                   'Sort by: ',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 10, color: Colors.grey),
                                 ),
                                 MouseRegion(
@@ -1884,7 +1554,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               : _awaySortOption == 'lastName'
                                                   ? 'Last Name'
                                                   : 'First Name'),
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                           fontSize: 11,
                                           color: Colors.black87,
                                           fontWeight: FontWeight.w500),
@@ -1912,7 +1582,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     isHome
                                         ? (_homeSortAscending ? '↑' : '↓')
                                         : (_awaySortAscending ? '↑' : '↓'),
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                         fontSize: 10,
                                         color: Colors.black87,
                                         fontWeight: FontWeight.bold),
@@ -2033,7 +1703,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             borderRadius:
                                                 BorderRadius.circular(2),
                                           ),
-                                          child: Icon(
+                                          child: const Icon(
                                             Icons.star,
                                             size: 8,
                                             color: Colors.white,
@@ -2227,7 +1897,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.star,
                           size: 8,
                           color: Colors.white,
@@ -2401,104 +2071,267 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         //     height:
                                                                         //         4),
                                                                         // // Custom text field for between players
-                                                                        Container(
-                                                                          width:
-                                                                              double.infinity,
-                                                                          height:
-                                                                              32,
-                                                                          padding: const EdgeInsets
-                                                                              .symmetric(
-                                                                              horizontal: 4),
-                                                                          decoration:
-                                                                              BoxDecoration(
-                                                                            color:
-                                                                                Colors.white,
-                                                                            borderRadius:
-                                                                                BorderRadius.circular(2),
-                                                                            border:
-                                                                                Border.all(color: Colors.grey.shade300),
-                                                                          ),
-                                                                          child:
-                                                                              TextField(
-                                                                            controller:
-                                                                                customBetweenPlayersController,
-                                                                            cursorWidth:
-                                                                                1.5,
-                                                                            cursorHeight:
-                                                                                16,
-                                                                            style:
-                                                                                const TextStyle(fontSize: 12, height: 2.3),
-                                                                            decoration:
-                                                                                InputDecoration(
-                                                                              hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
-                                                                              border: InputBorder.none,
-                                                                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                                              isDense: true,
-                                                                            ),
-                                                                            onChanged:
-                                                                                (value) {
-                                                                              // Check for magic input format (e.g., "27 hr 1")
-                                                                              if (_isMagicInput(value)) {
-                                                                                _parseMagicInput(value);
-                                                                                // Don't return - let the text stay in the field
-                                                                              }
-
-                                                                              setState(() {
-                                                                                if (_isPlayerSearchMode && _isNumeric(value)) {
-                                                                                  // print(
-                                                                                  //     'DEBUG: Calling _filterPlayersByNumber');
-                                                                                  _filterPlayersByNumber(value);
-                                                                                } else if (_isPlayerSearchMode && value.isEmpty) {
-                                                                                  // print(
-                                                                                  //     'DEBUG: Clearing filtered players');
-                                                                                  _filteredPlayers.clear();
-                                                                                } else if (!_isPlayerSearchMode) {
-                                                                                  // When in custom verb mode, show inning selector
-                                                                                  if (value.isNotEmpty) {
-                                                                                    setState(() {
-                                                                                      _showCustomTextInningSelector = true;
-                                                                                    });
-                                                                                  } else {
-                                                                                    setState(() {
-                                                                                      _showCustomTextInningSelector = false;
-                                                                                    });
-                                                                                  }
-
-                                                                                  // Update caption with custom verb if we have the original caption
-                                                                                  if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
-                                                                                    String originalCaption = _originalCaptionBeforeCustomVerb!;
-                                                                                    List<String> allSelectedPlayers = [];
-                                                                                    allSelectedPlayers.addAll(selectedHomePlayers);
-                                                                                    allSelectedPlayers.addAll(selectedAwayPlayers);
-
-                                                                                    if (allSelectedPlayers.isNotEmpty) {
-                                                                                      String playerName = allSelectedPlayers.first;
-
-                                                                                      // Find the player in the caption and insert custom verb after team
-                                                                                      if (originalCaption.contains(playerName)) {
-                                                                                        int playerIndex = originalCaption.indexOf(playerName);
-                                                                                        if (playerIndex != -1) {
-                                                                                          String beforePlayer = originalCaption.substring(0, playerIndex);
-                                                                                          String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
-
-                                                                                          // Find "against" to insert before it
-                                                                                          int againstIndex = afterPlayer.indexOf(' against ');
-                                                                                          if (againstIndex != -1) {
-                                                                                            String beforeAgainst = afterPlayer.substring(0, againstIndex);
-                                                                                            String afterAgainst = afterPlayer.substring(againstIndex);
-                                                                                            captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
-                                                                                          } else {
-                                                                                            // Fallback
-                                                                                            captionController.text = '$beforePlayer$playerName $value';
+                                                                        Row(
+                                                                          children: [
+                                                                            Expanded(
+                                                                              flex: 7, // 35% of container width
+                                                                              child: Row(
+                                                                                children: [
+                                                                                  Expanded(
+                                                                                    child: Container(
+                                                                                      height: 32,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: Colors.white,
+                                                                                        borderRadius: BorderRadius.circular(2),
+                                                                                        border: Border.all(color: Colors.grey.shade300),
+                                                                                      ),
+                                                                                      child: TextField(
+                                                                                        controller: customBetweenPlayersController,
+                                                                                        cursorWidth: 1.5,
+                                                                                        cursorHeight: 16,
+                                                                                        style: const TextStyle(fontSize: 12, height: 2.3),
+                                                                                        decoration: InputDecoration(
+                                                                                          hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
+                                                                                          border: InputBorder.none,
+                                                                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                                                          isDense: true,
+                                                                                        ),
+                                                                                        onChanged: (value) {
+                                                                                          // Check for magic input format (e.g., "27 hr 1")
+                                                                                          if (_isMagicInput(value)) {
+                                                                                            _parseMagicInput(value);
+                                                                                            // Don't return - let the text stay in the field
                                                                                           }
-                                                                                        }
-                                                                                      }
-                                                                                    }
-                                                                                  }
-                                                                                }
-                                                                              });
-                                                                            },
-                                                                          ),
+
+                                                                                          setState(() {
+                                                                                            if (_isPlayerSearchMode && _isNumeric(value)) {
+                                                                                              // print(
+                                                                                              //     'DEBUG: Calling _filterPlayersByNumber');
+                                                                                              _filterPlayersByNumber(value);
+                                                                                            } else if (_isPlayerSearchMode && value.isEmpty) {
+                                                                                              // print(
+                                                                                              //     'DEBUG: Clearing filtered players');
+                                                                                              _filteredPlayers.clear();
+                                                                                            } else if (!_isPlayerSearchMode) {
+                                                                                              // When in custom verb mode, show inning selector
+                                                                                              if (value.isNotEmpty) {
+                                                                                                setState(() {
+                                                                                                  _showCustomTextInningSelector = true;
+                                                                                                });
+                                                                                              } else {
+                                                                                                setState(() {
+                                                                                                  _showCustomTextInningSelector = false;
+                                                                                                });
+                                                                                              }
+
+                                                                                              // Update caption with custom verb if we have the original caption
+                                                                                              if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
+                                                                                                String originalCaption = _originalCaptionBeforeCustomVerb!;
+                                                                                                List<String> allSelectedPlayers = [];
+                                                                                                allSelectedPlayers.addAll(selectedHomePlayers);
+                                                                                                allSelectedPlayers.addAll(selectedAwayPlayers);
+
+                                                                                                if (allSelectedPlayers.isNotEmpty) {
+                                                                                                  String playerName = allSelectedPlayers.first;
+
+                                                                                                  // Find the player in the caption and insert custom verb after team
+                                                                                                  if (originalCaption.contains(playerName)) {
+                                                                                                    int playerIndex = originalCaption.indexOf(playerName);
+                                                                                                    if (playerIndex != -1) {
+                                                                                                      String beforePlayer = originalCaption.substring(0, playerIndex);
+                                                                                                      String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
+
+                                                                                                      // Find "against" to insert before it
+                                                                                                      int againstIndex = afterPlayer.indexOf(' against ');
+                                                                                                      if (againstIndex != -1) {
+                                                                                                        String beforeAgainst = afterPlayer.substring(0, againstIndex);
+                                                                                                        String afterAgainst = afterPlayer.substring(againstIndex);
+                                                                                                        captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
+                                                                                                      } else {
+                                                                                                        // Fallback
+                                                                                                        captionController.text = '$beforePlayer$playerName $value';
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          });
+                                                                                        },
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                            Expanded(
+                                                                              flex: 13, // Other 65% for action buttons
+                                                                              child: Row(
+                                                                                mainAxisAlignment: MainAxisAlignment.end,
+                                                                                children: [
+                                                                                  const SizedBox(width: 20),
+                                                                                  // Reset button
+                                                                                  CustomButton(
+                                                                                    onTap: _resetCaption,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: Colors.grey.shade100,
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(color: Colors.grey.shade300),
+                                                                                      ),
+                                                                                      child: Row(
+                                                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                                                        mainAxisSize: MainAxisSize.min,
+                                                                                        children: [
+                                                                                          Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
+                                                                                          const SizedBox(width: 2),
+                                                                                          Text('Reset', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                                        ],
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 24),
+                                                                                  // Prev button
+                                                                                  CustomButton(
+                                                                                    onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                                                                                        ? () async {
+                                                                                            if (widget.onSaveIptc != null) {
+                                                                                              widget.onSaveIptc!();
+                                                                                            }
+                                                                                            widget.onPreviousImage?.call();
+                                                                                          }
+                                                                                        : null,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade100 : Colors.grey.shade200,
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(
+                                                                                          color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade300 : Colors.grey.shade400,
+                                                                                        ),
+                                                                                      ),
+                                                                                      child: Row(
+                                                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                                                        children: [
+                                                                                          Icon(
+                                                                                            Icons.arrow_back,
+                                                                                            size: 14,
+                                                                                            color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade700 : Colors.grey.shade500,
+                                                                                          ),
+                                                                                        ],
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Copy button
+                                                                                  CustomButton(
+                                                                                    onTap: () {
+                                                                                      _copyMetadataFromCaptionWidget();
+                                                                                    },
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: Colors.blue.shade50,
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(color: Colors.blue.shade200),
+                                                                                      ),
+                                                                                      child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Paste button
+                                                                                  CustomButton(
+                                                                                    onTap: _pasteMetadataToCaptionWidget,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: Colors.green.shade50,
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(color: Colors.green.shade200),
+                                                                                      ),
+                                                                                      child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // Next button
+                                                                                  CustomButton(
+                                                                                    onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
+                                                                                        ? () async {
+                                                                                            if (widget.onSaveIptc != null) {
+                                                                                              widget.onSaveIptc!();
+                                                                                            }
+                                                                                            widget.onNextImage?.call();
+                                                                                          }
+                                                                                        : null,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade100 : Colors.grey.shade200,
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(
+                                                                                          color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade300 : Colors.grey.shade400,
+                                                                                        ),
+                                                                                      ),
+                                                                                      child: Row(
+                                                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                                                        children: [
+                                                                                          Icon(
+                                                                                            Icons.arrow_forward,
+                                                                                            size: 14,
+                                                                                            color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade700 : Colors.grey.shade500,
+                                                                                          ),
+                                                                                        ],
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 20),
+                                                                                  // Settings button
+                                                                                  CustomButton(
+                                                                                    onTap: _showFtpSettings,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: const Color(0xFF4A90E2),
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(color: const Color(0xFF4A90E2)),
+                                                                                      ),
+                                                                                      child: const Icon(Icons.settings, size: 16, color: Colors.white),
+                                                                                    ),
+                                                                                  ),
+                                                                                  const SizedBox(width: 2),
+                                                                                  // FTP button
+                                                                                  CustomButton(
+                                                                                    onTap: _disableFtp ? null : _onFtpPressed,
+                                                                                    child: Container(
+                                                                                      height: 28,
+                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                                                                      decoration: BoxDecoration(
+                                                                                        color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC),
+                                                                                        borderRadius: BorderRadius.circular(4),
+                                                                                        border: Border.all(color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC)),
+                                                                                      ),
+                                                                                      child: Row(
+                                                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                                                        children: [
+                                                                                          Icon(Icons.cloud_upload, size: 16, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                                                                                          const SizedBox(width: 2),
+                                                                                          Text(_disableFtp ? 'FTP OFF' : (_currentFtpProfile != null ? 'FTP: $_currentFtpProfile' : 'FTP'), style: TextStyle(fontSize: 10, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
+                                                                                        ],
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                          ],
                                                                         ),
 
                                                                         // Player selection overlay
@@ -2527,7 +2360,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                           Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
                                                                                           const SizedBox(width: 8),
                                                                                           Text(
-                                                                                            'No player with number ${_playerSearchText}',
+                                                                                            'No player with number $_playerSearchText',
                                                                                             style: TextStyle(
                                                                                               fontSize: 12,
                                                                                               color: Colors.orange.shade700,
@@ -2549,7 +2382,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                 '#${player.jerseyNumber}',
                                                                                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
                                                                                               ),
-                                                                                              const SizedBox(width: 4),
+                                                                                              const SizedBox(width: 2),
                                                                                               Text(
                                                                                                 _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
                                                                                                 style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
@@ -2557,10 +2390,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               const SizedBox(width: 2),
                                                                                               Icon(
                                                                                                 _isHomePlayer(player) ? Icons.home : Icons.flight,
-                                                                                                size: 10,
+                                                                                                size: 11,
                                                                                                 color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
                                                                                               ),
-                                                                                              const SizedBox(width: 4),
+                                                                                              const SizedBox(width: 2),
                                                                                               Expanded(
                                                                                                 child: Text(
                                                                                                   _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
@@ -2601,7 +2434,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                           ),
                                                                         // Inning selector - moved outside the magic bar container
                                                                         if (_showCustomTextInningSelector) ...[
-                                                                          Container(
+                                                                          SizedBox(
                                                                             height:
                                                                                 100,
                                                                             child:
@@ -2622,7 +2455,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             !_showCustomTextInningSelector &&
                                                                             _selectedVerb !=
                                                                                 'Home Run') ...[
-                                                                          Container(
+                                                                          SizedBox(
                                                                             height:
                                                                                 500, // Increased height for verb area
                                                                             // Removed debug background for cleaner appearance
@@ -2787,7 +2620,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               child: Container(
                                                                                                 padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
                                                                                                 child: Text(
-                                                                                                  _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
+                                                                                                  _selectedRbiInning != null ? _getOrdinalSuffix(_selectedRbiInning!) : '',
                                                                                                   style: const TextStyle(fontSize: 8),
                                                                                                   textAlign: TextAlign.center,
                                                                                                 ),
@@ -2874,7 +2707,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                     child: Container(
                                                                                                       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
                                                                                                       child: Text(
-                                                                                                        _selectedRbiInning != null ? '${_getOrdinalSuffix(_selectedRbiInning!)}' : '',
+                                                                                                        _selectedRbiInning != null ? _getOrdinalSuffix(_selectedRbiInning!) : '',
                                                                                                         style: const TextStyle(fontSize: 8),
                                                                                                         textAlign: TextAlign.center,
                                                                                                       ),
@@ -3167,11 +3000,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.edit_note, size: 12, color: Colors.black87),
-              const SizedBox(width: 4),
-              const Text(
+              Icon(Icons.edit_note, size: 12, color: Colors.black87),
+              SizedBox(width: 4),
+              Text(
                 'Caption:',
                 style: TextStyle(
                   fontSize: 10,
@@ -3179,7 +3012,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: Colors.black87,
                 ),
               ),
-              const Spacer(),
+              Spacer(),
             ],
           ),
           const SizedBox(height: 4),
@@ -3425,7 +3258,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Expanded(
                             child: Text(
                               _selectedRbiInning != null
-                                  ? '${_getOrdinalSuffix(_selectedRbiInning!)}'
+                                  ? _getOrdinalSuffix(_selectedRbiInning!)
                                   : 'Select',
                               style: const TextStyle(fontSize: 10),
                             ),
@@ -3779,13 +3612,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Select the player
     setState(() {
       if (isHomePlayer) {
-        selectedHomePlayers.add(foundPlayer?.displayName ?? 'Unknown Player');
+        selectedHomePlayers.add(foundPlayer.displayName ?? 'Unknown Player');
         _firstTeamSelected = true;
-        _firstPlayerSelected = foundPlayer?.displayName ?? 'Unknown Player';
+        _firstPlayerSelected = foundPlayer.displayName ?? 'Unknown Player';
       } else {
-        selectedAwayPlayers.add(foundPlayer?.displayName ?? 'Unknown Player');
+        selectedAwayPlayers.add(foundPlayer.displayName ?? 'Unknown Player');
         _firstTeamSelected = false;
-        _firstPlayerSelected = foundPlayer?.displayName ?? 'Unknown Player';
+        _firstPlayerSelected = foundPlayer.displayName ?? 'Unknown Player';
       }
     });
 
@@ -3994,11 +3827,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Select Player'),
+        title: const Text('Select Player'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Multiple players found with this number:'),
+            const Text('Multiple players found with this number:'),
             const SizedBox(height: 16),
             ...players.map((player) {
               final isHome = _homeRoster.contains(player);
@@ -4074,7 +3907,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               const Text('Multiple players found with this number.'),
               const SizedBox(height: 16),
               // Home player option
-              Container(
+              SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
@@ -4104,7 +3937,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
               const SizedBox(height: 12),
               // Visitor player option
-              Container(
+              SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () {
@@ -4139,8 +3972,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Column(
-                  children: const [
+                child: const Column(
+                  children: [
                     Text(
                       'Keyboard shortcuts:',
                       style:
@@ -4186,14 +4019,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         (player) => _homeRoster.contains(player),
         orElse: () => _magicInputMatchingPlayers.first,
       );
-      print('DEBUG: Selected home player: ${selectedPlayer?.fullName}');
+      print('DEBUG: Selected home player: ${selectedPlayer.fullName}');
     } else if (choice == 'v') {
       // Find away player
       selectedPlayer = _magicInputMatchingPlayers.firstWhere(
         (player) => _awayRoster.contains(player),
         orElse: () => _magicInputMatchingPlayers.first,
       );
-      print('DEBUG: Selected away player: ${selectedPlayer?.fullName}');
+      print('DEBUG: Selected away player: ${selectedPlayer.fullName}');
     }
 
     if (selectedPlayer != null) {
@@ -4201,7 +4034,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Store the original magic input text to restore it
       final originalMagicInput =
-          '${selectedPlayer.jerseyNumber} ${_magicInputActionText}';
+          '${selectedPlayer.jerseyNumber} $_magicInputActionText';
       print('DEBUG: Original magic input was: "$originalMagicInput"');
 
       // Clear the waiting state
@@ -4233,14 +4066,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         (player) => _homeRoster.contains(player),
         orElse: () => _magicInputMatchingPlayers.first,
       );
-      print('DEBUG: Selected home player: ${selectedPlayer?.fullName}');
+      print('DEBUG: Selected home player: ${selectedPlayer.fullName}');
     } else if (choice == 'v') {
       // Find away player
       selectedPlayer = _magicInputMatchingPlayers.firstWhere(
         (player) => _awayRoster.contains(player),
         orElse: () => _magicInputMatchingPlayers.first,
       );
-      print('DEBUG: Selected away player: ${selectedPlayer?.fullName}');
+      print('DEBUG: Selected away player: ${selectedPlayer.fullName}');
     }
 
     if (selectedPlayer != null) {
@@ -4858,7 +4691,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         try {
           // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
           final parts = dateString.split(' ');
-          if (parts.length >= 1) {
+          if (parts.isNotEmpty) {
             final datePart = parts[0];
             final dateComponents = datePart.split(':');
             if (dateComponents.length >= 3) {
@@ -5122,7 +4955,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     final caption = '$dateline '
-        '$playerName${customTextPart}${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified$inningPart '
+        '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified$inningPart '
         '$gamePart at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
     // Set caption text directly (no diacritic removal)
@@ -5712,7 +5545,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             border: Border.all(color: Colors.grey.shade300),
           ),
-          child: Text(
+          child: const Text(
             'Verb Selection',
             style: TextStyle(
               fontSize: 12,
@@ -5800,7 +5633,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 widget.onPreviousImage?.call();
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -5810,13 +5644,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.arrow_back,
-                        size: 12, color: Colors.grey.shade700),
-                    const SizedBox(width: 2),
-                    Text('Prev',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500)),
+                        size: 16, color: Colors.grey.shade700),
                   ],
                 ),
               ),
@@ -5828,7 +5656,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _copyMetadataFromCaptionWidget();
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -5837,13 +5666,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.copy, size: 12, color: Colors.grey.shade700),
-                    const SizedBox(width: 2),
-                    Text('Copy',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500)),
+                    Icon(Icons.copy, size: 16, color: Colors.grey.shade700),
                   ],
                 ),
               ),
@@ -5853,7 +5676,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             CustomButton(
               onTap: _pasteMetadataToCaptionWidget,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -5862,13 +5686,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.paste, size: 12, color: Colors.grey.shade700),
-                    const SizedBox(width: 2),
-                    Text('Paste',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500)),
+                    Icon(Icons.paste, size: 16, color: Colors.grey.shade700),
                   ],
                 ),
               ),
@@ -5883,7 +5701,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 widget.onNextImage?.call();
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -5892,18 +5711,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Next',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 2),
                     Icon(Icons.arrow_forward,
-                        size: 12, color: Colors.grey.shade700),
+                        size: 16, color: Colors.grey.shade700),
                   ],
                 ),
               ),
             ),
+            const SizedBox(width: 12),
           ],
         ),
         const SizedBox(height: 8),
@@ -5912,7 +5726,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _onFtpPressed,
-                icon: const Icon(Icons.cloud_upload, size: 14),
+                icon: const Icon(Icons.cloud_upload, size: 18),
                 label: const Text('FTP Upload', style: TextStyle(fontSize: 10)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purple.shade600,
@@ -5925,7 +5739,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _showFtpSettings,
-                icon: const Icon(Icons.settings, size: 14),
+                icon: const Icon(Icons.settings, size: 18),
                 label:
                     const Text('FTP Settings', style: TextStyle(fontSize: 10)),
                 style: ElevatedButton.styleFrom(
@@ -6100,7 +5914,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Metadata copied (${allMetadata.length} fields)!'),
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -6120,33 +5934,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Map<String, dynamic>.from(widget.metadata ?? {});
 
           // Apply all fields except date and time
-          if (metadataMap['TransmissionReference'] != null)
+          if (metadataMap['TransmissionReference'] != null) {
             updatedMetadata['TransmissionReference'] =
                 metadataMap['TransmissionReference'].toString();
-          if (metadataMap['CaptionWriter'] != null)
+          }
+          if (metadataMap['CaptionWriter'] != null) {
             updatedMetadata['CaptionWriter'] =
                 metadataMap['CaptionWriter'].toString();
-          if (metadataMap['Headline'] != null)
+          }
+          if (metadataMap['Headline'] != null) {
             updatedMetadata['Headline'] = metadataMap['Headline'].toString();
-          if (metadataMap['Keywords'] != null)
+          }
+          if (metadataMap['Keywords'] != null) {
             updatedMetadata['Keywords'] = metadataMap['Keywords'].toString();
+          }
 
-          if (metadataMap['AuthorsPosition'] != null)
+          if (metadataMap['AuthorsPosition'] != null) {
             updatedMetadata['AuthorsPosition'] =
                 metadataMap['AuthorsPosition'].toString();
-          if (metadataMap['Credit'] != null)
+          }
+          if (metadataMap['Credit'] != null) {
             updatedMetadata['Credit'] = metadataMap['Credit'].toString();
-          if (metadataMap['Copyright'] != null)
+          }
+          if (metadataMap['Copyright'] != null) {
             updatedMetadata['Copyright'] = metadataMap['Copyright'].toString();
-          if (metadataMap['Source'] != null)
+          }
+          if (metadataMap['Source'] != null) {
             updatedMetadata['Source'] = metadataMap['Source'].toString();
-          if (metadataMap['Urgency'] != null)
+          }
+          if (metadataMap['Urgency'] != null) {
             updatedMetadata['Urgency'] = metadataMap['Urgency'].toString();
-          if (metadataMap['Country'] != null)
+          }
+          if (metadataMap['Country'] != null) {
             updatedMetadata['Country'] = metadataMap['Country'].toString();
-          if (metadataMap['CountryCode'] != null)
+          }
+          if (metadataMap['CountryCode'] != null) {
             updatedMetadata['CountryCode'] =
                 metadataMap['CountryCode'].toString();
+          }
           if (metadataMap['Sub-location'] != null) {
             final stadiumValue = metadataMap['Sub-location'].toString();
             updatedMetadata['Sub-location'] = stadiumValue;
@@ -6165,23 +5990,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             // Update the province controller directly
             provinceController.text = provinceValue;
           }
-          if (metadataMap['ObjectName'] != null)
+          if (metadataMap['ObjectName'] != null) {
             updatedMetadata['ObjectName'] =
                 metadataMap['ObjectName'].toString();
-          if (metadataMap['Category'] != null)
+          }
+          if (metadataMap['Category'] != null) {
             updatedMetadata['Category'] = metadataMap['Category'].toString();
-          if (metadataMap['SupplementalCategories1'] != null)
+          }
+          if (metadataMap['SupplementalCategories1'] != null) {
             updatedMetadata['SupplementalCategories1'] =
                 metadataMap['SupplementalCategories1'].toString();
-          if (metadataMap['SupplementalCategories2'] != null)
+          }
+          if (metadataMap['SupplementalCategories2'] != null) {
             updatedMetadata['SupplementalCategories2'] =
                 metadataMap['SupplementalCategories2'].toString();
-          if (metadataMap['SupplementalCategories3'] != null)
+          }
+          if (metadataMap['SupplementalCategories3'] != null) {
             updatedMetadata['SupplementalCategories3'] =
                 metadataMap['SupplementalCategories3'].toString();
-          if (metadataMap['SpecialInstructions'] != null)
+          }
+          if (metadataMap['SpecialInstructions'] != null) {
             updatedMetadata['SpecialInstructions'] =
                 metadataMap['SpecialInstructions'].toString();
+          }
 
           // Caption and personality fields
           if (metadataMap['Caption-Abstract'] != null) {
@@ -6190,12 +6021,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             // Update the caption controller directly
             captionController.text = captionValue;
           }
-          if (metadataMap['XMP:Description'] != null)
+          if (metadataMap['XMP:Description'] != null) {
             updatedMetadata['XMP:Description'] =
                 metadataMap['XMP:Description'].toString();
-          if (metadataMap['ImageDescription'] != null)
+          }
+          if (metadataMap['ImageDescription'] != null) {
             updatedMetadata['ImageDescription'] =
                 metadataMap['ImageDescription'].toString();
+          }
           if (metadataMap['XMP-getty:Personality'] != null) {
             final personalityValue =
                 metadataMap['XMP-getty:Personality'].toString();
@@ -6228,7 +6061,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error pasting metadata: $e'),
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -6240,6 +6073,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.clear();
       customCelebrationController.clear();
       customBetweenPlayersController.clear();
+      _homeSearchController.clear();
+      _awaySearchController.clear();
       _showCustomTextInningSelector = false;
 
       // Reset all verb-related state
@@ -6295,6 +6130,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedPlayerNumbers.clear();
       _playerSearchText = '';
       _noPlayersFound = false;
+      _homeSearchText = '';
+      _awaySearchText = '';
 
       // Clear magic input player selection state
       _showMagicInputPlayerOptions = false;
@@ -6620,7 +6457,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  void _showEditProfileDialog(String profileName, {String? successMessage}) {
+  void _showEditProfileDialog(String profileName) {
     final profile = _ftpProfiles[profileName];
     if (profile == null) return;
 
@@ -6713,8 +6550,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           isDense: true,
                           labelText: 'FTP Host',
                           labelStyle: TextStyle(
@@ -6753,7 +6590,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
+                                contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 6),
                                 isDense: true,
                                 labelText: 'Username',
@@ -6791,7 +6628,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
-                                contentPadding: EdgeInsets.symmetric(
+                                contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 6),
                                 isDense: true,
                                 labelText: 'Port',
@@ -6827,8 +6664,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           isDense: true,
                           labelText: 'Password',
                           labelStyle: TextStyle(
@@ -6861,8 +6698,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           isDense: true,
                           labelText: 'Remote Path (optional)',
                           labelStyle: TextStyle(
@@ -7164,7 +7001,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     child: DropdownButtonFormField<String>(
                       value: _currentFtpProfile,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -7189,7 +7026,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         child: Text(
                                           profileName,
                                           style: TextStyle(
-                                              fontSize: 11,
+                                              fontSize: 10,
                                               color: Colors.grey.shade700),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -7280,7 +7117,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             isDense: true,
                             labelText: 'Rename uploaded file as',
@@ -7316,7 +7153,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             isDense: true,
                             labelText:
@@ -7527,7 +7364,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           borderRadius: BorderRadius.circular(2),
                           border: Border.all(color: Colors.grey.shade500),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Save Settings',
                           style: TextStyle(
                             fontSize: 11,
@@ -7728,7 +7565,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     child: DropdownButtonFormField<String>(
                       value: _currentFtpProfile,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         border: InputBorder.none,
                         contentPadding:
                             EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -7753,7 +7590,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         child: Text(
                                           profileName,
                                           style: TextStyle(
-                                              fontSize: 11,
+                                              fontSize: 10,
                                               color: Colors.grey.shade700),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -7844,7 +7681,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             isDense: true,
                             labelText: 'Rename uploaded file as',
@@ -7880,7 +7717,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             isDense: true,
                             labelText:
@@ -8838,12 +8675,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else {
           return 'takes fielding practice prior to playing the ${_getOpposingTeamName()}';
         }
-      case 'Warm Ups':
-        if (activePlayerCount >= 2) {
-          return 'take part in warm-ups prior to playing the ${_getOpposingTeamName()}';
-        } else {
-          return 'takes part in warm-ups prior to playing the ${_getOpposingTeamName()}';
-        }
       case 'Walks On Field':
         if (activePlayerCount >= 2) {
           return 'walk on the field prior to playing the ${_getOpposingTeamName()}';
@@ -8894,7 +8725,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ? ' against ${_formatPlayerNames(opposingPlayers)}${opposingTeam != null ? ' of the $opposingTeam' : ''}'
               : (opposingTeam != null ? ' against the $opposingTeam' : '');
 
-          final celebrationType = 'celebrates';
+          const celebrationType = 'celebrates';
           final dugoutPhrase = _selectedHittingAction == 'celebrates_in_dugout'
               ? ' in the dugout'
               : '';
@@ -9201,7 +9032,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.star,
                           size: 10,
                           color: Colors.white,
@@ -9309,7 +9140,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.star,
                           size: 10,
                           color: Colors.white,
@@ -9597,7 +9428,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         fontWeight: FontWeight.bold,
                                         fontSize: 10),
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 2),
                                   Text(
                                     _getTeamAbbreviation(_isHomePlayer(player)
                                             ? selectedHomeTeam ?? ''
@@ -9617,7 +9448,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         ? Colors.blue.shade600
                                         : Colors.red.shade600,
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 2),
                                   Expanded(
                                     child: Text(
                                       _removeJerseyNumberFromName(
@@ -9684,7 +9515,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10),
                                     ),
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: 2),
                                     Text(
                                       _getTeamAbbreviation(_isHomePlayer(player)
                                               ? selectedHomeTeam ?? ''
@@ -9704,7 +9535,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ? Colors.blue.shade600
                                           : Colors.red.shade600,
                                     ),
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: 2),
                                     Expanded(
                                       child: Text(
                                         _removeJerseyNumberFromName(
@@ -11132,22 +10963,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         selectedHomePlayers
             .add(playerName); // Use original display name for side lists
         // Set as first player selected if none selected yet
-        if (_firstPlayerSelected == null) {
-          _firstPlayerSelected =
-              cleanedPlayerName; // Use cleaned name for caption
-          // print(
-          //     'DEBUG: First player selected from overlay: $cleanedPlayerName');
-        }
+        _firstPlayerSelected ??= cleanedPlayerName;
       } else {
         selectedAwayPlayers
             .add(playerName); // Use original display name for side lists
         // Set as first player selected if none selected yet
-        if (_firstPlayerSelected == null) {
-          _firstPlayerSelected =
-              cleanedPlayerName; // Use cleaned name for caption
-          // print(
-          //     'DEBUG: First player selected from overlay: $cleanedPlayerName');
-        }
+        _firstPlayerSelected ??= cleanedPlayerName;
       }
 
       _playerSearchText = '';
@@ -11237,7 +11058,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: const Color(0xFF4A90E2)),
               ),
-              child: Icon(Icons.settings, size: 14, color: Colors.white),
+              child: const Icon(Icons.settings, size: 18, color: Colors.white),
             ),
           ),
           const SizedBox(width: 4),

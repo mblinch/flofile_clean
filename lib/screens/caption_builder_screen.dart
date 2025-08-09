@@ -72,8 +72,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (_thumbnailScrollController.hasClients && imagePaths.isNotEmpty) {
       // Calculate the position of the current thumbnail
       final containerWidth = MediaQuery.of(context).size.width * 0.4;
-      final thumbSize = 140.0;
-      final thumbSpacing = 14.0;
+      const thumbSize = 140.0;
+      const thumbSpacing = 14.0;
       final columns =
           ((containerWidth - thumbSpacing) / (thumbSize + thumbSpacing))
               .floor();
@@ -158,7 +158,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       // Filter for image files
       final List<String> imageFiles = entities
-          .where((entity) => entity is File)
+          .whereType<File>()
           .map((entity) => entity.path)
           .where((path) =>
               path.toLowerCase().endsWith('.jpg') ||

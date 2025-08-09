@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'screens/caption_builder_screen.dart';
-import 'widgets/api_test_widget.dart';
-import 'widgets/ftp_upload_widget.dart';
 
 void main() {
   runApp(const MyApp());

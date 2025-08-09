@@ -180,7 +180,7 @@ class _StartupDialogState extends State<StartupDialog> {
         final List<FileSystemEntity> entities = await directory.list().toList();
 
         final List<String> imageFiles = entities
-            .where((entity) => entity is File)
+            .whereType<File>()
             .map((entity) => entity.path)
             .where((path) =>
                 path.toLowerCase().endsWith('.jpg') ||
@@ -253,7 +253,7 @@ class _StartupDialogState extends State<StartupDialog> {
                 try {
                   // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
                   final parts = dateString.split(' ');
-                  if (parts.length >= 1) {
+                  if (parts.isNotEmpty) {
                     final datePart = parts[0];
                     final dateComponents = datePart.split(':');
                     if (dateComponents.length >= 3) {

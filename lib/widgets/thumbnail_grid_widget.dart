@@ -33,7 +33,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   double _thumbSpacing = 14.0;
 
   // EXIF data cache
-  Map<String, String> _exifTimeCache = {};
+  final Map<String, String> _exifTimeCache = {};
 
   // Loading state for thumbnails
   bool _isLoadingThumbnails = false;
@@ -209,7 +209,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 topRight: Radius.circular(8),
               ),
             ),
-            child: Container(
+            child: SizedBox(
               height: 20, // Match image preview header height
               child: Row(
                 mainAxisAlignment:
@@ -335,7 +335,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 bottomRight: Radius.circular(8),
               ),
             ),
-            child: Container(
+            child: SizedBox(
               height: 20,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -450,7 +450,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
           // Calculate cache dimensions for 170px max with 70% quality
           int cacheWidth, cacheHeight;
-          final maxSize = 170; // Max thumbnail size
+          const maxSize = 170; // Max thumbnail size
           try {
             if (isLandscape) {
               cacheWidth = maxSize;

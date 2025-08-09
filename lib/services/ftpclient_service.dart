@@ -76,7 +76,7 @@ class FtpClientService {
       Future<String> getNextResponse() {
         final completer = Completer<String>();
         responseCompleter.add(completer);
-        return completer.future.timeout(Duration(seconds: 30));
+        return completer.future.timeout(const Duration(seconds: 30));
       }
 
       // Read welcome message
@@ -142,7 +142,7 @@ class FtpClientService {
 
       final fileName = remoteFilePath.split('/').last;
       final fileSize = await localFile.length();
-      print('FTP: Uploading $localFilePath as $fileName (${fileSize} bytes)');
+      print('FTP: Uploading $localFilePath as $fileName ($fileSize bytes)');
 
       // Send STOR command
       controlSocket.write('STOR $fileName\r\n');

@@ -41,6 +41,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   bool _isLoadingExif = false;
 
   // Method to refresh EXIF data (can be called from parent)
+  @override
   void refreshExifData() {
     if (mounted) {
       setState(() {
@@ -254,7 +255,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         ),
                       ),
                     )
-                  : Container(
+                  : SizedBox(
                       height:
                           20, // Reduced from 24 to 20 for more compact display
                       child: Row(
