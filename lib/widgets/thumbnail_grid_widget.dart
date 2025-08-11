@@ -11,6 +11,7 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Function(int) onImageSelected;
   final ScrollController? scrollController;
   final double? loadingProgress; // Add loading progress parameter
+  final Map<String, String>? exifTimes; // Optional precomputed EXIF times
 
   const ThumbnailGridWidget({
     super.key,
@@ -19,6 +20,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     required this.onImageSelected,
     this.scrollController,
     this.loadingProgress,
+    this.exifTimes,
   });
 
   @override
@@ -26,13 +28,11 @@ class ThumbnailGridWidget extends StatefulWidget {
 }
 
 class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
-  static const int kThumbnailSize = 240; // High quality cache size
-
   // Thumbnail size control
   double _thumbSize = 140.0; // Start at middle size (140px)
   double _thumbSpacing = 14.0;
 
-  // EXIF data cache
+  // EXIF data cache (fallback when exifTimes not provided)
   final Map<String, String> _exifTimeCache = {};
 
   // Loading state for thumbnails
@@ -297,24 +297,34 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 2),
-                            child: FutureBuilder<String>(
-                              future: _getImageTime(imagePath),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData &&
-                                    snapshot.data!.isNotEmpty) {
-                                  return Text(
-                                    snapshot.data!,
-                                    style: const TextStyle(
-                                      fontSize: 7,
-                                      color: Colors.grey,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  );
-                                }
-                                return const SizedBox.shrink();
-                              },
-                            ),
+                            child: () {
+                              final provided = widget.exifTimes?[imagePath];
+                              if (provided != null && provided.isNotEmpty) {
+                                return Text(
+                                  provided,
+                                  style: const TextStyle(
+                                      fontSize: 7, color: Colors.grey),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              }
+                              return FutureBuilder<String>(
+                                future: _getImageTime(imagePath),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData &&
+                                      snapshot.data!.isNotEmpty) {
+                                    return Text(
+                                      snapshot.data!,
+                                      style: const TextStyle(
+                                          fontSize: 7, color: Colors.grey),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              );
+                            }(),
                           ),
                         ],
                       ),
@@ -432,137 +442,32 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   }
 
   Widget _buildThumbnail(String imagePath) {
-    return FutureBuilder<Size>(
-      future: _getImageDimensions(imagePath),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Container(
-            color: Colors.grey.shade200,
-            child: const Center(
-              child: Icon(Icons.broken_image, color: Colors.red, size: 16),
-            ),
-          );
-        }
-
-        if (snapshot.hasData) {
-          final imageSize = snapshot.data!;
-          final isLandscape = imageSize.width > imageSize.height;
-
-          // Calculate cache dimensions for 170px max with 70% quality
-          int cacheWidth, cacheHeight;
-          const maxSize = 170; // Max thumbnail size
-          try {
-            if (isLandscape) {
-              cacheWidth = maxSize;
-              cacheHeight =
-                  (maxSize * imageSize.height / imageSize.width).round();
-            } else {
-              cacheHeight = maxSize;
-              cacheWidth =
-                  (maxSize * imageSize.width / imageSize.height).round();
-            }
-
-            cacheWidth = cacheWidth.clamp(1, maxSize);
-            cacheHeight = cacheHeight.clamp(1, maxSize);
-          } catch (e) {
-            cacheWidth = maxSize;
-            cacheHeight = maxSize;
+    const int maxSize = 170;
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: ExtendedImage.file(
+        File(imagePath),
+        fit: BoxFit.contain,
+        cacheWidth: maxSize,
+        // Let height scale automatically for speed
+        filterQuality: FilterQuality.medium,
+        loadStateChanged: (state) {
+          if (state.extendedImageLoadState == LoadState.completed ||
+              state.extendedImageLoadState == LoadState.failed) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _onThumbnailLoaded();
+            });
           }
-
-          return Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: ExtendedImage.file(
-              File(imagePath),
-              fit: BoxFit.contain,
-              cacheWidth: cacheWidth,
-              cacheHeight: cacheHeight,
-              filterQuality:
-                  FilterQuality.high, // 100% quality for best appearance
-              loadStateChanged: (state) {
-                if (state.extendedImageLoadState == LoadState.completed) {
-                  // Image loaded successfully
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _onThumbnailLoaded();
-                  });
-                } else if (state.extendedImageLoadState == LoadState.failed) {
-                  // Count error as loaded to prevent infinite loading
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _onThumbnailLoaded();
-                  });
-                }
-                return null; // Use default loading/error states
-              },
-            ),
-          );
-        } else {
-          // Loading state with progress bar
-          return Container(
-            color: Colors.grey.shade200,
-            child: Stack(
-              children: [
-                // Background placeholder
-                Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-
-                // Loading indicator with order number
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(strokeWidth: 2),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${widget.imagePaths.indexOf(imagePath) + 1}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-      },
+          return null;
+        },
+      ),
     );
   }
 
-  // Get image dimensions efficiently using ExtendedImage
-  Future<Size> _getImageDimensions(String imagePath) async {
-    try {
-      final completer = Completer<Size>();
-      final image = ExtendedImage.file(File(imagePath));
-
-      image.image.resolve(const ImageConfiguration()).addListener(
-            ImageStreamListener(
-              (ImageInfo info, bool _) {
-                final width = info.image.width.toDouble();
-                final height = info.image.height.toDouble();
-                completer.complete(Size(width, height));
-              },
-              onError: (dynamic exception, StackTrace? stackTrace) {
-                completer.complete(const Size(1.0, 1.0));
-              },
-            ),
-          );
-
-      return completer.future;
-    } catch (e) {
-      return const Size(1.0, 1.0);
-    }
-  }
+  // Removed dimension probing to speed up thumbnail rendering
 }

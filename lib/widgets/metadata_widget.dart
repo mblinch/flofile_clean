@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert';
 
 class MetadataWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -449,19 +448,13 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           meta['AuthorsPosition']?.toString() ?? '';
 
       final extractedCredit = meta['Credit']?.toString() ?? '';
-      if (extractedCredit.isNotEmpty) {
-        creditController.text = extractedCredit;
-      }
+      creditController.text = extractedCredit;
 
       final extractedCopyright = meta['Copyright']?.toString() ?? '';
-      if (extractedCopyright.isNotEmpty) {
-        copyrightController.text = extractedCopyright;
-      }
+      copyrightController.text = extractedCopyright;
 
       final extractedSource = meta['Source']?.toString() ?? '';
-      if (extractedSource.isNotEmpty) {
-        sourceController.text = extractedSource;
-      }
+      sourceController.text = extractedSource;
 
       // Load IPTC metadata fields only if they exist
       // Extract urgency number from descriptive text like "5 (normal urgency)"
@@ -512,8 +505,15 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           } else {
             // Single value, put in first field
             suppCat1Controller.text = suppCatsStr;
+            suppCat2Controller.text = '';
+            suppCat3Controller.text = '';
           }
         }
+      } else {
+        // Explicitly clear when not present
+        suppCat1Controller.text = '';
+        suppCat2Controller.text = '';
+        suppCat3Controller.text = '';
       }
 
       // Load special instructions - try IPTC field first, then XMP field
@@ -521,25 +521,18 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           meta['Instructions']?.toString() ??
           meta['XMP-photoshop:Instructions']?.toString() ??
           '';
-      if (specialInstructions.isNotEmpty) {
-        specialInstructionsController.text = specialInstructions;
-      }
+      // Always assign (clears when empty)
+      specialInstructionsController.text = specialInstructions;
 
       // Load location fields from JPEG metadata
       final extractedStadium = meta['Sub-location']?.toString() ?? '';
-      if (extractedStadium.isNotEmpty) {
-        stadiumController.text = extractedStadium;
-      }
+      stadiumController.text = extractedStadium;
 
       final extractedCity = meta['City']?.toString() ?? '';
-      if (extractedCity.isNotEmpty) {
-        cityController.text = extractedCity;
-      }
+      cityController.text = extractedCity;
 
       final extractedProvince = meta['Province-State']?.toString() ?? '';
-      if (extractedProvince.isNotEmpty) {
-        provinceController.text = extractedProvince;
-      }
+      provinceController.text = extractedProvince;
 
       // Load date and time from metadata
       final dateTimeOriginal = meta['DateTimeOriginal']?.toString() ?? '';
@@ -626,7 +619,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       decoration: InputDecoration(
         labelText: label,
         floatingLabelBehavior: FloatingLabelBehavior.always,
-        hintText: 'Enter $label...',
+        // No hint text when empty
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: BorderSide(color: Colors.grey.shade400),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
@@ -27,6 +28,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Metadata state
   Map<String, dynamic>? currentMetadata;
+  // Precomputed EXIF times for thumbnails
+  Map<String, String> _exifTimes = {};
 
   // Team selection
   String? selectedHomeTeam;
@@ -41,6 +44,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Startup configuration
   bool _isStartupComplete = false;
   String? _selectedFolderPath;
+  // Folder watcher to auto-reload images on changes
+  StreamSubscription<FileSystemEvent>? _folderWatchSub;
+  Timer? _folderReloadDebounce;
 
   // Loading states
   bool _isLoadingPlayers = false;
@@ -102,6 +108,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     // Start sequential loading: players first, then thumbnails
     _startLoadingSequence(folderPath);
+
+    // Start watching the selected folder for new/edited images
+    _startWatchingFolder(folderPath);
   }
 
   Future<void> _startLoadingSequence(String folderPath) async {
@@ -168,13 +177,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               path.toLowerCase().endsWith('.bmp'))
           .toList();
 
-      // Sort files by date taken (DateTimeOriginal from EXIF)
-      await _sortImagesByDateTaken(imageFiles);
-
+      // Set images immediately for instant thumbnail rendering
       setState(() {
-        imagePaths = imageFiles;
+        imagePaths = List.from(imageFiles);
         currentIndex = 0;
       });
+
+      // In the background: batch EXIF read for DateTimeOriginal, compute formatted times, and sort
+      // Fire-and-forget without awaiting
+      Future(() => _loadExifTimesAndSort(imageFiles));
 
       print('Loaded ${imageFiles.length} images from folder: $folderPath');
 
@@ -184,6 +195,96 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     } catch (e) {
       print('Error loading images from folder: $e');
+    }
+  }
+
+  // Begin watching a folder and debounce reloads when image files change
+  void _startWatchingFolder(String folderPath) {
+    // Clean up any existing watcher
+    _folderWatchSub?.cancel();
+    _folderWatchSub = null;
+
+    try {
+      final dir = Directory(folderPath);
+      _folderWatchSub = dir
+          .watch(
+              events: FileSystemEvent.create |
+                  FileSystemEvent.modify |
+                  FileSystemEvent.move |
+                  FileSystemEvent.delete)
+          .listen((event) {
+        final path = event.path.toLowerCase();
+        final isImage = path.endsWith('.jpg') ||
+            path.endsWith('.jpeg') ||
+            path.endsWith('.png') ||
+            path.endsWith('.tiff') ||
+            path.endsWith('.bmp');
+        if (!isImage) return;
+
+        // Debounce frequent events from save operations
+        _folderReloadDebounce?.cancel();
+        _folderReloadDebounce = Timer(const Duration(milliseconds: 600), () {
+          final watchedPath = _selectedFolderPath;
+          if (watchedPath != null) {
+            _loadImagesFromFolder(watchedPath);
+          }
+        });
+      });
+    } catch (e) {
+      print('Error starting folder watcher: $e');
+    }
+  }
+
+  Future<void> _loadExifTimesAndSort(List<String> imageFiles) async {
+    try {
+      if (imageFiles.isEmpty) return;
+
+      // Batch exiftool call for all files (DateTimeOriginal)
+      final args = <String>['-j', '-DateTimeOriginal'];
+      args.addAll(imageFiles);
+      final proc = await Process.run('exiftool', args);
+      final Map<String, DateTime> times = {};
+      final Map<String, String> formatted = {};
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
+        for (final item in data) {
+          if (item is Map<String, dynamic>) {
+            final sourceFile = item['SourceFile']?.toString();
+            final dateStr = item['DateTimeOriginal']?.toString();
+            if (sourceFile != null && dateStr != null) {
+              try {
+                final dt = DateTime.parse(
+                    dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                times[sourceFile] = dt;
+                // format to 12h as per preference
+                final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+                final minute = dt.minute.toString().padLeft(2, '0');
+                final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                formatted[sourceFile] = '$hour:$minute $ampm';
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      // Fallback to file modified time when missing
+      for (final path in imageFiles) {
+        times[path] ??= await File(path).lastModified();
+        formatted[path] ??= '';
+      }
+
+      // Sort paths by time
+      final sorted = List<String>.from(imageFiles)
+        ..sort((a, b) => (times[a]!).compareTo(times[b]!));
+
+      if (!mounted) return;
+      setState(() {
+        imagePaths = sorted;
+        _exifTimes = formatted;
+      });
+    } catch (e) {
+      print('Error in _loadExifTimesAndSort: $e');
     }
   }
 
@@ -546,6 +647,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   @override
   void dispose() {
+    _folderWatchSub?.cancel();
+    _folderReloadDebounce?.cancel();
     _thumbnailScrollController.dispose();
     super.dispose();
   }
@@ -786,6 +889,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       currentIndex: currentIndex,
                       onImageSelected: _onImageSelected,
                       scrollController: _thumbnailScrollController,
+                      exifTimes: _exifTimes,
                     ),
                   ),
                 ],

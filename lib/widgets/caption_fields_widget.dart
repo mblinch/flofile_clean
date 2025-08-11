@@ -1282,7 +1282,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Team header with symbol and search bar
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.only(
@@ -1329,78 +1329,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             SizedBox(
-                              height: 37,
+                              height: 42,
+                              width: 45,
                               child: Center(
-                                child: Column(
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       isHome ? Icons.home : Icons.flight,
-                                      size: 12,
+                                      size: 14,
                                       color: Colors.black87,
                                     ),
-                                    const SizedBox(height: 2),
+                                    const SizedBox(width: 4),
                                     Text(
                                       _getTeamAbbreviation(isHome
                                           ? selectedHomeTeam!
                                           : selectedAwayTeam!),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade700,
+                                        letterSpacing: 0.5,
                                       ),
                                     ),
                                   ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Search field on top line
-                            Expanded(
-                              child: SizedBox(
-                                height: 42,
-                                child: TextField(
-                                  controller: searchController,
-                                  cursorWidth: 1.5,
-                                  cursorHeight: 16,
-                                  style: const TextStyle(
-                                      fontSize: 12, height: 2.3),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      if (isHome) {
-                                        _homeSearchText = value;
-                                      } else {
-                                        _awaySearchText = value;
-                                      }
-                                    });
-                                  },
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    prefixIcon: const Icon(Icons.search,
-                                        size: 14, color: Colors.grey),
-                                    prefixIconConstraints: const BoxConstraints(
-                                        minWidth: 28, minHeight: 20),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade400),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade400),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.blue.shade400,
-                                          width: 1),
-                                    ),
-                                    hintStyle: const TextStyle(
-                                        fontSize: 10, color: Colors.grey),
-                                  ),
                                 ),
                               ),
                             ),
@@ -1414,35 +1367,74 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 _updateCaption();
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 4),
+                                height: 27,
+                                width: 27,
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(4),
                                   border:
                                       Border.all(color: Colors.grey.shade300),
                                 ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      _homeOnLeft ? Icons.home : Icons.flight,
-                                      size: 12,
-                                      color: Colors.grey.shade700,
+                                child: Center(
+                                  child: Icon(
+                                    Icons.autorenew,
+                                    size: 16,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Search field on top line
+                            Expanded(
+                              child: SizedBox(
+                                height: 42,
+                                child: Align(
+                                  alignment: Alignment.center,
+                                  child: TextField(
+                                    controller: searchController,
+                                    cursorWidth: 1.5,
+                                    cursorHeight: 16,
+                                    style: const TextStyle(
+                                        fontSize: 12, height: 2.3),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (isHome) {
+                                          _homeSearchText = value;
+                                        } else {
+                                          _awaySearchText = value;
+                                        }
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.only(
+                                          left: 8, right: 8, top: 2, bottom: 0),
+                                      prefixIcon: const Icon(Icons.search,
+                                          size: 14, color: Colors.grey),
+                                      prefixIconConstraints:
+                                          const BoxConstraints(
+                                              minWidth: 28, minHeight: 20),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade400),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade400),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.blue.shade400,
+                                            width: 1),
+                                      ),
+                                      hintStyle: const TextStyle(
+                                          fontSize: 10, color: Colors.grey),
                                     ),
-                                    const SizedBox(width: 2),
-                                    const Icon(
-                                      Icons.swap_horiz,
-                                      size: 12,
-                                      color: Colors.black54,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Icon(
-                                      _homeOnLeft ? Icons.flight : Icons.home,
-                                      size: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
