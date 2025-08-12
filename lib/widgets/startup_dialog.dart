@@ -65,6 +65,12 @@ class _StartupDialogState extends State<StartupDialog> {
   int typingIndex = 0;
   Timer? typingTimer;
 
+  // Team selection typewriter state
+  String _teamSelectionText = '';
+  bool _isTypingTeamSelection = false;
+  int _teamSelectionTypingIndex = 0;
+  Timer? _teamSelectionTypingTimer;
+
   final ApiManager _apiManager = ApiManager();
 
   final List<String> questions = [
@@ -98,8 +104,6 @@ class _StartupDialogState extends State<StartupDialog> {
     String textToType;
     if (currentQuestion < questions.length) {
       textToType = questions[currentQuestion];
-    } else if (currentQuestion == 2) {
-      textToType = 'What teams are playing?';
     } else {
       textToType = '';
     }
@@ -113,6 +117,32 @@ class _StartupDialogState extends State<StartupDialog> {
     } else {
       setState(() {
         isTyping = false;
+      });
+    }
+  }
+
+  void _startTeamSelectionTyping() {
+    setState(() {
+      _teamSelectionText = '';
+      _teamSelectionTypingIndex = 0;
+      _isTypingTeamSelection = true;
+    });
+    _typeTeamSelectionNextCharacter();
+  }
+
+  void _typeTeamSelectionNextCharacter() {
+    const textToType = 'What teams are playing?';
+
+    if (_teamSelectionTypingIndex < textToType.length) {
+      setState(() {
+        _teamSelectionText += textToType[_teamSelectionTypingIndex];
+        _teamSelectionTypingIndex++;
+      });
+      _teamSelectionTypingTimer = Timer(
+          const Duration(milliseconds: 15), _typeTeamSelectionNextCharacter);
+    } else {
+      setState(() {
+        _isTypingTeamSelection = false;
       });
     }
   }
@@ -140,11 +170,10 @@ class _StartupDialogState extends State<StartupDialog> {
     if (currentQuestion == 0 && hasImagesInFolder && selectedGameDate != null) {
       setState(() {
         currentQuestion = 2; // Go to team selection
-        isTyping = true;
-        displayedText = '';
-        typingIndex = 0;
+        isTyping = false;
+        displayedText = 'Where is your images folder?';
       });
-      _typeNextCharacter();
+      _startTeamSelectionTyping();
       return;
     }
 
@@ -160,11 +189,10 @@ class _StartupDialogState extends State<StartupDialog> {
       // Move to team selection step with typing animation
       setState(() {
         currentQuestion = 2;
-        isTyping = true;
-        displayedText = '';
-        typingIndex = 0;
+        isTyping = false;
+        displayedText = 'Where is your images folder?';
       });
-      _typeNextCharacter();
+      _startTeamSelectionTyping();
     }
   }
 
@@ -339,6 +367,16 @@ class _StartupDialogState extends State<StartupDialog> {
       });
       _nextQuestion();
     }
+  }
+
+  void _openMetadataPreset() {
+    // Placeholder for upcoming feature
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Metadata Preset feature coming soon.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   bool get _canProceed {
@@ -630,7 +668,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
                     // Team selection header
                     Text(
-                      displayedText + (isTyping ? '|' : ''),
+                      _teamSelectionText + (_isTypingTeamSelection ? '|' : ''),
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
@@ -638,169 +676,226 @@ class _StartupDialogState extends State<StartupDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Home Team
-                    Text('Home Team:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800,
-                          fontSize: 13,
-                        )),
-                    const SizedBox(height: 4), // Reduced spacing
-                    FractionallySizedBox(
-                      widthFactor: 0.75,
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2), // More compact padding
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius:
-                              BorderRadius.circular(4), // Smaller radius
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedHomeTeam,
-                            hint: const Text('Select home team',
-                                style: TextStyle(fontSize: 13)),
-                            isExpanded: true,
-                            items: availableTeams.map((team) {
-                              return DropdownMenuItem<String>(
-                                value: team,
-                                child: Text(team,
-                                    style: const TextStyle(fontSize: 13)),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedHomeTeam = value;
-                              });
-                            },
+                    // Show team dropdowns only after typewriter is done
+                    if (!_isTypingTeamSelection) ...[
+                      // Home Team
+                      Text('Home Team:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800,
+                            fontSize: 13,
+                          )),
+                      const SizedBox(height: 4), // Reduced spacing
+                      FractionallySizedBox(
+                        widthFactor: 0.75,
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2), // More compact padding
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius:
+                                BorderRadius.circular(4), // Smaller radius
                           ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24), // Increased spacing
-
-                    // Away Team
-                    Text('Away Team:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800,
-                          fontSize: 13,
-                        )),
-                    const SizedBox(height: 4), // Reduced spacing
-                    FractionallySizedBox(
-                      widthFactor: 0.75,
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2), // More compact padding
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius:
-                              BorderRadius.circular(4), // Smaller radius
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedAwayTeam,
-                            hint: const Text('Select away team',
-                                style: TextStyle(fontSize: 13)),
-                            isExpanded: true,
-                            items: availableTeams.map((team) {
-                              return DropdownMenuItem<String>(
-                                value: team,
-                                child: Text(team,
-                                    style: const TextStyle(fontSize: 13)),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedAwayTeam = value;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24), // Increased spacing
-
-                    // Date already shown under Current Folder when available
-
-                    // Error message if same team selected
-                    if (selectedHomeTeam != null &&
-                        selectedAwayTeam != null &&
-                        selectedHomeTeam == selectedAwayTeam)
-                      Container(
-                        padding: const EdgeInsets.all(12), // Increased padding
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          border: Border.all(color: Colors.red.shade200),
-                          borderRadius:
-                              BorderRadius.circular(6), // Increased radius
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.error,
-                                color: Colors.red, size: 18), // Increased size
-                            SizedBox(width: 8),
-                            Text(
-                              'Home and away teams must be different',
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 14, // Added font size
-                              ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedHomeTeam,
+                              hint: const Text('Select home team',
+                                  style: TextStyle(fontSize: 13)),
+                              isExpanded: true,
+                              items: availableTeams.map((team) {
+                                return DropdownMenuItem<String>(
+                                  value: team,
+                                  child: Text(team,
+                                      style: const TextStyle(fontSize: 13)),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedHomeTeam = value;
+                                });
+                              },
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 24), // Increased spacing
+                      const SizedBox(height: 24), // Increased spacing
 
-                    // Start button
-                    if (_canProceed)
+                      // Away Team
+                      Text('Away Team:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800,
+                            fontSize: 13,
+                          )),
+                      const SizedBox(height: 4), // Reduced spacing
+                      FractionallySizedBox(
+                        widthFactor: 0.75,
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2), // More compact padding
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius:
+                                BorderRadius.circular(4), // Smaller radius
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedAwayTeam,
+                              hint: const Text('Select away team',
+                                  style: TextStyle(fontSize: 13)),
+                              isExpanded: true,
+                              items: availableTeams.map((team) {
+                                return DropdownMenuItem<String>(
+                                  value: team,
+                                  child: Text(team,
+                                      style: const TextStyle(fontSize: 13)),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  selectedAwayTeam = value;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (selectedAwayTeam != null) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          height: 1,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                      ] else ...[
+                        const SizedBox(height: 24), // Increased spacing
+                      ],
+
+                      // Date already shown under Current Folder when available
+
+                      // Error message if same team selected
+                      if (selectedHomeTeam != null &&
+                          selectedAwayTeam != null &&
+                          selectedHomeTeam == selectedAwayTeam)
+                        Container(
+                          padding:
+                              const EdgeInsets.all(12), // Increased padding
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            border: Border.all(color: Colors.red.shade200),
+                            borderRadius:
+                                BorderRadius.circular(6), // Increased radius
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.error,
+                                  color: Colors.red,
+                                  size: 18), // Increased size
+                              SizedBox(width: 8),
+                              Text(
+                                'Home and away teams must be different',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 14, // Added font size
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 24), // Increased spacing
+
+                      // Optional section
+                      Text('Optional:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                            fontSize: 13,
+                          )),
+                      const SizedBox(height: 8),
                       FractionallySizedBox(
                         widthFactor: 0.75,
                         alignment: Alignment.centerLeft,
                         child: CustomButton(
-                          onTap: () {
-                            widget.onConfigurationComplete(
-                              selectedFolderPath!,
-                              selectedHomeTeam,
-                              selectedAwayTeam,
-                            );
-                          },
+                          onTap: _openMetadataPreset,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0052CC),
+                              color: Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(6),
-                              border:
-                                  Border.all(color: const Color(0xFF0052CC)),
+                              border: Border.all(color: Colors.grey.shade300),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.rocket_launch,
-                                    size: 12, color: Colors.white),
+                                Icon(Icons.description,
+                                    size: 12, color: Colors.grey.shade700),
                                 const SizedBox(width: 4),
-                                Text(
-                                  'Go Time',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
+                                Text('Metadata Preset',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // Start button
+                      if (_canProceed)
+                        FractionallySizedBox(
+                          widthFactor: 0.75,
+                          alignment: Alignment.centerLeft,
+                          child: CustomButton(
+                            onTap: () {
+                              widget.onConfigurationComplete(
+                                selectedFolderPath!,
+                                selectedHomeTeam,
+                                selectedAwayTeam,
+                              );
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0052CC),
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: const Color(0xFF0052CC)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.rocket_launch,
+                                      size: 12, color: Colors.white),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Go Time',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ] else ...[
                     const Center(
                       child: CircularProgressIndicator(),

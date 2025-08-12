@@ -128,6 +128,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _awaySearchText = '';
   String _managerName = '';
 
+  // Prevent recursive onChanged updates for caption shortcuts
+  bool _isProcessingCaptionShortcut = false;
+
   // Date
   DateTime selectedDate = DateTime.now();
 
@@ -849,6 +852,256 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     resetCaptionSelections();
   }
 
+  // Handle hNN / vNN shorthand typed in the caption box
+  void _onCaptionChanged(String value) {
+    if (_isProcessingCaptionShortcut) return;
+
+    // Only proceed if the last character typed was an actual space character
+    if (value.isEmpty || value.codeUnitAt(value.length - 1) != 32) return;
+
+    // Only proceed if rosters are available (except for ag and team tokens)
+    if (_homeRoster.isEmpty &&
+        _awayRoster.isEmpty &&
+        !value.contains(RegExp(r'\b(ag|ht|vt)\s'))) return;
+
+    // Pattern tokens (require space after):
+    // - hNN / hhNN / vNN / vvNN → player tokens
+    // - iNN → inning token → "during the first inning"
+    // - ht / vt → team names (home / visiting)
+    // - ag → "against the [opposite team]" (based on first selected player)
+    final regex = RegExp(
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})\s');
+    if (!regex.hasMatch(value)) return;
+
+    String newText = value;
+    bool replacedAny = false;
+    int? caretAfterReplacement;
+    final selection = captionController.selection;
+
+    // Normalize reversed forms: `4i` -> `i4`, `27v` -> `v27`, `27vv` -> `vv27`, etc.
+    // Only tokens with numbers can be reversed
+    final scanValue = value.replaceAllMapped(
+      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI])\s'),
+      (m) => '${m.group(2)}${m.group(1)} ',
+    );
+
+    // Convert numbers to written ordinals for innings (1 -> first, 4 -> fourth, 21 -> 21st)
+    String _ordinalWord(int n) {
+      switch (n) {
+        case 1:
+          return 'first';
+        case 2:
+          return 'second';
+        case 3:
+          return 'third';
+        case 4:
+          return 'fourth';
+        case 5:
+          return 'fifth';
+        case 6:
+          return 'sixth';
+        case 7:
+          return 'seventh';
+        case 8:
+          return 'eighth';
+        case 9:
+          return 'ninth';
+        case 10:
+          return 'tenth';
+        case 11:
+          return 'eleventh';
+        case 12:
+          return 'twelfth';
+        case 13:
+          return 'thirteenth';
+        case 14:
+          return 'fourteenth';
+        case 15:
+          return 'fifteenth';
+        case 16:
+          return 'sixteenth';
+        case 17:
+          return 'seventeenth';
+        case 18:
+          return 'eighteenth';
+        case 19:
+          return 'nineteenth';
+        case 20:
+          return 'twentieth';
+        default:
+          if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
+          switch (n % 10) {
+            case 1:
+              return '${n}st';
+            case 2:
+              return '${n}nd';
+            case 3:
+              return '${n}rd';
+            default:
+              return '${n}th';
+          }
+      }
+    }
+
+    final buffer = StringBuffer();
+    int lastIndex = 0;
+
+    for (final match in regex.allMatches(value)) {
+      if (match.start > lastIndex) {
+        buffer.write(value.substring(lastIndex, match.start));
+      }
+      final prefix = match.group(1)!; // h, hh, v, vv, or i (any case)
+      final number = match.group(2)!;
+      final lower = prefix.toLowerCase();
+
+      // Inning token handling: iN -> "during the <ordinal> inning"
+      if (lower == 'i') {
+        replacedAny = true;
+        final inningNum = int.tryParse(number) ?? 0;
+        final ord = _ordinalWord(inningNum);
+        final replacement = 'during the $ord inning ';
+        buffer.write(replacement);
+        if (selection.baseOffset >= match.start &&
+            selection.baseOffset <= match.end) {
+          caretAfterReplacement = buffer.length;
+        }
+        lastIndex =
+            match.end - 1; // Skip the space that triggered the expansion
+        continue;
+      }
+
+      // Against token: ag -> "against the [opposite team]"
+      if (lower == 'ag') {
+        print('DEBUG: ag token detected, processing...');
+        replacedAny = true;
+        String oppositeTeam = '';
+
+        // Scan the caption text to see which team is already mentioned
+        final captionText = captionController.text;
+        final homeTeamMentioned =
+            selectedHomeTeam != null && captionText.contains(selectedHomeTeam!);
+        final awayTeamMentioned =
+            selectedAwayTeam != null && captionText.contains(selectedAwayTeam!);
+
+        if (homeTeamMentioned && !awayTeamMentioned) {
+          // Home team is mentioned, so opposite is away team
+          oppositeTeam = selectedAwayTeam ?? '';
+        } else if (awayTeamMentioned && !homeTeamMentioned) {
+          // Away team is mentioned, so opposite is home team
+          oppositeTeam = selectedHomeTeam ?? '';
+        } else if (selectedHomePlayers.isNotEmpty &&
+            selectedAwayPlayers.isEmpty) {
+          // Fallback: Home player selected first, so opposite is away team
+          oppositeTeam = selectedAwayTeam ?? '';
+        } else if (selectedAwayPlayers.isNotEmpty &&
+            selectedHomePlayers.isEmpty) {
+          // Fallback: Away player selected first, so opposite is home team
+          oppositeTeam = selectedHomeTeam ?? '';
+        } else {
+          // Default to away team as opposite
+          oppositeTeam = selectedAwayTeam ?? '';
+        }
+
+        final replacement = oppositeTeam.isNotEmpty
+            ? 'against the $oppositeTeam '
+            : 'against the opposing team ';
+        buffer.write(replacement);
+        if (selection.baseOffset >= match.start &&
+            selection.baseOffset <= match.end) {
+          caretAfterReplacement = buffer.length;
+        }
+        lastIndex = match
+            .end; // Don't skip the space - let it be part of the replacement
+        continue;
+      }
+
+      // Team tokens: ht / vt -> full team name
+      if (lower == 'ht' || lower == 'vt') {
+        replacedAny = true;
+        final teamName = lower == 'ht' ? selectedHomeTeam : selectedAwayTeam;
+        final replacement = (teamName != null && teamName.isNotEmpty)
+            ? '$teamName '
+            : (lower == 'ht' ? 'Home Team ' : 'Visiting Team ');
+        buffer.write(replacement);
+        if (selection.baseOffset >= match.start &&
+            selection.baseOffset <= match.end) {
+          caretAfterReplacement = buffer.length;
+        }
+        lastIndex =
+            match.end - 1; // Skip the space that triggered the expansion
+        continue;
+      }
+
+      final isHome = lower.startsWith('h');
+      final isDouble = lower.length == 2; // hh or vv
+
+      final roster = isHome ? _homeRoster : _awayRoster;
+      Player? found;
+      for (final p in roster) {
+        if (p.jerseyNumber == number) {
+          found = p;
+          break;
+        }
+      }
+
+      if (found != null) {
+        replacedAny = true;
+        // Update personality field with clean full name (no number), de-duplicated
+        final current = personalityController.text.trim();
+        final parts = current.isEmpty
+            ? <String>[]
+            : current
+                .split(';')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+        if (!parts.contains(found.fullName)) {
+          parts.add(found.fullName);
+          personalityController.text = parts.join(';');
+        }
+
+        String replacement = found.displayName;
+        if (!isDouble) {
+          final teamName = isHome ? selectedHomeTeam : selectedAwayTeam;
+          if (teamName != null && teamName.isNotEmpty) {
+            replacement = '$replacement of the $teamName';
+          }
+        }
+        replacement =
+            '$replacement '; // Add space after all player replacements
+        buffer.write(replacement);
+        // If caret is within or at end of this token, place it at end of replacement
+        if (selection.baseOffset >= match.start &&
+            selection.baseOffset <= match.end) {
+          caretAfterReplacement = buffer.length;
+        }
+      } else {
+        // No match found; keep token
+        buffer.write(value.substring(match.start, match.end));
+      }
+      lastIndex = match.end - 1; // Skip the space that triggered the expansion
+    }
+
+    // Append remaining tail
+    if (lastIndex < value.length) {
+      buffer.write(value.substring(lastIndex));
+    }
+    newText = buffer.toString();
+
+    if (replacedAny && newText != value) {
+      _isProcessingCaptionShortcut = true;
+      captionController.text = newText;
+      if (caretAfterReplacement != null) {
+        captionController.selection =
+            TextSelection.collapsed(offset: caretAfterReplacement);
+      } else if (selection.baseOffset >= 0) {
+        final clamped = selection.baseOffset.clamp(0, newText.length);
+        captionController.selection = TextSelection.collapsed(offset: clamped);
+      }
+      _isProcessingCaptionShortcut = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -880,6 +1133,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               child: TextField(
                                 controller: captionController,
                                 maxLines: 3,
+                                onChanged: _onCaptionChanged,
                                 style: const TextStyle(fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Caption',
