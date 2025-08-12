@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
@@ -30,6 +31,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Map<String, dynamic>? currentMetadata;
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
+  // XMP metadata for rating and color label
+  Map<String, int> _xmpRatings = {};
+  Map<String, String> _xmpLabels = {};
+  // Files that appear locked (not writable by owner)
+  Set<String> _lockedPaths = {};
 
   // Team selection
   String? selectedHomeTeam;
@@ -44,9 +50,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Startup configuration
   bool _isStartupComplete = false;
   String? _selectedFolderPath;
-  // Folder watcher to auto-reload images on changes
-  StreamSubscription<FileSystemEvent>? _folderWatchSub;
-  Timer? _folderReloadDebounce;
+  // Folder watcher disabled to prevent image jumping
 
   // Loading states
   bool _isLoadingPlayers = false;
@@ -66,6 +70,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Cached player data to prevent re-fetching
   List<Player> _cachedHomeRoster = [];
   List<Player> _cachedAwayRoster = [];
+
+  // Track uploaded images
+  Set<String> _uploadedImages = {};
+  // Track upload progress for thumbnails
+  Map<String, double> _uploadProgress = {};
+  // Request id for centering selected thumbnail on arrow navigation
+  int _thumbCenterRequestId = 0;
 
   void _handleReset() {
     setState(() {
@@ -109,8 +120,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Start sequential loading: players first, then thumbnails
     _startLoadingSequence(folderPath);
 
-    // Start watching the selected folder for new/edited images
-    _startWatchingFolder(folderPath);
+    // Folder watching disabled to prevent image jumping
   }
 
   Future<void> _startLoadingSequence(String folderPath) async {
@@ -162,6 +172,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   Future<void> _loadImagesFromFolder(String folderPath) async {
     try {
+      // Preserve currently selected image path (if any) to avoid jumps on reloads
+      final String? previouslySelectedPath =
+          imagePaths.isNotEmpty && currentIndex < imagePaths.length
+              ? imagePaths[currentIndex]
+              : null;
+
       final directory = Directory(folderPath);
       final List<FileSystemEntity> entities = await directory.list().toList();
 
@@ -177,10 +193,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               path.toLowerCase().endsWith('.bmp'))
           .toList();
 
-      // Set images immediately for instant thumbnail rendering
+      // Set images immediately for instant thumbnail rendering and try to
+      // preserve the previously selected image (if it still exists)
       setState(() {
         imagePaths = List.from(imageFiles);
-        currentIndex = 0;
+        if (previouslySelectedPath != null) {
+          final idx = imageFiles.indexOf(previouslySelectedPath);
+          currentIndex = idx >= 0 ? idx : 0;
+        } else {
+          currentIndex = 0;
+        }
       });
 
       // In the background: batch EXIF read for DateTimeOriginal, compute formatted times, and sort
@@ -199,52 +221,25 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   // Begin watching a folder and debounce reloads when image files change
-  void _startWatchingFolder(String folderPath) {
-    // Clean up any existing watcher
-    _folderWatchSub?.cancel();
-    _folderWatchSub = null;
-
-    try {
-      final dir = Directory(folderPath);
-      _folderWatchSub = dir
-          .watch(
-              events: FileSystemEvent.create |
-                  FileSystemEvent.modify |
-                  FileSystemEvent.move |
-                  FileSystemEvent.delete)
-          .listen((event) {
-        final path = event.path.toLowerCase();
-        final isImage = path.endsWith('.jpg') ||
-            path.endsWith('.jpeg') ||
-            path.endsWith('.png') ||
-            path.endsWith('.tiff') ||
-            path.endsWith('.bmp');
-        if (!isImage) return;
-
-        // Debounce frequent events from save operations
-        _folderReloadDebounce?.cancel();
-        _folderReloadDebounce = Timer(const Duration(milliseconds: 600), () {
-          final watchedPath = _selectedFolderPath;
-          if (watchedPath != null) {
-            _loadImagesFromFolder(watchedPath);
-          }
-        });
-      });
-    } catch (e) {
-      print('Error starting folder watcher: $e');
-    }
-  }
+  // Folder watching methods removed to prevent image jumping
 
   Future<void> _loadExifTimesAndSort(List<String> imageFiles) async {
     try {
       if (imageFiles.isEmpty) return;
 
-      // Batch exiftool call for all files (DateTimeOriginal)
-      final args = <String>['-j', '-DateTimeOriginal'];
+      // Batch exiftool call for all files (DateTimeOriginal, Rating, Label)
+      final args = <String>[
+        '-j',
+        '-DateTimeOriginal',
+        '-XMP:Rating',
+        '-XMP:Label'
+      ];
       args.addAll(imageFiles);
       final proc = await Process.run('exiftool', args);
       final Map<String, DateTime> times = {};
       final Map<String, String> formatted = {};
+      final Map<String, int> ratings = {};
+      final Map<String, String> labels = {};
 
       if (proc.exitCode == 0) {
         final List data = jsonDecode(proc.stdout as String);
@@ -252,6 +247,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           if (item is Map<String, dynamic>) {
             final sourceFile = item['SourceFile']?.toString();
             final dateStr = item['DateTimeOriginal']?.toString();
+            // ExifTool normalizes keys to simple names like 'Rating' and 'Label'
+            final ratingVal = item['Rating'];
+            final labelVal = item['Label'];
             if (sourceFile != null && dateStr != null) {
               try {
                 final dt = DateTime.parse(
@@ -260,9 +258,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 // format to 12h as per preference
                 final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
                 final minute = dt.minute.toString().padLeft(2, '0');
+                final second = dt.second.toString().padLeft(2, '0');
                 final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                formatted[sourceFile] = '$hour:$minute $ampm';
+                formatted[sourceFile] = '$hour:$minute:$second $ampm';
               } catch (_) {}
+            }
+            if (sourceFile != null) {
+              if (ratingVal != null) {
+                // Ratings are 0-5; ensure int
+                final r = int.tryParse(ratingVal.toString());
+                if (r != null) ratings[sourceFile] = r;
+              }
+              if (labelVal != null) {
+                labels[sourceFile] = labelVal.toString();
+              }
             }
           }
         }
@@ -279,9 +288,46 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         ..sort((a, b) => (times[a]!).compareTo(times[b]!));
 
       if (!mounted) return;
+
+      // Preserve current image if possible
+      final String? currentImagePath =
+          imagePaths.isNotEmpty && currentIndex < imagePaths.length
+              ? imagePaths[currentIndex]
+              : null;
+
+      final bool orderChanged = !listEquals(sorted, imagePaths);
+
+      // Compute locked set based on file writability (owner write bit)
+      final Set<String> locked = {};
+      for (final path in imageFiles) {
+        try {
+          final stat = File(path).statSync();
+          // If not writable by owner, treat as locked
+          final modeStr = stat.modeString(); // e.g., rw-r--r--
+          final ownerWritable = modeStr.length >= 2 && modeStr[1] == 'w';
+          if (!ownerWritable) locked.add(path);
+        } catch (_) {}
+      }
+
       setState(() {
-        imagePaths = sorted;
         _exifTimes = formatted;
+        _xmpRatings = ratings;
+        _xmpLabels = labels;
+        _lockedPaths = locked;
+        if (orderChanged) {
+          imagePaths = sorted;
+          // Restore current image position if it still exists
+          if (currentImagePath != null) {
+            final newIndex = sorted.indexOf(currentImagePath);
+            if (newIndex != -1) {
+              currentIndex = newIndex;
+            } else {
+              currentIndex = 0;
+            }
+          } else {
+            currentIndex = 0;
+          }
+        }
       });
     } catch (e) {
       print('Error in _loadExifTimesAndSort: $e');
@@ -639,16 +685,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       currentIndex = index;
     });
     _loadMetadata();
-    // Scroll to current thumbnail after a short delay to ensure the widget is built
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _scrollToCurrentThumbnail();
-    });
+    // Center thumbnails only when arrow navigation explicitly requests it
   }
 
   @override
   void dispose() {
-    _folderWatchSub?.cancel();
-    _folderReloadDebounce?.cancel();
     _thumbnailScrollController.dispose();
     super.dispose();
   }
@@ -868,11 +909,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onImageSelected: _onImageSelected,
                       onNextImage: () {
                         if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
                           _onImageSelected(currentIndex + 1);
                         }
                       },
                       onPreviousImage: () {
                         if (currentIndex > 0) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
                           _onImageSelected(currentIndex - 1);
                         }
                       },
@@ -890,6 +937,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onImageSelected: _onImageSelected,
                       scrollController: _thumbnailScrollController,
                       exifTimes: _exifTimes,
+                      uploadedImages: _uploadedImages,
+                      xmpRatings: _xmpRatings,
+                      xmpLabels: _xmpLabels,
+                      lockedPaths: _lockedPaths,
+                      uploadProgress: _uploadProgress,
+                      centerRequestId: _thumbCenterRequestId,
                     ),
                   ),
                 ],
@@ -915,11 +968,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       awayTeam: selectedAwayTeam,
                       onNextImage: () {
                         if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
                           _onImageSelected(currentIndex + 1);
                         }
                       },
                       onPreviousImage: () {
                         if (currentIndex > 0) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
                           _onImageSelected(currentIndex - 1);
                         }
                       },
@@ -943,6 +1002,18 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
                       totalImages: imagePaths.length,
                       onSaveIptc: _saveIptcMetadata,
+                      onImageUploaded: (imagePath) {
+                        setState(() {
+                          _uploadedImages.add(imagePath);
+                          _uploadProgress
+                              .remove(imagePath); // Clear progress when done
+                        });
+                      },
+                      onUploadProgress: (imagePath, progress) {
+                        setState(() {
+                          _uploadProgress[imagePath] = progress;
+                        });
+                      },
                     ),
                   ),
 

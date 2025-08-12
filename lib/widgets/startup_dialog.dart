@@ -70,7 +70,6 @@ class _StartupDialogState extends State<StartupDialog> {
   final List<String> questions = [
     'Where is your images folder?',
     'What is the game date?',
-    'Please select your teams:',
   ];
 
   @override
@@ -96,9 +95,18 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   void _typeNextCharacter() {
-    if (typingIndex < questions[currentQuestion].length) {
+    String textToType;
+    if (currentQuestion < questions.length) {
+      textToType = questions[currentQuestion];
+    } else if (currentQuestion == 2) {
+      textToType = 'What teams are playing?';
+    } else {
+      textToType = '';
+    }
+
+    if (typingIndex < textToType.length) {
       setState(() {
-        displayedText += questions[currentQuestion][typingIndex];
+        displayedText += textToType[typingIndex];
         typingIndex++;
       });
       typingTimer = Timer(const Duration(milliseconds: 15), _typeNextCharacter);
@@ -128,24 +136,35 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   void _nextQuestion() {
+    // Special case: skip directly to team selection when date inferred
+    if (currentQuestion == 0 && hasImagesInFolder && selectedGameDate != null) {
+      setState(() {
+        currentQuestion = 2; // Go to team selection
+        isTyping = true;
+        displayedText = '';
+        typingIndex = 0;
+      });
+      _typeNextCharacter();
+      return;
+    }
+
     if (currentQuestion < questions.length - 1) {
-      // If we're moving from folder selection and images were found with a date,
-      // skip the date question and go directly to team selection
-      if (currentQuestion == 0 &&
-          hasImagesInFolder &&
-          selectedGameDate != null) {
-        setState(() {
-          currentQuestion = 2; // Skip to team selection (question 2)
-        });
-      } else if (currentQuestion == 1 && selectedGameDate == null) {
-        // If we're at date selection but no date was selected, stay here
-        return;
-      } else {
-        setState(() {
-          currentQuestion++;
-        });
-      }
+      setState(() {
+        currentQuestion++;
+      });
       _startTyping();
+      return;
+    }
+
+    if (currentQuestion == questions.length - 1) {
+      // Move to team selection step with typing animation
+      setState(() {
+        currentQuestion = 2;
+        isTyping = true;
+        displayedText = '';
+        typingIndex = 0;
+      });
+      _typeNextCharacter();
     }
   }
 
@@ -207,7 +226,7 @@ class _StartupDialogState extends State<StartupDialog> {
           });
         }
 
-        // Always proceed to next step after folder selection
+        // Automatically proceed to team selection after folder is selected
         _nextQuestion();
       } else {
         setState(() {
@@ -378,191 +397,65 @@ class _StartupDialogState extends State<StartupDialog> {
                 Text(
                   displayedText + (isTyping ? '|' : ''),
                   style: const TextStyle(
-                    fontSize: 17, // Reduced from 20 by 3px
+                    fontSize: 16, // Match "Please select your teams:" size
                     fontWeight: FontWeight.w500,
                     color: Colors.black,
                   ),
                 ),
-                const SizedBox(height: 32), // Increased from 24
+                const SizedBox(
+                    height:
+                        16), // Reduced from 32 to bring button closer to header
 
                 // Question-specific content
-                if (currentQuestion == 0) ...[
+                if (currentQuestion == 0 && !isTyping) ...[
                   // Folder selection
-                  CustomButton(
-                    onTap: isLoadingFolder ? null : _pickFolder,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isLoadingFolder
-                            ? Colors.grey.shade300
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          isLoadingFolder
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(Icons.folder_open,
-                                  size: 12, color: Colors.grey.shade700),
-                          const SizedBox(width: 4),
-                          Text(
+                  FractionallySizedBox(
+                    widthFactor: 0.75,
+                    alignment: Alignment.centerLeft,
+                    child: CustomButton(
+                      onTap: isLoadingFolder ? null : _pickFolder,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isLoadingFolder
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
                             isLoadingFolder
-                                ? 'Loading...'
-                                : 'Pick Images Folder',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isLoadingFolder
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade700,
-                              fontWeight: FontWeight.w500,
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : Icon(Icons.folder_open,
+                                    size: 12, color: Colors.grey.shade700),
+                            const SizedBox(width: 4),
+                            Text(
+                              isLoadingFolder
+                                  ? 'Loading...'
+                                  : 'Pick Images Folder',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isLoadingFolder
+                                    ? Colors.grey.shade600
+                                    : Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16), // Increased spacing
-                  // Display selected folder path
-                  if (selectedFolderPath != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16), // Increased padding
-                      decoration: BoxDecoration(
-                        color: hasImagesInFolder
-                            ? Colors.green.shade50
-                            : Colors.orange.shade50,
-                        border: Border.all(
-                            color: hasImagesInFolder
-                                ? Colors.green.shade200
-                                : Colors.orange.shade200),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                hasImagesInFolder
-                                    ? Icons.check_circle
-                                    : Icons.warning,
-                                color: hasImagesInFolder
-                                    ? Colors.green
-                                    : Colors.orange,
-                                size: 18, // Increased size
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                hasImagesInFolder
-                                    ? 'Folder Selected:'
-                                    : 'No Images Found:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: hasImagesInFolder
-                                      ? Colors.green
-                                      : Colors.orange,
-                                  fontSize: 14, // Added font size
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6), // Increased spacing
-                          Text(
-                            selectedFolderPath!,
-                            style: const TextStyle(
-                              fontSize: 13, // Increased from 12
-                              color: Colors.grey,
-                            ),
-                          ),
-                          if (!hasImagesInFolder) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'No image files found. Please select the game date to continue.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange.shade700,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ] else if (isExtractingDate) ...[
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.green.shade600),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Finding date...',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green.shade700,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ] else if (selectedGameDate != null) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'Game date extracted from images: ${selectedGameDate!.year}-${selectedGameDate!.month.toString().padLeft(2, '0')}-${selectedGameDate!.day.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green.shade700,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24), // Increased spacing
-                    if (hasImagesInFolder)
-                      CustomButton(
-                        onTap: () => _nextQuestion(),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.arrow_forward,
-                                  size: 12, color: Colors.grey.shade700),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Next',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
                 ] else if (currentQuestion == 1) ...[
                   // Date selection (only show if no date was extracted from images)
                   if (selectedGameDate == null) ...[
@@ -629,116 +522,213 @@ class _StartupDialogState extends State<StartupDialog> {
                 ] else if (currentQuestion == 2) ...[
                   // Team selection
                   if (!isLoadingTeams) ...[
-                    // Home Team
-                    const Text('Home Team:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16, // Added font size
-                        )),
-                    const SizedBox(height: 8), // Increased spacing
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4), // Much smaller padding
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius:
-                            BorderRadius.circular(4), // Smaller radius
+                    // Pick Images Folder option
+                    FractionallySizedBox(
+                      widthFactor: 0.75,
+                      alignment: Alignment.centerLeft,
+                      child: CustomButton(
+                        onTap: isLoadingFolder ? null : _pickFolder,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isLoadingFolder
+                                ? Colors.grey.shade300
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              isLoadingFolder
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : Icon(Icons.folder_open,
+                                      size: 12, color: Colors.grey.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                isLoadingFolder
+                                    ? 'Loading...'
+                                    : 'Pick Images Folder',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isLoadingFolder
+                                      ? Colors.grey.shade600
+                                      : Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedHomeTeam,
-                          hint: const Text('Select home team'),
-                          isExpanded: true,
-                          items: availableTeams.map((team) {
-                            return DropdownMenuItem<String>(
-                              value: team,
-                              child: Text(team),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedHomeTeam = value;
-                            });
-                          },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Display selected folder path if exists (no box)
+                    if (selectedFolderPath != null) ...[
+                      Row(
+                        children: [
+                          Text(
+                            'Current Folder: ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              selectedFolderPath!,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (selectedGameDate != null) ...[
+                        Row(
+                          children: [
+                            Text(
+                              'Date detected: ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade800,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              _formatDate(selectedGameDate!),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+                        Container(
+                          width: double.infinity,
+                          height: 1,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 40),
+                      ] else ...[
+                        const SizedBox(height: 16),
+                      ],
+                    ],
+
+                    // Team selection header
+                    Text(
+                      displayedText + (isTyping ? '|' : ''),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Home Team
+                    Text('Home Team:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                          fontSize: 13,
+                        )),
+                    const SizedBox(height: 4), // Reduced spacing
+                    FractionallySizedBox(
+                      widthFactor: 0.75,
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2), // More compact padding
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius:
+                              BorderRadius.circular(4), // Smaller radius
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedHomeTeam,
+                            hint: const Text('Select home team',
+                                style: TextStyle(fontSize: 13)),
+                            isExpanded: true,
+                            items: availableTeams.map((team) {
+                              return DropdownMenuItem<String>(
+                                value: team,
+                                child: Text(team,
+                                    style: const TextStyle(fontSize: 13)),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                selectedHomeTeam = value;
+                              });
+                            },
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 24), // Increased spacing
 
                     // Away Team
-                    const Text('Away Team:',
+                    Text('Away Team:',
                         style: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16, // Added font size
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                          fontSize: 13,
                         )),
-                    const SizedBox(height: 8), // Increased spacing
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4), // Much smaller padding
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius:
-                            BorderRadius.circular(4), // Smaller radius
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedAwayTeam,
-                          hint: const Text('Select away team'),
-                          isExpanded: true,
-                          items: availableTeams.map((team) {
-                            return DropdownMenuItem<String>(
-                              value: team,
-                              child: Text(team),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              selectedAwayTeam = value;
-                            });
-                          },
+                    const SizedBox(height: 4), // Reduced spacing
+                    FractionallySizedBox(
+                      widthFactor: 0.75,
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2), // More compact padding
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius:
+                              BorderRadius.circular(4), // Smaller radius
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedAwayTeam,
+                            hint: const Text('Select away team',
+                                style: TextStyle(fontSize: 13)),
+                            isExpanded: true,
+                            items: availableTeams.map((team) {
+                              return DropdownMenuItem<String>(
+                                value: team,
+                                child: Text(team,
+                                    style: const TextStyle(fontSize: 13)),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                selectedAwayTeam = value;
+                              });
+                            },
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 24), // Increased spacing
 
-                    // Show extracted date under team dropdowns
-                    if (selectedGameDate != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          border: Border.all(color: Colors.green.shade200),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle,
-                                color: Colors.green, size: 18),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Game date detected from images in your folder:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _formatDate(selectedGameDate!),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24), // Increased spacing
-                    ],
+                    // Date already shown under Current Folder when available
 
                     // Error message if same team selected
                     if (selectedHomeTeam != null &&
@@ -771,38 +761,43 @@ class _StartupDialogState extends State<StartupDialog> {
 
                     // Start button
                     if (_canProceed)
-                      CustomButton(
-                        onTap: () {
-                          widget.onConfigurationComplete(
-                            selectedFolderPath!,
-                            selectedHomeTeam,
-                            selectedAwayTeam,
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.play_arrow,
-                                  size: 12, color: Colors.grey.shade700),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Go Time',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w500,
+                      FractionallySizedBox(
+                        widthFactor: 0.75,
+                        alignment: Alignment.centerLeft,
+                        child: CustomButton(
+                          onTap: () {
+                            widget.onConfigurationComplete(
+                              selectedFolderPath!,
+                              selectedHomeTeam,
+                              selectedAwayTeam,
+                            );
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0052CC),
+                              borderRadius: BorderRadius.circular(6),
+                              border:
+                                  Border.all(color: const Color(0xFF0052CC)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.rocket_launch,
+                                    size: 12, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Go Time',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),

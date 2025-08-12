@@ -77,6 +77,9 @@ class CaptionFieldsWidget extends StatefulWidget {
   final int? totalImages;
   final Future<void> Function()? onSaveIptc;
   final Future<void> Function()? onSaveIptcBackground;
+  final Function(String)? onImageUploaded; // Callback when image is uploaded
+  final Function(String, double)?
+      onUploadProgress; // Callback for upload progress
 
   const CaptionFieldsWidget({
     super.key,
@@ -96,6 +99,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.totalImages,
     this.onSaveIptc,
     this.onSaveIptcBackground,
+    this.onImageUploaded,
+    this.onUploadProgress,
   });
 
   @override
@@ -1330,7 +1335,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                             SizedBox(
                               height: 42,
-                              width: 45,
+                              width: 55,
                               child: Center(
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -2313,7 +2318,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       child: Row(
                                                                                         mainAxisAlignment: MainAxisAlignment.center,
                                                                                         children: [
-                                                                                          Icon(Icons.cloud_upload, size: 16, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                                                                                          Icon(Icons.rocket_launch, size: 14, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
                                                                                           const SizedBox(width: 2),
                                                                                           Text(_disableFtp ? 'FTP OFF' : (_currentFtpProfile != null ? 'FTP: $_currentFtpProfile' : 'FTP'), style: TextStyle(fontSize: 10, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
                                                                                         ],
@@ -2442,11 +2447,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             height:
                                                                                 4), // Padding between Magic Bar and verb categories
 
-                                                                        // Verb categories (hidden when custom text is being used, when inning selector is shown, or when certain verbs are selected)
+                                                                        // Verb categories (hidden when custom text is being used, when inning selector is shown)
                                                                         if (customBetweenPlayersController.text.isEmpty &&
-                                                                            !_showCustomTextInningSelector &&
-                                                                            _selectedVerb !=
-                                                                                'Home Run') ...[
+                                                                            !_showCustomTextInningSelector) ...[
                                                                           SizedBox(
                                                                             height:
                                                                                 500, // Increased height for verb area
@@ -5006,63 +5009,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     print('FTP: Remote path: $_ftpRemotePath');
     print('FTP: Full remote path: $fullRemotePath');
 
-    // Show progress dialog with progress bar
-    double uploadProgress = 0.0;
+    // Progress will be shown over the thumbnail instead of a dialog
     String statusText = 'Connecting to FTP server...';
     String? errorText;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Uploading Image...'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(
-                value: uploadProgress,
-                backgroundColor: Colors.grey[300],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  errorText != null ? Colors.red : Colors.blue,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                statusText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: errorText != null ? Colors.red : Colors.black87,
-                  fontWeight:
-                      errorText != null ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-              if (errorText != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    errorText!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.red,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-
     try {
+      // Folder watching disabled - no need to signal
+
       final result = await FtpClientService.uploadFile(
         host: _ftpHost,
         username: _ftpUsername,
@@ -5072,22 +5025,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         port: _ftpPort,
         passiveMode: _ftpPassiveMode,
         onProgress: (status, progress, error) {
-          uploadProgress = progress;
           statusText = status;
           errorText = error;
-          setState(() {});
+          // Notify parent about upload progress for overlay
+          if (widget.onUploadProgress != null &&
+              widget.currentImagePath != null) {
+            widget.onUploadProgress!(widget.currentImagePath!, progress);
+          }
         },
       );
-
-      // Wait a moment to show completion
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      Navigator.pop(context); // Close progress dialog
 
       if (result.success) {
         setState(() {
           // No need to increment picture number when using original filenames
         });
+
+        // Notify parent that image was uploaded successfully
+        if (widget.onImageUploaded != null && widget.currentImagePath != null) {
+          widget.onImageUploaded!(widget.currentImagePath!);
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -5718,7 +5674,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _onFtpPressed,
-                icon: const Icon(Icons.cloud_upload, size: 18),
+                icon: const Icon(Icons.rocket_launch, size: 14),
                 label: const Text('FTP Upload', style: TextStyle(fontSize: 10)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purple.shade600,
@@ -6206,6 +6162,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _currentFtpProfile = profileName;
       });
 
+      // Save the current profile selection to persistent storage
+      _saveFtpProfilesToStorage();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('FTP profile "$profileName" loaded successfully!'),
@@ -6246,6 +6205,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       await prefs.setString('ftp_profiles', profilesJson);
       if (currentProfile != null) {
         await prefs.setString('current_ftp_profile', currentProfile);
+        print('DEBUG: Saved current FTP profile "$currentProfile" to storage');
       }
     } catch (e) {
       print('Error saving FTP profiles: $e');
@@ -6258,12 +6218,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final profilesJson = prefs.getString('ftp_profiles');
       final currentProfile = prefs.getString('current_ftp_profile');
 
+      print('DEBUG: Loading FTP profiles - currentProfile: $currentProfile');
+      print('DEBUG: Available profiles: ${_ftpProfiles.keys.toList()}');
+
       if (profilesJson != null) {
         final profiles = jsonDecode(profilesJson) as Map<String, dynamic>;
         setState(() {
           _ftpProfiles = Map<String, Map<String, dynamic>>.from(profiles);
           _currentFtpProfile = currentProfile;
         });
+
+        // Automatically load the current profile data if one exists
+        if (currentProfile != null &&
+            _ftpProfiles.containsKey(currentProfile)) {
+          final profile = _ftpProfiles[currentProfile];
+          if (profile != null) {
+            setState(() {
+              _ftpHost = profile['host'] ?? '';
+              _ftpUsername = profile['username'] ?? '';
+              _ftpPassword = profile['password'] ?? '';
+              _ftpPort = profile['port'] ?? 21;
+              _ftpRemotePath = profile['remotePath'] ?? '';
+              _ftpPassiveMode = profile['passiveMode'] ?? true;
+            });
+            print('DEBUG: Loaded FTP profile "$currentProfile" on app startup');
+          }
+        } else {
+          print('DEBUG: No current FTP profile found or profile not in list');
+        }
       }
     } catch (e) {
       print('Error loading FTP profiles: $e');
@@ -11072,8 +11054,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.cloud_upload,
-                      size: 14,
+                  Icon(Icons.rocket_launch,
+                      size: 10,
                       color: _disableFtp ? Colors.grey.shade600 : Colors.white),
                   const SizedBox(width: 2),
                   Text(
