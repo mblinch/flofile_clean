@@ -615,28 +615,28 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       controller: controller,
       maxLines: maxLines,
       expands: expands,
-      style: const TextStyle(fontSize: 12),
+      style: const TextStyle(fontSize: 10),
       decoration: InputDecoration(
         labelText: label,
         floatingLabelBehavior: FloatingLabelBehavior.always,
         // No hint text when empty
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: Colors.grey.shade400),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: Colors.grey.shade400),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(6),
-          borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: Colors.blue.shade400, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.all(8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         filled: true,
         fillColor: Colors.grey.shade50,
         labelStyle: const TextStyle(
-          fontSize: 12,
+          fontSize: 9,
           fontWeight: FontWeight.w500,
           color: Colors.black87,
         ),
@@ -653,7 +653,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
         color: Colors.grey.shade50,
       ),
       child: PopupMenuButton<String>(
@@ -664,12 +664,12 @@ class _MetadataWidgetState extends State<MetadataWidget> {
             .map(
               (item) => PopupMenuItem<String>(
                 value: item['code'],
-                height: 32,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 child: Text(
                   item['name']!,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: Colors.black,
                     fontWeight: FontWeight.normal,
                   ),
@@ -679,8 +679,8 @@ class _MetadataWidgetState extends State<MetadataWidget> {
             .toList(),
         child: Container(
           width: double.infinity,
-          height: 40, // Match the height of regular text fields
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          height: 32, // Reduced height to match compact text fields
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           child: Row(
             children: [
               Expanded(
@@ -692,7 +692,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     Text(
                       label,
                       style: const TextStyle(
-                        fontSize: 8,
+                        fontSize: 7,
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
@@ -701,7 +701,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                     Text(
                       value ?? 'Select $label',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         color:
                             value != null ? Colors.black : Colors.grey.shade600,
                       ),
@@ -829,7 +829,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.all(3.0),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.circular(8),
@@ -837,35 +837,10 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       ),
       child: Column(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
-              ),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, size: 16, color: Colors.black87),
-                SizedBox(width: 8),
-                Text(
-                  'Metadata',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-          ),
           // Main content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.only(left: 6, right: 6, top: 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -932,11 +907,11 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                           child: _buildField('Supp Cat 3', suppCat3Controller)),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   _buildField(
                       'Special Instructions', specialInstructionsController,
                       maxLines: 2),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
 
                   // IPTC metadata fields
                   Row(
@@ -955,10 +930,10 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       Expanded(
                           child: _buildField('Country', countryController)),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: _buildDropdownField(
                           'Country Code',
@@ -975,21 +950,21 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
 
                   // Location fields
                   Row(
                     children: [
                       Expanded(child: _buildField('City', cityController)),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       Expanded(
                           child: _buildField(
                               'Province/State', provinceController)),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   _buildField('Stadium', stadiumController),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(child: _buildDateField()),

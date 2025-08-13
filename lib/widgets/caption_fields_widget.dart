@@ -11,6 +11,154 @@ import 'package:file_picker/file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// TextEditingController that can render inline highlights accurately inside the
+// TextField by overriding buildTextSpan. This keeps caret/selection perfectly
+// aligned with the painted text since EditableText uses this span directly.
+class HighlightingTextEditingController extends TextEditingController {
+  HighlightingTextEditingController({List<TextRange>? highlightedRanges})
+      : _highlightedRanges = highlightedRanges ?? <TextRange>[],
+        _invalidRanges = <TextRange>[];
+
+  List<TextRange> _highlightedRanges;
+  List<TextRange> _invalidRanges;
+
+  List<TextRange> get highlightedRanges => _highlightedRanges;
+  set highlightedRanges(List<TextRange> ranges) {
+    _highlightedRanges = ranges;
+    // notifyListeners is called when text changes; for style-only changes we
+    // still need to notify so the widget rebuilds with new spans
+    notifyListeners();
+  }
+
+  List<TextRange> get invalidRanges => _invalidRanges;
+  set invalidRanges(List<TextRange> ranges) {
+    _invalidRanges = ranges;
+    // notifyListeners is called when text changes; for style-only changes we
+    // still need to notify so the widget rebuilds with new spans
+    notifyListeners();
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    bool withComposing = false,
+  }) {
+    final TextStyle baseStyle = style ?? const TextStyle();
+    final TextStyle validHighlightStyle = baseStyle.copyWith(
+      backgroundColor: Colors.lightBlue.withOpacity(0.2),
+      fontWeight: FontWeight.w500,
+    );
+    final TextStyle invalidHighlightStyle = baseStyle.copyWith(
+      backgroundColor: Colors.grey.withOpacity(0.3),
+      fontWeight: FontWeight.w500,
+      color: Colors.grey.shade600,
+    );
+
+    final String fullText = text;
+    if (_highlightedRanges.isEmpty && _invalidRanges.isEmpty ||
+        fullText.isEmpty) {
+      return TextSpan(style: baseStyle, text: fullText);
+    }
+
+    // Combine and sort all ranges
+    final List<TextRange> allRanges = <TextRange>[];
+    for (final range in _highlightedRanges) {
+      allRanges.add(range);
+    }
+    for (final range in _invalidRanges) {
+      allRanges.add(range);
+    }
+    allRanges.sort((a, b) => a.start.compareTo(b.start));
+
+    final List<InlineSpan> children = <InlineSpan>[];
+    int cursor = 0;
+    for (final TextRange r in allRanges) {
+      final int start = r.start.clamp(0, fullText.length);
+      final int end = r.end.clamp(0, fullText.length);
+      if (start > cursor) {
+        children.add(TextSpan(
+            style: baseStyle, text: fullText.substring(cursor, start)));
+      }
+      if (end > start) {
+        // Determine if this range is valid or invalid
+        bool isValid = _highlightedRanges.contains(r);
+        final TextStyle highlightStyle =
+            isValid ? validHighlightStyle : invalidHighlightStyle;
+        children.add(TextSpan(
+            style: highlightStyle, text: fullText.substring(start, end)));
+      }
+      cursor = end;
+    }
+    if (cursor < fullText.length) {
+      children
+          .add(TextSpan(style: baseStyle, text: fullText.substring(cursor)));
+    }
+
+    return TextSpan(style: baseStyle, children: children);
+  }
+}
+
+// Formatter that converts any backspace/delete within a highlighted range into
+// deletion of the entire highlighted token. This guarantees single-keypress
+// removal of a token without relying on heuristics in listeners.
+class HighlightedTokenDeletionFormatter extends TextInputFormatter {
+  HighlightedTokenDeletionFormatter({
+    required this.getRanges,
+    required this.onTokenDeleted,
+  });
+
+  // Supplies the current highlight ranges from the owning State
+  final List<TextRange> Function() getRanges;
+  // Callback with the deleted range (indices relative to OLD text) and its text
+  final void Function(TextRange deletedRange, String deletedText)
+      onTokenDeleted;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Only care about deletions
+    if (newValue.text.length >= oldValue.text.length) {
+      return newValue;
+    }
+
+    final List<TextRange> ranges = getRanges();
+    if (ranges.isEmpty) return newValue;
+
+    // Determine deletion window
+    // Typical backspace: selection moved left by 1; forward delete: stays
+    final int delta = oldValue.text.length - newValue.text.length;
+    int startIndex;
+    if (newValue.selection.baseOffset < oldValue.selection.baseOffset) {
+      // Backspace
+      startIndex = newValue.selection.baseOffset;
+    } else {
+      // Delete
+      startIndex = oldValue.selection.baseOffset;
+    }
+    final int endIndex = startIndex + delta;
+
+    // If any range intersects the deleted window, delete the entire range
+    for (final TextRange r in ranges) {
+      final bool intersects = !(endIndex <= r.start || startIndex >= r.end);
+      if (intersects) {
+        final String tokenText = oldValue.text.substring(r.start, r.end);
+        onTokenDeleted(r, tokenText);
+        final String replaced = oldValue.text.replaceRange(r.start, r.end, '');
+        return newValue.copyWith(
+          text: replaced,
+          selection: TextSelection.collapsed(offset: r.start),
+          composing: TextRange.empty,
+        );
+      }
+    }
+
+    return newValue;
+  }
+}
+
 // Custom button widget with cursor styling and press feedback
 class CustomButton extends StatefulWidget {
   final VoidCallback? onTap;
@@ -109,7 +257,8 @@ class CaptionFieldsWidget extends StatefulWidget {
 
 class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Controllers
-  final TextEditingController captionController = TextEditingController();
+  final HighlightingTextEditingController captionController =
+      HighlightingTextEditingController();
   final TextEditingController personalityController = TextEditingController();
   final TextEditingController _homeSearchController = TextEditingController();
   final TextEditingController _awaySearchController = TextEditingController();
@@ -121,6 +270,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       TextEditingController();
   final TextEditingController customDejectionController =
       TextEditingController();
+  // Magic bar controller (kept to satisfy existing references in UI)
   final TextEditingController customBetweenPlayersController =
       TextEditingController();
   final TextEditingController _managerNameController = TextEditingController();
@@ -130,6 +280,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Prevent recursive onChanged updates for caption shortcuts
   bool _isProcessingCaptionShortcut = false;
+
+  // Highlighting state for expanded tokens
+  List<TextRange> _highlightedRanges = [];
+  Map<String, String> _tokenToPlayerName =
+      {}; // Maps expanded text to player name for personality field
+
+  // Track previous caption text to detect deletions (e.g., backspace)
+  String _prevCaptionText = '';
+  TextSelection? _prevCaptionSelection;
+
+  // Magic input team hint (true = home, false = away) used to disambiguate same-number players
+  bool? _magicTeamHint;
+  // Track last auto-selected jersey per team so we can swap as user continues typing
+  String? _autoSelectedHomeJersey;
+  String? _autoSelectedAwayJersey;
+  // Track last auto-typed token context to detect progressive typing
+  String? _lastAutoTokenNumber;
+  bool? _lastAutoTokenIsHome;
+  String?
+      _lastAutoTokenText; // Track the exact token text that caused selection
 
   // Date
   DateTime selectedDate = DateTime.now();
@@ -834,7 +1004,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Clear custom text fields
       customCelebrationController.clear();
       customDejectionController.clear();
-      customBetweenPlayersController.clear();
+      // Magic bar removed: no-op placeholder
 
       // Clear search bars
       _homeSearchController.clear();
@@ -856,34 +1026,82 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _onCaptionChanged(String value) {
     if (_isProcessingCaptionShortcut) return;
 
-    // Only proceed if the last character typed was an actual space character
-    if (value.isEmpty || value.codeUnitAt(value.length - 1) != 32) return;
+    // Only proceed with expansion if the last character typed was an actual Enter character
+    if (value.isEmpty || value.codeUnitAt(value.length - 1) != 10) {
+      // Check for potential tokens to highlight immediately (only when not expanding)
+      _highlightPotentialTokens(value);
+      return;
+    }
+
+    // Magic input inside caption: support sequences like "h27 hr 1st" or reversed "27h hr 1st"
+    final String beforeFinalNewline = value.substring(0, value.length - 1);
+    final String submittedLine = beforeFinalNewline.split('\n').isNotEmpty
+        ? beforeFinalNewline.split('\n').last.trim()
+        : beforeFinalNewline.trim();
+    final RegExp magicRe = RegExp(
+        r'^(?:(h{1,2}|v{1,2})(\d{1,3})|(\d{1,3})(h{1,2}|v{1,2}))\s+([A-Za-z0-9]+)(?:\s+(\d{1,2}(?:st|nd|rd|th)?))?$');
+    final RegExpMatch? magicMatch = magicRe.firstMatch(submittedLine);
+    if (magicMatch != null) {
+      String? teamPrefix = magicMatch.group(1);
+      String? numAfterTeam = magicMatch.group(2);
+      String? numBeforeTeam = magicMatch.group(3);
+      String? teamSuffix = magicMatch.group(4);
+      String actionToken = (magicMatch.group(5) ?? '').toLowerCase();
+      String inningToken = magicMatch.group(6) ?? '';
+
+      String jersey = numAfterTeam ?? numBeforeTeam ?? '';
+      String? teamToken = teamPrefix ?? teamSuffix;
+      bool? isHomeHint;
+      if (teamToken != null) {
+        isHomeHint = teamToken.toLowerCase().startsWith('h');
+      }
+      if (inningToken.isNotEmpty) {
+        inningToken = inningToken.replaceAll(RegExp(r'(st|nd|rd|th)$'), '');
+      }
+      if (jersey.isNotEmpty) {
+        final String normalizedMagic = [
+          jersey,
+          actionToken,
+          if (inningToken.isNotEmpty) inningToken,
+        ].join(' ').trim();
+
+        _magicTeamHint = isHomeHint;
+        try {
+          _parseMagicInput(normalizedMagic);
+        } finally {
+          _magicTeamHint = null;
+        }
+        return; // handled
+      }
+    }
 
     // Only proceed if rosters are available (except for ag and team tokens)
     if (_homeRoster.isEmpty &&
         _awayRoster.isEmpty &&
-        !value.contains(RegExp(r'\b(ag|ht|vt)\s'))) return;
+        !value.contains(RegExp(r'\b(ag|ht|vt)\n'))) return;
 
-    // Pattern tokens (require space after):
+    // Normalize reversed forms first so subsequent matching works for both orders
+    // e.g., `4i` -> `i4`, `27v` -> `v27`, `27vv` -> `vv27`
+    final normalizedValue = value.replaceAllMapped(
+      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI])\n'),
+      (m) => '${m.group(2)}${m.group(1)}\n',
+    );
+
+    // Pattern tokens (require Enter after):
     // - hNN / hhNN / vNN / vvNN → player tokens
     // - iNN → inning token → "during the first inning"
     // - ht / vt → team names (home / visiting)
     // - ag → "against the [opposite team]" (based on first selected player)
     final regex = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})\s');
-    if (!regex.hasMatch(value)) return;
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})\n');
+    if (!regex.hasMatch(normalizedValue)) return;
 
     String newText = value;
     bool replacedAny = false;
     int? caretAfterReplacement;
     final selection = captionController.selection;
 
-    // Normalize reversed forms: `4i` -> `i4`, `27v` -> `v27`, `27vv` -> `vv27`, etc.
-    // Only tokens with numbers can be reversed
-    final scanValue = value.replaceAllMapped(
-      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI])\s'),
-      (m) => '${m.group(2)}${m.group(1)} ',
-    );
+    // Normalize reversed forms handled earlier via normalizedValue
 
     // Convert numbers to written ordinals for innings (1 -> first, 4 -> fourth, 21 -> 21st)
     String _ordinalWord(int n) {
@@ -945,10 +1163,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final buffer = StringBuffer();
     int lastIndex = 0;
+    final List<TextRange> newHighlightedRanges = [];
 
-    for (final match in regex.allMatches(value)) {
+    for (final match in regex.allMatches(normalizedValue)) {
       if (match.start > lastIndex) {
-        buffer.write(value.substring(lastIndex, match.start));
+        buffer.write(normalizedValue.substring(lastIndex, match.start));
       }
       final prefix = match.group(1)!; // h, hh, v, vv, or i (any case)
       final number = match.group(2)!;
@@ -961,6 +1180,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final ord = _ordinalWord(inningNum);
         final replacement = 'during the $ord inning ';
         buffer.write(replacement);
+        // Highlight the entire inserted phrase
+        newHighlightedRanges.add(
+          TextRange(
+              start: buffer.length - replacement.length, end: buffer.length),
+        );
         if (selection.baseOffset >= match.start &&
             selection.baseOffset <= match.end) {
           caretAfterReplacement = buffer.length;
@@ -1006,6 +1230,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ? 'against the $oppositeTeam '
             : 'against the opposing team ';
         buffer.write(replacement);
+        newHighlightedRanges.add(
+          TextRange(
+              start: buffer.length - replacement.length, end: buffer.length),
+        );
         if (selection.baseOffset >= match.start &&
             selection.baseOffset <= match.end) {
           caretAfterReplacement = buffer.length;
@@ -1023,6 +1251,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ? '$teamName '
             : (lower == 'ht' ? 'Home Team ' : 'Visiting Team ');
         buffer.write(replacement);
+        newHighlightedRanges.add(
+          TextRange(
+              start: buffer.length - replacement.length, end: buffer.length),
+        );
         if (selection.baseOffset >= match.start &&
             selection.baseOffset <= match.end) {
           caretAfterReplacement = buffer.length;
@@ -1067,9 +1299,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             replacement = '$replacement of the $teamName';
           }
         }
-        replacement =
-            '$replacement '; // Add space after all player replacements
+        replacement = '$replacement ';
         buffer.write(replacement);
+        newHighlightedRanges.add(
+          TextRange(
+              start: buffer.length - replacement.length, end: buffer.length),
+        );
+        // Record mapping so deletion can remove from personality
+        _tokenToPlayerName[replacement.trim()] = found.fullName;
         // If caret is within or at end of this token, place it at end of replacement
         if (selection.baseOffset >= match.start &&
             selection.baseOffset <= match.end) {
@@ -1077,16 +1314,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       } else {
         // No match found; keep token
-        buffer.write(value.substring(match.start, match.end));
+        buffer.write(normalizedValue.substring(match.start, match.end));
       }
-      lastIndex = match.end - 1; // Skip the space that triggered the expansion
+      lastIndex = match.end; // Consume the Enter that triggered the expansion
     }
 
     // Append remaining tail
-    if (lastIndex < value.length) {
-      buffer.write(value.substring(lastIndex));
+    if (lastIndex < normalizedValue.length) {
+      buffer.write(normalizedValue.substring(lastIndex));
     }
     newText = buffer.toString();
+    // Safety: remove any stray newlines so subsequent typing doesn't auto-trigger expansions
+    if (newText.contains('\n')) {
+      newText = newText.replaceAll('\n', '');
+    }
 
     if (replacedAny && newText != value) {
       _isProcessingCaptionShortcut = true;
@@ -1098,16 +1339,159 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final clamped = selection.baseOffset.clamp(0, newText.length);
         captionController.selection = TextSelection.collapsed(offset: clamped);
       }
+      // Update highlight ranges for newly inserted phrases
+      _highlightedRanges = newHighlightedRanges;
+      captionController.highlightedRanges = newHighlightedRanges;
+      captionController.invalidRanges = [];
       _isProcessingCaptionShortcut = false;
     }
+  }
+
+  // Remove a player's full name from the personality field text (semicolon-separated, de-duplicated)
+  void _removePlayerFromPersonality(String playerName) {
+    final current = personalityController.text.trim();
+    final parts = current.isEmpty
+        ? <String>[]
+        : current
+            .split(';')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+    parts.removeWhere((p) => p == playerName);
+    personalityController.text = parts.join(';');
+  }
+
+  // Highlight potential tokens as they are typed, including reversed numeric forms
+  void _highlightPotentialTokens(String value) {
+    if (value.isEmpty) {
+      captionController.highlightedRanges = [];
+      captionController.invalidRanges = [];
+      setState(() {});
+      return;
+    }
+
+    final List<TextRange> validRanges = [];
+    final List<TextRange> invalidRanges = [];
+
+    // Forward tokens: h, hh, v, vv, i, ht, vt, ag + optional number (for player/inning)
+    final forward = RegExp(
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})');
+    for (final m in forward.allMatches(value)) {
+      final prefix = m.group(1)!.toLowerCase();
+      final number = m.group(2) ?? '';
+
+      bool isPlayerToken =
+          (prefix == 'h' || prefix == 'hh' || prefix == 'v' || prefix == 'vv');
+      bool isValid = false;
+      if (prefix == 'i') {
+        isValid = number.isNotEmpty; // inning requires a number
+      } else if (prefix == 'ht' || prefix == 'vt' || prefix == 'ag') {
+        isValid = true; // no number required
+      } else if (isPlayerToken && number.isNotEmpty) {
+        final isHome = prefix.startsWith('h');
+        final roster = isHome ? _homeRoster : _awayRoster;
+        isValid = roster.any((p) => p.jerseyNumber == number);
+      }
+
+      final range = TextRange(start: m.start, end: m.end);
+      if (isValid) {
+        validRanges.add(range);
+      } else if (isPlayerToken && number.isNotEmpty) {
+        invalidRanges.add(range);
+      }
+    }
+
+    // Reversed numeric tokens at the end: NN(h|hh|v|vv|i)
+    final reverse = RegExp(r'(?:^|\b)(\d{1,3})(([hH]{1,2})|([vV]{1,2})|[iI])');
+    for (final m in reverse.allMatches(value)) {
+      final number = m.group(1) ?? '';
+      final suffix = (m.group(2) ?? '').toLowerCase();
+
+      bool isPlayerToken =
+          (suffix == 'h' || suffix == 'hh' || suffix == 'v' || suffix == 'vv');
+      bool isValid = false;
+      if (suffix == 'i') {
+        isValid = number.isNotEmpty;
+      } else if (isPlayerToken && number.isNotEmpty) {
+        final isHome = suffix.startsWith('h');
+        final roster = isHome ? _homeRoster : _awayRoster;
+        isValid = roster.any((p) => p.jerseyNumber == number);
+      }
+
+      final range = TextRange(start: m.start, end: m.end);
+      if (isValid) {
+        validRanges.add(range);
+      } else if (isPlayerToken) {
+        invalidRanges.add(range);
+      }
+    }
+
+    captionController.highlightedRanges = validRanges;
+    captionController.invalidRanges = invalidRanges;
+    _highlightedRanges = validRanges;
+    setState(() {});
+  }
+
+  // Minimal chip selection helpers (safe no-ops if roster/players missing)
+  void _selectPlayerChipByNumber({
+    required bool isHomeTeam,
+    required String jerseyNumber,
+    bool isProgressive = false,
+  }) {
+    final roster = isHomeTeam ? _homeRoster : _awayRoster;
+    final name = roster
+        .firstWhere(
+          (p) => p.jerseyNumber == jerseyNumber,
+          orElse: () => Player(
+              fullName: '', firstName: '', displayName: '', jerseyNumber: ''),
+        )
+        .displayName;
+    if (name.isEmpty) return;
+    final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+    set.add(name);
+    _firstTeamSelected ??= isHomeTeam;
+    _firstPlayerSelected ??= name;
+    if (isHomeTeam) {
+      _autoSelectedHomeJersey = jerseyNumber;
+    } else {
+      _autoSelectedAwayJersey = jerseyNumber;
+    }
+    setState(() {});
+  }
+
+  void _unselectAutoSelectedByToken({
+    required bool isHomeTeam,
+    required String jerseyNumber,
+  }) {
+    final roster = isHomeTeam ? _homeRoster : _awayRoster;
+    final name = roster
+        .firstWhere(
+          (p) => p.jerseyNumber == jerseyNumber,
+          orElse: () => Player(
+              fullName: '', firstName: '', displayName: '', jerseyNumber: ''),
+        )
+        .displayName;
+    if (name.isEmpty) return;
+    final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+    set.remove(name);
+    if (_firstPlayerSelected == name) {
+      _firstPlayerSelected = null;
+      _firstTeamSelected = null;
+    }
+    if (isHomeTeam && _autoSelectedHomeJersey == jerseyNumber) {
+      _autoSelectedHomeJersey = null;
+    }
+    if (!isHomeTeam && _autoSelectedAwayJersey == jerseyNumber) {
+      _autoSelectedAwayJersey = null;
+    }
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.all(3.0),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
       ),
@@ -1116,7 +1500,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Caption Builder Section
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(0),
               child: Row(
                 children: [
                   // Left side: Caption, Personality, and Player/Verb area (70%)
@@ -1165,6 +1549,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     color: Colors.black87,
                                   ),
                                 ),
+                                inputFormatters: [
+                                  HighlightedTokenDeletionFormatter(
+                                    getRanges: () => _highlightedRanges,
+                                    onTokenDeleted: (deletedRange, tokenText) {
+                                      // Update personality if this was a player expansion
+                                      final playerName =
+                                          _tokenToPlayerName[tokenText.trim()];
+                                      if (playerName != null) {
+                                        _removePlayerFromPersonality(
+                                            playerName);
+                                        // Remove mapping for this exact token text
+                                        _tokenToPlayerName
+                                            .remove(tokenText.trim());
+                                      }
+
+                                      // Rebuild highlight ranges after deletion
+                                      final int removedLen =
+                                          deletedRange.end - deletedRange.start;
+                                      final List<TextRange> updated = [];
+                                      for (final r in _highlightedRanges) {
+                                        // Skip the deleted range itself
+                                        if (r.start >= deletedRange.start &&
+                                            r.end <= deletedRange.end) {
+                                          continue;
+                                        }
+                                        if (r.start >= deletedRange.end) {
+                                          updated.add(TextRange(
+                                              start: r.start - removedLen,
+                                              end: r.end - removedLen));
+                                        } else {
+                                          updated.add(r);
+                                        }
+                                      }
+                                      _highlightedRanges = updated;
+                                      if (captionController
+                                          is HighlightingTextEditingController) {
+                                        (captionController
+                                                as HighlightingTextEditingController)
+                                            .highlightedRanges = updated;
+                                        (captionController
+                                                as HighlightingTextEditingController)
+                                            .invalidRanges = [];
+                                      }
+                                      setState(() {});
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 9),
@@ -1236,8 +1667,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCaptionBuildingSection() {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 300),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
@@ -1314,7 +1744,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Container(
           width: double.infinity,
           height: 80,
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.only(left: 8, right: 8, top: 8),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade400),
             borderRadius: BorderRadius.circular(6),
@@ -1414,7 +1844,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.only(left: 12, right: 12, top: 12),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade400),
             borderRadius: BorderRadius.circular(6),
@@ -2324,262 +2754,160 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         // // Custom text field for between players
                                                                         Row(
                                                                           children: [
+                                                                            // LEFT: Reset
                                                                             Expanded(
-                                                                              flex: 7, // 35% of container width
-                                                                              child: Row(
-                                                                                children: [
-                                                                                  Expanded(
-                                                                                    child: Container(
-                                                                                      height: 32,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: Colors.white,
-                                                                                        borderRadius: BorderRadius.circular(2),
-                                                                                        border: Border.all(color: Colors.grey.shade300),
-                                                                                      ),
-                                                                                      child: TextField(
-                                                                                        controller: customBetweenPlayersController,
-                                                                                        cursorWidth: 1.5,
-                                                                                        cursorHeight: 16,
-                                                                                        style: const TextStyle(fontSize: 12, height: 2.3),
-                                                                                        decoration: InputDecoration(
-                                                                                          hintText: _isPlayerSearchMode ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...' : 'write custom verb here',
-                                                                                          border: InputBorder.none,
-                                                                                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                                                          isDense: true,
-                                                                                        ),
-                                                                                        onChanged: (value) {
-                                                                                          // Check for magic input format (e.g., "27 hr 1")
-                                                                                          if (_isMagicInput(value)) {
-                                                                                            _parseMagicInput(value);
-                                                                                            // Don't return - let the text stay in the field
-                                                                                          }
-
-                                                                                          setState(() {
-                                                                                            if (_isPlayerSearchMode && _isNumeric(value)) {
-                                                                                              // print(
-                                                                                              //     'DEBUG: Calling _filterPlayersByNumber');
-                                                                                              _filterPlayersByNumber(value);
-                                                                                            } else if (_isPlayerSearchMode && value.isEmpty) {
-                                                                                              // print(
-                                                                                              //     'DEBUG: Clearing filtered players');
-                                                                                              _filteredPlayers.clear();
-                                                                                            } else if (!_isPlayerSearchMode) {
-                                                                                              // When in custom verb mode, show inning selector
-                                                                                              if (value.isNotEmpty) {
-                                                                                                setState(() {
-                                                                                                  _showCustomTextInningSelector = true;
-                                                                                                });
-                                                                                              } else {
-                                                                                                setState(() {
-                                                                                                  _showCustomTextInningSelector = false;
-                                                                                                });
-                                                                                              }
-
-                                                                                              // Update caption with custom verb if we have the original caption
-                                                                                              if (value.isNotEmpty && _originalCaptionBeforeCustomVerb != null) {
-                                                                                                String originalCaption = _originalCaptionBeforeCustomVerb!;
-                                                                                                List<String> allSelectedPlayers = [];
-                                                                                                allSelectedPlayers.addAll(selectedHomePlayers);
-                                                                                                allSelectedPlayers.addAll(selectedAwayPlayers);
-
-                                                                                                if (allSelectedPlayers.isNotEmpty) {
-                                                                                                  String playerName = allSelectedPlayers.first;
-
-                                                                                                  // Find the player in the caption and insert custom verb after team
-                                                                                                  if (originalCaption.contains(playerName)) {
-                                                                                                    int playerIndex = originalCaption.indexOf(playerName);
-                                                                                                    if (playerIndex != -1) {
-                                                                                                      String beforePlayer = originalCaption.substring(0, playerIndex);
-                                                                                                      String afterPlayer = originalCaption.substring(playerIndex + playerName.length);
-
-                                                                                                      // Find "against" to insert before it
-                                                                                                      int againstIndex = afterPlayer.indexOf(' against ');
-                                                                                                      if (againstIndex != -1) {
-                                                                                                        String beforeAgainst = afterPlayer.substring(0, againstIndex);
-                                                                                                        String afterAgainst = afterPlayer.substring(againstIndex);
-                                                                                                        captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
-                                                                                                      } else {
-                                                                                                        // Fallback
-                                                                                                        captionController.text = '$beforePlayer$playerName $value';
-                                                                                                      }
-                                                                                                    }
-                                                                                                  }
-                                                                                                }
-                                                                                              }
-                                                                                            }
-                                                                                          });
-                                                                                        },
-                                                                                      ),
+                                                                              child: Align(
+                                                                                alignment: Alignment.centerLeft,
+                                                                                child: CustomButton(
+                                                                                  onTap: _resetCaption,
+                                                                                  child: Container(
+                                                                                    height: 28,
+                                                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                    decoration: BoxDecoration(
+                                                                                      color: Colors.grey.shade100,
+                                                                                      borderRadius: BorderRadius.circular(4),
+                                                                                      border: Border.all(color: Colors.grey.shade300),
+                                                                                    ),
+                                                                                    child: Row(
+                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                                      children: [
+                                                                                        Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
+                                                                                        const SizedBox(width: 2),
+                                                                                        Text('Reset', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+                                                                                      ],
                                                                                     ),
                                                                                   ),
-                                                                                ],
+                                                                                ),
                                                                               ),
                                                                             ),
+                                                                            // CENTER: Prev, Copy, Paste, Next
                                                                             Expanded(
-                                                                              flex: 13, // Other 65% for action buttons
-                                                                              child: Row(
-                                                                                mainAxisAlignment: MainAxisAlignment.end,
-                                                                                children: [
-                                                                                  const SizedBox(width: 20),
-                                                                                  // Reset button
-                                                                                  CustomButton(
-                                                                                    onTap: _resetCaption,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: Colors.grey.shade100,
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(color: Colors.grey.shade300),
-                                                                                      ),
-                                                                                      child: Row(
-                                                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                                                        mainAxisSize: MainAxisSize.min,
-                                                                                        children: [
-                                                                                          Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
-                                                                                          const SizedBox(width: 2),
-                                                                                          Text('Reset', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-                                                                                        ],
+                                                                              child: Center(
+                                                                                child: Row(
+                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                  children: [
+                                                                                    // Prev
+                                                                                    CustomButton(
+                                                                                      onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                                                                                          ? () async {
+                                                                                              if (widget.onSaveIptc != null) {
+                                                                                                widget.onSaveIptc!();
+                                                                                              }
+                                                                                              widget.onPreviousImage?.call();
+                                                                                            }
+                                                                                          : null,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade100 : Colors.grey.shade200,
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade300 : Colors.grey.shade400),
+                                                                                        ),
+                                                                                        child: const Icon(Icons.arrow_back, size: 14),
                                                                                       ),
                                                                                     ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 24),
-                                                                                  // Prev button
-                                                                                  CustomButton(
-                                                                                    onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
-                                                                                        ? () async {
-                                                                                            if (widget.onSaveIptc != null) {
-                                                                                              widget.onSaveIptc!();
+                                                                                    const SizedBox(width: 2),
+                                                                                    // Copy
+                                                                                    CustomButton(
+                                                                                      onTap: _copyMetadataFromCaptionWidget,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: Colors.blue.shade50,
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: Colors.blue.shade200),
+                                                                                        ),
+                                                                                        child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
+                                                                                      ),
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                    // Paste
+                                                                                    CustomButton(
+                                                                                      onTap: _pasteMetadataToCaptionWidget,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: Colors.green.shade50,
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: Colors.green.shade200),
+                                                                                        ),
+                                                                                        child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
+                                                                                      ),
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                    // Next
+                                                                                    CustomButton(
+                                                                                      onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
+                                                                                          ? () async {
+                                                                                              if (widget.onSaveIptc != null) {
+                                                                                                widget.onSaveIptc!();
+                                                                                              }
+                                                                                              widget.onNextImage?.call();
                                                                                             }
-                                                                                            widget.onPreviousImage?.call();
-                                                                                          }
-                                                                                        : null,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade100 : Colors.grey.shade200,
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(
-                                                                                          color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade300 : Colors.grey.shade400,
+                                                                                          : null,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade100 : Colors.grey.shade200,
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade300 : Colors.grey.shade400),
+                                                                                        ),
+                                                                                        child: const Icon(Icons.arrow_forward, size: 14),
+                                                                                      ),
+                                                                                    ),
+                                                                                  ],
+                                                                                ),
+                                                                              ),
+                                                                            ),
+                                                                            // RIGHT: FTP settings + FTP
+                                                                            Expanded(
+                                                                              child: Align(
+                                                                                alignment: Alignment.centerRight,
+                                                                                child: Row(
+                                                                                  mainAxisSize: MainAxisSize.min,
+                                                                                  children: [
+                                                                                    // Settings
+                                                                                    CustomButton(
+                                                                                      onTap: _showFtpSettings,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: const Color(0xFF4A90E2),
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: const Color(0xFF4A90E2)),
+                                                                                        ),
+                                                                                        child: const Icon(Icons.settings, size: 16, color: Colors.white),
+                                                                                      ),
+                                                                                    ),
+                                                                                    const SizedBox(width: 2),
+                                                                                    // FTP
+                                                                                    CustomButton(
+                                                                                      onTap: _disableFtp ? null : _onFtpPressed,
+                                                                                      child: Container(
+                                                                                        height: 28,
+                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                                                                        decoration: BoxDecoration(
+                                                                                          color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC),
+                                                                                          borderRadius: BorderRadius.circular(4),
+                                                                                          border: Border.all(color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC)),
+                                                                                        ),
+                                                                                        child: Row(
+                                                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                                                          children: [
+                                                                                            Icon(Icons.rocket_launch, size: 14, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
+                                                                                            const SizedBox(width: 2),
+                                                                                            Text(_disableFtp ? 'FTP OFF' : (_currentFtpProfile != null ? 'FTP: $_currentFtpProfile' : 'FTP'), style: TextStyle(fontSize: 10, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
+                                                                                          ],
                                                                                         ),
                                                                                       ),
-                                                                                      child: Row(
-                                                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                                                        children: [
-                                                                                          Icon(
-                                                                                            Icons.arrow_back,
-                                                                                            size: 14,
-                                                                                            color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade700 : Colors.grey.shade500,
-                                                                                          ),
-                                                                                        ],
-                                                                                      ),
                                                                                     ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Copy button
-                                                                                  CustomButton(
-                                                                                    onTap: () {
-                                                                                      _copyMetadataFromCaptionWidget();
-                                                                                    },
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: Colors.blue.shade50,
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(color: Colors.blue.shade200),
-                                                                                      ),
-                                                                                      child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Paste button
-                                                                                  CustomButton(
-                                                                                    onTap: _pasteMetadataToCaptionWidget,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: Colors.green.shade50,
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(color: Colors.green.shade200),
-                                                                                      ),
-                                                                                      child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // Next button
-                                                                                  CustomButton(
-                                                                                    onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
-                                                                                        ? () async {
-                                                                                            if (widget.onSaveIptc != null) {
-                                                                                              widget.onSaveIptc!();
-                                                                                            }
-                                                                                            widget.onNextImage?.call();
-                                                                                          }
-                                                                                        : null,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade100 : Colors.grey.shade200,
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(
-                                                                                          color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade300 : Colors.grey.shade400,
-                                                                                        ),
-                                                                                      ),
-                                                                                      child: Row(
-                                                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                                                        children: [
-                                                                                          Icon(
-                                                                                            Icons.arrow_forward,
-                                                                                            size: 14,
-                                                                                            color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade700 : Colors.grey.shade500,
-                                                                                          ),
-                                                                                        ],
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 20),
-                                                                                  // Settings button
-                                                                                  CustomButton(
-                                                                                    onTap: _showFtpSettings,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: const Color(0xFF4A90E2),
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(color: const Color(0xFF4A90E2)),
-                                                                                      ),
-                                                                                      child: const Icon(Icons.settings, size: 16, color: Colors.white),
-                                                                                    ),
-                                                                                  ),
-                                                                                  const SizedBox(width: 2),
-                                                                                  // FTP button
-                                                                                  CustomButton(
-                                                                                    onTap: _disableFtp ? null : _onFtpPressed,
-                                                                                    child: Container(
-                                                                                      height: 28,
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                                                                      decoration: BoxDecoration(
-                                                                                        color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC),
-                                                                                        borderRadius: BorderRadius.circular(4),
-                                                                                        border: Border.all(color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC)),
-                                                                                      ),
-                                                                                      child: Row(
-                                                                                        mainAxisAlignment: MainAxisAlignment.center,
-                                                                                        children: [
-                                                                                          Icon(Icons.rocket_launch, size: 14, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
-                                                                                          const SizedBox(width: 2),
-                                                                                          Text(_disableFtp ? 'FTP OFF' : (_currentFtpProfile != null ? 'FTP: $_currentFtpProfile' : 'FTP'), style: TextStyle(fontSize: 10, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
-                                                                                        ],
-                                                                                      ),
-                                                                                    ),
-                                                                                  ),
-                                                                                ],
+                                                                                  ],
+                                                                                ),
                                                                               ),
                                                                             ),
                                                                           ],
@@ -2701,9 +3029,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             height:
                                                                                 4), // Padding between Magic Bar and verb categories
 
-                                                                        // Verb categories (hidden when custom text is being used, when inning selector is shown)
-                                                                        if (customBetweenPlayersController.text.isEmpty &&
-                                                                            !_showCustomTextInningSelector) ...[
+                                                                        // Verb categories (always visible now that magic bar is removed)
+                                                                        if (!_showCustomTextInningSelector) ...[
                                                                           SizedBox(
                                                                             height:
                                                                                 500, // Increased height for verb area
@@ -3037,11 +3364,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
             // Clear magic bar text for Home Run to ensure verb categories are hidden
             if (verb == 'Home Run') {
-              customBetweenPlayersController.clear();
+              // Magic bar removed: no-op
               print('DEBUG: Home Run selected - cleared magic bar text');
               print('DEBUG: _selectedVerb = $_selectedVerb');
-              print(
-                  'DEBUG: customBetweenPlayersController.text = "${customBetweenPlayersController.text}"');
+              print('DEBUG: customBetweenPlayersController.text = ""');
             }
           }
         });
@@ -3843,7 +4169,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _waitingForHomeVisitorChoice = true;
 
         // Store the original magic input text before showing dialog
-        final originalText = customBetweenPlayersController.text;
+        final originalText = '';
         print('DEBUG: Storing original text: "$originalText"');
 
         // Show popup dialog for home/visitor choice
@@ -4291,7 +4617,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
         // Restore the original magic input text
-        customBetweenPlayersController.text = originalMagicInput;
+        // Magic bar removed
       });
 
       // Process the magic input with the selected player
@@ -4333,7 +4659,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
         // Restore the original magic input text and keep it editable
-        customBetweenPlayersController.text = originalText;
+        // Magic bar removed
       });
 
       // Process the magic input with the selected player but don't clear the magic bar
@@ -5167,9 +5493,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Add custom text between players if provided (but not magic input)
     String customTextPart = '';
-    if (customBetweenPlayersController.text.isNotEmpty &&
-        !_isMagicInput(customBetweenPlayersController.text)) {
-      customTextPart = ' ${customBetweenPlayersController.text}';
+    // Magic bar removed: no custom text part from magic bar
+    if (false) {
+      customTextPart = '';
     }
 
     // Build the final caption
@@ -6274,7 +6600,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       captionController.clear();
       personalityController.clear();
       customCelebrationController.clear();
-      customBetweenPlayersController.clear();
+      // Magic bar removed
       _homeSearchController.clear();
       _awaySearchController.clear();
       _showCustomTextInningSelector = false;
@@ -9466,7 +9792,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             children: [
               // Text field
               TextField(
-                controller: customBetweenPlayersController,
+                // Magic bar removed
+                controller: TextEditingController(),
                 enabled:
                     !_waitingForHomeVisitorChoice, // Disable when waiting for choice
                 cursorWidth: 1.5,
@@ -9572,8 +9899,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 },
                 onEditingComplete: () {
                   // Update caption when editing is complete
-                  if (!_isPlayerSearchMode && customBetweenPlayersController.text.isNotEmpty) {
-                    String customText = customBetweenPlayersController.text;
+                   if (!_isPlayerSearchMode) {
+                     String customText = '';
                     String currentCaption = captionController.text;
                     
                     // Find the selected player name
@@ -11217,7 +11544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _finishPlayerSelection() {
     setState(() {
       _isPlayerSearchMode = false;
-      customBetweenPlayersController.text = '';
+      // Magic bar removed
       // Clear any existing inning selection when switching to custom verb mode
       _showCustomTextInningSelector = false;
     });
@@ -11229,7 +11556,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _filteredPlayers.clear();
       _selectedPlayerNumbers.clear();
       _playerSearchText = '';
-      customBetweenPlayersController.clear();
+      // Magic bar removed
       // Clear custom verb mode state
       _showCustomTextInningSelector = false;
       _originalCaptionBeforeCustomVerb = null; // Clear stored caption

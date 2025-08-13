@@ -891,12 +891,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         },
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(8.0, 2.0, 8.0, 8.0),
+        padding: const EdgeInsets.fromLTRB(4.0, 1.0, 4.0, 4.0),
         child: Column(
           children: [
-            // TOP ROW - Reduced height (43% instead of 50%)
+            // TOP ROW - Increased height (40% instead of 35%)
             SizedBox(
-              height: MediaQuery.of(context).size.height * 0.43,
+              height: MediaQuery.of(context).size.height * 0.40,
               child: Row(
                 children: [
                   // TOP LEFT BOX - Picture Preview
@@ -921,6 +921,25 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             _thumbCenterRequestId++;
                           });
                           _onImageSelected(currentIndex - 1);
+                        }
+                      },
+                      // Quick navigation (no thumbnail centering or extra state churn)
+                      onQuickNextImage: () {
+                        print('DEBUG: Quick next image called');
+                        if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            currentIndex = currentIndex + 1;
+                          });
+                          _loadMetadata();
+                        }
+                      },
+                      onQuickPreviousImage: () {
+                        print('DEBUG: Quick previous image called');
+                        if (currentIndex > 0) {
+                          setState(() {
+                            currentIndex = currentIndex - 1;
+                          });
+                          _loadMetadata();
                         }
                       },
                       onSaveIptc: _saveIptcMetadata,
@@ -949,7 +968,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             ),
 
-            // BOTTOM ROW - Increased height (60% instead of 50%)
+            // BOTTOM ROW - Increased height (68% instead of 60%)
             Expanded(
               child: Row(
                 children: [

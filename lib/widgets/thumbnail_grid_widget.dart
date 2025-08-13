@@ -297,7 +297,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     if (widget.imagePaths.isEmpty) {
       return Container(
-        margin: const EdgeInsets.all(8.0),
+        margin: const EdgeInsets.all(3.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
           borderRadius: BorderRadius.circular(8),
@@ -333,7 +333,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     // Show loading state while thumbnails are being generated
     if (_isLoadingThumbnails) {
       return Container(
-        margin: const EdgeInsets.all(8.0),
+        margin: const EdgeInsets.all(3.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
           borderRadius: BorderRadius.circular(8),
@@ -379,7 +379,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     _visiblePaths = visiblePaths;
 
     return Container(
-      margin: const EdgeInsets.all(8.0),
+      margin: const EdgeInsets.all(3.0),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.circular(8),
@@ -387,37 +387,6 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       ),
       child: Column(
         children: [
-          // Header with image count only
-          Container(
-            padding:
-                const EdgeInsets.all(4), // Match image preview header padding
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50, // Match image preview header color
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
-              ),
-            ),
-            child: SizedBox(
-              height: 20, // Match image preview header height
-              child: Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.center, // Center the counter
-                children: [
-                  // Thumbnail counter
-                  Text(
-                    'Thumbnails (${widget.currentIndex + 1}/${widget.imagePaths.length})',
-                    style: const TextStyle(
-                      fontSize: 10, // Match image preview header font size
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
           // Thumbnail grid
           Expanded(
             child: GridView.builder(
@@ -715,7 +684,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               _ensureVisibleAfterLayout();
                             },
                             constraints: const BoxConstraints(
-                              minWidth: 90,
+                              minWidth: 80,
                               minHeight: 24,
                             ),
                             selectedBorderColor: Colors.grey.shade600,
@@ -725,8 +694,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             textStyle: const TextStyle(fontSize: 11),
                             borderRadius: BorderRadius.circular(4),
                             children: const [
-                              Text('Hide Sent'),
-                              Text('Show Sent'),
+                              Text('Hide'),
+                              Text('Show'),
                             ],
                           ),
                         ],
@@ -756,7 +725,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           _ensureVisibleAfterLayout();
                         },
                         constraints:
-                            const BoxConstraints(minWidth: 70, minHeight: 24),
+                            const BoxConstraints(minWidth: 60, minHeight: 24),
                         selectedBorderColor: Colors.grey.shade600,
                         selectedColor: Colors.black,
                         fillColor: Colors.grey.shade200,
@@ -769,7 +738,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           Text('Locked'),
                         ],
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       // Label filter: Any / Red / Yellow / Green / Blue / Purple
                       DropdownButton<String>(
                         value: _selectedLabel ?? 'Any',
