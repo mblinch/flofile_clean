@@ -1743,10 +1743,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           children: [
                                             // Magic bar (left side)
                                             Expanded(
-                                              flex: 3,
+                                              flex: 1,
                                               child: Container(
                                                 margin: const EdgeInsets.only(
                                                     right: 8),
+                                                padding: const EdgeInsets.only(
+                                                    left: 4),
                                                 child: TextField(
                                                   controller:
                                                       customBetweenPlayersController,
@@ -11816,34 +11818,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
           const SizedBox(width: 4),
           // Next
-          CustomButton(
-            onTap: (widget.currentIndex != null &&
-                    widget.totalImages != null &&
-                    widget.currentIndex! < widget.totalImages! - 1)
-                ? () async {
-                    if (widget.onSaveIptc != null) {
-                      widget.onSaveIptc!();
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: CustomButton(
+              onTap: (widget.currentIndex != null &&
+                      widget.totalImages != null &&
+                      widget.currentIndex! < widget.totalImages! - 1)
+                  ? () async {
+                      if (widget.onSaveIptc != null) {
+                        widget.onSaveIptc!();
+                      }
+                      widget.onNextImage?.call();
                     }
-                    widget.onNextImage?.call();
-                  }
-                : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: (widget.currentIndex != null &&
-                        widget.totalImages != null &&
-                        widget.currentIndex! < widget.totalImages! - 1)
-                    ? Colors.grey.shade100
-                    : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                    color: (widget.currentIndex != null &&
-                            widget.totalImages != null &&
-                            widget.currentIndex! < widget.totalImages! - 1)
-                        ? Colors.grey.shade300
-                        : Colors.grey.shade400),
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (widget.currentIndex != null &&
+                          widget.totalImages != null &&
+                          widget.currentIndex! < widget.totalImages! - 1)
+                      ? Colors.grey.shade100
+                      : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                      color: (widget.currentIndex != null &&
+                              widget.totalImages != null &&
+                              widget.currentIndex! < widget.totalImages! - 1)
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade400),
+                ),
+                child: const Icon(Icons.arrow_forward, size: 14),
               ),
-              child: const Icon(Icons.arrow_forward, size: 14),
             ),
           ),
         ],
