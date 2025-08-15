@@ -1444,6 +1444,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {});
   }
 
+  void _handleHrOptionInput(String value) {
+    final token = value.trim().toLowerCase();
+    if (token.isEmpty) return;
+    final normalized = token.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    // Accept partials to be forgiving
+    String? hrType;
+    if ('solo'.startsWith(normalized)) {
+      hrType = 'Solo';
+    } else if ('tworun'.startsWith(normalized) ||
+        normalized == '2' ||
+        normalized == '2run') {
+      hrType = 'Two-Run';
+    } else if ('threerun'.startsWith(normalized) ||
+        normalized == '3' ||
+        normalized == '3run') {
+      hrType = 'Three-Run';
+    } else if ('grandslam'.startsWith(normalized) ||
+        normalized == 'grand' ||
+        normalized == 'gs') {
+      hrType = 'Grand Slam';
+    }
+
+    if (hrType != null) {
+      setState(() {
+        _selectedVerb = 'Home Run';
+        _selectedActionVerb = 'Home Run';
+        _selectedHomeRunType = hrType;
+        switch (hrType) {
+          case 'Solo':
+            _rbiCount = 1;
+            break;
+          case 'Two-Run':
+            _rbiCount = 2;
+            break;
+          case 'Three-Run':
+            _rbiCount = 3;
+            break;
+          case 'Grand Slam':
+            _rbiCount = 4;
+            break;
+        }
+      });
+      _updateCaption();
+    }
+  }
+
   // Minimal chip selection helpers (safe no-ops if roster/players missing)
   void _selectPlayerChipByNumber({
     required bool isHomeTeam,
@@ -4032,7 +4079,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (input.isEmpty) return false;
 
     final parts = input.trim().toLowerCase().split(' ');
-    if (parts.length < 2) return false;
+    // Allow single-token HR type inputs like "solo", "two-run", etc.
+    if (parts.length == 1) {
+      const hrTypeTokens = {
+        'solo',
+        'two-run',
+        'tworun',
+        'three-run',
+        'threerun',
+        'grand',
+        'grandslam',
+        'gs',
+      };
+      return hrTypeTokens.contains(parts[0]);
+    }
 
     // Check if first part is a number OR a team prefix + number (like h27, v23)
     String firstPart = parts[0];
@@ -4063,6 +4123,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       '2b',
       'triple',
       '3b',
+      // Support HR type tokens as actions in multi-part inputs too
+      'solo', 'two-run', 'tworun', 'three-run', 'threerun', 'grand',
+      'grandslam', 'gs',
       'walks',
       'walk',
       'bb',
@@ -4173,8 +4236,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Parse the magic input
     final parts = input.trim().toLowerCase().split(' ');
     print('DEBUG: Parts: $parts');
-    if (parts.length < 2) {
-      print('DEBUG: Not enough parts, returning');
+    // Handle single-token HR type inputs like "solo", "two-run", etc.
+    if (parts.length == 1) {
+      final token = parts[0];
+      if ({
+        'solo',
+        'two-run',
+        'tworun',
+        'three-run',
+        'threerun',
+        'grand',
+        'grandslam',
+        'gs'
+      }.contains(token)) {
+        setState(() {
+          _selectedVerb = 'Home Run';
+          _selectedActionVerb = 'Home Run';
+          // Map token to HR type and RBI count
+          if (token == 'solo') {
+            _selectedHomeRunType = 'Solo';
+            _rbiCount = 1;
+          } else if (token == 'two-run' || token == 'tworun') {
+            _selectedHomeRunType = 'Two-Run';
+            _rbiCount = 2;
+          } else if (token == 'three-run' || token == 'threerun') {
+            _selectedHomeRunType = 'Three-Run';
+            _rbiCount = 3;
+          } else {
+            _selectedHomeRunType = 'Grand Slam';
+            _rbiCount = 4;
+          }
+        });
+        _updateCaption();
+        return;
+      }
+      print('DEBUG: Single token not recognized as HR type');
       return;
     }
 
@@ -4285,13 +4381,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Parse action and inning
     String action = '';
     int? inning;
+    String? homeRunType; // Solo / Two-Run / Three-Run / Grand Slam
 
     for (int i = 1; i < parts.length; i++) {
       final part = parts[i];
 
-      // Check for inning number
+      // Check for inning number (supports ordinals like 1st, 2nd, etc.)
       if (_isNumeric(part)) {
         inning = int.parse(part);
+        continue;
+      }
+      final ord = RegExp(r'^(\d+)(st|nd|rd|th)$').firstMatch(part);
+      if (ord != null) {
+        inning = int.parse(ord.group(1)!);
+        continue;
+      }
+
+      // Check for home run type tokens
+      if (part == 'solo' ||
+          part == 'two-run' ||
+          part == 'tworun' ||
+          part == 'three-run' ||
+          part == 'threerun' ||
+          part == 'grand' ||
+          part == 'grandslam' ||
+          part == 'gs') {
+        // Ensure action is Home Run if HR type is provided
+        if (action.isEmpty) {
+          action = 'Home Run';
+        }
+        if (part == 'solo') {
+          homeRunType = 'Solo';
+        } else if (part == 'two-run' || part == 'tworun') {
+          homeRunType = 'Two-Run';
+        } else if (part == 'three-run' || part == 'threerun') {
+          homeRunType = 'Three-Run';
+        } else {
+          homeRunType = 'Grand Slam';
+        }
         continue;
       }
 
@@ -4460,17 +4587,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedActionVerb = action;
         _selectedRbiInning = inning;
 
-        // Only set RBI count if inning is provided (indicating RBI was specified)
-        // For magic input like "27 hr", don't set RBI count
-        // For magic input like "27 hr 1", set RBI count to 1
-        if (inning != null &&
-            (action == 'Home Run' ||
-                action == 'Single' ||
-                action == 'Double' ||
-                action == 'Triple')) {
-          _rbiCount = inning; // Use the inning number as RBI count
+        // Apply Home Run type if provided
+        if (homeRunType != null) {
+          _selectedHomeRunType = homeRunType;
+          // Set RBI count based on HR type
+          switch (homeRunType) {
+            case 'Solo':
+              _rbiCount = 1;
+              break;
+            case 'Two-Run':
+              _rbiCount = 2;
+              break;
+            case 'Three-Run':
+              _rbiCount = 3;
+              break;
+            case 'Grand Slam':
+              _rbiCount = 4;
+              break;
+          }
         } else {
-          _rbiCount = null; // Don't set RBI count for solo actions
+          // Only set RBI count if inning is provided (legacy syntax like "27 hr 1")
+          if (inning != null &&
+              (action == 'Home Run' ||
+                  action == 'Single' ||
+                  action == 'Double' ||
+                  action == 'Triple')) {
+            _rbiCount = inning; // Interpret trailing number as RBI count
+          } else {
+            _rbiCount = null;
+          }
         }
       });
     }
@@ -9976,6 +10121,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Quick HR type input
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: SizedBox(
+            height: 28,
+            child: TextField(
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'Type: solo, two-run, three-run, grand slam',
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.blue.shade400),
+                ),
+              ),
+              onChanged: (value) {
+                _handleHrOptionInput(value);
+              },
+            ),
+          ),
+        ),
         // Magic bar (always visible) - COMMENTED OUT for Home Run to hide magic bar
         /* Container(
           width: double.infinity,
