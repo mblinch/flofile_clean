@@ -9632,7 +9632,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Determine which team the main player is from
-    final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
+    // Check if any home player contains the first player's name
+    final isMainPlayerHome = selectedHomePlayers.any((player) =>
+        _removeJerseyNumberFromName(player) == _firstPlayerSelected);
     print('DEBUG: isMainPlayerHome: $isMainPlayerHome');
 
     // Return the opposing team name
