@@ -1033,48 +1033,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
-    // Magic input inside caption: support sequences like "h27 hr 1st" or reversed "27h hr 1st"
-    final String beforeFinalSpace = value.substring(0, value.length - 1);
-    final String submittedLine = beforeFinalSpace.split(' ').isNotEmpty
-        ? beforeFinalSpace.split(' ').last.trim()
-        : beforeFinalSpace.trim();
-    final RegExp magicRe = RegExp(
-        r'^(?:(h{1,2}|v{1,2})(\d{1,3})|(\d{1,3})(h{1,2}|v{1,2}))\s+([A-Za-z0-9]+)(?:\s+(\d{1,2}(?:st|nd|rd|th)?))?$');
-    final RegExpMatch? magicMatch = magicRe.firstMatch(submittedLine);
-    if (magicMatch != null) {
-      String? teamPrefix = magicMatch.group(1);
-      String? numAfterTeam = magicMatch.group(2);
-      String? numBeforeTeam = magicMatch.group(3);
-      String? teamSuffix = magicMatch.group(4);
-      String actionToken = (magicMatch.group(5) ?? '').toLowerCase();
-      String inningToken = magicMatch.group(6) ?? '';
-
-      String jersey = numAfterTeam ?? numBeforeTeam ?? '';
-      String? teamToken = teamPrefix ?? teamSuffix;
-      bool? isHomeHint;
-      if (teamToken != null) {
-        isHomeHint = teamToken.toLowerCase().startsWith('h');
-      }
-      if (inningToken.isNotEmpty) {
-        inningToken = inningToken.replaceAll(RegExp(r'(st|nd|rd|th)$'), '');
-      }
-      if (jersey.isNotEmpty) {
-        final String normalizedMagic = [
-          jersey,
-          actionToken,
-          if (inningToken.isNotEmpty) inningToken,
-        ].join(' ').trim();
-
-        _magicTeamHint = isHomeHint;
-        try {
-          _parseMagicInput(normalizedMagic);
-        } finally {
-          _magicTeamHint = null;
-        }
-        return; // handled
-      }
-    }
-
     // Only proceed if rosters are available (except for ag and team tokens)
     if (_homeRoster.isEmpty &&
         _awayRoster.isEmpty &&
@@ -4076,8 +4034,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final parts = input.trim().toLowerCase().split(' ');
     if (parts.length < 2) return false;
 
-    // Check if first part is a number
-    if (!_isNumeric(parts[0])) return false;
+    // Check if first part is a number OR a team prefix + number (like h27, v23)
+    String firstPart = parts[0];
+    bool isValidFirstPart = false;
+
+    // Check if it's just a number
+    if (_isNumeric(firstPart)) {
+      isValidFirstPart = true;
+    } else {
+      // Check if it's a team prefix + number (h27, v23, hh27, vv23)
+      final teamPrefixRegex = RegExp(r'^(h{1,2}|v{1,2})(\d+)$');
+      final match = teamPrefixRegex.firstMatch(firstPart);
+      if (match != null) {
+        isValidFirstPart = true;
+      }
+    }
+
+    if (!isValidFirstPart) return false;
 
     // Check if there's an action word
     final actionWords = [
@@ -4205,26 +4178,54 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
-    // Extract player number
-    final playerNumber = parts[0];
-    print('DEBUG: Player number: $playerNumber');
-    if (!_isNumeric(playerNumber)) {
-      print('DEBUG: Player number is not numeric, returning');
-      return;
-    }
+    // Extract player number and team hint
+    final firstPart = parts[0];
+    String playerNumber;
+    bool? isHomeHint;
 
-    // Find all players with this number
-    List<Player> matchingPlayers = [];
-
-    // Search in both rosters
-    for (final player in _homeRoster) {
-      if (player.jerseyNumber == playerNumber) {
-        matchingPlayers.add(player);
+    if (_isNumeric(firstPart)) {
+      // Format: "27 hr 1st" - just a number
+      playerNumber = firstPart;
+      isHomeHint = null; // No team hint
+    } else {
+      // Format: "h27 hr 1st" or "v23 hr 1st" - team prefix + number
+      final teamPrefixRegex = RegExp(r'^(h{1,2}|v{1,2})(\d+)$');
+      final match = teamPrefixRegex.firstMatch(firstPart);
+      if (match != null) {
+        playerNumber = match.group(2)!; // Extract the number part
+        final teamPrefix = match.group(1)!;
+        isHomeHint =
+            teamPrefix.startsWith('h'); // h or hh = home, v or vv = away
+      } else {
+        print('DEBUG: Invalid format, returning');
+        return;
       }
     }
-    for (final player in _awayRoster) {
-      if (player.jerseyNumber == playerNumber) {
-        matchingPlayers.add(player);
+
+    print('DEBUG: Player number: $playerNumber, isHomeHint: $isHomeHint');
+
+    // Find players with this number
+    List<Player> matchingPlayers = [];
+
+    if (isHomeHint != null) {
+      // Team hint provided, search only in the specified team
+      final roster = isHomeHint! ? _homeRoster : _awayRoster;
+      for (final player in roster) {
+        if (player.jerseyNumber == playerNumber) {
+          matchingPlayers.add(player);
+        }
+      }
+    } else {
+      // No team hint, search in both rosters
+      for (final player in _homeRoster) {
+        if (player.jerseyNumber == playerNumber) {
+          matchingPlayers.add(player);
+        }
+      }
+      for (final player in _awayRoster) {
+        if (player.jerseyNumber == playerNumber) {
+          matchingPlayers.add(player);
+        }
       }
     }
 
