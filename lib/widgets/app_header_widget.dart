@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:adaptive_navigation/adaptive_navigation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:async';
 import '../services/api_manager.dart';
 

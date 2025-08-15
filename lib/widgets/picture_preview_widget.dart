@@ -350,7 +350,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           // EXIF data panel on the right side
           if (_exifData != null || _isLoadingExif)
             Container(
-              width: 140, // Fixed width for EXIF panel
+              width: 180, // Fixed width for EXIF panel
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
@@ -523,7 +523,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
                             // Image counter between arrows
                             Text(
-                              '${widget.currentIndex + 1}/${imageCount}',
+                              '${widget.currentIndex + 1}/$imageCount',
                               style: const TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,

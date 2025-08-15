@@ -72,9 +72,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   List<Player> _cachedAwayRoster = [];
 
   // Track uploaded images
-  Set<String> _uploadedImages = {};
+  final Set<String> _uploadedImages = {};
   // Track upload progress for thumbnails
-  Map<String, double> _uploadProgress = {};
+  final Map<String, double> _uploadProgress = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
 

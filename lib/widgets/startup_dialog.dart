@@ -814,7 +814,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       const SizedBox(height: 24), // Increased spacing
 
                       // Optional section
-                      Text('Optional:',
+                      const Text('Optional:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
@@ -876,12 +876,12 @@ class _StartupDialogState extends State<StartupDialog> {
                                 border:
                                     Border.all(color: const Color(0xFF0052CC)),
                               ),
-                              child: Row(
+                              child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(Icons.rocket_launch,
                                       size: 12, color: Colors.white),
-                                  const SizedBox(width: 4),
+                                  SizedBox(width: 4),
                                   Text(
                                     'Go Time',
                                     style: TextStyle(

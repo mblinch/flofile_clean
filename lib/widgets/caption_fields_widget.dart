@@ -283,11 +283,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Highlighting state for expanded tokens
   List<TextRange> _highlightedRanges = [];
-  Map<String, String> _tokenToPlayerName =
+  final Map<String, String> _tokenToPlayerName =
       {}; // Maps expanded text to player name for personality field
 
   // Track previous caption text to detect deletions (e.g., backspace)
-  String _prevCaptionText = '';
+  final String _prevCaptionText = '';
   TextSelection? _prevCaptionSelection;
 
   // Magic input team hint (true = home, false = away) used to disambiguate same-number players
@@ -1026,18 +1026,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _onCaptionChanged(String value) {
     if (_isProcessingCaptionShortcut) return;
 
-    // Only proceed with expansion if the last character typed was an actual Enter character
-    if (value.isEmpty || value.codeUnitAt(value.length - 1) != 10) {
+    // Only proceed with expansion if the last character typed was a space
+    if (value.isEmpty || value.codeUnitAt(value.length - 1) != 32) {
       // Check for potential tokens to highlight immediately (only when not expanding)
       _highlightPotentialTokens(value);
       return;
     }
 
     // Magic input inside caption: support sequences like "h27 hr 1st" or reversed "27h hr 1st"
-    final String beforeFinalNewline = value.substring(0, value.length - 1);
-    final String submittedLine = beforeFinalNewline.split('\n').isNotEmpty
-        ? beforeFinalNewline.split('\n').last.trim()
-        : beforeFinalNewline.trim();
+    final String beforeFinalSpace = value.substring(0, value.length - 1);
+    final String submittedLine = beforeFinalSpace.split(' ').isNotEmpty
+        ? beforeFinalSpace.split(' ').last.trim()
+        : beforeFinalSpace.trim();
     final RegExp magicRe = RegExp(
         r'^(?:(h{1,2}|v{1,2})(\d{1,3})|(\d{1,3})(h{1,2}|v{1,2}))\s+([A-Za-z0-9]+)(?:\s+(\d{1,2}(?:st|nd|rd|th)?))?$');
     final RegExpMatch? magicMatch = magicRe.firstMatch(submittedLine);
@@ -1078,22 +1078,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Only proceed if rosters are available (except for ag and team tokens)
     if (_homeRoster.isEmpty &&
         _awayRoster.isEmpty &&
-        !value.contains(RegExp(r'\b(ag|ht|vt)\n'))) return;
+        !value.contains(RegExp(r'\b(ag|ht|vt) '))) {
+      return;
+    }
 
     // Normalize reversed forms first so subsequent matching works for both orders
     // e.g., `4i` -> `i4`, `27v` -> `v27`, `27vv` -> `vv27`
     final normalizedValue = value.replaceAllMapped(
-      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI])\n'),
-      (m) => '${m.group(2)}${m.group(1)}\n',
+      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]) '),
+      (m) => '${m.group(2)}${m.group(1)} ',
     );
 
-    // Pattern tokens (require Enter after):
+    // Pattern tokens (require space after):
     // - hNN / hhNN / vNN / vvNN → player tokens
     // - iNN → inning token → "during the first inning"
     // - ht / vt → team names (home / visiting)
     // - ag → "against the [opposite team]" (based on first selected player)
     final regex = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})\n');
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
     if (!regex.hasMatch(normalizedValue)) return;
 
     String newText = value;
@@ -1104,7 +1106,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Normalize reversed forms handled earlier via normalizedValue
 
     // Convert numbers to written ordinals for innings (1 -> first, 4 -> fourth, 21 -> 21st)
-    String _ordinalWord(int n) {
+    String ordinalWord(int n) {
       switch (n) {
         case 1:
           return 'first';
@@ -1177,7 +1179,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (lower == 'i') {
         replacedAny = true;
         final inningNum = int.tryParse(number) ?? 0;
-        final ord = _ordinalWord(inningNum);
+        final ord = ordinalWord(inningNum);
         final replacement = 'during the $ord inning ';
         buffer.write(replacement);
         // Highlight the entire inserted phrase
@@ -1278,6 +1280,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       if (found != null) {
         replacedAny = true;
+        // Visually select the player in the picker below when a valid token is entered
+        _selectPlayerChipByNumber(
+          isHomeTeam: isHome,
+          jerseyNumber: number,
+          isProgressive:
+              true, // don't override existing red star on subsequent tokens
+        );
         // Update personality field with clean full name (no number), de-duplicated
         final current = personalityController.text.trim();
         final parts = current.isEmpty
@@ -1316,7 +1325,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // No match found; keep token
         buffer.write(normalizedValue.substring(match.start, match.end));
       }
-      lastIndex = match.end; // Consume the Enter that triggered the expansion
+      lastIndex = match.end; // Consume the space that triggered the expansion
     }
 
     // Append remaining tail
@@ -1429,6 +1438,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     captionController.highlightedRanges = validRanges;
     captionController.invalidRanges = invalidRanges;
     _highlightedRanges = validRanges;
+
+    // Progressive auto-selection: when a valid trailing player token is being typed,
+    // select that player in the visual pickers below in real time.
+    try {
+      final trailingForward =
+          RegExp(r'(?:^|\b)((?:h{1,2})|(?:v{1,2}))(\d{1,3})\s*$');
+      final trailingReverse =
+          RegExp(r'(?:^|\b)(\d{1,3})((?:h{1,2})|(?:v{1,2}))\s*$');
+      String? teamToken;
+      String? jersey;
+      final m1 = trailingForward.firstMatch(value.toLowerCase());
+      if (m1 != null) {
+        teamToken = m1.group(1);
+        jersey = m1.group(2);
+      } else {
+        final m2 = trailingReverse.firstMatch(value.toLowerCase());
+        if (m2 != null) {
+          jersey = m2.group(1);
+          teamToken = m2.group(2);
+        }
+      }
+
+      if (teamToken != null && jersey != null && jersey.isNotEmpty) {
+        final bool isHome = teamToken.startsWith('h');
+        final roster = isHome ? _homeRoster : _awayRoster;
+        final exists = roster.any((p) => p.jerseyNumber == jersey);
+        if (exists) {
+          // If a different jersey was previously auto-selected for this team, unselect it
+          // But preserve the first player selection during progressive typing
+          final lastAuto =
+              isHome ? _autoSelectedHomeJersey : _autoSelectedAwayJersey;
+          if (lastAuto != null && lastAuto != jersey) {
+            _unselectAutoSelectedByToken(
+                isHomeTeam: isHome, jerseyNumber: lastAuto);
+          }
+          // Select the current jersey
+          _selectPlayerChipByNumber(
+            isHomeTeam: isHome,
+            jerseyNumber: jersey,
+            isProgressive: true,
+          );
+        }
+      }
+    } catch (_) {
+      // Best-effort progressive selection; ignore errors
+    }
+
     setState(() {});
   }
 
@@ -1449,8 +1505,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (name.isEmpty) return;
     final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
     set.add(name);
-    _firstTeamSelected ??= isHomeTeam;
-    _firstPlayerSelected ??= name;
+
+    // Red star is determined by caption text order
+
     if (isHomeTeam) {
       _autoSelectedHomeJersey = jerseyNumber;
     } else {
@@ -1474,10 +1531,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (name.isEmpty) return;
     final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
     set.remove(name);
-    if (_firstPlayerSelected == name) {
-      _firstPlayerSelected = null;
-      _firstTeamSelected = null;
-    }
+    // Only clear the red star if this was truly the first selected player AND
+    // we're removing the last remaining player, not just switching auto-selections
+    // Red star tracking removed - determined by caption text order only
     if (isHomeTeam && _autoSelectedHomeJersey == jerseyNumber) {
       _autoSelectedHomeJersey = null;
     }
@@ -1583,15 +1639,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         }
                                       }
                                       _highlightedRanges = updated;
-                                      if (captionController
-                                          is HighlightingTextEditingController) {
-                                        (captionController
-                                                as HighlightingTextEditingController)
-                                            .highlightedRanges = updated;
-                                        (captionController
-                                                as HighlightingTextEditingController)
-                                            .invalidRanges = [];
-                                      }
+                                      (captionController
+                                              as HighlightingTextEditingController)
+                                          .highlightedRanges = updated;
+                                      (captionController
+                                              as HighlightingTextEditingController)
+                                          .invalidRanges = [];
                                       setState(() {});
                                     },
                                   ),
@@ -1645,7 +1698,221 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Action buttons are now beside the magic bar
                         // (Old action button container removed)
 
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 1),
+
+                        // New container spanning bottom left quadrant
+                        Container(
+                          width: double.infinity,
+                          height: 40, // Single line height
+                          padding: EdgeInsets.zero,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.grey.shade400,
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // First column - same width as player picker (flex: 2)
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    'MAGIC BAR:',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade700,
+                                      letterSpacing: -1.0,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Middle column - same width as verb picker (flex: 8)
+                              Expanded(
+                                flex: 8,
+                                child: Container(
+                                  child: Row(
+                                    children: [
+                                      // Magic bar + Navigation buttons
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            // Magic bar (left side)
+                                            Expanded(
+                                              flex: 3,
+                                              child: Container(
+                                                margin: const EdgeInsets.only(
+                                                    right: 8),
+                                                child: TextField(
+                                                  controller:
+                                                      customBetweenPlayersController,
+                                                  style: const TextStyle(
+                                                      fontSize: 12),
+                                                  decoration: InputDecoration(
+                                                    border: OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade300),
+                                                    ),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      borderSide: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade300),
+                                                    ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                      borderSide: BorderSide(
+                                                          color: Colors
+                                                              .blue.shade400),
+                                                    ),
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 8),
+                                                    isDense: true,
+                                                  ),
+                                                  onChanged: (value) {
+                                                    // Magic bar functionality
+                                                    if (value.isEmpty) {
+                                                      if (_firstPlayerSelected ==
+                                                          null) {
+                                                        _resetCaption();
+                                                      }
+                                                      return;
+                                                    }
+                                                    if (_isMagicInput(value)) {
+                                                      _parseMagicInput(value);
+                                                      return;
+                                                    }
+                                                    setState(() {
+                                                      if (_isPlayerSearchMode &&
+                                                          _isNumeric(value)) {
+                                                        _filterPlayersByNumber(
+                                                            value);
+                                                      } else if (_isPlayerSearchMode &&
+                                                          value.isEmpty) {
+                                                        _filteredPlayers
+                                                            .clear();
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                            // Navigation buttons (right side)
+                                            Expanded(
+                                              flex: 2,
+                                              child: _buildNavigationButtons(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // Third column - same width as player picker (flex: 2)
+                              Expanded(
+                                flex: 2,
+                                child: Container(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      // Settings button
+                                      CustomButton(
+                                        onTap: _showFtpSettings,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF4A90E2),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: const Color(0xFF4A90E2)),
+                                          ),
+                                          child: const Icon(Icons.settings,
+                                              size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      // FTP button
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 4),
+                                        child: CustomButton(
+                                          onTap: _disableFtp
+                                              ? null
+                                              : _onFtpPressed,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: _disableFtp
+                                                  ? Colors.grey.shade300
+                                                  : const Color(0xFF0052CC),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                  color: _disableFtp
+                                                      ? Colors.grey.shade300
+                                                      : const Color(
+                                                          0xFF0052CC)),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.rocket_launch,
+                                                    size: 14,
+                                                    color: _disableFtp
+                                                        ? Colors.grey.shade600
+                                                        : Colors.white),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                    _disableFtp
+                                                        ? 'FTP OFF'
+                                                        : (_currentFtpProfile !=
+                                                                null
+                                                            ? 'FTP: $_currentFtpProfile'
+                                                            : 'FTP'),
+                                                    style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: _disableFtp
+                                                            ? Colors
+                                                                .grey.shade600
+                                                            : Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w500)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 1),
 
                         // Player and Verb Selection Area
                         Expanded(
@@ -2332,7 +2599,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       if (_firstTeamSelected == null) {
                                         _firstTeamSelected = isHome;
                                         _firstPlayerSelected =
-                                            player.displayName;
+                                            _removeJerseyNumberFromName(
+                                                player.displayName);
                                       } else {}
                                       if (isHome) {
                                         selectedHomePlayers
@@ -2398,7 +2666,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   ? _homeSortOption
                                                   : _awaySortOption),
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: 11,
                                             fontWeight: isSelected
                                                 ? FontWeight.w600
                                                 : FontWeight.normal,
@@ -2493,10 +2761,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     selectedAwayPlayers.remove(player.displayName);
                   }
                 } else {
-                  // Track which team was selected first
+                  // Track which team was selected first; set first player if not set
                   if (_firstTeamSelected == null) {
                     _firstTeamSelected = isHome;
-                    _firstPlayerSelected = player.displayName;
+                    _firstPlayerSelected =
+                        _removeJerseyNumberFromName(player.displayName);
                   }
                   if (isHome) {
                     selectedHomePlayers.add(player.displayName);
@@ -2552,7 +2821,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         Text(
                           player.fullName.split(' ').skip(1).join(' '),
                           style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 10,
                             fontWeight: isSelected
                                 ? FontWeight.w600
                                 : FontWeight.normal,
@@ -2752,166 +3021,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                         //     height:
                                                                         //         4),
                                                                         // // Custom text field for between players
-                                                                        Row(
-                                                                          children: [
-                                                                            // LEFT: Reset
-                                                                            Expanded(
-                                                                              child: Align(
-                                                                                alignment: Alignment.centerLeft,
-                                                                                child: CustomButton(
-                                                                                  onTap: _resetCaption,
-                                                                                  child: Container(
-                                                                                    height: 28,
-                                                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                    decoration: BoxDecoration(
-                                                                                      color: Colors.grey.shade100,
-                                                                                      borderRadius: BorderRadius.circular(4),
-                                                                                      border: Border.all(color: Colors.grey.shade300),
-                                                                                    ),
-                                                                                    child: Row(
-                                                                                      mainAxisSize: MainAxisSize.min,
-                                                                                      children: [
-                                                                                        Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
-                                                                                        const SizedBox(width: 2),
-                                                                                        Text('Reset', style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-                                                                                      ],
-                                                                                    ),
-                                                                                  ),
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            // CENTER: Prev, Copy, Paste, Next
-                                                                            Expanded(
-                                                                              child: Center(
-                                                                                child: Row(
-                                                                                  mainAxisSize: MainAxisSize.min,
-                                                                                  children: [
-                                                                                    // Prev
-                                                                                    CustomButton(
-                                                                                      onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
-                                                                                          ? () async {
-                                                                                              if (widget.onSaveIptc != null) {
-                                                                                                widget.onSaveIptc!();
-                                                                                              }
-                                                                                              widget.onPreviousImage?.call();
-                                                                                            }
-                                                                                          : null,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade100 : Colors.grey.shade200,
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: (widget.currentIndex != null && widget.currentIndex! > 0) ? Colors.grey.shade300 : Colors.grey.shade400),
-                                                                                        ),
-                                                                                        child: const Icon(Icons.arrow_back, size: 14),
-                                                                                      ),
-                                                                                    ),
-                                                                                    const SizedBox(width: 2),
-                                                                                    // Copy
-                                                                                    CustomButton(
-                                                                                      onTap: _copyMetadataFromCaptionWidget,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: Colors.blue.shade50,
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: Colors.blue.shade200),
-                                                                                        ),
-                                                                                        child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
-                                                                                      ),
-                                                                                    ),
-                                                                                    const SizedBox(width: 2),
-                                                                                    // Paste
-                                                                                    CustomButton(
-                                                                                      onTap: _pasteMetadataToCaptionWidget,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: Colors.green.shade50,
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: Colors.green.shade200),
-                                                                                        ),
-                                                                                        child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
-                                                                                      ),
-                                                                                    ),
-                                                                                    const SizedBox(width: 2),
-                                                                                    // Next
-                                                                                    CustomButton(
-                                                                                      onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
-                                                                                          ? () async {
-                                                                                              if (widget.onSaveIptc != null) {
-                                                                                                widget.onSaveIptc!();
-                                                                                              }
-                                                                                              widget.onNextImage?.call();
-                                                                                            }
-                                                                                          : null,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade100 : Colors.grey.shade200,
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1) ? Colors.grey.shade300 : Colors.grey.shade400),
-                                                                                        ),
-                                                                                        child: const Icon(Icons.arrow_forward, size: 14),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                            // RIGHT: FTP settings + FTP
-                                                                            Expanded(
-                                                                              child: Align(
-                                                                                alignment: Alignment.centerRight,
-                                                                                child: Row(
-                                                                                  mainAxisSize: MainAxisSize.min,
-                                                                                  children: [
-                                                                                    // Settings
-                                                                                    CustomButton(
-                                                                                      onTap: _showFtpSettings,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: const Color(0xFF4A90E2),
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: const Color(0xFF4A90E2)),
-                                                                                        ),
-                                                                                        child: const Icon(Icons.settings, size: 16, color: Colors.white),
-                                                                                      ),
-                                                                                    ),
-                                                                                    const SizedBox(width: 2),
-                                                                                    // FTP
-                                                                                    CustomButton(
-                                                                                      onTap: _disableFtp ? null : _onFtpPressed,
-                                                                                      child: Container(
-                                                                                        height: 28,
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                                                                        decoration: BoxDecoration(
-                                                                                          color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC),
-                                                                                          borderRadius: BorderRadius.circular(4),
-                                                                                          border: Border.all(color: _disableFtp ? Colors.grey.shade300 : const Color(0xFF0052CC)),
-                                                                                        ),
-                                                                                        child: Row(
-                                                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                                                          children: [
-                                                                                            Icon(Icons.rocket_launch, size: 14, color: _disableFtp ? Colors.grey.shade600 : Colors.white),
-                                                                                            const SizedBox(width: 2),
-                                                                                            Text(_disableFtp ? 'FTP OFF' : (_currentFtpProfile != null ? 'FTP: $_currentFtpProfile' : 'FTP'), style: TextStyle(fontSize: 10, color: _disableFtp ? Colors.grey.shade600 : Colors.white, fontWeight: FontWeight.w500)),
-                                                                                          ],
-                                                                                        ),
-                                                                                      ),
-                                                                                    ),
-                                                                                  ],
-                                                                                ),
-                                                                              ),
-                                                                            ),
-                                                                          ],
-                                                                        ),
 
                                                                         // Player selection overlay
                                                                         if (_filteredPlayers.isNotEmpty ||
@@ -3021,8 +3130,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                           ),
                                                                           const SizedBox(
                                                                               height: 4),
-                                                                          // Action buttons (Reset, Settings, FTP)
-                                                                          _buildCompactActionButtons(),
                                                                         ],
 
                                                                         const SizedBox(
@@ -4092,16 +4199,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     print('DEBUG: _parseMagicInput called with: "$input"');
     if (input.isEmpty) return;
 
-    // Clear existing selections
+    // Reset only action-related state, but DO NOT clear players or first selection
     setState(() {
-      selectedHomePlayers.clear();
-      selectedAwayPlayers.clear();
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
       _selectedRbiInning = null;
-      _firstTeamSelected = null;
-      _firstPlayerSelected = null;
 
       // Clear player search state to prevent conflicts
       _filteredPlayers.clear();
@@ -4169,7 +4272,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _waitingForHomeVisitorChoice = true;
 
         // Store the original magic input text before showing dialog
-        final originalText = '';
+        const originalText = '';
         print('DEBUG: Storing original text: "$originalText"');
 
         // Show popup dialog for home/visitor choice
@@ -4186,16 +4289,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Select the player
     setState(() {
+      final display = foundPlayer.displayName ?? 'Unknown Player';
+      final cleaned = _removeJerseyNumberFromName(display);
       if (isHomePlayer) {
-        selectedHomePlayers.add(foundPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = true;
-        _firstPlayerSelected = foundPlayer.displayName ?? 'Unknown Player';
+        selectedHomePlayers.add(display);
+        _firstTeamSelected ??= true;
+        _firstPlayerSelected ??= cleaned;
       } else {
-        selectedAwayPlayers.add(foundPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = false;
-        _firstPlayerSelected = foundPlayer.displayName ?? 'Unknown Player';
+        selectedAwayPlayers.add(display);
+        _firstTeamSelected ??= false;
+        _firstPlayerSelected ??= cleaned;
       }
     });
+
+    // Ensure the original main player remains selected in its team list
+    _ensureMainPlayerStillSelected();
 
     // Parse action and inning
     String action = '';
@@ -4682,16 +4790,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _processMagicInputWithPlayer(Player selectedPlayer, String actionText) {
-    // Clear existing selections
+    // Reset only action-related state; keep existing selections and main player
     setState(() {
-      selectedHomePlayers.clear();
-      selectedAwayPlayers.clear();
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
       _selectedRbiInning = null;
-      _firstTeamSelected = null;
-      _firstPlayerSelected = null;
 
       // Clear player search state to prevent conflicts
       _filteredPlayers.clear();
@@ -4702,16 +4806,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Select the chosen player
     final isHomePlayer = _homeRoster.contains(selectedPlayer);
     setState(() {
+      final display = selectedPlayer.displayName ?? 'Unknown Player';
+      final cleaned = _removeJerseyNumberFromName(display);
       if (isHomePlayer) {
-        selectedHomePlayers.add(selectedPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = true;
-        _firstPlayerSelected = selectedPlayer.displayName ?? 'Unknown Player';
+        selectedHomePlayers.add(display);
+        _firstTeamSelected ??= true;
+        _firstPlayerSelected ??= cleaned;
       } else {
-        selectedAwayPlayers.add(selectedPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = false;
-        _firstPlayerSelected = selectedPlayer.displayName ?? 'Unknown Player';
+        selectedAwayPlayers.add(display);
+        _firstTeamSelected ??= false;
+        _firstPlayerSelected ??= cleaned;
       }
     });
+
+    // Ensure the original main player remains selected in its team list
+    _ensureMainPlayerStillSelected();
 
     // Parse the action text
     final parts = actionText.trim().toLowerCase().split(' ');
@@ -4911,36 +5020,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   void _processMagicInputWithPlayerKeepBar(
       Player selectedPlayer, String actionText) {
-    // Clear existing selections but keep the magic bar active
+    // Reset only action-related state; keep players and first selection intact
     setState(() {
-      selectedHomePlayers.clear();
-      selectedAwayPlayers.clear();
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
       _selectedRbiInning = null;
-      _firstTeamSelected = null;
-      _firstPlayerSelected = null;
-
-      // DON'T clear player search state - keep the magic bar active
-      // _filteredPlayers.clear();
-      // _noPlayersFound = false;
-      // _isPlayerSearchMode = false;
     });
 
     // Select the chosen player
     final isHomePlayer = _homeRoster.contains(selectedPlayer);
     setState(() {
+      final display = selectedPlayer.displayName ?? 'Unknown Player';
+      final cleaned = _removeJerseyNumberFromName(display);
       if (isHomePlayer) {
-        selectedHomePlayers.add(selectedPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = true;
-        _firstPlayerSelected = selectedPlayer.displayName ?? 'Unknown Player';
+        selectedHomePlayers.add(display);
+        _firstTeamSelected ??= true;
+        _firstPlayerSelected ??= cleaned;
       } else {
-        selectedAwayPlayers.add(selectedPlayer.displayName ?? 'Unknown Player');
-        _firstTeamSelected = false;
-        _firstPlayerSelected = selectedPlayer.displayName ?? 'Unknown Player';
+        selectedAwayPlayers.add(display);
+        _firstTeamSelected ??= false;
+        _firstPlayerSelected ??= cleaned;
       }
     });
+
+    // Ensure the original main player remains selected in its team list
+    _ensureMainPlayerStillSelected();
 
     // Parse the action text (same as original method)
     final parts = actionText.trim().toLowerCase().split(' ');
@@ -5408,7 +5513,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Handle opponent players if selected
     String opponentPart = '';
-    if (_selectedHittingAction == 'celebrates' ||
+    if (actionPhrase.contains('against') ||
+        _selectedHittingAction == 'celebrates' ||
         _selectedHittingAction == 'celebrates_in_dugout' ||
         _selectedHittingAction == 'trots_the_bases' ||
         verbToUse == 'At Bat' ||
@@ -5530,7 +5636,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     final caption = '$dateline '
-        '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified$inningPart '
+        '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${_isPriorToGame ? '' : inningPart} '
         '$gamePart at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
 
     // Set caption text directly (no diacritic removal)
@@ -6021,7 +6127,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             // Track which team was selected first
                             if (_firstTeamSelected == null) {
                               _firstTeamSelected = isHome;
-                              _firstPlayerSelected = player.displayName;
+                              _firstPlayerSelected =
+                                  _removeJerseyNumberFromName(
+                                      player.displayName);
                               // print(
                               //     'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
                               // print(
@@ -9768,12 +9876,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   bool _isFirstSelectedPlayer(String playerName) {
-    // Check if this player was the first one selected
-    if (_firstPlayerSelected == null) return false;
+    // The red star should be on the first player mentioned in the caption text
+    final captionText = captionController.text;
+    if (captionText.isEmpty) return false;
 
-    final isFirst = _firstPlayerSelected == playerName;
+    // Get all players from both rosters to search for in caption
+    final allPlayers = [..._homeRoster, ..._awayRoster];
+    if (allPlayers.isEmpty) return false;
 
-    return isFirst;
+    // Find all player display names that appear in the caption text
+    final playersWithPositions = <Map<String, dynamic>>[];
+
+    for (final player in allPlayers) {
+      final displayName = player.displayName;
+      final position = captionText.indexOf(displayName);
+      if (position != -1) {
+        playersWithPositions.add({
+          'player': displayName,
+          'position': position,
+        });
+      }
+    }
+
+    if (playersWithPositions.isEmpty) return false;
+
+    // Sort by position (earliest first)
+    playersWithPositions
+        .sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
+    final firstPlayerInCaption = playersWithPositions.first['player'] as String;
+
+    return firstPlayerInCaption == playerName;
   }
 
   Widget _buildHomeRunSubOptions() {
@@ -9800,11 +9932,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 cursorHeight: 16,
                 style: const TextStyle(fontSize: 12, height: 2.3),
                 decoration: InputDecoration(
-                  hintText: _waitingForHomeVisitorChoice
-                      ? '🏠 Type H for Home or 🚍 V for Visitor 🏠'
-                      : _isPlayerSearchMode
-                          ? 'Magic Bar: Type player numbers (e.g., 75, 23) or magic input (e.g., "27 hr 1")...'
-                          : 'write custom verb here',
                   border: InputBorder.none,
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -9818,8 +9945,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       'DEBUG: _waitingForHomeVisitorChoice: $_waitingForHomeVisitorChoice');
 
                   // If magic bar is completely cleared, reset everything
+                  // BUT only if we don't have a first player selected (preserve main player)
                   if (value.isEmpty) {
-                    _resetCaption();
+                    if (_firstPlayerSelected == null) {
+                      _resetCaption();
+                    }
                     return;
                   }
 
@@ -10270,11 +10400,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 100, // Increased height to accommodate Prior button
                 child: _buildReusableInningSelector(),
               ),
-
-              const SizedBox(height: 8),
-
-              // Compact action buttons
-              _buildCompactActionButtons(),
 
               const SizedBox(height: 8),
 
@@ -11572,6 +11697,160 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return playerName.replaceAll(RegExp(r'\s*#\d+\s*$'), '').trim();
   }
 
+  void _ensureMainPlayerStillSelected() {
+    if (_firstPlayerSelected == null) return;
+    final normalized = _firstPlayerSelected!;
+    // Find the display name that corresponds to the normalized main player in rosters
+    String? homeDisplay;
+    String? awayDisplay;
+    for (final p in _homeRoster) {
+      if (_removeJerseyNumberFromName(p.displayName ?? 'Unknown') ==
+          normalized) {
+        homeDisplay = p.displayName;
+        break;
+      }
+    }
+    for (final p in _awayRoster) {
+      if (_removeJerseyNumberFromName(p.displayName ?? 'Unknown') ==
+          normalized) {
+        awayDisplay = p.displayName;
+        break;
+      }
+    }
+    // Ensure it's present in the correct selected set
+    if (homeDisplay != null &&
+        selectedHomePlayers.isNotEmpty &&
+        _firstTeamSelected == true) {
+      selectedHomePlayers.add(homeDisplay);
+    } else if (awayDisplay != null &&
+        selectedAwayPlayers.isNotEmpty &&
+        _firstTeamSelected == false) {
+      selectedAwayPlayers.add(awayDisplay);
+    }
+  }
+
+  Widget _buildNavigationButtons() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Reset button
+          CustomButton(
+            onTap: _resetCaption,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.refresh, size: 14, color: Colors.grey.shade700),
+                  const SizedBox(width: 2),
+                  Text('Reset',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 25),
+          // Prev
+          CustomButton(
+            onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                ? () async {
+                    if (widget.onSaveIptc != null) {
+                      widget.onSaveIptc!();
+                    }
+                    widget.onPreviousImage?.call();
+                  }
+                : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: (widget.currentIndex != null && widget.currentIndex! > 0)
+                    ? Colors.grey.shade100
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                    color: (widget.currentIndex != null &&
+                            widget.currentIndex! > 0)
+                        ? Colors.grey.shade300
+                        : Colors.grey.shade400),
+              ),
+              child: const Icon(Icons.arrow_back, size: 14),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Copy
+          CustomButton(
+            onTap: _copyMetadataFromCaptionWidget,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Paste
+          CustomButton(
+            onTap: _pasteMetadataToCaptionWidget,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Next
+          CustomButton(
+            onTap: (widget.currentIndex != null &&
+                    widget.totalImages != null &&
+                    widget.currentIndex! < widget.totalImages! - 1)
+                ? () async {
+                    if (widget.onSaveIptc != null) {
+                      widget.onSaveIptc!();
+                    }
+                    widget.onNextImage?.call();
+                  }
+                : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: (widget.currentIndex != null &&
+                        widget.totalImages != null &&
+                        widget.currentIndex! < widget.totalImages! - 1)
+                    ? Colors.grey.shade100
+                    : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                    color: (widget.currentIndex != null &&
+                            widget.totalImages != null &&
+                            widget.currentIndex! < widget.totalImages! - 1)
+                        ? Colors.grey.shade300
+                        : Colors.grey.shade400),
+              ),
+              child: const Icon(Icons.arrow_forward, size: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCompactActionButtons() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
@@ -11597,58 +11876,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 24),
-          // Settings button
-          CustomButton(
-            onTap: _showFtpSettings,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4A90E2),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: const Color(0xFF4A90E2)),
-              ),
-              child: const Icon(Icons.settings, size: 18, color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // FTP button
-          CustomButton(
-            onTap: _disableFtp ? null : _onFtpPressed,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                color: _disableFtp
-                    ? Colors.grey.shade300
-                    : const Color(0xFF0052CC),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                    color: _disableFtp
-                        ? Colors.grey.shade300
-                        : const Color(0xFF0052CC)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.rocket_launch,
-                      size: 10,
-                      color: _disableFtp ? Colors.grey.shade600 : Colors.white),
-                  const SizedBox(width: 2),
-                  Text(
-                      _disableFtp
-                          ? 'FTP OFF'
-                          : (_currentFtpProfile != null
-                              ? 'FTP: $_currentFtpProfile'
-                              : 'FTP'),
-                      style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              _disableFtp ? Colors.grey.shade600 : Colors.white,
                           fontWeight: FontWeight.w500)),
                 ],
               ),
@@ -12732,9 +12959,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // Reset, Settings, and FTP buttons
-                    _buildCompactActionButtons(),
-                    const SizedBox(height: 8),
                     // Back button
                     _buildVerbOptionsBackButton(),
                   ],

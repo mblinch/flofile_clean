@@ -219,7 +219,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     // Compute visible index for current image (accounts for hidden uploaded images)
     if (widget.currentIndex < 0 ||
-        widget.currentIndex >= widget.imagePaths.length) return;
+        widget.currentIndex >= widget.imagePaths.length) {
+      return;
+    }
     final String currentPath = widget.imagePaths[widget.currentIndex];
     final int visibleIndex = _visiblePaths.indexOf(currentPath);
     if (visibleIndex < 0) return; // current item hidden; skip centering
@@ -508,7 +510,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: Colors.transparent,
                                 ),
                                 child: Text(
@@ -527,7 +529,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 4, vertical: 1),
                                 margin: const EdgeInsets.only(bottom: 2),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: Colors.transparent,
                                 ),
                                 child: () {
@@ -589,8 +591,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                           backgroundColor:
                                               Colors.white.withOpacity(0.3),
                                           valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                  Colors.white),
+                                              const AlwaysStoppedAnimation<
+                                                  Color>(Colors.white),
                                         ),
                                       ),
                                       const SizedBox(height: 4),
