@@ -1719,192 +1719,150 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           child: Row(
                             children: [
-                              // First column - same width as player picker (flex: 2)
+                              // First column - Magic bar
                               Expanded(
                                 flex: 2,
                                 child: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: Text(
-                                    'MAGIC BAR:',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade700,
-                                      letterSpacing: -1.0,
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: TextField(
+                                    controller: customBetweenPlayersController,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade300),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.blue.shade400),
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 8),
+                                      isDense: true,
+                                      hintText: 'Magic Bar',
                                     ),
+                                    onChanged: (value) {
+                                      // Magic bar functionality
+                                      if (value.isEmpty) {
+                                        // Don't reset caption when magic bar is empty
+                                        // This preserves player selections during multi-player input
+                                        return;
+                                      }
+                                      if (_isMagicInput(value)) {
+                                        _parseMagicInput(value);
+                                        return;
+                                      }
+
+                                      // Handle multiple player numbers (e.g., "27 23")
+                                      _handleMultiplePlayerInput(value);
+                                    },
                                   ),
                                 ),
                               ),
-                              // Middle column - same width as verb picker (flex: 8)
+                              // Middle column - Navigation buttons and FTP/Settings
                               Expanded(
                                 flex: 8,
-                                child: Container(
-                                  child: Row(
-                                    children: [
-                                      // Magic bar + Navigation buttons
-                                      Expanded(
-                                        child: Row(
-                                          children: [
-                                            // Magic bar (left side)
-                                            Expanded(
-                                              flex: 1,
-                                              child: Container(
-                                                margin: const EdgeInsets.only(
-                                                    right: 8),
-                                                padding: const EdgeInsets.only(
-                                                    left: 4),
-                                                child: TextField(
-                                                  controller:
-                                                      customBetweenPlayersController,
-                                                  style: const TextStyle(
-                                                      fontSize: 12),
-                                                  decoration: InputDecoration(
-                                                    border: OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade300),
-                                                    ),
-                                                    enabledBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      borderSide: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade300),
-                                                    ),
-                                                    focusedBorder:
-                                                        OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                      borderSide: BorderSide(
-                                                          color: Colors
-                                                              .blue.shade400),
-                                                    ),
-                                                    contentPadding:
-                                                        const EdgeInsets
-                                                            .symmetric(
-                                                            horizontal: 8,
-                                                            vertical: 8),
-                                                    isDense: true,
-                                                  ),
-                                                  onChanged: (value) {
-                                                    // Magic bar functionality
-                                                    if (value.isEmpty) {
-                                                      // Don't reset caption when magic bar is empty
-                                                      // This preserves player selections during multi-player input
-                                                      return;
-                                                    }
-                                                    if (_isMagicInput(value)) {
-                                                      _parseMagicInput(value);
-                                                      return;
-                                                    }
-
-                                                    // Handle multiple player numbers (e.g., "27 23")
-                                                    _handleMultiplePlayerInput(
-                                                        value);
-                                                  },
-                                                ),
+                                child: Row(
+                                  children: [
+                                    // Navigation buttons (left side)
+                                    Expanded(
+                                      child: _buildNavigationButtons(),
+                                    ),
+                                    // FTP and Settings buttons (right side)
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        // Settings button
+                                        CustomButton(
+                                          onTap: _showFtpSettings,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF4A90E2),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                  color:
+                                                      const Color(0xFF4A90E2)),
+                                            ),
+                                            child: const Icon(Icons.settings,
+                                                size: 14, color: Colors.white),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        // FTP button
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 4),
+                                          child: CustomButton(
+                                            onTap: _disableFtp
+                                                ? null
+                                                : _onFtpPressed,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: _disableFtp
+                                                    ? Colors.grey.shade300
+                                                    : const Color(0xFF0052CC),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                border: Border.all(
+                                                    color: _disableFtp
+                                                        ? Colors.grey.shade300
+                                                        : const Color(
+                                                            0xFF0052CC)),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.rocket_launch,
+                                                      size: 14,
+                                                      color: _disableFtp
+                                                          ? Colors.grey.shade600
+                                                          : Colors.white),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                      _disableFtp
+                                                          ? 'FTP OFF'
+                                                          : (_currentFtpProfile !=
+                                                                  null
+                                                              ? 'FTP: $_currentFtpProfile'
+                                                              : 'FTP'),
+                                                      style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: _disableFtp
+                                                              ? Colors
+                                                                  .grey.shade600
+                                                              : Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.w500)),
+                                                ],
                                               ),
                                             ),
-                                            // Navigation buttons (right side)
-                                            Expanded(
-                                              flex: 2,
-                                              child: _buildNavigationButtons(),
-                                            ),
-                                          ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                               // Third column - same width as player picker (flex: 2)
                               Expanded(
                                 flex: 2,
-                                child: Container(
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      // Settings button
-                                      CustomButton(
-                                        onTap: _showFtpSettings,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF4A90E2),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            border: Border.all(
-                                                color: const Color(0xFF4A90E2)),
-                                          ),
-                                          child: const Icon(Icons.settings,
-                                              size: 14, color: Colors.white),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      // FTP button
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 4),
-                                        child: CustomButton(
-                                          onTap: _disableFtp
-                                              ? null
-                                              : _onFtpPressed,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: _disableFtp
-                                                  ? Colors.grey.shade300
-                                                  : const Color(0xFF0052CC),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                  color: _disableFtp
-                                                      ? Colors.grey.shade300
-                                                      : const Color(
-                                                          0xFF0052CC)),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(Icons.rocket_launch,
-                                                    size: 14,
-                                                    color: _disableFtp
-                                                        ? Colors.grey.shade600
-                                                        : Colors.white),
-                                                const SizedBox(width: 2),
-                                                Text(
-                                                    _disableFtp
-                                                        ? 'FTP OFF'
-                                                        : (_currentFtpProfile !=
-                                                                null
-                                                            ? 'FTP: $_currentFtpProfile'
-                                                            : 'FTP'),
-                                                    style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: _disableFtp
-                                                            ? Colors
-                                                                .grey.shade600
-                                                            : Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w500)),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                child: Container(),
                               ),
                             ],
                           ),
@@ -11839,57 +11797,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          // Reset button
-          CustomButton(
-            onTap: _fullReset,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.refresh, size: 14, color: Colors.grey.shade700),
-                  const SizedBox(width: 2),
-                  Text('Reset',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 25),
           // Prev
-          CustomButton(
-            onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
-                ? () async {
-                    if (widget.onSaveIptc != null) {
-                      widget.onSaveIptc!();
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: CustomButton(
+              onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                  ? () async {
+                      if (widget.onSaveIptc != null) {
+                        widget.onSaveIptc!();
+                      }
+                      widget.onPreviousImage?.call();
                     }
-                    widget.onPreviousImage?.call();
-                  }
-                : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: (widget.currentIndex != null && widget.currentIndex! > 0)
-                    ? Colors.grey.shade100
-                    : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                    color: (widget.currentIndex != null &&
-                            widget.currentIndex! > 0)
-                        ? Colors.grey.shade300
-                        : Colors.grey.shade400),
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color:
+                      (widget.currentIndex != null && widget.currentIndex! > 0)
+                          ? Colors.grey.shade100
+                          : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                      color: (widget.currentIndex != null &&
+                              widget.currentIndex! > 0)
+                          ? Colors.grey.shade300
+                          : Colors.grey.shade400),
+                ),
+                child: const Icon(Icons.arrow_back, size: 14),
               ),
-              child: const Icon(Icons.arrow_back, size: 14),
             ),
           ),
           const SizedBox(width: 4),
@@ -11952,6 +11889,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           : Colors.grey.shade400),
                 ),
                 child: const Icon(Icons.arrow_forward, size: 14),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Reset button
+          Padding(
+            padding: const EdgeInsets.only(left: 30),
+            child: CustomButton(
+              onTap: _fullReset,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.refresh, size: 14, color: Colors.grey.shade700),
+                    const SizedBox(width: 2),
+                    Text('Reset',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
               ),
             ),
           ),
