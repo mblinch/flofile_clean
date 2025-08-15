@@ -1465,14 +1465,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final roster = isHome ? _homeRoster : _awayRoster;
         final exists = roster.any((p) => p.jerseyNumber == jersey);
         if (exists) {
-          // If a different jersey was previously auto-selected for this team, unselect it
-          // But preserve the first player selection during progressive typing
+          // If a different jersey was previously auto-selected for this team,
+          // DO NOT unselect it. We want to keep previously selected players
+          // when adding additional players via shortcodes.
           final lastAuto =
               isHome ? _autoSelectedHomeJersey : _autoSelectedAwayJersey;
-          if (lastAuto != null && lastAuto != jersey) {
-            _unselectAutoSelectedByToken(
-                isHomeTeam: isHome, jerseyNumber: lastAuto);
-          }
+          // Intentionally keep lastAuto selected to allow multiple selections
           // Select the current jersey
           _selectPlayerChipByNumber(
             isHomeTeam: isHome,
@@ -1505,6 +1503,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (name.isEmpty) return;
     final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
     set.add(name);
+
+    // Ensure first team/player tracking is set on first auto-selection
+    if (_firstTeamSelected == null) {
+      _firstTeamSelected = isHomeTeam;
+    }
+    // Preserve the first player selected if not already set
+    _firstPlayerSelected ??= _removeJerseyNumberFromName(name);
 
     // Red star is determined by caption text order
 
@@ -1791,27 +1796,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   onChanged: (value) {
                                                     // Magic bar functionality
                                                     if (value.isEmpty) {
-                                                      if (_firstPlayerSelected ==
-                                                          null) {
-                                                        _resetCaption();
-                                                      }
+                                                      // Don't reset caption when magic bar is empty
+                                                      // This preserves player selections during multi-player input
                                                       return;
                                                     }
                                                     if (_isMagicInput(value)) {
                                                       _parseMagicInput(value);
                                                       return;
                                                     }
-                                                    setState(() {
-                                                      if (_isPlayerSearchMode &&
-                                                          _isNumeric(value)) {
-                                                        _filterPlayersByNumber(
-                                                            value);
-                                                      } else if (_isPlayerSearchMode &&
-                                                          value.isEmpty) {
-                                                        _filteredPlayers
-                                                            .clear();
-                                                      }
-                                                    });
+
+                                                    // Handle multiple player numbers (e.g., "27 23")
+                                                    _handleMultiplePlayerInput(
+                                                        value);
                                                   },
                                                 ),
                                               ),
@@ -4092,6 +4088,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return 'thirtieth';
       default:
         return '${number}th';
+    }
+  }
+
+  // Handle multiple player numbers input (e.g., "27 23")
+  void _handleMultiplePlayerInput(String value) {
+    if (value.isEmpty) return;
+
+    final parts = value.trim().split(' ');
+    final lastPart = parts.last;
+
+    // If the last part is numeric, search for that player
+    if (_isNumeric(lastPart)) {
+      setState(() {
+        _filterPlayersByNumber(lastPart);
+      });
+    } else {
+      // Clear filtered players if not numeric
+      setState(() {
+        _filteredPlayers.clear();
+      });
     }
   }
 
@@ -6757,6 +6773,90 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _batterRunningByHit.clear();
 
       _clearVerbSubSelections();
+      // Don't clear player selections when resetting caption
+      // This preserves multi-player selections when using magic bar
+      // _firstTeamSelected = null;
+      // _firstPlayerSelected = null;
+      // selectedHomePlayers.clear();
+      // selectedAwayPlayers.clear();
+
+      // Clear magic input related state
+      _isPlayerSearchMode = true;
+      _filteredPlayers.clear();
+      _selectedPlayerNumbers.clear();
+      _playerSearchText = '';
+      _noPlayersFound = false;
+      _homeSearchText = '';
+      _awaySearchText = '';
+
+      // Clear magic input player selection state
+      _showMagicInputPlayerOptions = false;
+      _magicInputMatchingPlayers.clear();
+      _magicInputActionText = '';
+      _waitingForHomeVisitorChoice = false;
+
+      // Don't clear custom text or magic bar text for multiple player selection
+      // customBetweenPlayersController.clear();
+    });
+
+    // Update the UI
+    _updateCaption();
+    _updatePersonalityField();
+  }
+
+  void _fullReset() {
+    setState(() {
+      captionController.clear();
+      personalityController.clear();
+      customCelebrationController.clear();
+      // Magic bar removed
+      _homeSearchController.clear();
+      _awaySearchController.clear();
+      _showCustomTextInningSelector = false;
+
+      // Reset all verb-related state
+      _selectedVerb = null;
+      _selectedActionVerb = null; // Clear action verb
+      _selectedHittingAction = null;
+      _selectedHomeRunType = null;
+      _selectedTagsAction = null; // Clear tags action
+      _selectedBase = null; // Clear selected base
+      _selectedFieldingAction = null;
+      _selectedBaseRunningAction = null;
+      _selectedStealBase = null;
+      _selectedCelebrationType = null;
+      _isCelebratingScoring = false; // Reset scoring celebration selection
+      _isCelebratingWithTeammates =
+          false; // Reset teammates celebration selection
+      _selectedAtBatAction = null;
+      _selectedBattingAction = null;
+      _selectedRbiInning = null;
+
+      // Reset other verb-related state
+      _rbiCount = null;
+      _isBatterRunning = false;
+      _isSliding = false;
+      _showFieldingOptions = false;
+      _showStealAgainstPlayer = false;
+      _isSoloCelebration = false;
+      _isDivingCatch = false;
+      _walkOff = false;
+      _showExtraInnings = false;
+      _extraInningsPage = 0;
+      _isPriorToGame = false; // Reset "prior to the game" selection
+
+      // Clear collections
+      celebrateWith.clear();
+      celebrateAgainst.clear();
+
+      // Clear per-hit-type selections
+      _rbiCountByHit.clear();
+      _homeRunTypeByHit.clear();
+      _inningByHit.clear();
+      _batterRunningByHit.clear();
+
+      _clearVerbSubSelections();
+      // Clear player selections for full reset
       _firstTeamSelected = null;
       _firstPlayerSelected = null;
       selectedHomePlayers.clear();
@@ -6777,12 +6877,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _magicInputActionText = '';
       _waitingForHomeVisitorChoice = false;
 
-      // Clear manager name for Pitching Change
-      _managerName = '';
-      _managerNameController.clear();
-
-      _updatePersonalityField();
+      // Clear custom text and magic bar text for full reset
+      customBetweenPlayersController.clear();
     });
+
+    // Update the UI
+    _updateCaption();
+    _updatePersonalityField();
 
     if (widget.onReset != null) widget.onReset!();
 
@@ -9946,12 +10047,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   print(
                       'DEBUG: _waitingForHomeVisitorChoice: $_waitingForHomeVisitorChoice');
 
-                  // If magic bar is completely cleared, reset everything
-                  // BUT only if we don't have a first player selected (preserve main player)
+                  // If magic bar is completely cleared, don't reset
+                  // This preserves player selections during multi-player input
                   if (value.isEmpty) {
-                    if (_firstPlayerSelected == null) {
-                      _resetCaption();
-                    }
                     return;
                   }
 
@@ -11654,7 +11752,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
 
       _playerSearchText = '';
-      customBetweenPlayersController.clear();
+      // Don't clear the magic bar text when adding additional players
+      // customBetweenPlayersController.clear();
       _filteredPlayers.clear();
 
       // Automatically switch to custom verb writer mode when a player is selected
@@ -11663,6 +11762,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update caption when player is selected from Magic Bar
     _updateCaption();
+
+    // Ensure the original main player remains selected
+    _ensureMainPlayerStillSelected();
 
     // Store the original caption AFTER it's been updated
     _originalCaptionBeforeCustomVerb = captionController.text;
@@ -11739,7 +11841,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           // Reset button
           CustomButton(
-            onTap: _resetCaption,
+            onTap: _fullReset,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
@@ -11864,7 +11966,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           // Reset button (aligned to left)
           CustomButton(
-            onTap: _resetCaption,
+            onTap: _fullReset,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
