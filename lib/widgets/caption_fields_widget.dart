@@ -4585,7 +4585,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         _selectedVerb = action;
         _selectedActionVerb = action;
-        _selectedRbiInning = inning;
+        // Only set inning if explicitly provided in the input
+        // Don't automatically set inning for shortcodes
+        if (inning != null) {
+          _selectedRbiInning = inning;
+        }
 
         // Apply Home Run type if provided
         if (homeRunType != null) {
@@ -4606,13 +4610,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               break;
           }
         } else {
-          // Only set RBI count if inning is provided (legacy syntax like "27 hr 1")
+          // For shortcodes, interpret trailing numbers as RBI count, not inning
+          // This prevents automatic inning writing for shortcodes
           if (inning != null &&
               (action == 'Home Run' ||
                   action == 'Single' ||
                   action == 'Double' ||
                   action == 'Triple')) {
             _rbiCount = inning; // Interpret trailing number as RBI count
+            // Don't set inning for shortcodes - only set inning if explicitly provided as inning
+            // _selectedRbiInning remains null for shortcodes
           } else {
             _rbiCount = null;
           }
@@ -5119,17 +5126,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         _selectedVerb = action;
         _selectedActionVerb = action;
-        _selectedRbiInning = inning;
+        // Only set inning if explicitly provided in the input
+        // Don't automatically set inning for shortcodes
+        if (inning != null) {
+          _selectedRbiInning = inning;
+        }
 
-        // Only set RBI count if inning is provided (indicating RBI was specified)
-        // For magic input like "27 hr", don't set RBI count
-        // For magic input like "27 hr 1", set RBI count to 1
+        // For shortcodes, interpret trailing numbers as RBI count, not inning
+        // This prevents automatic inning writing for shortcodes
         if (inning != null &&
             (action == 'Home Run' ||
                 action == 'Single' ||
                 action == 'Double' ||
                 action == 'Triple')) {
           _rbiCount = inning; // Use the inning number as RBI count
+          // Don't set inning for shortcodes - only set inning if explicitly provided as inning
+          // _selectedRbiInning remains null for shortcodes
         } else {
           _rbiCount = null; // Don't set RBI count for solo actions
         }
@@ -9445,8 +9457,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           celebrationPhrase += ' scoring';
         }
 
-        // Add teammates if there are multiple players (always format with teammates)
-        if (activePlayers.length > 1) {
+        // Add teammates only if there are actual teammates (other players besides main player), but not for solo home runs
+        if (_selectedHomeRunType != 'Solo') {
           final teammates = _getTeammates();
           if (teammates.isNotEmpty) {
             final teammateWord =
