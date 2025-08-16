@@ -1049,12 +1049,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Pattern tokens (require space after):
     // - hNN / hhNN / vNN / vvNN → player tokens
-    // - iNN → inning token → "during the first inning"
+    // - iNN → inning token → "during the first inning" (requires at least 1 digit)
     // - ht / vt → team names (home / visiting)
     // - ag → "against the [opposite team]" (based on first selected player)
     final regex = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
-    if (!regex.hasMatch(normalizedValue)) return;
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
+    final inningRegex = RegExp(r'(?:^|\b)[iI](\d{1,3}) ');
+
+    // Check if there are any valid tokens to process
+    if (!regex.hasMatch(normalizedValue) &&
+        !inningRegex.hasMatch(normalizedValue)) return;
 
     String newText = value;
     bool replacedAny = false;
@@ -1125,34 +1129,43 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     int lastIndex = 0;
     final List<TextRange> newHighlightedRanges = [];
 
+    // Process inning tokens first (they require at least 1 digit)
+    for (final match in inningRegex.allMatches(normalizedValue)) {
+      if (match.start > lastIndex) {
+        buffer.write(normalizedValue.substring(lastIndex, match.start));
+      }
+      final number = match.group(1)!;
+
+      replacedAny = true;
+      final inningNum = int.tryParse(number) ?? 0;
+      // Don't process inning 0
+      if (inningNum == 0) {
+        lastIndex = match.end;
+        continue;
+      }
+      final ord = ordinalWord(inningNum);
+      final replacement = 'during the $ord inning ';
+      buffer.write(replacement);
+      // Highlight the entire inserted phrase
+      newHighlightedRanges.add(
+        TextRange(
+            start: buffer.length - replacement.length, end: buffer.length),
+      );
+      if (selection.baseOffset >= match.start &&
+          selection.baseOffset <= match.end) {
+        caretAfterReplacement = buffer.length;
+      }
+      lastIndex = match.end - 1; // Skip the space that triggered the expansion
+    }
+
+    // Process other tokens
     for (final match in regex.allMatches(normalizedValue)) {
       if (match.start > lastIndex) {
         buffer.write(normalizedValue.substring(lastIndex, match.start));
       }
-      final prefix = match.group(1)!; // h, hh, v, vv, or i (any case)
+      final prefix = match.group(1)!; // h, hh, v, vv, ht, vt, ag
       final number = match.group(2)!;
       final lower = prefix.toLowerCase();
-
-      // Inning token handling: iN -> "during the <ordinal> inning"
-      if (lower == 'i') {
-        replacedAny = true;
-        final inningNum = int.tryParse(number) ?? 0;
-        final ord = ordinalWord(inningNum);
-        final replacement = 'during the $ord inning ';
-        buffer.write(replacement);
-        // Highlight the entire inserted phrase
-        newHighlightedRanges.add(
-          TextRange(
-              start: buffer.length - replacement.length, end: buffer.length),
-        );
-        if (selection.baseOffset >= match.start &&
-            selection.baseOffset <= match.end) {
-          caretAfterReplacement = buffer.length;
-        }
-        lastIndex =
-            match.end - 1; // Skip the space that triggered the expansion
-        continue;
-      }
 
       // Against token: ag -> "against the [opposite team]"
       if (lower == 'ag') {
@@ -2247,7 +2260,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                             SizedBox(
                               height: 42,
-                              width: 55,
+                              width: 60,
                               child: Center(
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -2258,7 +2271,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       size: 14,
                                       color: Colors.black87,
                                     ),
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: 2),
                                     Text(
                                       _getTeamAbbreviation(isHome
                                           ? selectedHomeTeam!
@@ -2274,7 +2287,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 4),
                             // Team switch button
                             CustomButton(
                               onTap: () {
@@ -2284,8 +2297,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 _updateCaption();
                               },
                               child: Container(
-                                height: 27,
-                                width: 27,
+                                height: 22,
+                                width: 22,
                                 decoration: BoxDecoration(
                                   color: Colors.grey.shade100,
                                   borderRadius: BorderRadius.circular(4),
@@ -2293,212 +2306,224 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Border.all(color: Colors.grey.shade300),
                                 ),
                                 child: Center(
-                                  child: Icon(
-                                    Icons.autorenew,
-                                    size: 16,
-                                    color: Colors.grey.shade700,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.arrow_back,
+                                        size: 10,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                      Icon(
+                                        Icons.arrow_forward,
+                                        size: 10,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Search field on top line
+                            // Display options to the right of switch button
                             Expanded(
-                              child: SizedBox(
-                                height: 42,
-                                child: Align(
-                                  alignment: Alignment.center,
-                                  child: TextField(
-                                    controller: searchController,
-                                    cursorWidth: 1.5,
-                                    cursorHeight: 16,
-                                    style: const TextStyle(
-                                        fontSize: 12, height: 2.3),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        if (isHome) {
-                                          _homeSearchText = value;
-                                        } else {
-                                          _awaySearchText = value;
-                                        }
-                                      });
-                                    },
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.only(
-                                          left: 8, right: 8, top: 2, bottom: 0),
-                                      prefixIcon: const Icon(Icons.search,
-                                          size: 14, color: Colors.grey),
-                                      prefixIconConstraints:
-                                          const BoxConstraints(
-                                              minWidth: 28, minHeight: 20),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade400),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Type button
+                                    MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            if (isHome) {
+                                              _homePlayerGridMode =
+                                                  !_homePlayerGridMode;
+                                              // Reset sort order when switching to grid mode
+                                              if (_homePlayerGridMode) {
+                                                _homeSortOption = 'number';
+                                                _homeSortAscending = true;
+                                              }
+                                            } else {
+                                              _awayPlayerGridMode =
+                                                  !_awayPlayerGridMode;
+                                              // Reset sort order when switching to grid mode
+                                              if (_awayPlayerGridMode) {
+                                                _awaySortOption = 'number';
+                                                _awaySortAscending = true;
+                                              }
+                                            }
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 4, vertical: 2),
+                                          child: Text(
+                                            isHome
+                                                ? (_homePlayerGridMode
+                                                    ? 'Grid'
+                                                    : 'List')
+                                                : (_awayPlayerGridMode
+                                                    ? 'Grid'
+                                                    : 'List'),
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.black87,
+                                                fontWeight: FontWeight.w500),
+                                          ),
+                                        ),
                                       ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade400),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.blue.shade400,
-                                            width: 1),
-                                      ),
-                                      hintStyle: const TextStyle(
-                                          fontSize: 10, color: Colors.grey),
                                     ),
-                                  ),
+                                    Text('•',
+                                        style: TextStyle(
+                                            fontSize: 10, color: Colors.black)),
+                                    const SizedBox(width: 8),
+                                    // Sort by options (only show when in List mode)
+                                    if (!(isHome
+                                        ? _homePlayerGridMode
+                                        : _awayPlayerGridMode)) ...[
+                                      MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              if (isHome) {
+                                                if (_homeSortOption ==
+                                                    'number') {
+                                                  _homeSortOption = 'lastName';
+                                                } else if (_homeSortOption ==
+                                                    'lastName') {
+                                                  _homeSortOption = 'firstName';
+                                                } else {
+                                                  _homeSortOption = 'number';
+                                                }
+                                              } else {
+                                                if (_awaySortOption ==
+                                                    'number') {
+                                                  _awaySortOption = 'lastName';
+                                                } else if (_awaySortOption ==
+                                                    'lastName') {
+                                                  _awaySortOption = 'firstName';
+                                                } else {
+                                                  _awaySortOption = 'number';
+                                                }
+                                              }
+                                            });
+                                          },
+                                          child: Text(
+                                            isHome
+                                                ? (_homeSortOption == 'number'
+                                                    ? 'Number'
+                                                    : _homeSortOption ==
+                                                            'lastName'
+                                                        ? 'Last'
+                                                        : 'First')
+                                                : (_awaySortOption == 'number'
+                                                    ? 'Number'
+                                                    : _awaySortOption ==
+                                                            'lastName'
+                                                        ? 'Last'
+                                                        : 'First'),
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.black87,
+                                                fontWeight: FontWeight.w500),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text('•',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.black)),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    // Ascending/Descending button
+                                    MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            if (isHome) {
+                                              _homeSortAscending =
+                                                  !_homeSortAscending;
+                                            } else {
+                                              _awaySortAscending =
+                                                  !_awaySortAscending;
+                                            }
+                                          });
+                                        },
+                                        child: Text(
+                                          isHome
+                                              ? (_homeSortAscending ? '↑' : '↓')
+                                              : (_awaySortAscending
+                                                  ? '↑'
+                                                  : '↓'),
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.black87,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        // Controls row
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Row(
-                            children: [
-                              // Type label
-                              const Text(
-                                'Display Type: ',
-                                style:
-                                    TextStyle(fontSize: 10, color: Colors.grey),
+                        const SizedBox(height: 0),
+                        // Search bar below team names and controls
+                        SizedBox(
+                          height: 24,
+                          child: TextField(
+                            controller: searchController,
+                            cursorWidth: 1.5,
+                            cursorHeight: 16,
+                            style: const TextStyle(fontSize: 11, height: 1.1),
+                            onChanged: (value) {
+                              setState(() {
+                                if (isHome) {
+                                  _homeSearchText = value;
+                                } else {
+                                  _awaySearchText = value;
+                                }
+                              });
+                            },
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.only(
+                                  left: 6, right: 6, top: 0, bottom: 0),
+                              prefixIcon: const Icon(Icons.search,
+                                  size: 14, color: Colors.grey),
+                              prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 28, minHeight: 20),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade400),
                               ),
-                              // Type button
-                              MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      if (isHome) {
-                                        _homePlayerGridMode =
-                                            !_homePlayerGridMode;
-                                        // Reset sort order when switching to grid mode
-                                        if (_homePlayerGridMode) {
-                                          _homeSortOption = 'number';
-                                          _homeSortAscending = true;
-                                        }
-                                      } else {
-                                        _awayPlayerGridMode =
-                                            !_awayPlayerGridMode;
-                                        // Reset sort order when switching to grid mode
-                                        if (_awayPlayerGridMode) {
-                                          _awaySortOption = 'number';
-                                          _awaySortAscending = true;
-                                        }
-                                      }
-                                    });
-                                  },
-                                  child: Text(
-                                    isHome
-                                        ? (_homePlayerGridMode
-                                            ? 'Grid'
-                                            : 'List')
-                                        : (_awayPlayerGridMode
-                                            ? 'Grid'
-                                            : 'List'),
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade400),
                               ),
-                              const SizedBox(width: 8),
-                              // Sort by options (only show when in List mode)
-                              if (!(isHome
-                                  ? _homePlayerGridMode
-                                  : _awayPlayerGridMode)) ...[
-                                const Text(
-                                  'Sort by: ',
-                                  style: TextStyle(
-                                      fontSize: 10, color: Colors.grey),
-                                ),
-                                MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        if (isHome) {
-                                          if (_homeSortOption == 'number') {
-                                            _homeSortOption = 'lastName';
-                                          } else if (_homeSortOption ==
-                                              'lastName') {
-                                            _homeSortOption = 'firstName';
-                                          } else {
-                                            _homeSortOption = 'number';
-                                          }
-                                        } else {
-                                          if (_awaySortOption == 'number') {
-                                            _awaySortOption = 'lastName';
-                                          } else if (_awaySortOption ==
-                                              'lastName') {
-                                            _awaySortOption = 'firstName';
-                                          } else {
-                                            _awaySortOption = 'number';
-                                          }
-                                        }
-                                      });
-                                    },
-                                    child: Text(
-                                      isHome
-                                          ? (_homeSortOption == 'number'
-                                              ? 'Number'
-                                              : _homeSortOption == 'lastName'
-                                                  ? 'Last Name'
-                                                  : 'First Name')
-                                          : (_awaySortOption == 'number'
-                                              ? 'Number'
-                                              : _awaySortOption == 'lastName'
-                                                  ? 'Last Name'
-                                                  : 'First Name'),
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.black87,
-                                          fontWeight: FontWeight.w500),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              // Ascending/Descending button
-                              MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      if (isHome) {
-                                        _homeSortAscending =
-                                            !_homeSortAscending;
-                                      } else {
-                                        _awaySortAscending =
-                                            !_awaySortAscending;
-                                      }
-                                    });
-                                  },
-                                  child: Text(
-                                    isHome
-                                        ? (_homeSortAscending ? '↑' : '↓')
-                                        : (_awaySortAscending ? '↑' : '↓'),
-                                    style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(
+                                    color: Colors.blue.shade400, width: 1),
                               ),
-                            ],
+                              hintText: 'Search players...',
+                              hintStyle: const TextStyle(
+                                  fontSize: 10, color: Colors.grey),
+                            ),
                           ),
                         ),
                       ],
