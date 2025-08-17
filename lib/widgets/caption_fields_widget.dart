@@ -2045,6 +2045,65 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   .last
                                                   .toLowerCase();
 
+                                      // Ensure caption updates on deletion of shortcuts (run early before any returns)
+                                      {
+                                        final List<String> tokens = raw
+                                            .trim()
+                                            .toLowerCase()
+                                            .split(RegExp(r'\s+'))
+                                            .where((t) => t.isNotEmpty)
+                                            .toList();
+                                        final bool hasHrToken = tokens.any(
+                                            (t) =>
+                                                RegExp(r'^hr([1-4])$',
+                                                        caseSensitive: false)
+                                                    .hasMatch(t) ||
+                                                t == 'gs');
+                                        final bool hasRbiToken = RegExp(
+                                                r'(?:^|\s)(\d{1,2})\s*[rR](?:\s|$)')
+                                            .hasMatch(raw.trim());
+                                        final bool hasExplicitInningToken =
+                                            RegExp(r'(?:^|\b)[iI]\d+')
+                                                .hasMatch(raw);
+                                        final List<String> bareNums = tokens
+                                            .where((t) => RegExp(r'^\d{1,2}$')
+                                                .hasMatch(t))
+                                            .toList();
+                                        final bool hasBareInningToken =
+                                            raw.contains(' ') &&
+                                                bareNums.isNotEmpty;
+
+                                        bool anyChanged = false;
+                                        setState(() {
+                                          // If inning token removed, clear inning selection
+                                          if (!hasExplicitInningToken &&
+                                              !hasBareInningToken &&
+                                              _selectedRbiInning != null) {
+                                            _selectedRbiInning = null;
+                                            anyChanged = true;
+                                          }
+                                          // If HR shortcut removed, clear Home Run selections
+                                          if (!hasHrToken &&
+                                              _selectedVerb == 'Home Run') {
+                                            _selectedVerb = null;
+                                            _selectedActionVerb = null;
+                                            _selectedHomeRunType = null;
+                                            _rbiCount = null;
+                                            anyChanged = true;
+                                          }
+                                          // If RBI shortcut removed (and not HR), clear RBI count
+                                          if (!hasRbiToken &&
+                                              _selectedVerb != 'Home Run' &&
+                                              _rbiCount != null) {
+                                            _rbiCount = null;
+                                            anyChanged = true;
+                                          }
+                                        });
+                                        if (anyChanged) {
+                                          _updateCaption();
+                                        }
+                                      }
+
                                       // Quick-select Home Run with type via magic bar from the LAST token
                                       // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
                                       if (lastToken.isNotEmpty) {
@@ -2086,6 +2145,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             _selectedActionVerb = 'Home Run';
                                             _selectedHomeRunType = 'Grand Slam';
                                             _rbiCount = 4;
+                                          });
+                                          _updateCaption();
+                                          return;
+                                        }
+                                      }
+
+                                      // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
+                                      // Only trigger when there is at least one space (to avoid conflicting with first player token)
+                                      if (hasSpace &&
+                                          RegExp(r'^\d{1,2}$')
+                                              .hasMatch(lastToken)) {
+                                        final int inningNum =
+                                            int.parse(lastToken);
+                                        if (inningNum > 0 && inningNum <= 20) {
+                                          setState(() {
+                                            _selectedRbiInning = inningNum;
                                           });
                                           _updateCaption();
                                           return;
@@ -2165,9 +2240,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         }
                                       }
 
-                                      // Parse RBI (e.g., "3r") and Inning (e.g., "1i") shortcuts in sub-menus
+                                      // Parse RBI shortcuts (e.g., "3r") in sub-menus
                                       final RegExpMatch? statMatch =
-                                          RegExp(r'(\d{1,2})\s*([riRI])$')
+                                          RegExp(r'(\d{1,2})\s*([rR])$')
                                               .firstMatch(value.trim());
                                       if (statMatch != null) {
                                         final int number =
@@ -2202,13 +2277,63 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             _updateCaption();
                                             return;
                                           }
-                                        } else if (suffix == 'i') {
-                                          setState(() {
-                                            _selectedRbiInning = number;
-                                          });
-                                          _updateCaption();
-                                          return;
                                         }
+                                      }
+
+                                      // Cleanup: if user deletes shortcuts, clear derived selections and update caption
+                                      final List<String> tokens = raw
+                                          .trim()
+                                          .toLowerCase()
+                                          .split(RegExp(r'\s+'))
+                                          .where((t) => t.isNotEmpty)
+                                          .toList();
+                                      final bool hasHrToken = tokens.any((t) =>
+                                          RegExp(r'^hr([1-4])$',
+                                                  caseSensitive: false)
+                                              .hasMatch(t) ||
+                                          t == 'gs');
+                                      final bool hasRbiToken = RegExp(
+                                              r'(?:^|\s)(\d{1,2})\s*[rR](?:\s|$)')
+                                          .hasMatch(raw.trim());
+                                      final bool hasExplicitInningToken =
+                                          RegExp(r'(?:^|\b)[iI]\d+')
+                                              .hasMatch(raw);
+                                      final List<String> bareNums = tokens
+                                          .where((t) =>
+                                              RegExp(r'^\d{1,2}$').hasMatch(t))
+                                          .toList();
+                                      final bool hasBareInningToken =
+                                          raw.contains(' ') &&
+                                              bareNums.isNotEmpty;
+
+                                      bool anyChanged = false;
+                                      setState(() {
+                                        // If HR shortcut removed, clear Home Run selections
+                                        if (!hasHrToken &&
+                                            _selectedVerb == 'Home Run') {
+                                          _selectedVerb = null;
+                                          _selectedActionVerb = null;
+                                          _selectedHomeRunType = null;
+                                          _rbiCount = null;
+                                          anyChanged = true;
+                                        }
+                                        // If RBI shortcut removed (and not HR), clear RBI count
+                                        if (!hasRbiToken &&
+                                            _selectedVerb != 'Home Run' &&
+                                            _rbiCount != null) {
+                                          _rbiCount = null;
+                                          anyChanged = true;
+                                        }
+                                        // If inning token removed, clear inning selection
+                                        if (!hasExplicitInningToken &&
+                                            !hasBareInningToken &&
+                                            _selectedRbiInning != null) {
+                                          _selectedRbiInning = null;
+                                          anyChanged = true;
+                                        }
+                                      });
+                                      if (anyChanged) {
+                                        _updateCaption();
                                       }
 
                                       if (_isMagicInput(value)) {
@@ -4763,22 +4888,86 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Handle multiple player numbers input (e.g., "27 23")
   void _handleMultiplePlayerInput(String value) {
-    if (value.isEmpty) return;
-
-    final parts = value.trim().split(' ');
-    final lastPart = parts.last;
-
-    // If the last part is numeric, search for that player
-    if (_isNumeric(lastPart)) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      // If input cleared, deselect all players and update caption
       setState(() {
-        _filterPlayersByNumber(lastPart);
-      });
-    } else {
-      // Clear filtered players if not numeric
-      setState(() {
+        selectedHomePlayers.clear();
+        selectedAwayPlayers.clear();
+        _firstPlayerSelected = null;
+        _firstTeamSelected = null;
         _filteredPlayers.clear();
       });
+      _updateCaption();
+      return;
     }
+
+    final parts = trimmed.split(RegExp(r'\s+'));
+    final lastPart = parts.isNotEmpty ? parts.last : '';
+
+    // Build target selections from tokens so UI reflects exactly what's typed
+    final Set<String> nextHome = {};
+    final Set<String> nextAway = {};
+    bool? firstTeamIsHome;
+    String? firstPlayerCleaned;
+
+    for (int i = 0; i < parts.length; i++) {
+      final token = parts[i].toLowerCase();
+      if (token.isEmpty) continue;
+      // Match hNN / hhNN / vNN / vvNN or plain NN
+      final match = RegExp(r'^(h{1,2}|v{1,2})?(\d+)$').firstMatch(token);
+      if (match == null) continue;
+      final prefix = match.group(1);
+      final num = match.group(2)!;
+
+      // Find matching players in rosters
+      List<Player> candidates;
+      if (prefix == null) {
+        candidates = [
+          ..._homeRoster.where((p) => p.jerseyNumber == num),
+          ..._awayRoster.where((p) => p.jerseyNumber == num),
+        ];
+      } else if (prefix.startsWith('h')) {
+        candidates = _homeRoster.where((p) => p.jerseyNumber == num).toList();
+      } else {
+        candidates = _awayRoster.where((p) => p.jerseyNumber == num).toList();
+      }
+      if (candidates.isEmpty) continue;
+      final player = candidates.first;
+      final display = player.displayName;
+      final cleaned = _removeJerseyNumberFromName(display);
+      final isHome = prefix == null
+          ? selectedHomePlayers.contains(display) // fall back to current
+          : prefix.startsWith('h');
+
+      if (isHome) {
+        nextHome.add(display);
+      } else {
+        nextAway.add(display);
+      }
+      firstTeamIsHome ??= isHome;
+      firstPlayerCleaned ??= cleaned;
+    }
+
+    // Apply computed selections so deletions are reflected
+    setState(() {
+      selectedHomePlayers
+        ..clear()
+        ..addAll(nextHome);
+      selectedAwayPlayers
+        ..clear()
+        ..addAll(nextAway);
+      _firstTeamSelected = firstTeamIsHome;
+      _firstPlayerSelected = firstPlayerCleaned;
+
+      // Update filtered players for live highlight of the last numeric token
+      if (_isNumeric(lastPart)) {
+        _filterPlayersByNumber(lastPart);
+      } else {
+        _filteredPlayers.clear();
+      }
+    });
+    _updateCaption();
   }
 
   // Magic input parsing methods
