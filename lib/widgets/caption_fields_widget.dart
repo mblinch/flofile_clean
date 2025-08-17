@@ -2111,24 +2111,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           // Left Team (Home or Away depending on _homeOnLeft)
           Expanded(
-            flex: 2,
+            flex: 3,
             child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
           ),
 
           const SizedBox(width: 4),
 
-          // Verbs (Center) - 80% of space
+          // Verbs (Center) - 70% of space
           Expanded(
-            flex: 8,
+            flex: 7,
             child: _buildCompactVerbColumn(),
-          ),
-
-          const SizedBox(width: 4),
-
-          // Right Team (Away or Home depending on _homeOnLeft)
-          Expanded(
-            flex: 2,
-            child: _buildCompactTeamColumn(_homeOnLeft ? false : true),
           ),
         ],
       ),
@@ -2417,19 +2409,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Row(
               children: [
                 // Show team dropdown when no team selected, or team name + controls when team selected
-                if (isHome
+                if (_homeOnLeft
                     ? selectedHomeTeam == null
                     : selectedAwayTeam == null) ...[
                   // Team selection area when no team selected
                   Expanded(
                     child: _buildTeamDropdown(
-                      isHome: isHome,
+                      isHome: _homeOnLeft,
                       selectedTeam:
-                          isHome ? selectedHomeTeam : selectedAwayTeam,
+                          _homeOnLeft ? selectedHomeTeam : selectedAwayTeam,
                       onTeamChanged: (String? newValue) async {
                         if (newValue == null) return;
                         setState(() {
-                          if (isHome) {
+                          if (_homeOnLeft) {
                             selectedHomeTeam = newValue;
                           } else {
                             selectedAwayTeam = newValue;
@@ -2438,7 +2430,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         // Load rosters and show debug popup
                         await _loadTeamRosters();
-                        _showTeamSelectionDebug(newValue, isHome);
+                        _showTeamSelectionDebug(newValue, _homeOnLeft);
                       },
                     ),
                   ),
@@ -2456,7 +2448,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               cursor: SystemMouseCursors.click,
                               child: GestureDetector(
                                 onTap: () =>
-                                    _showTeamEditorDialog(isHome: isHome),
+                                    _showTeamEditorDialog(isHome: _homeOnLeft),
                                 child: SizedBox(
                                   height: 42,
                                   width: 60,
@@ -2467,13 +2459,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
-                                          isHome ? Icons.home : Icons.flight,
+                                          _homeOnLeft
+                                              ? Icons.home
+                                              : Icons.flight,
                                           size: 14,
                                           color: Colors.black87,
                                         ),
                                         const SizedBox(width: 2),
                                         Text(
-                                          _getTeamAbbreviation(isHome
+                                          _getTeamAbbreviation(_homeOnLeft
                                               ? selectedHomeTeam!
                                               : selectedAwayTeam!),
                                           style: TextStyle(
@@ -2494,7 +2488,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             CustomButton(
                               onTap: () {
                                 setState(() {
-                                  _homeOnLeft = !_homeOnLeft;
+                                  // Switch between home and away team on the left side
+                                  if (_homeOnLeft) {
+                                    // Currently showing home team, switch to away team
+                                    _homeOnLeft = false;
+                                  } else {
+                                    // Currently showing away team, switch to home team
+                                    _homeOnLeft = true;
+                                  }
                                 });
                                 _updateCaption();
                               },
@@ -2545,7 +2546,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: GestureDetector(
                                         onTap: () {
                                           setState(() {
-                                            if (isHome) {
+                                            if (_homeOnLeft) {
                                               _homePlayerGridMode =
                                                   !_homePlayerGridMode;
                                               // Reset sort order when switching to grid mode
@@ -2568,7 +2569,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 4, vertical: 2),
                                           child: Text(
-                                            isHome
+                                            _homeOnLeft
                                                 ? (_homePlayerGridMode
                                                     ? 'Grid'
                                                     : 'List')
@@ -2588,7 +2589,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             fontSize: 10, color: Colors.black)),
                                     const SizedBox(width: 8),
                                     // Sort by options (only show when in List mode)
-                                    if (!(isHome
+                                    if (!(_homeOnLeft
                                         ? _homePlayerGridMode
                                         : _awayPlayerGridMode)) ...[
                                       MouseRegion(
@@ -2596,7 +2597,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         child: GestureDetector(
                                           onTap: () {
                                             setState(() {
-                                              if (isHome) {
+                                              if (_homeOnLeft) {
                                                 if (_homeSortOption ==
                                                     'number') {
                                                   _homeSortOption = 'lastName';
@@ -2620,7 +2621,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             });
                                           },
                                           child: Text(
-                                            isHome
+                                            _homeOnLeft
                                                 ? (_homeSortOption == 'number'
                                                     ? 'Number'
                                                     : _homeSortOption ==
@@ -2653,7 +2654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: GestureDetector(
                                         onTap: () {
                                           setState(() {
-                                            if (isHome) {
+                                            if (_homeOnLeft) {
                                               _homeSortAscending =
                                                   !_homeSortAscending;
                                             } else {
@@ -2663,7 +2664,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           });
                                         },
                                         child: Text(
-                                          isHome
+                                          _homeOnLeft
                                               ? (_homeSortAscending ? '↑' : '↓')
                                               : (_awaySortAscending
                                                   ? '↑'
@@ -2692,7 +2693,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             style: const TextStyle(fontSize: 11, height: 1.1),
                             onChanged: (value) {
                               setState(() {
-                                if (isHome) {
+                                if (_homeOnLeft) {
                                   _homeSearchText = value;
                                 } else {
                                   _awaySearchText = value;
@@ -2758,9 +2759,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
                       )
-                    : (isHome ? _homePlayerGridMode : _awayPlayerGridMode)
+                    : (_homeOnLeft ? _homePlayerGridMode : _awayPlayerGridMode)
                         ? _buildPlayerGrid(
-                            filteredRoster, selectedPlayers, isHome)
+                            filteredRoster, selectedPlayers, _homeOnLeft)
                         : ListView.builder(
                             shrinkWrap: true,
                             itemCount: filteredRoster.length,
@@ -2768,8 +2769,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               final player = filteredRoster[index];
                               final isSelected =
                                   selectedPlayers.contains(player.displayName);
-                              final isHomePlayer = selectedHomePlayers
-                                  .contains(player.displayName);
+                              final isHomePlayer = _homeOnLeft
+                                  ? selectedHomePlayers
+                                      .contains(player.displayName)
+                                  : selectedAwayPlayers
+                                      .contains(player.displayName);
 
                               return GestureDetector(
                                 onTap: () {
@@ -2928,153 +2932,190 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }).toList();
     }
 
-    // Create rows with 4 squares per row
-    List<Widget> rows = [];
-    List<Widget> currentRow = [];
-
+    // Group players by jersey number ranges (0-9, 10-19, 20-29, etc.)
+    Map<int, List<int>> playersByRange = {};
     for (int jerseyNum in jerseyNumbers) {
-      Player player = playersByNumber[jerseyNum]!;
-      bool isSelected = selectedPlayers.contains(player.displayName);
-      bool isHomePlayer = selectedHomePlayers.contains(player.displayName);
-
-      currentRow.add(
-        Expanded(
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                if (isSelected) {
-                  if (isHome) {
-                    selectedHomePlayers.remove(player.displayName);
-                  } else {
-                    selectedAwayPlayers.remove(player.displayName);
-                  }
-                } else {
-                  // Track which team was selected first; set first player if not set
-                  if (_firstTeamSelected == null) {
-                    _firstTeamSelected = isHome;
-                    _firstPlayerSelected =
-                        _removeJerseyNumberFromName(player.displayName);
-                  }
-                  if (isHome) {
-                    selectedHomePlayers.add(player.displayName);
-                  } else {
-                    selectedAwayPlayers.add(player.displayName);
-                  }
-
-                  // Switch to custom verb mode when a player is selected
-                  _isPlayerSearchMode = false;
-                }
-              });
-              _updateCaption();
-
-              // Store the original caption AFTER it's been updated (for grid selection)
-              _originalCaptionBeforeCustomVerb = captionController.text;
-            },
-            child: Container(
-              margin: const EdgeInsets.all(1),
-              height: 40,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
-                    : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: isSelected
-                      ? (isHomePlayer
-                          ? Colors.grey.shade700
-                          : Colors.grey.shade400)
-                      : Colors.grey.shade300,
-                  width: 0.5,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          jerseyNum.toString(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: isSelected
-                                ? (isHomePlayer ? Colors.white : Colors.black87)
-                                : Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          player.fullName.split(' ').skip(1).join(' '),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: isSelected
-                                ? (isHomePlayer ? Colors.white : Colors.black87)
-                                : Colors.black54,
-                          ),
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Red star for first selected player
-                  if (isSelected && _isFirstSelectedPlayer(player.displayName))
-                    Positioned(
-                      top: 2,
-                      right: 2,
-                      child: Container(
-                        padding: const EdgeInsets.all(1),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: const Icon(
-                          Icons.star,
-                          size: 8,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-
-      // When we have 4 items in the current row, add it to rows and start a new row
-      if (currentRow.length == 4) {
-        rows.add(Row(children: currentRow));
-        currentRow = [];
-      }
+      int range = (jerseyNum ~/ 10) * 10; // 0, 10, 20, 30, etc.
+      playersByRange.putIfAbsent(range, () => []).add(jerseyNum);
     }
 
-    // Add any remaining items in the last row
-    if (currentRow.isNotEmpty) {
-      // Fill the remaining slots with empty containers to maintain 4-column layout
-      while (currentRow.length < 4) {
-        currentRow.add(
+    // Sort jersey numbers within each range by number (not by name)
+    for (int range in playersByRange.keys) {
+      playersByRange[range]!.sort();
+      print('DEBUG: Range $range contains: ${playersByRange[range]}');
+    }
+
+    // Create rows with dynamic number of columns, grouped by ranges
+    List<Widget> rows = [];
+    List<int> sortedRanges = playersByRange.keys.toList()..sort();
+    // Determine max players in any range to set consistent columns per row
+    int columnsPerRow = playersByRange.values.isNotEmpty
+        ? playersByRange.values
+            .map((list) => list.length)
+            .reduce((a, b) => a > b ? a : b)
+        : 1;
+    if (columnsPerRow < 1) columnsPerRow = 1;
+
+    for (int range in sortedRanges) {
+      List<int> rangeJerseyNumbers = playersByRange[range]!;
+      List<Widget> allPlayersInRange = [];
+
+      // First, create all player widgets for this range
+      for (int jerseyNum in rangeJerseyNumbers) {
+        Player player = playersByNumber[jerseyNum]!;
+        bool isSelected = selectedPlayers.contains(player.displayName);
+        bool isHomePlayer = selectedHomePlayers.contains(player.displayName);
+
+        allPlayersInRange.add(
           Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(1),
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.transparent, width: 0.5),
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    if (isHome) {
+                      selectedHomePlayers.remove(player.displayName);
+                    } else {
+                      selectedAwayPlayers.remove(player.displayName);
+                    }
+                  } else {
+                    // Track which team was selected first; set first player if not set
+                    if (_firstTeamSelected == null) {
+                      _firstTeamSelected = isHome;
+                      _firstPlayerSelected =
+                          _removeJerseyNumberFromName(player.displayName);
+                    }
+                    if (isHome) {
+                      selectedHomePlayers.add(player.displayName);
+                    } else {
+                      selectedAwayPlayers.add(player.displayName);
+                    }
+
+                    // Switch to custom verb mode when a player is selected
+                    _isPlayerSearchMode = false;
+                  }
+                });
+                _updateCaption();
+
+                // Store the original caption AFTER it's been updated (for grid selection)
+                _originalCaptionBeforeCustomVerb = captionController.text;
+              },
+              child: Container(
+                margin: const EdgeInsets.all(1),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSelected
+                        ? (isHomePlayer
+                            ? Colors.grey.shade700
+                            : Colors.grey.shade400)
+                        : Colors.grey.shade300,
+                    width: 0.5,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            jerseyNum.toString(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? (isHomePlayer
+                                      ? Colors.white
+                                      : Colors.black87)
+                                  : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            player.fullName.split(' ').skip(1).join(' '),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? (isHomePlayer
+                                      ? Colors.white
+                                      : Colors.black87)
+                                  : Colors.black54,
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Red star for first selected player
+                    if (isSelected &&
+                        _isFirstSelectedPlayer(player.displayName))
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(1),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                          child: const Icon(
+                            Icons.star,
+                            size: 8,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         );
       }
-      rows.add(Row(children: currentRow));
+
+      // Now create rows from all players in this range
+      for (int i = 0; i < allPlayersInRange.length; i += columnsPerRow) {
+        List<Widget> currentRow = [];
+
+        // Add players for this row
+        for (int j = 0;
+            j < columnsPerRow && i + j < allPlayersInRange.length;
+            j++) {
+          currentRow.add(allPlayersInRange[i + j]);
+        }
+
+        // Fill remaining slots with placeholder squares
+        while (currentRow.length < columnsPerRow) {
+          currentRow.add(
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.all(1),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade200, width: 0.5),
+                ),
+                child: Container(), // Empty placeholder square
+              ),
+            ),
+          );
+        }
+
+        rows.add(Row(children: currentRow));
+      }
     }
 
     return Padding(
