@@ -367,6 +367,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<Player> _magicInputMatchingPlayers = [];
   String _magicInputActionText = '';
   bool _showMagicInputPlayerOptions = false;
+  // Live text typed in the magic bar used to drive verb highlighting
+  String _magicBarVerbInput = '';
+  // Controller for the Magic Bar to allow programmatic clearing on reset
+  final TextEditingController _magicBarController = TextEditingController();
+  // Focus node for Magic Bar to control when verb bolding is visible
+  final FocusNode _magicBarFocusNode = FocusNode();
+  // Whether the user is currently typing the first magic player token (e.g., "h27")
+  bool _typingFirstMagicToken = false;
   bool _waitingForHomeVisitorChoice = false;
 
   // Team data
@@ -489,6 +497,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Pitching Change'
     ],
   };
+
+  // Match a magic-bar verb token to a canonical verb using the following rules:
+  // - Single-word verbs: the first 2–3 letters are accepted (require at least 2)
+  // - Multi-word verbs: use the acronym of the first letters of each word, excluding "the".
+  //   Accept the full acronym or a prefix of it with length >= 2 (e.g., "pgw" for Post Game Win, "pg" also acceptable).
+  String? _matchVerbToken(String rawToken) {
+    if (rawToken.isEmpty) return null;
+    final token = rawToken.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    if (token.length < 2) return null; // require at least two letters
+
+    // Build a flat list of verbs
+    final List<String> allVerbs = [];
+    for (final entry in verbCategories.entries) {
+      for (final v in entry.value) {
+        if (!allVerbs.contains(v)) allVerbs.add(v);
+      }
+    }
+
+    for (final verb in allVerbs) {
+      final words = verb.split(' ');
+      final filtered = words
+          .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
+          .toList();
+      if (filtered.length > 1) {
+        final acronym = filtered.map((w) => w[0].toLowerCase()).join();
+        if (token.length <= acronym.length && acronym.startsWith(token)) {
+          return verb;
+        }
+      } else {
+        final first = filtered.first.toLowerCase();
+        // Accept first 2-3 letters
+        if (token.length <= 3 && first.startsWith(token)) {
+          return verb;
+        }
+      }
+    }
+
+    return null;
+  }
 
   final bool _isResetting = false;
 
@@ -872,6 +919,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void initState() {
     super.initState();
+    // Rebuild when magic bar focus changes to toggle verb bolding
+    _magicBarFocusNode.addListener(() {
+      setState(() {});
+    });
     _homeSearchController.addListener(() {
       setState(() {
         _homeSearchText = _homeSearchController.text;
@@ -893,6 +944,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void dispose() {
     _homeSearchController.dispose();
     _awaySearchController.dispose();
+    _magicBarController.dispose();
+    _magicBarFocusNode.dispose();
     super.dispose();
   }
 
@@ -1703,6 +1756,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool isHomeTeam,
     required String jerseyNumber,
     bool isProgressive = false,
+    bool affectFirstStar = true,
   }) {
     final roster = isHomeTeam ? _homeRoster : _awayRoster;
     final name = roster
@@ -1716,12 +1770,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
     set.add(name);
 
-    // Ensure first team/player tracking is set on first auto-selection
-    if (_firstTeamSelected == null) {
-      _firstTeamSelected = isHomeTeam;
+    // Optionally affect first star tracking
+    if (affectFirstStar) {
+      if (_firstTeamSelected == null) {
+        _firstTeamSelected = isHomeTeam;
+      }
+      _firstPlayerSelected ??= _removeJerseyNumberFromName(name);
     }
-    // Preserve the first player selected if not already set
-    _firstPlayerSelected ??= _removeJerseyNumberFromName(name);
 
     // Red star is determined by caption text order
 
@@ -1937,7 +1992,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: Container(
                                   padding: const EdgeInsets.only(left: 4),
                                   child: TextField(
-                                    controller: customBetweenPlayersController,
                                     style: const TextStyle(fontSize: 12),
                                     decoration: InputDecoration(
                                       border: OutlineInputBorder(
@@ -1961,13 +2015,202 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       isDense: true,
                                       hintText: 'Magic Bar',
                                     ),
+                                    controller: _magicBarController,
+                                    focusNode: _magicBarFocusNode,
                                     onChanged: (value) {
+                                      // Track magic bar input for verb highlighting
+                                      _magicBarVerbInput =
+                                          value.trim().toLowerCase();
+                                      // Track if we're typing a first magic token (no space yet)
+                                      _typingFirstMagicToken =
+                                          !value.contains(' ');
                                       // Magic bar functionality
                                       if (value.isEmpty) {
                                         // Don't reset caption when magic bar is empty
                                         // This preserves player selections during multi-player input
+                                        setState(() {}); // refresh highlighting
                                         return;
                                       }
+                                      // If user is typing a single player token (no space yet),
+                                      // highlight progressively and postpone parsing until token completes.
+                                      final raw = value;
+                                      final token = raw.trim().toLowerCase();
+                                      final hasSpace = raw.contains(' ');
+                                      final String lastToken =
+                                          raw.trimRight().isEmpty
+                                              ? ''
+                                              : raw
+                                                  .trimRight()
+                                                  .split(' ')
+                                                  .last
+                                                  .toLowerCase();
+
+                                      // Quick-select Home Run with type via magic bar from the LAST token
+                                      // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
+                                      if (lastToken.isNotEmpty) {
+                                        final hrNum = RegExp(r'^hr([1-4])$',
+                                                caseSensitive: false)
+                                            .firstMatch(lastToken);
+                                        if (hrNum != null) {
+                                          final n =
+                                              int.tryParse(hrNum.group(1)!);
+                                          String? hrType;
+                                          switch (n) {
+                                            case 1:
+                                              hrType = 'Solo';
+                                              break;
+                                            case 2:
+                                              hrType = 'Two-Run';
+                                              break;
+                                            case 3:
+                                              hrType = 'Three-Run';
+                                              break;
+                                            case 4:
+                                              hrType = 'Grand Slam';
+                                              break;
+                                          }
+                                          if (hrType != null) {
+                                            setState(() {
+                                              _selectedVerb = 'Home Run';
+                                              _selectedActionVerb = 'Home Run';
+                                              _selectedHomeRunType = hrType;
+                                              _rbiCount = n; // keep in sync
+                                            });
+                                            _updateCaption();
+                                            return;
+                                          }
+                                        }
+                                        if (lastToken == 'gs') {
+                                          setState(() {
+                                            _selectedVerb = 'Home Run';
+                                            _selectedActionVerb = 'Home Run';
+                                            _selectedHomeRunType = 'Grand Slam';
+                                            _rbiCount = 4;
+                                          });
+                                          _updateCaption();
+                                          return;
+                                        }
+                                      }
+
+                                      final singlePlayerRegex =
+                                          RegExp(r'^(h{1,2}|v{1,2})?\d+$');
+                                      // Exclude hr patterns from single player regex
+                                      final hrPattern = RegExp(r'^hr\d+$');
+                                      if (_typingFirstMagicToken &&
+                                          !hasSpace &&
+                                          singlePlayerRegex.hasMatch(token) &&
+                                          !hrPattern.hasMatch(token)) {
+                                        String numberPart = token.replaceAll(
+                                            RegExp(r'^(h{1,2}|v{1,2})'), '');
+                                        bool isHomeHint = token.startsWith('h');
+                                        // If a different jersey was previously auto-selected for this team, unselect it
+                                        final prevAuto = isHomeHint
+                                            ? _autoSelectedHomeJersey
+                                            : _autoSelectedAwayJersey;
+                                        if (prevAuto != null &&
+                                            prevAuto != numberPart) {
+                                          _unselectAutoSelectedByToken(
+                                            isHomeTeam:
+                                                isHomeHint ? true : _homeOnLeft,
+                                            jerseyNumber: prevAuto,
+                                          );
+                                        }
+                                        _selectPlayerChipByNumber(
+                                          isHomeTeam:
+                                              isHomeHint ? true : _homeOnLeft,
+                                          jerseyNumber: numberPart,
+                                          isProgressive: true,
+                                          affectFirstStar: false,
+                                        );
+                                        setState(() {});
+                                        return;
+                                      }
+
+                                      // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
+                                      final RegExpMatch? hrLettersMatch0 =
+                                          RegExp(r'([a-zA-Z]+)$')
+                                              .firstMatch(value);
+                                      final String hrLetters0 = hrLettersMatch0
+                                              ?.group(1)
+                                              ?.toLowerCase() ??
+                                          '';
+                                      if (_selectedVerb == 'Home Run' &&
+                                          hrLetters0 == 'gs') {
+                                        setState(() {
+                                          _selectedHomeRunType = 'Grand Slam';
+                                        });
+                                        _updateCaption();
+                                        return;
+                                      }
+
+                                      // Try to match typed letters to a verb shortcut and auto-select the verb
+                                      final RegExpMatch? lettersMatch =
+                                          RegExp(r'([a-zA-Z]+)$')
+                                              .firstMatch(value);
+                                      final String typedLetters = lettersMatch
+                                              ?.group(1)
+                                              ?.toLowerCase() ??
+                                          '';
+                                      if (typedLetters.length >= 2) {
+                                        final matchedVerb =
+                                            _matchVerbToken(typedLetters);
+                                        if (matchedVerb != null) {
+                                          setState(() {
+                                            _selectedVerb = matchedVerb;
+                                            _selectedActionVerb = matchedVerb;
+                                            _clearVerbSubSelections();
+                                          });
+                                          _updateCaption();
+                                          return;
+                                        }
+                                      }
+
+                                      // Parse RBI (e.g., "3r") and Inning (e.g., "1i") shortcuts in sub-menus
+                                      final RegExpMatch? statMatch =
+                                          RegExp(r'(\d{1,2})\s*([riRI])$')
+                                              .firstMatch(value.trim());
+                                      if (statMatch != null) {
+                                        final int number =
+                                            int.tryParse(statMatch.group(1)!) ??
+                                                0;
+                                        final String suffix =
+                                            (statMatch.group(2) ?? '')
+                                                .toLowerCase();
+                                        if (suffix == 'r') {
+                                          if (_selectedVerb == 'Home Run') {
+                                            String? hrType;
+                                            if (number <= 1) {
+                                              hrType = 'Solo';
+                                            } else if (number == 2) {
+                                              hrType = 'Two-Run';
+                                            } else if (number == 3) {
+                                              hrType = 'Three-Run';
+                                            } else if (number >= 4) {
+                                              hrType = 'Grand Slam';
+                                            }
+                                            if (hrType != null) {
+                                              setState(() {
+                                                _selectedHomeRunType = hrType;
+                                              });
+                                              _updateCaption();
+                                              return;
+                                            }
+                                          } else {
+                                            setState(() {
+                                              _rbiCount = number;
+                                            });
+                                            _updateCaption();
+                                            return;
+                                          }
+                                        } else if (suffix == 'i') {
+                                          setState(() {
+                                            _selectedRbiInning = number;
+                                          });
+                                          _updateCaption();
+                                          return;
+                                        }
+                                      }
+
                                       if (_isMagicInput(value)) {
                                         _parseMagicInput(value);
                                         return;
@@ -1975,6 +2218,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                       // Handle multiple player numbers (e.g., "27 23")
                                       _handleMultiplePlayerInput(value);
+                                      setState(
+                                          () {}); // refresh highlighting while typing
                                     },
                                   ),
                                 ),
@@ -2171,7 +2416,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Container(
           width: double.infinity,
           height: 80,
-          padding: const EdgeInsets.only(left: 8, right: 8, top: 8),
+          padding: const EdgeInsets.only(left: 8, right: 8, top: 0),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade400),
             borderRadius: BorderRadius.circular(6),
@@ -2685,7 +2930,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         const SizedBox(height: 0),
                         // Search bar below team names and controls
                         SizedBox(
-                          height: 24,
+                          height: 20,
                           child: TextField(
                             controller: searchController,
                             cursorWidth: 1.5,
@@ -2942,7 +3187,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Sort jersey numbers within each range by number (not by name)
     for (int range in playersByRange.keys) {
       playersByRange[range]!.sort();
-      print('DEBUG: Range $range contains: ${playersByRange[range]}');
+      // print('DEBUG: Range $range contains: ${playersByRange[range]}');
     }
 
     // Create rows with dynamic number of columns, grouped by ranges
@@ -3678,8 +3923,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // Function to find the shortest unique prefix for a verb
+  String _getShortestUniquePrefix(String verb, List<String> allVerbs) {
+    for (int i = 1; i <= verb.length; i++) {
+      String prefix = verb.substring(0, i).toLowerCase();
+      bool isUnique = true;
+
+      for (String otherVerb in allVerbs) {
+        if (otherVerb != verb && otherVerb.toLowerCase().startsWith(prefix)) {
+          isUnique = false;
+          break;
+        }
+      }
+
+      if (isUnique) {
+        return verb.substring(0, i);
+      }
+    }
+    return verb; // Fallback to full verb if no unique prefix found
+  }
+
   Widget _buildVerbOption(String verb) {
     final isSelected = _selectedVerb == verb;
+
+    // Get all verbs for prefix calculation
+    List<String> allVerbs = [];
+    for (List<String> verbs in verbCategories.values) {
+      allVerbs.addAll(verbs);
+    }
+
+    // Get the shortest unique prefix for this verb
+    String shortestPrefix = _getShortestUniquePrefix(verb, allVerbs);
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -3710,8 +3984,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _updateCaption();
       },
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        width: double.infinity, // Dynamic width to fit container
+        height: 36, // Fixed height to keep all chips the same height
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -3721,14 +3996,178 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             width: 0.5,
           ),
         ),
-        child: Text(
-          verb,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
-          ),
-        ),
+        child: Builder(builder: (context) {
+          String typed = _magicBarVerbInput;
+          // Only use trailing letters for verb matching (ignore digits like in "h27")
+          final RegExpMatch? lettersMatch =
+              RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
+          final String typedLetters =
+              lettersMatch?.group(1)?.toLowerCase() ?? '';
+
+          // Debug output
+          // print(
+          //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
+
+          // Calculate the shortcut letters for this verb
+          String shortcutLetters = '';
+          final words = verb.split(' ');
+          final filtered = words
+              .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
+              .toList();
+
+          if (filtered.isEmpty) {
+            // Fallback if no valid words found
+            shortcutLetters = verb.length >= 3
+                ? verb.substring(0, 3).toLowerCase()
+                : verb.toLowerCase();
+          } else if (filtered.length > 1) {
+            // Multi-word verb: use acronym
+            shortcutLetters = filtered.map((w) => w[0].toLowerCase()).join();
+          } else {
+            // Single word verb: use first 2-3 letters
+            final first = filtered.first.toLowerCase();
+            shortcutLetters = first.length >= 3 ? first.substring(0, 3) : first;
+          }
+
+          // Determine what to highlight based on what's typed
+          String displayPrefix;
+          List<int> firstLetterPositions = [];
+
+          if (filtered.length > 1) {
+            // Multi-word verb: find positions of first letters to highlight
+            int currentPos = 0;
+
+            for (int i = 0; i < words.length; i++) {
+              String word = words[i].trim();
+              if (word.isNotEmpty && word.toLowerCase() != 'the') {
+                // Find the position of the first letter in this word
+                int wordStart = currentPos +
+                    (i > 0 ? 1 : 0); // Account for space before word
+                int firstLetterPos = wordStart + word.indexOf(word[0]);
+                firstLetterPositions.add(firstLetterPos);
+              }
+              currentPos +=
+                  word.length + (i > 0 ? 1 : 0); // Add word length + space
+            }
+
+            if (typedLetters.isNotEmpty &&
+                shortcutLetters.startsWith(typedLetters)) {
+              // User is typing the shortcut - highlight the first letters they've typed
+              int lettersToHighlight = typedLetters.length;
+              if (lettersToHighlight <= firstLetterPositions.length) {
+                displayPrefix = verb.substring(
+                    0, firstLetterPositions[lettersToHighlight - 1] + 1);
+              } else {
+                displayPrefix =
+                    verb.substring(0, firstLetterPositions.last + 1);
+              }
+            } else {
+              // Show all first letters
+              displayPrefix = verb.substring(0, firstLetterPositions.last + 1);
+            }
+          } else {
+            // Single word verb: use first 2-3 letters
+            if (typedLetters.isNotEmpty &&
+                shortcutLetters.startsWith(typedLetters)) {
+              // User is typing the shortcut - highlight what they've typed
+              final int len = typedLetters.length < verb.length
+                  ? typedLetters.length
+                  : verb.length;
+              displayPrefix = verb.substring(0, len);
+            } else if (typedLetters.isEmpty) {
+              // No typing - show the shortcut letters
+              displayPrefix = verb.substring(0, shortcutLetters.length);
+            } else {
+              // User typed something else - show shortcut letters
+              displayPrefix = verb.substring(0, shortcutLetters.length);
+            }
+          }
+
+          if (filtered.length > 1) {
+            // Multi-word verb: create spans for each character
+            List<TextSpan> spans = [];
+
+            for (int i = 0; i < verb.length; i++) {
+              bool shouldBold = false;
+
+              // Only show bolded shortcuts when magic bar has focus
+              if (_magicBarFocusNode.hasFocus) {
+                if (typedLetters.isNotEmpty &&
+                    shortcutLetters.startsWith(typedLetters)) {
+                  // User is typing letters – progressively bold first letters
+                  int lettersToHighlight = typedLetters.length;
+                  if (lettersToHighlight <= firstLetterPositions.length) {
+                    shouldBold = firstLetterPositions
+                        .take(lettersToHighlight)
+                        .contains(i);
+                  } else {
+                    shouldBold = firstLetterPositions.contains(i);
+                  }
+                } else {
+                  // No letters (e.g., only numbers typed) – show default shortcut letters
+                  shouldBold = firstLetterPositions.contains(i);
+                }
+              }
+
+              spans.add(TextSpan(
+                text: verb[i],
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: shouldBold ? FontWeight.w700 : FontWeight.w400,
+                  color: shouldBold ? Colors.black87 : Colors.grey.shade700,
+                ),
+              ));
+            }
+
+            return RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(children: spans),
+            );
+          } else {
+            // Single word verb: use simple approach
+            if (_magicBarFocusNode.hasFocus) {
+              // When magic bar is active, bold either progressive letters or default shortcut
+              return RichText(
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: displayPrefix,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (displayPrefix.length < verb.length)
+                      TextSpan(
+                        text: verb.substring(displayPrefix.length),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            } else {
+              // Magic bar inactive – normal styling
+              return Text(
+                verb,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey.shade700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              );
+            }
+          }
+        }),
       ),
     );
   }
@@ -4087,18 +4526,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.orange.shade100 : Colors.grey.shade100,
+          color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? Colors.orange.shade300 : Colors.grey.shade300,
+            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade300,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.orange.shade700 : Colors.grey.shade700,
+            color: isSelected ? Colors.grey.shade800 : Colors.grey.shade700,
           ),
         ),
       ),
@@ -4347,8 +4786,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (input.isEmpty) return false;
 
     final parts = input.trim().toLowerCase().split(' ');
-    // Allow single-token HR type inputs like "solo", "two-run", etc.
+    // Allow single-token inputs that are:
+    // - HR type tokens like "solo"
+    // - A plain jersey number (e.g., "27")
+    // - A team-prefixed jersey number (e.g., "h27", "v23", "hh12", "vv45")
     if (parts.length == 1) {
+      final token = parts[0];
       const hrTypeTokens = {
         'solo',
         'two-run',
@@ -4359,7 +4802,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'grandslam',
         'gs',
       };
-      return hrTypeTokens.contains(parts[0]);
+      if (hrTypeTokens.contains(token)) return true;
+      if (_isNumeric(token)) return true;
+      if (RegExp(r'^(h{1,2}|v{1,2})\d+$').hasMatch(token)) return true;
+      return false;
     }
 
     // Check if first part is a number OR a team prefix + number (like h27, v23)
@@ -4476,7 +4922,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _parseMagicInput(String input) {
-    print('DEBUG: _parseMagicInput called with: "$input"');
+    // print('DEBUG: _parseMagicInput called with: "$input"');
     if (input.isEmpty) return;
 
     // Reset only action-related state, but DO NOT clear players or first selection
@@ -4503,10 +4949,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Parse the magic input
     final parts = input.trim().toLowerCase().split(' ');
-    print('DEBUG: Parts: $parts');
-    // Handle single-token HR type inputs like "solo", "two-run", etc.
+    // print('DEBUG: Parts: $parts');
+    // Handle single-token inputs
     if (parts.length == 1) {
       final token = parts[0];
+      // HR type tokens like "solo", etc.
       if ({
         'solo',
         'two-run',
@@ -4520,7 +4967,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         setState(() {
           _selectedVerb = 'Home Run';
           _selectedActionVerb = 'Home Run';
-          // Map token to HR type and RBI count
           if (token == 'solo') {
             _selectedHomeRunType = 'Solo';
             _rbiCount = 1;
@@ -4538,7 +4984,60 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _updateCaption();
         return;
       }
-      print('DEBUG: Single token not recognized as HR type');
+
+      // Single player code (numeric or team-prefixed like h27)
+      String singleFirstPart = token;
+      String playerNumber;
+      bool? isHomeHint;
+      if (_isNumeric(singleFirstPart)) {
+        playerNumber = singleFirstPart;
+        isHomeHint = null;
+      } else {
+        final teamPrefixRegex = RegExp(r'^(h{1,2}|v{1,2})(\d+)$');
+        final match = teamPrefixRegex.firstMatch(singleFirstPart);
+        if (match != null) {
+          playerNumber = match.group(2)!;
+          final teamPrefix = match.group(1)!;
+          isHomeHint = teamPrefix.startsWith('h');
+        } else {
+          print('DEBUG: Single token not recognized as player code');
+          return;
+        }
+      }
+
+      // Find and select/highlight player immediately
+      List<Player> matching = [];
+      if (isHomeHint != null) {
+        final roster = isHomeHint ? _homeRoster : _awayRoster;
+        matching = roster.where((p) => p.jerseyNumber == playerNumber).toList();
+      } else {
+        matching = [
+          ..._homeRoster.where((p) => p.jerseyNumber == playerNumber),
+          ..._awayRoster.where((p) => p.jerseyNumber == playerNumber),
+        ];
+      }
+      if (matching.isEmpty) return;
+      final found = matching.first;
+      final isHomePlayer = _homeRoster.contains(found);
+      _selectPlayerChipByNumber(
+        isHomeTeam: isHomePlayer,
+        jerseyNumber: playerNumber,
+        isProgressive: true,
+      );
+      setState(() {
+        final display = found.displayName ?? '';
+        if (display.isNotEmpty) {
+          if (isHomePlayer) {
+            selectedHomePlayers.add(display);
+          } else {
+            selectedAwayPlayers.add(display);
+          }
+          // Do not set _firstPlayerSelected here if already set (preserve red star)
+          _firstTeamSelected ??= isHomePlayer;
+          _firstPlayerSelected ??= _removeJerseyNumberFromName(display);
+        }
+      });
+      _updateCaption();
       return;
     }
 
@@ -4628,18 +5127,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final foundPlayer = matchingPlayers.first;
     final isHomePlayer = _homeRoster.contains(foundPlayer);
 
+    // Highlight the player in the player picker
+    _selectPlayerChipByNumber(
+      isHomeTeam: isHomePlayer,
+      jerseyNumber: playerNumber,
+      isProgressive:
+          true, // Don't override existing red star on subsequent selections
+      affectFirstStar:
+          false, // Do not set first-star when auto-selecting via magic bar
+    );
+
     // Select the player
     setState(() {
       final display = foundPlayer.displayName ?? 'Unknown Player';
       final cleaned = _removeJerseyNumberFromName(display);
       if (isHomePlayer) {
         selectedHomePlayers.add(display);
-        _firstTeamSelected ??= true;
-        _firstPlayerSelected ??= cleaned;
       } else {
         selectedAwayPlayers.add(display);
-        _firstTeamSelected ??= false;
-        _firstPlayerSelected ??= cleaned;
+      }
+      // On token completion, if no first-star yet, set it to this player
+      if (_firstPlayerSelected == null) {
+        _firstTeamSelected = isHomePlayer;
+        _firstPlayerSelected = cleaned;
       }
     });
 
@@ -4691,6 +5201,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
 
       // Parse action
+      // First try flexible 2–3 letter/acronym matching
+      final matchedVerb = _matchVerbToken(part);
+      if (matchedVerb != null) {
+        action = matchedVerb;
+        continue;
+      }
+
       switch (part) {
         case 'hr':
         case 'homerun':
@@ -7298,6 +7815,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Clear custom text and magic bar text for full reset
       customBetweenPlayersController.clear();
+      _magicBarController.clear();
+      _magicBarVerbInput = '';
+      _typingFirstMagicToken = false;
     });
 
     // Update the UI
@@ -9877,7 +10397,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Build the hit phrase
     String hitPhrase = '';
-    if (_rbiCount != null && _rbiCount! > 0) {
+    final bool isHomeRunAction = verbToUse == 'Home Run';
+    if (!isHomeRunAction && _rbiCount != null && _rbiCount! > 0) {
       final rbiText =
           _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
       hitPhrase = 'hits a $rbiText $baseAction';
@@ -10436,8 +10957,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 onChanged: (value) {
                   // Debug output
-                  print('DEBUG: Magic bar onChanged: "$value"');
-                  print('DEBUG: _isMagicInput: ${_isMagicInput(value)}');
+                          // print('DEBUG: Magic bar onChanged: "$value"');
+        // print('DEBUG: _isMagicInput: ${_isMagicInput(value)}');
                   print(
                       'DEBUG: _waitingForHomeVisitorChoice: $_waitingForHomeVisitorChoice');
 
@@ -10456,7 +10977,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     final expectedText =
                         '${_magicInputMatchingPlayers.first.jerseyNumber} ${_magicInputActionText}';
                     if (value != expectedText) {
-                      print('DEBUG: Restoring original text: "$expectedText"');
+                      // print('DEBUG: Restoring original text: "$expectedText"');
                       Future.microtask(() {
                         customBetweenPlayersController.text = expectedText;
                         customBetweenPlayersController.selection =
@@ -10470,7 +10991,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                   // Check for magic input format (e.g., "27 hr 1")
                   if (_isMagicInput(value)) {
-                    print('DEBUG: Processing magic input: "$value"');
+                    // print('DEBUG: Processing magic input: "$value"');
                     _parseMagicInput(value);
                     return; // Return to prevent additional setState calls
                   }
@@ -10841,14 +11362,65 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 width: 0.5,
                               ),
                             ),
-                            child: Text(
-                              hrType,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
+                            child: Builder(builder: (context) {
+                              final String typed = _magicBarVerbInput;
+                              final RegExpMatch? lettersMatch =
+                                  RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
+                              final String typedLetters =
+                                  lettersMatch?.group(1)?.toLowerCase() ?? '';
+
+                              // Build shortcut: multi-word -> acronym, single-word -> first 2-3
+                              List<String> words = RegExp(r'[A-Za-z]+')
+                                  .allMatches(hrType)
+                                  .map((m) => m.group(0)!)
+                                  .toList();
+                              String shortcut;
+                              if (words.length > 1) {
+                                shortcut =
+                                    words.map((w) => w[0].toLowerCase()).join();
+                              } else {
+                                final w = words.first.toLowerCase();
+                                shortcut =
+                                    w.length >= 2 ? w.substring(0, 2) : w;
+                              }
+
+                              String boldPart = '';
+                              if (_magicBarFocusNode.hasFocus &&
+                                  typedLetters.isNotEmpty &&
+                                  shortcut.startsWith(typedLetters)) {
+                                boldPart = hrType.substring(
+                                    0,
+                                    typedLetters.length
+                                        .clamp(0, hrType.length));
+                              } else if (_magicBarFocusNode.hasFocus) {
+                                boldPart = hrType.substring(
+                                    0, shortcut.length.clamp(0, hrType.length));
+                              }
+
+                              return RichText(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                text: TextSpan(children: [
+                                  if (boldPart.isNotEmpty)
+                                    TextSpan(
+                                      text: boldPart,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  TextSpan(
+                                    text: hrType.substring(boldPart.length),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ]),
+                              );
+                            }),
                           ),
                         );
                       }).toList(),
