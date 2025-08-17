@@ -683,6 +683,178 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return teamSecondaryColors[teamName] ?? Colors.grey.shade500;
   }
 
+  // Opens a dialog that allows editing of the current team's settings
+  // - Change the team entirely (dropdown)
+  // - Edit player jersey numbers and names
+  Future<void> _showTeamEditorDialog({required bool isHome}) async {
+    String? tempSelectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
+    List<Player> tempRoster =
+        List<Player>.from(isHome ? _homeRoster : _awayRoster);
+
+    final Map<int, String> indexToEditedName = {};
+    final Map<int, String> indexToEditedNumber = {};
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(isHome ? 'Edit Home Team' : 'Edit Away Team'),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Team selector
+                    Row(
+                      children: [
+                        const Text('Team:', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: tempSelectedTeam,
+                            items: teamsList
+                                .map((t) => DropdownMenuItem<String>(
+                                      value: t,
+                                      child: Text(
+                                        t,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (value) async {
+                              if (value == null) return;
+                              setDialogState(() {
+                                tempSelectedTeam = value;
+                              });
+                              try {
+                                final fetched =
+                                    await _apiManager.fetchTeamRoster(value);
+                                setDialogState(() {
+                                  tempRoster = List<Player>.from(fetched);
+                                  indexToEditedName.clear();
+                                  indexToEditedNumber.clear();
+                                });
+                              } catch (_) {
+                                // Leave roster as is on error
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Editable roster
+                    SizedBox(
+                      height: 420,
+                      child: Scrollbar(
+                        child: ListView.separated(
+                          itemCount: tempRoster.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final player = tempRoster[index];
+                            final currentName =
+                                indexToEditedName[index] ?? player.fullName;
+                            final currentNumber = indexToEditedNumber[index] ??
+                                (player.jerseyNumber ?? '');
+                            return Row(
+                              children: [
+                                SizedBox(
+                                  width: 64,
+                                  child: TextField(
+                                    controller: TextEditingController(
+                                        text: currentNumber)
+                                      ..selection = TextSelection.collapsed(
+                                          offset: currentNumber.length),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Number',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (v) => setDialogState(() {
+                                      indexToEditedNumber[index] = v;
+                                    }),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller:
+                                        TextEditingController(text: currentName)
+                                          ..selection = TextSelection.collapsed(
+                                              offset: currentName.length),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Name',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (v) => setDialogState(() {
+                                      indexToEditedName[index] = v;
+                                    }),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel')),
+                TextButton(
+                  onPressed: () {
+                    final List<Player> updated = [];
+                    for (int i = 0; i < tempRoster.length; i++) {
+                      final base = tempRoster[i];
+                      final editedName =
+                          (indexToEditedName[i] ?? base.fullName).trim();
+                      final editedNumber =
+                          (indexToEditedNumber[i] ?? base.jerseyNumber ?? '')
+                              .trim();
+                      final jerseyNumber =
+                          editedNumber.isEmpty ? null : editedNumber;
+                      final displayName = jerseyNumber != null
+                          ? '$editedName #$jerseyNumber'
+                          : editedName;
+                      updated.add(Player(
+                        fullName: editedName,
+                        firstName: editedName.split(' ').first,
+                        jerseyNumber: jerseyNumber,
+                        displayName: displayName,
+                      ));
+                    }
+
+                    setState(() {
+                      if (isHome) {
+                        selectedHomeTeam = tempSelectedTeam;
+                        _homeRoster = updated;
+                      } else {
+                        selectedAwayTeam = tempSelectedTeam;
+                        _awayRoster = updated;
+                      }
+                    });
+                    _updateCaption();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // Method to get current values from caption-related controllers
   Map<String, String> getCurrentCaptionValues() {
     return {
@@ -1050,10 +1222,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Pattern tokens (require space after):
     // - hNN / hhNN / vNN / vvNN → player tokens
     // - iNN → inning token → "during the first inning" (requires at least 1 digit)
+    // - h / v → team names (home / away)
     // - ht / vt → team names (home / visiting)
     // - ag → "against the [opposite team]" (based on first selected player)
     final regex = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
+        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[hH][tT]|[vV][tT]|[hH]|[vV]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
     final inningRegex = RegExp(r'(?:^|\b)[iI](\d{1,3}) ');
 
     // Check if there are any valid tokens to process
@@ -1223,6 +1396,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final replacement = (teamName != null && teamName.isNotEmpty)
             ? '$teamName '
             : (lower == 'ht' ? 'Home Team ' : 'Visiting Team ');
+        buffer.write(replacement);
+        newHighlightedRanges.add(
+          TextRange(
+              start: buffer.length - replacement.length, end: buffer.length),
+        );
+        if (selection.baseOffset >= match.start &&
+            selection.baseOffset <= match.end) {
+          caretAfterReplacement = buffer.length;
+        }
+        lastIndex =
+            match.end - 1; // Skip the space that triggered the expansion
+        continue;
+      }
+
+      // Single team tokens: h / v -> full team name
+      if (lower == 'h' || lower == 'v') {
+        replacedAny = true;
+        final teamName = lower == 'h' ? selectedHomeTeam : selectedAwayTeam;
+        final replacement = (teamName != null && teamName.isNotEmpty)
+            ? '$teamName '
+            : (lower == 'h' ? 'Home Team ' : 'Away Team ');
         buffer.write(replacement);
         newHighlightedRanges.add(
           TextRange(
@@ -2258,32 +2452,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            SizedBox(
-                              height: 42,
-                              width: 60,
-                              child: Center(
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isHome ? Icons.home : Icons.flight,
-                                      size: 14,
-                                      color: Colors.black87,
+                            MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    _showTeamEditorDialog(isHome: isHome),
+                                child: SizedBox(
+                                  height: 42,
+                                  width: 60,
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isHome ? Icons.home : Icons.flight,
+                                          size: 14,
+                                          color: Colors.black87,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          _getTeamAbbreviation(isHome
+                                              ? selectedHomeTeam!
+                                              : selectedAwayTeam!),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade700,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      _getTeamAbbreviation(isHome
-                                          ? selectedHomeTeam!
-                                          : selectedAwayTeam!),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.grey.shade700,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -5744,8 +5946,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
-    // Get creator from metadata widget or use default
+    // Get creator and credit from metadata widget or use default
     final creatorValue = widget.metadata?['Creator'];
+    final creditValue = widget.metadata?['Credit'];
     String photoBy;
     if (creatorValue is List) {
       // If it's a list, take the first value only
@@ -5754,6 +5957,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           : 'Mark Blinch';
     } else {
       photoBy = creatorValue?.toString() ?? 'Mark Blinch';
+    }
+
+    // Build the byline with Getty Images style
+    String byline;
+    if (creditValue != null && creditValue.toString().isNotEmpty) {
+      byline = 'Photo by $photoBy/$creditValue';
+    } else {
+      byline = 'Photo by $photoBy/Getty Images';
     }
 
     // Add custom text between players if provided (but not magic input)
@@ -5796,7 +6007,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${_isPriorToGame ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix. (Photo by $photoBy/Getty Images)';
+        '$gamePart at $stadium on $formattedDate $locationSuffix. ($byline)';
 
     // Set caption text directly (no diacritic removal)
     captionController.text = caption;
@@ -6429,7 +6640,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               },
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -6438,8 +6649,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.arrow_back,
-                        size: 16, color: Colors.grey.shade700),
+                    Text(
+                      'Prev',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -6461,7 +6678,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.copy, size: 16, color: Colors.grey.shade700),
+                    Text(
+                      'Copy',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -6481,7 +6705,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.paste, size: 16, color: Colors.grey.shade700),
+                    Text(
+                      'Paste',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -6497,7 +6728,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               },
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -6506,8 +6737,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.arrow_forward,
-                        size: 16, color: Colors.grey.shade700),
+                    Text(
+                      'Next',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -9726,17 +9963,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Get teammates (other players from the same team as the main player)
     if (_firstPlayerSelected == null) return [];
 
-    // Determine which team the main player is from
-    final isMainPlayerHome = selectedHomePlayers.contains(_firstPlayerSelected);
+    // Determine which team the main player is from using normalized comparison
+    final isMainPlayerHome = selectedHomePlayers.any((player) =>
+        _removeJerseyNumberFromName(player) == _firstPlayerSelected);
 
-    // Get all players from the same team, excluding the main player
-    final teammates = isMainPlayerHome
-        ? selectedHomePlayers
-            .where((player) => player != _firstPlayerSelected)
-            .toList()
-        : selectedAwayPlayers
-            .where((player) => player != _firstPlayerSelected)
-            .toList();
+    // Get all players from the same team, excluding the main player (normalized)
+    final Iterable<String> source =
+        isMainPlayerHome ? selectedHomePlayers : selectedAwayPlayers;
+    final teammates = source
+        .where((player) =>
+            _removeJerseyNumberFromName(player) != _firstPlayerSelected)
+        .toList();
 
     return teammates;
   }
@@ -10122,73 +10359,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   bool _isFirstSelectedPlayer(String playerName) {
-    // The red star should be on the first player mentioned in the caption text
-    final captionText = captionController.text;
-    if (captionText.isEmpty) return false;
-
-    // Get all players from both rosters to search for in caption
-    final allPlayers = [..._homeRoster, ..._awayRoster];
-    if (allPlayers.isEmpty) return false;
-
-    // Find all player display names that appear in the caption text
-    final playersWithPositions = <Map<String, dynamic>>[];
-
-    for (final player in allPlayers) {
-      final displayName = player.displayName;
-      final position = captionText.indexOf(displayName);
-      if (position != -1) {
-        playersWithPositions.add({
-          'player': displayName,
-          'position': position,
-        });
-      }
-    }
-
-    if (playersWithPositions.isEmpty) return false;
-
-    // Sort by position (earliest first)
-    playersWithPositions
-        .sort((a, b) => (a['position'] as int).compareTo(b['position'] as int));
-    final firstPlayerInCaption = playersWithPositions.first['player'] as String;
-
-    return firstPlayerInCaption == playerName;
+    // Always keep the red star on the very first player the user picked
+    if (_firstPlayerSelected == null) return false;
+    return _removeJerseyNumberFromName(playerName) == _firstPlayerSelected;
   }
 
   Widget _buildHomeRunSubOptions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Quick HR type input
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: SizedBox(
-            height: 28,
-            child: TextField(
-              style: const TextStyle(fontSize: 12),
-              decoration: InputDecoration(
-                hintText: 'Type: solo, two-run, three-run, grand slam',
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.blue.shade400),
-                ),
-              ),
-              onChanged: (value) {
-                _handleHrOptionInput(value);
-              },
-            ),
-          ),
-        ),
         // Magic bar (always visible) - COMMENTED OUT for Home Run to hide magic bar
         /* Container(
           width: double.infinity,
@@ -11531,7 +11710,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               '$rbi',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.grey.shade700,
                               ),
@@ -12039,7 +12218,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ? Colors.grey.shade300
                           : Colors.grey.shade400),
                 ),
-                child: const Icon(Icons.arrow_back, size: 14),
+                child: Text(
+                  'Prev',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
               ),
             ),
           ),
@@ -12054,7 +12240,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.blue.shade200),
               ),
-              child: Icon(Icons.copy, size: 14, color: Colors.blue.shade700),
+              child: Text(
+                'Copy',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.blue.shade700,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -12068,7 +12261,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: Colors.green.shade200),
               ),
-              child: Icon(Icons.paste, size: 14, color: Colors.green.shade700),
+              child: Text(
+                'Paste',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.green.shade700,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -12102,7 +12302,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ? Colors.grey.shade300
                           : Colors.grey.shade400),
                 ),
-                child: const Icon(Icons.arrow_forward, size: 14),
+                child: Text(
+                  'Next',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
               ),
             ),
           ),
