@@ -468,6 +468,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Double',
       'Triple',
       'Home Run',
+      'Sacrifice Fly',
       'At Bat',
       'Swings',
       'Bunts',
@@ -587,7 +588,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Icon(Icons.home,
                               size: 12, color: Colors.grey.shade700),
                         if (!isHome)
-                          Icon(Icons.flight_takeoff,
+                          Icon(Icons.flight,
                               size: 12, color: Colors.grey.shade700),
                         const SizedBox(width: 3),
                         Expanded(
@@ -621,8 +622,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   if (isHome)
                     Icon(Icons.home, size: 11, color: Colors.grey.shade700),
                   if (!isHome)
-                    Icon(Icons.flight_takeoff,
-                        size: 11, color: Colors.grey.shade700),
+                    Icon(Icons.flight, size: 11, color: Colors.grey.shade700),
                   const SizedBox(width: 3),
                   Expanded(
                     child: Text(
@@ -737,6 +737,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String? tempSelectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
     List<Player> tempRoster =
         List<Player>.from(isHome ? _homeRoster : _awayRoster);
+    bool isLoading = false;
+
+    // Sort roster by jersey number
+    tempRoster.sort((a, b) {
+      final aNum = int.tryParse(a.jerseyNumber ?? '') ?? 999;
+      final bNum = int.tryParse(b.jerseyNumber ?? '') ?? 999;
+      return aNum.compareTo(bNum);
+    });
 
     final Map<int, String> indexToEditedName = {};
     final Map<int, String> indexToEditedNumber = {};
@@ -748,107 +756,319 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(isHome ? 'Edit Home Team' : 'Edit Away Team'),
+              titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              title: Text(
+                'Edit Teams',
+                style: const TextStyle(fontSize: 14),
+              ),
               content: SizedBox(
                 width: 520,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Team selector
+                    // Team switcher
                     Row(
                       children: [
-                        const Text('Team:', style: TextStyle(fontSize: 12)),
+                        const Text('Team:', style: TextStyle(fontSize: 10)),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: tempSelectedTeam,
-                            items: teamsList
-                                .map((t) => DropdownMenuItem<String>(
-                                      value: t,
-                                      child: Text(
-                                        t,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ))
-                                .toList(),
-                            onChanged: (value) async {
-                              if (value == null) return;
+                        // Home team tab
+                        GestureDetector(
+                          onTap: () async {
+                            setDialogState(() {
+                              tempSelectedTeam = selectedHomeTeam;
+                              isLoading = true;
+                            });
+                            try {
+                              final fetched = await _apiManager
+                                  .fetchTeamRoster(selectedHomeTeam!);
                               setDialogState(() {
-                                tempSelectedTeam = value;
-                              });
-                              try {
-                                final fetched =
-                                    await _apiManager.fetchTeamRoster(value);
-                                setDialogState(() {
-                                  tempRoster = List<Player>.from(fetched);
-                                  indexToEditedName.clear();
-                                  indexToEditedNumber.clear();
+                                tempRoster = List<Player>.from(fetched);
+                                // Sort roster by jersey number
+                                tempRoster.sort((a, b) {
+                                  final aNum =
+                                      int.tryParse(a.jerseyNumber ?? '') ?? 999;
+                                  final bNum =
+                                      int.tryParse(b.jerseyNumber ?? '') ?? 999;
+                                  return aNum.compareTo(bNum);
                                 });
-                              } catch (_) {
-                                // Leave roster as is on error
-                              }
-                            },
+                                indexToEditedName.clear();
+                                indexToEditedNumber.clear();
+                                isLoading = false;
+                              });
+                            } catch (_) {
+                              // Leave roster as is on error
+                              setDialogState(() {
+                                isLoading = false;
+                              });
+                            }
+                          },
+                          child: Container(
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: tempSelectedTeam == selectedHomeTeam
+                                  ? Colors.grey.shade300
+                                  : Colors.grey.shade100,
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(4),
+                                bottomLeft: Radius.circular(4),
+                              ),
+                              border: Border.all(
+                                color: tempSelectedTeam == selectedHomeTeam
+                                    ? Colors.grey.shade500
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.home,
+                                    size: 10,
+                                    color: tempSelectedTeam == selectedHomeTeam
+                                        ? Colors.black87
+                                        : Colors.grey.shade500,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _getTeamAbbreviation(
+                                        selectedHomeTeam ?? 'Home'),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color:
+                                          tempSelectedTeam == selectedHomeTeam
+                                              ? Colors.black87
+                                              : Colors.grey.shade500,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Away team tab
+                        GestureDetector(
+                          onTap: () async {
+                            setDialogState(() {
+                              tempSelectedTeam = selectedAwayTeam;
+                              isLoading = true;
+                            });
+                            try {
+                              final fetched = await _apiManager
+                                  .fetchTeamRoster(selectedAwayTeam!);
+                              setDialogState(() {
+                                tempRoster = List<Player>.from(fetched);
+                                // Sort roster by jersey number
+                                tempRoster.sort((a, b) {
+                                  final aNum =
+                                      int.tryParse(a.jerseyNumber ?? '') ?? 999;
+                                  final bNum =
+                                      int.tryParse(b.jerseyNumber ?? '') ?? 999;
+                                  return aNum.compareTo(bNum);
+                                });
+                                indexToEditedName.clear();
+                                indexToEditedNumber.clear();
+                                isLoading = false;
+                              });
+                            } catch (_) {
+                              // Leave roster as is on error
+                              setDialogState(() {
+                                isLoading = false;
+                              });
+                            }
+                          },
+                          child: Container(
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: tempSelectedTeam == selectedAwayTeam
+                                  ? Colors.grey.shade300
+                                  : Colors.grey.shade100,
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(4),
+                                bottomRight: Radius.circular(4),
+                              ),
+                              border: Border.all(
+                                color: tempSelectedTeam == selectedAwayTeam
+                                    ? Colors.grey.shade500
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.flight,
+                                    size: 10,
+                                    color: tempSelectedTeam == selectedAwayTeam
+                                        ? Colors.black87
+                                        : Colors.grey.shade500,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _getTeamAbbreviation(
+                                        selectedAwayTeam ?? 'Away'),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color:
+                                          tempSelectedTeam == selectedAwayTeam
+                                              ? Colors.black87
+                                              : Colors.grey.shade500,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
+                    // Column headers
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 64,
+                            child: Text(
+                              'Number',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Name',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     // Editable roster
                     SizedBox(
-                      height: 420,
-                      child: Scrollbar(
-                        child: ListView.separated(
-                          itemCount: tempRoster.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
-                          itemBuilder: (context, index) {
-                            final player = tempRoster[index];
-                            final currentName =
-                                indexToEditedName[index] ?? player.fullName;
-                            final currentNumber = indexToEditedNumber[index] ??
-                                (player.jerseyNumber ?? '');
-                            return Row(
-                              children: [
-                                SizedBox(
-                                  width: 64,
-                                  child: TextField(
-                                    controller: TextEditingController(
-                                        text: currentNumber)
-                                      ..selection = TextSelection.collapsed(
-                                          offset: currentNumber.length),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      labelText: 'Number',
-                                      border: OutlineInputBorder(),
+                      height: 380,
+                      child: isLoading
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
                                     ),
-                                    onChanged: (v) => setDialogState(() {
-                                      indexToEditedNumber[index] = v;
-                                    }),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    controller:
-                                        TextEditingController(text: currentName)
-                                          ..selection = TextSelection.collapsed(
-                                              offset: currentName.length),
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                      labelText: 'Name',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    onChanged: (v) => setDialogState(() {
-                                      indexToEditedName[index] = v;
-                                    }),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Loading roster...',
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey),
                                   ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+                                ],
+                              ),
+                            )
+                          : Scrollbar(
+                              child: ListView.separated(
+                                itemCount: tempRoster.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 6),
+                                itemBuilder: (context, index) {
+                                  final player = tempRoster[index];
+                                  final currentName =
+                                      indexToEditedName[index] ??
+                                          player.fullName;
+                                  final currentNumber =
+                                      indexToEditedNumber[index] ??
+                                          (player.jerseyNumber ?? '');
+                                  return Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 64,
+                                        child: TextField(
+                                          controller: TextEditingController(
+                                              text: currentNumber)
+                                            ..selection =
+                                                TextSelection.collapsed(
+                                                    offset:
+                                                        currentNumber.length),
+                                          style: const TextStyle(fontSize: 12),
+                                          decoration: InputDecoration(
+                                            isDense: true,
+                                            border: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade400),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 6),
+                                          ),
+                                          onChanged: (v) => setDialogState(() {
+                                            indexToEditedNumber[index] = v;
+                                          }),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: TextEditingController(
+                                              text: currentName)
+                                            ..selection =
+                                                TextSelection.collapsed(
+                                                    offset: currentName.length),
+                                          style: const TextStyle(fontSize: 12),
+                                          decoration: InputDecoration(
+                                            isDense: true,
+                                            border: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade400),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 6),
+                                          ),
+                                          onChanged: (v) => setDialogState(() {
+                                            indexToEditedName[index] = v;
+                                          }),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -856,7 +1076,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               actions: [
                 TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel')),
+                    child:
+                        const Text('Cancel', style: TextStyle(fontSize: 11))),
                 TextButton(
                   onPressed: () {
                     final List<Player> updated = [];
@@ -892,7 +1113,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     _updateCaption();
                     Navigator.of(context).pop();
                   },
-                  child: const Text('Save'),
+                  child: const Text('Save', style: TextStyle(fontSize: 11)),
                 ),
               ],
             );
@@ -2060,7 +2281,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     .hasMatch(t) ||
                                                 t == 'gs');
                                         final bool hasRbiToken = RegExp(
-                                                r'(?:^|\s)(\d{1,2})\s*[rR](?:\s|$)')
+                                                r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
                                             .hasMatch(raw.trim());
                                         final bool hasExplicitInningToken =
                                             RegExp(r'(?:^|\b)[iI]\d+')
@@ -2106,7 +2327,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                       // Quick-select Home Run with type via magic bar from the LAST token
                                       // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
-                                      if (lastToken.isNotEmpty) {
+                                      // Only work when NOT in a submenu (to avoid conflicts)
+                                      if (lastToken.isNotEmpty &&
+                                          _selectedVerb == null) {
                                         final hrNum = RegExp(r'^hr([1-4])$',
                                                 caseSensitive: false)
                                             .firstMatch(lastToken);
@@ -2153,9 +2376,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                       // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
                                       // Only trigger when there is at least one space (to avoid conflicting with first player token)
+                                      // Only work when NOT in a submenu (to avoid conflicts)
                                       if (hasSpace &&
                                           RegExp(r'^\d{1,2}$')
-                                              .hasMatch(lastToken)) {
+                                              .hasMatch(lastToken) &&
+                                          _selectedVerb == null) {
                                         final int inningNum =
                                             int.parse(lastToken);
                                         if (inningNum > 0 && inningNum <= 20) {
@@ -2219,31 +2444,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       }
 
                                       // Try to match typed letters to a verb shortcut and auto-select the verb
-                                      final RegExpMatch? lettersMatch =
-                                          RegExp(r'([a-zA-Z]+)$')
-                                              .firstMatch(value);
-                                      final String typedLetters = lettersMatch
-                                              ?.group(1)
-                                              ?.toLowerCase() ??
-                                          '';
-                                      if (typedLetters.length >= 2) {
-                                        final matchedVerb =
-                                            _matchVerbToken(typedLetters);
-                                        if (matchedVerb != null) {
-                                          setState(() {
-                                            _selectedVerb = matchedVerb;
-                                            _selectedActionVerb = matchedVerb;
-                                            _clearVerbSubSelections();
-                                          });
-                                          _updateCaption();
-                                          return;
+                                      // Only work when NOT in a submenu (to avoid conflicts)
+                                      if (_selectedVerb == null) {
+                                        final RegExpMatch? lettersMatch =
+                                            RegExp(r'([a-zA-Z]+)$')
+                                                .firstMatch(value);
+                                        final String typedLetters = lettersMatch
+                                                ?.group(1)
+                                                ?.toLowerCase() ??
+                                            '';
+                                        if (typedLetters.length >= 2) {
+                                          final matchedVerb =
+                                              _matchVerbToken(typedLetters);
+                                          if (matchedVerb != null) {
+                                            setState(() {
+                                              _selectedVerb = matchedVerb;
+                                              _selectedActionVerb = matchedVerb;
+                                              _clearVerbSubSelections();
+                                            });
+                                            _updateCaption();
+                                            return;
+                                          }
                                         }
                                       }
 
-                                      // Parse RBI shortcuts (e.g., "3r") in sub-menus
-                                      final RegExpMatch? statMatch =
-                                          RegExp(r'(\d{1,2})\s*([rR])$')
-                                              .firstMatch(value.trim());
+                                      // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
+                                      final RegExpMatch? statMatch = RegExp(
+                                              r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
+                                          .firstMatch(value.trim());
                                       if (statMatch != null) {
                                         final int number =
                                             int.tryParse(statMatch.group(1)!) ??
@@ -2251,7 +2479,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         final String suffix =
                                             (statMatch.group(2) ?? '')
                                                 .toLowerCase();
-                                        if (suffix == 'r') {
+                                        if (suffix == 'r' ||
+                                            suffix == 'rb' ||
+                                            suffix == 'rbi') {
                                           if (_selectedVerb == 'Home Run') {
                                             String? hrType;
                                             if (number <= 1) {
@@ -2280,6 +2510,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         }
                                       }
 
+                                      // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
+                                      if (_selectedVerb != null) {
+                                        final RegExpMatch? inningMatch =
+                                            RegExp(r'^(\d{1,2})$')
+                                                .firstMatch(lastToken);
+                                        if (inningMatch != null) {
+                                          final int inningNum = int.tryParse(
+                                                  inningMatch.group(1)!) ??
+                                              0;
+                                          if (inningNum > 0 &&
+                                              inningNum <= 20) {
+                                            setState(() {
+                                              _selectedRbiInning = inningNum;
+                                            });
+                                            _updateCaption();
+                                            return;
+                                          }
+                                        }
+                                      }
+
                                       // Cleanup: if user deletes shortcuts, clear derived selections and update caption
                                       final List<String> tokens = raw
                                           .trim()
@@ -2293,7 +2543,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               .hasMatch(t) ||
                                           t == 'gs');
                                       final bool hasRbiToken = RegExp(
-                                              r'(?:^|\s)(\d{1,2})\s*[rR](?:\s|$)')
+                                              r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
                                           .hasMatch(raw.trim());
                                       final bool hasExplicitInningToken =
                                           RegExp(r'(?:^|\b)[iI]\d+')
@@ -2820,82 +3070,127 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 onTap: () =>
                                     _showTeamEditorDialog(isHome: _homeOnLeft),
                                 child: SizedBox(
-                                  height: 42,
-                                  width: 60,
+                                  height: 0,
+                                  width: 0,
                                   child: Center(
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          _homeOnLeft
-                                              ? Icons.home
-                                              : Icons.flight,
-                                          size: 14,
-                                          color: Colors.black87,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          _getTeamAbbreviation(_homeOnLeft
-                                              ? selectedHomeTeam!
-                                              : selectedAwayTeam!),
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.grey.shade700,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                    child: SizedBox.shrink(),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            // Team switch button
-                            CustomButton(
-                              onTap: () {
-                                setState(() {
-                                  // Switch between home and away team on the left side
-                                  if (_homeOnLeft) {
-                                    // Currently showing home team, switch to away team
-                                    _homeOnLeft = false;
-                                  } else {
-                                    // Currently showing away team, switch to home team
-                                    _homeOnLeft = true;
-                                  }
-                                });
-                                _updateCaption();
-                              },
-                              child: Container(
-                                height: 22,
-                                width: 22,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.arrow_back,
-                                        size: 10,
-                                        color: Colors.grey.shade700,
+                            const SizedBox(width: 0),
+                            // Team tabs
+                            Row(
+                              children: [
+                                // Home team tab
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _homeOnLeft = true;
+                                    });
+                                    _updateCaption();
+                                  },
+                                  child: Container(
+                                    height: 22,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      color: _homeOnLeft
+                                          ? Colors.grey.shade300
+                                          : Colors.grey.shade100,
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(4),
+                                        bottomLeft: Radius.circular(4),
                                       ),
-                                      Icon(
-                                        Icons.arrow_forward,
-                                        size: 10,
-                                        color: Colors.grey.shade700,
+                                      border: Border.all(
+                                        color: _homeOnLeft
+                                            ? Colors.grey.shade500
+                                            : Colors.grey.shade300,
                                       ),
-                                    ],
+                                    ),
+                                    child: Center(
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.home,
+                                            size: 10,
+                                            color: _homeOnLeft
+                                                ? Colors.black87
+                                                : Colors.grey.shade500,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            _getTeamAbbreviation(
+                                                selectedHomeTeam ?? 'Home'),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: _homeOnLeft
+                                                  ? Colors.black87
+                                                  : Colors.grey.shade500,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                // Away team tab
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _homeOnLeft = false;
+                                    });
+                                    _updateCaption();
+                                  },
+                                  child: Container(
+                                    height: 22,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      color: !_homeOnLeft
+                                          ? Colors.grey.shade300
+                                          : Colors.grey.shade100,
+                                      borderRadius: const BorderRadius.only(
+                                        topRight: Radius.circular(4),
+                                        bottomRight: Radius.circular(4),
+                                      ),
+                                      border: Border.all(
+                                        color: !_homeOnLeft
+                                            ? Colors.grey.shade500
+                                            : Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.flight,
+                                            size: 10,
+                                            color: !_homeOnLeft
+                                                ? Colors.black87
+                                                : Colors.grey.shade500,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            _getTeamAbbreviation(
+                                                selectedAwayTeam ?? 'Away'),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: !_homeOnLeft
+                                                  ? Colors.black87
+                                                  : Colors.grey.shade500,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(width: 8),
                             // Display options to the right of switch button
@@ -2910,6 +3205,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // Display title
+                                    Text(
+                                      'Display:',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 1),
                                     // Type button
                                     MouseRegion(
                                       cursor: SystemMouseCursors.click,
@@ -2946,22 +3251,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 : (_awayPlayerGridMode
                                                     ? 'Grid'
                                                     : 'List'),
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.black87,
+                                                color: Colors.grey.shade700,
                                                 fontWeight: FontWeight.w500),
                                           ),
                                         ),
                                       ),
                                     ),
-                                    Text('•',
-                                        style: TextStyle(
-                                            fontSize: 10, color: Colors.black)),
                                     const SizedBox(width: 8),
+
                                     // Sort by options (only show when in List mode)
                                     if (!(_homeOnLeft
                                         ? _homePlayerGridMode
                                         : _awayPlayerGridMode)) ...[
+                                      Text(
+                                        'Sort:',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.black87,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
                                       MouseRegion(
                                         cursor: SystemMouseCursors.click,
                                         child: GestureDetector(
@@ -2993,30 +3305,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           child: Text(
                                             _homeOnLeft
                                                 ? (_homeSortOption == 'number'
-                                                    ? 'Number'
+                                                    ? 'Player Numbers'
                                                     : _homeSortOption ==
                                                             'lastName'
-                                                        ? 'Last'
-                                                        : 'First')
+                                                        ? 'Last Name'
+                                                        : 'First Name')
                                                 : (_awaySortOption == 'number'
-                                                    ? 'Number'
+                                                    ? 'Player Numbers'
                                                     : _awaySortOption ==
                                                             'lastName'
-                                                        ? 'Last'
-                                                        : 'First'),
-                                            style: const TextStyle(
+                                                        ? 'Last Name'
+                                                        : 'First Name'),
+                                            style: TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.black87,
+                                                color: Colors.grey.shade700,
                                                 fontWeight: FontWeight.w500),
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text('•',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.black)),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 4),
                                     ],
                                     // Ascending/Descending button
                                     MouseRegion(
@@ -3046,6 +3353,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         ),
                                       ),
                                     ),
+                                    const SizedBox(width: 6),
+                                    // Edit Teams button
+                                    MouseRegion(
+                                      cursor: SystemMouseCursors.click,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          _showTeamEditorDialog(
+                                              isHome: _homeOnLeft);
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                            border: Border.all(
+                                                color: Colors.grey.shade300),
+                                          ),
+                                          child: Text(
+                                            'Edit Teams',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              color: Colors.grey.shade700,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -3053,13 +3390,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ],
                         ),
                         const SizedBox(height: 0),
+                        // small spacer above the player search bar
+                        const SizedBox(height: 4),
                         // Search bar below team names and controls
                         SizedBox(
-                          height: 20,
+                          height: 24,
                           child: TextField(
                             controller: searchController,
                             cursorWidth: 1.5,
-                            cursorHeight: 16,
+                            cursorHeight: 20,
                             style: const TextStyle(fontSize: 11, height: 1.1),
                             onChanged: (value) {
                               setState(() {
@@ -3073,11 +3412,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             decoration: InputDecoration(
                               isDense: true,
                               contentPadding: const EdgeInsets.only(
-                                  left: 6, right: 6, top: 0, bottom: 0),
+                                  left: 6, right: 6, top: 2, bottom: 2),
                               prefixIcon: const Icon(Icons.search,
                                   size: 14, color: Colors.grey),
                               prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 20),
+                                  minWidth: 28, minHeight: 24),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(4),
                                 borderSide:
@@ -3132,120 +3471,123 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     : (_homeOnLeft ? _homePlayerGridMode : _awayPlayerGridMode)
                         ? _buildPlayerGrid(
                             filteredRoster, selectedPlayers, _homeOnLeft)
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: filteredRoster.length,
-                            itemBuilder: (context, index) {
-                              final player = filteredRoster[index];
-                              final isSelected =
-                                  selectedPlayers.contains(player.displayName);
-                              final isHomePlayer = _homeOnLeft
-                                  ? selectedHomePlayers
-                                      .contains(player.displayName)
-                                  : selectedAwayPlayers
-                                      .contains(player.displayName);
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: filteredRoster.length,
+                              itemBuilder: (context, index) {
+                                final player = filteredRoster[index];
+                                final isSelected = selectedPlayers
+                                    .contains(player.displayName);
+                                final isHomePlayer = _homeOnLeft
+                                    ? selectedHomePlayers
+                                        .contains(player.displayName)
+                                    : selectedAwayPlayers
+                                        .contains(player.displayName);
 
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (isSelected) {
-                                      if (isHome) {
-                                        selectedHomePlayers
-                                            .remove(player.displayName);
+                                return GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      if (isSelected) {
+                                        if (isHome) {
+                                          selectedHomePlayers
+                                              .remove(player.displayName);
+                                        } else {
+                                          selectedAwayPlayers
+                                              .remove(player.displayName);
+                                        }
                                       } else {
-                                        selectedAwayPlayers
-                                            .remove(player.displayName);
-                                      }
-                                    } else {
-                                      // Track which team was selected first
-                                      if (_firstTeamSelected == null) {
-                                        _firstTeamSelected = isHome;
-                                        _firstPlayerSelected =
-                                            _removeJerseyNumberFromName(
-                                                player.displayName);
-                                      } else {}
-                                      if (isHome) {
-                                        selectedHomePlayers
-                                            .add(player.displayName);
-                                      } else {
-                                        selectedAwayPlayers
-                                            .add(player.displayName);
-                                      }
+                                        // Track which team was selected first
+                                        if (_firstTeamSelected == null) {
+                                          _firstTeamSelected = isHome;
+                                          _firstPlayerSelected =
+                                              _removeJerseyNumberFromName(
+                                                  player.displayName);
+                                        } else {}
+                                        if (isHome) {
+                                          selectedHomePlayers
+                                              .add(player.displayName);
+                                        } else {
+                                          selectedAwayPlayers
+                                              .add(player.displayName);
+                                        }
 
-                                      // Switch to custom verb mode when a player is selected
-                                      _isPlayerSearchMode = false;
-                                      print(
-                                          'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
-                                    }
-                                  });
-                                  _updateCaption();
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? (isHomePlayer
-                                            ? Colors.grey.shade700
-                                            : Colors.white)
-                                        : Colors.grey.shade100,
-                                    border: Border(
-                                      bottom: BorderSide(
-                                          color: isSelected
-                                              ? (isHomePlayer
-                                                  ? Colors.grey.shade700
-                                                  : Colors.grey.shade400)
-                                              : Colors.grey.shade200,
-                                          width: 0.5),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      // Red star for first selected player
-                                      if (isSelected &&
-                                          _isFirstSelectedPlayer(
-                                              player.displayName))
-                                        Container(
-                                          margin:
-                                              const EdgeInsets.only(right: 4),
-                                          padding: const EdgeInsets.all(1),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red,
-                                            borderRadius:
-                                                BorderRadius.circular(2),
-                                          ),
-                                          child: const Icon(
-                                            Icons.star,
-                                            size: 8,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: Text(
-                                          _getFormattedPlayerName(
-                                              player.displayName,
-                                              isHome
-                                                  ? _homeSortOption
-                                                  : _awaySortOption),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: isSelected
-                                                ? FontWeight.w600
-                                                : FontWeight.normal,
+                                        // Switch to custom verb mode when a player is selected
+                                        _isPlayerSearchMode = false;
+                                        print(
+                                            'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
+                                      }
+                                    });
+                                    _updateCaption();
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? (isHomePlayer
+                                              ? Colors.grey.shade700
+                                              : Colors.white)
+                                          : Colors.grey.shade100,
+                                      border: Border(
+                                        bottom: BorderSide(
                                             color: isSelected
                                                 ? (isHomePlayer
-                                                    ? Colors.white
-                                                    : Colors.grey.shade800)
-                                                : Colors.black87,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                                    ? Colors.grey.shade700
+                                                    : Colors.grey.shade400)
+                                                : Colors.grey.shade200,
+                                            width: 0.5),
                                       ),
-                                    ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Red star for first selected player
+                                        if (isSelected &&
+                                            _isFirstSelectedPlayer(
+                                                player.displayName))
+                                          Container(
+                                            margin:
+                                                const EdgeInsets.only(right: 4),
+                                            padding: const EdgeInsets.all(1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.red,
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                            child: const Icon(
+                                              Icons.star,
+                                              size: 8,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            _getFormattedPlayerName(
+                                                player.displayName,
+                                                isHome
+                                                    ? _homeSortOption
+                                                    : _awaySortOption),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.w600
+                                                  : FontWeight.normal,
+                                              color: isSelected
+                                                  ? (isHomePlayer
+                                                      ? Colors.white
+                                                      : Colors.grey.shade800)
+                                                  : Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
           ),
         ],
@@ -3510,12 +3852,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Verb categories with compact layout
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(1),
+              padding: const EdgeInsets.all(0),
               child: _selectedVerb == 'Single' ||
                       _selectedVerb == 'Double' ||
                       _selectedVerb == 'Triple'
                   ? _buildHittingSubOptions()
-                  : _selectedVerb == 'RBI Sacrifice Fly'
+                  : _selectedVerb == 'Sacrifice Fly'
                       ? _buildSacrificeFlySubOptions()
                       : _selectedVerb == 'Home Run'
                           ? _buildHomeRunSubOptions()
@@ -3744,7 +4086,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             child:
                                                                                 SingleChildScrollView(
                                                                               child: Padding(
-                                                                                padding: const EdgeInsets.all(4),
+                                                                                padding: const EdgeInsets.all(0),
                                                                                 child: LayoutBuilder(
                                                                                   builder: (context, constraints) {
                                                                                     // Calculate width for exactly 3 columns
@@ -3762,7 +4104,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               'Double',
                                                                                               'Triple',
                                                                                               'Home Run',
-                                                                                              'RBI Sacrifice Fly',
+                                                                                              'Sacrifice Fly',
                                                                                               'At Bat',
                                                                                               'Swings',
                                                                                               'Bunts',
@@ -4111,7 +4453,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Container(
         width: double.infinity, // Dynamic width to fit container
         height: 36, // Fixed height to keep all chips the same height
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -5095,10 +5437,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'win',
       'postgameloss',
       'loss',
-      'walksofffield',
+      'walksoffield',
       'walksoff',
-      'runsofffield',
-      'runsoff'
+      'runsoffield',
+      'runsoff',
+      'sacrificefly',
+      'sf'
     ];
 
     for (int i = 1; i < parts.length; i++) {
@@ -5457,6 +5801,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'hbp':
         case 'hitbypitch':
           action = 'Hit by Pitch';
+          break;
+        case 'sacrificefly':
+        case 'sf':
+          action = 'Sacrifice Fly';
           break;
         case 'celebrates':
         case 'celebrate':
@@ -5999,6 +6347,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'hitbypitch':
           action = 'Hit by Pitch';
           break;
+        case 'sacrificefly':
+        case 'sf':
+          action = 'Sacrifice Fly';
+          break;
         case 'celebrates':
         case 'celebrate':
           action = 'Celebrates';
@@ -6174,7 +6526,158 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'homer':
           action = 'Home Run';
           break;
-        // Add more cases as needed
+        case 'single':
+        case '1b':
+          action = 'Single';
+          break;
+        case 'double':
+        case '2b':
+          action = 'Double';
+          break;
+        case 'triple':
+        case '3b':
+          action = 'Triple';
+          break;
+        case 'walks':
+        case 'walk':
+        case 'bb':
+          action = 'Walks';
+          break;
+        case 'strikeout':
+        case 'k':
+          action = 'Strikeout';
+          break;
+        case 'steals':
+        case 'steal':
+        case 'sb':
+          action = 'Steals';
+          break;
+        case 'catches':
+        case 'catch':
+          action = 'Catches';
+          break;
+        case 'throws':
+        case 'throw':
+          action = 'Throws';
+          break;
+        case 'tags':
+        case 'tag':
+          action = 'Tags';
+          break;
+        case 'pitches':
+        case 'pitch':
+        case 'pitching':
+          action = 'Pitching';
+          break;
+        case 'swings':
+        case 'swing':
+          action = 'Swings';
+          break;
+        case 'bunts':
+        case 'bunt':
+          action = 'Bunts';
+          break;
+        case 'hbp':
+        case 'hitbypitch':
+          action = 'Hit by Pitch';
+          break;
+        case 'sacrificefly':
+        case 'sf':
+          action = 'Sacrifice Fly';
+          break;
+        case 'celebrates':
+        case 'celebrate':
+          action = 'Celebrates';
+          break;
+        case 'dejection':
+        case 'dejected':
+          action = 'Dejection';
+          break;
+        case 'looks':
+        case 'look':
+          action = 'Looks On';
+          break;
+        case 'runs':
+        case 'run':
+          action = 'Runs';
+          break;
+        case 'slides':
+        case 'slide':
+          action = 'Slides';
+          break;
+        case 'rounds':
+        case 'round':
+          action = 'Rounds';
+          break;
+        case 'groundball':
+        case 'ground':
+          action = 'Groundball';
+          break;
+        case 'doubleplay':
+        case 'dp':
+          action = 'Double Play';
+          break;
+        case 'tripleplay':
+        case 'tp':
+          action = 'Triple Play';
+          break;
+        case 'atbat':
+        case 'at-bat':
+        case 'bat':
+          action = 'At Bat';
+          break;
+        case 'fielding':
+        case 'field':
+          action = 'Fielding Position';
+          break;
+        case 'warmup':
+        case 'warm':
+          action = 'Warm Ups';
+          break;
+        case 'stretching':
+        case 'stretch':
+          action = 'Stretching';
+          break;
+        case 'battingpractice':
+        case 'bp':
+          action = 'Batting Practice';
+          break;
+        case 'fieldingpractice':
+        case 'fp':
+          action = 'Fielding Practice';
+          break;
+        case 'takesthefield':
+        case 'takesfield':
+          action = 'Takes the Field';
+          break;
+        case 'comesofffield':
+        case 'offfield':
+          action = 'Comes Off the Field';
+          break;
+        case 'nationalanthem':
+        case 'anthem':
+          action = 'National Anthem';
+          break;
+        case 'pitchingchange':
+        case 'pitchchange':
+          action = 'Pitching Change';
+          break;
+        case 'postgamewin':
+        case 'win':
+          action = 'Post Game Win';
+          break;
+        case 'postgameloss':
+        case 'loss':
+          action = 'Post Game Loss';
+          break;
+        case 'walksoffield':
+        case 'walksoff':
+          action = 'Walks Off Field';
+          break;
+        case 'runsoffield':
+        case 'runsoff':
+          action = 'Runs Off Field';
+          break;
       }
     }
 
@@ -9990,8 +10493,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Home Run':
         baseAction = _buildHomeRunPhrase();
         break;
-      case 'RBI Sacrifice Fly':
-        baseAction = 'RBI sacrifice fly';
+      case 'Sacrifice Fly':
+        baseAction = 'sacrifice fly';
         break;
       case 'Strikeout':
         baseAction = 'strikeout';
