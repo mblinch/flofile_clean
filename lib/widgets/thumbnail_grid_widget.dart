@@ -16,6 +16,7 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Map<String, int>? xmpRatings; // Optional XMP ratings (0-5)
   final Map<String, String>?
       xmpLabels; // Optional XMP color labels (Red, Yellow, ...)
+  final Map<String, bool>? xmpTagged; // Optional XMP tagged/keep flags
   final Set<String>? lockedPaths; // Files detected as locked (read-only)
   final Map<String, double> uploadProgress; // Track upload progress
   // Bump this number to request the grid to center the selected index
@@ -32,6 +33,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     required this.uploadedImages,
     this.xmpRatings,
     this.xmpLabels,
+    this.xmpTagged,
     this.lockedPaths,
     required this.uploadProgress,
     required this.centerRequestId,
@@ -89,10 +91,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     // Apply tagged/untagged filter
     paths = paths.where((p) {
-      final ratings = widget.xmpRatings ?? const {};
+      final tagged = widget.xmpTagged ?? const {};
       final labels = widget.xmpLabels ?? const {};
-      final isTagged =
-          (ratings[p] ?? 0) > 0 || (labels[p]?.isNotEmpty ?? false);
+      final isTagged = tagged[p] ?? false;
 
       bool passTagFilter = true;
       if (_tagFilterMode == 'tagged') passTagFilter = isTagged;
@@ -637,70 +638,72 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
                       const Text(
-                        "Filter: ",
+                        "FTP'd images: ",
                         style: TextStyle(fontSize: 12, color: Colors.black),
                       ),
                       const SizedBox(width: 4),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ToggleButtons(
-                            isSelected: [
-                              _ftpFilterMode == 'hide_ftpd',
-                              _ftpFilterMode == 'show_ftpd',
-                            ],
-                            onPressed: (index) {
-                              setState(() {
-                                final selected =
-                                    index == 0 ? 'hide_ftpd' : 'show_ftpd';
-                                // toggle behavior: clicking an already-selected button clears filter
-                                _ftpFilterMode = (_ftpFilterMode == selected)
-                                    ? null
-                                    : selected;
-
-                                if (_ftpFilterMode == 'hide_ftpd' &&
-                                    widget.currentIndex <
-                                        widget.imagePaths.length &&
-                                    widget.uploadedImages.contains(widget
-                                        .imagePaths[widget.currentIndex])) {
-                                  int nextIndex = widget.currentIndex + 1;
-                                  while (nextIndex < widget.imagePaths.length &&
-                                      widget.uploadedImages.contains(
-                                          widget.imagePaths[nextIndex])) {
-                                    nextIndex++;
-                                  }
-                                  if (nextIndex >= widget.imagePaths.length) {
-                                    nextIndex = widget.currentIndex - 1;
-                                    while (nextIndex >= 0 &&
-                                        widget.uploadedImages.contains(
-                                            widget.imagePaths[nextIndex])) {
-                                      nextIndex--;
-                                    }
-                                  }
-                                  if (nextIndex >= 0 &&
-                                      nextIndex < widget.imagePaths.length) {
-                                    widget.onImageSelected(nextIndex);
-                                  }
-                                }
-                              });
-                              _ensureVisibleAfterLayout();
-                            },
-                            constraints: const BoxConstraints(
-                              minWidth: 80,
-                              minHeight: 24,
-                            ),
-                            selectedBorderColor: Colors.grey.shade600,
-                            selectedColor: Colors.black,
-                            fillColor: Colors.grey.shade200,
-                            color: Colors.black,
-                            textStyle: const TextStyle(fontSize: 11),
-                            borderRadius: BorderRadius.circular(4),
-                            children: const [
-                              Text('Hide'),
-                              Text('Show'),
-                            ],
+                      DropdownButton<String>(
+                        value: _ftpFilterMode == null
+                            ? 'all'
+                            : _ftpFilterMode == 'hide_ftpd'
+                                ? 'hide'
+                                : 'show',
+                        isDense: true,
+                        underline: Container(),
+                        style:
+                            const TextStyle(fontSize: 11, color: Colors.black),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Show All Images'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'hide',
+                            child: Text('Hide FTPd Images'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'show',
+                            child: Text('Show FTPd Images'),
                           ),
                         ],
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == 'all') {
+                              _ftpFilterMode = null;
+                            } else if (value == 'hide') {
+                              _ftpFilterMode = 'hide_ftpd';
+                            } else if (value == 'show') {
+                              _ftpFilterMode = 'show_ftpd';
+                            }
+
+                            // Handle current image selection when hiding FTPd images
+                            if (_ftpFilterMode == 'hide_ftpd' &&
+                                widget.currentIndex <
+                                    widget.imagePaths.length &&
+                                widget.uploadedImages.contains(
+                                    widget.imagePaths[widget.currentIndex])) {
+                              int nextIndex = widget.currentIndex + 1;
+                              while (nextIndex < widget.imagePaths.length &&
+                                  widget.uploadedImages
+                                      .contains(widget.imagePaths[nextIndex])) {
+                                nextIndex++;
+                              }
+                              if (nextIndex >= widget.imagePaths.length) {
+                                nextIndex = widget.currentIndex - 1;
+                                while (nextIndex >= 0 &&
+                                    widget.uploadedImages.contains(
+                                        widget.imagePaths[nextIndex])) {
+                                  nextIndex--;
+                                }
+                              }
+                              if (nextIndex >= 0 &&
+                                  nextIndex < widget.imagePaths.length) {
+                                widget.onImageSelected(nextIndex);
+                              }
+                            }
+                          });
+                          _ensureVisibleAfterLayout();
+                        },
                       ),
                     ],
                   ),
@@ -709,36 +712,37 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Tag mode: Tagged / Untagged / Locked
-                      ToggleButtons(
-                        isSelected: [
-                          _tagFilterMode == 'tagged',
-                          _tagFilterMode == 'untagged',
-                          _tagFilterMode == 'locked',
+                      // Tag mode dropdown
+                      DropdownButton<String>(
+                        value: _tagFilterMode == 'all'
+                            ? 'all'
+                            : _tagFilterMode == 'tagged'
+                                ? 'tagged'
+                                : 'untagged',
+                        isDense: true,
+                        underline: Container(),
+                        style:
+                            const TextStyle(fontSize: 11, color: Colors.black),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Show All Images'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tagged',
+                            child: Text('Show Tagged Images'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'untagged',
+                            child: Text('Show Untagged Images'),
+                          ),
                         ],
-                        onPressed: (i) {
+                        onChanged: (value) {
                           setState(() {
-                            final modes = ['tagged', 'untagged', 'locked'];
-                            final selected = modes[i];
-                            // toggle off when clicking the same option
-                            _tagFilterMode =
-                                (_tagFilterMode == selected) ? 'all' : selected;
+                            _tagFilterMode = value ?? 'all';
                           });
                           _ensureVisibleAfterLayout();
                         },
-                        constraints:
-                            const BoxConstraints(minWidth: 60, minHeight: 24),
-                        selectedBorderColor: Colors.grey.shade600,
-                        selectedColor: Colors.black,
-                        fillColor: Colors.grey.shade200,
-                        color: Colors.black,
-                        textStyle: const TextStyle(fontSize: 11),
-                        borderRadius: BorderRadius.circular(4),
-                        children: const [
-                          Text('Tagged'),
-                          Text('Untagged'),
-                          Text('Locked'),
-                        ],
                       ),
                       const SizedBox(width: 4),
                       // Label filter: Any / Red / Yellow / Green / Blue / Purple

@@ -34,6 +34,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // XMP metadata for rating and color label
   Map<String, int> _xmpRatings = {};
   Map<String, String> _xmpLabels = {};
+  // XMP metadata for tagged/keep flags
+  Map<String, bool> _xmpTagged = {};
   // Files that appear locked (not writable by owner)
   Set<String> _lockedPaths = {};
 
@@ -227,12 +229,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     try {
       if (imageFiles.isEmpty) return;
 
-      // Batch exiftool call for all files (DateTimeOriginal, Rating, Label)
+      // Batch exiftool call for all files (DateTimeOriginal, Rating, Label, Tagged, Keep)
       final args = <String>[
         '-j',
         '-DateTimeOriginal',
         '-XMP:Rating',
-        '-XMP:Label'
+        '-XMP:Label',
+        '-XMP:Tagged',
+        '-XMP:PMKeep'
       ];
       args.addAll(imageFiles);
       final proc = await Process.run('exiftool', args);
@@ -240,6 +244,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final Map<String, String> formatted = {};
       final Map<String, int> ratings = {};
       final Map<String, String> labels = {};
+      final Map<String, bool> tagged = {};
 
       if (proc.exitCode == 0) {
         final List data = jsonDecode(proc.stdout as String);
@@ -250,6 +255,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             // ExifTool normalizes keys to simple names like 'Rating' and 'Label'
             final ratingVal = item['Rating'];
             final labelVal = item['Label'];
+            final taggedVal = item['Tagged'];
+            final keepVal = item['PMKeep'];
             if (sourceFile != null && dateStr != null) {
               try {
                 final dt = DateTime.parse(
@@ -272,6 +279,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               if (labelVal != null) {
                 labels[sourceFile] = labelVal.toString();
               }
+              // Check for tagged/keep flags
+              final isTagged = taggedVal == true ||
+                  taggedVal == 'true' ||
+                  taggedVal == '1' ||
+                  keepVal == true ||
+                  keepVal == 'true' ||
+                  keepVal == '1';
+              tagged[sourceFile] = isTagged;
             }
           }
         }
@@ -313,6 +328,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         _exifTimes = formatted;
         _xmpRatings = ratings;
         _xmpLabels = labels;
+        _xmpTagged = tagged;
         _lockedPaths = locked;
         if (orderChanged) {
           imagePaths = sorted;
@@ -959,6 +975,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       uploadedImages: _uploadedImages,
                       xmpRatings: _xmpRatings,
                       xmpLabels: _xmpLabels,
+                      xmpTagged: _xmpTagged,
                       lockedPaths: _lockedPaths,
                       uploadProgress: _uploadProgress,
                       centerRequestId: _thumbCenterRequestId,
