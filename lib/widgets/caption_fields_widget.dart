@@ -2239,9 +2239,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             children: [
                               // First column - Magic bar
                               Expanded(
-                                flex: 2,
+                                flex: 6,
                                 child: Container(
-                                  padding: const EdgeInsets.only(left: 4),
+                                  padding:
+                                      const EdgeInsets.only(left: 4, right: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(6),
+                                      bottomLeft: Radius.circular(6),
+                                    ),
+                                  ),
                                   child: TextField(
                                     style: const TextStyle(fontSize: 12),
                                     decoration: InputDecoration(
@@ -2804,100 +2812,119 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                               // Middle column - Navigation buttons and FTP/Settings
                               Expanded(
-                                flex: 8,
-                                child: Row(
-                                  children: [
-                                    // Navigation buttons (left side)
-                                    Expanded(
-                                      child: _buildNavigationButtons(),
-                                    ),
-                                    // FTP and Settings buttons (right side)
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        // Settings button
-                                        CustomButton(
-                                          onTap: _showFtpSettings,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 6),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF4A90E2),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                  color:
-                                                      const Color(0xFF4A90E2)),
-                                            ),
-                                            child: const Icon(Icons.settings,
-                                                size: 14, color: Colors.white),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        // FTP button
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 4),
-                                          child: CustomButton(
-                                            onTap: _disableFtp
-                                                ? null
-                                                : _onFtpPressed,
+                                flex: 12,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade50,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // Navigation buttons (left side)
+                                      Expanded(
+                                        child: _buildNavigationButtons(),
+                                      ),
+                                      // FTP and Settings buttons (right side)
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          // Settings button
+                                          CustomButton(
+                                            onTap: _showFtpSettings,
                                             child: Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                       horizontal: 8,
                                                       vertical: 6),
                                               decoration: BoxDecoration(
-                                                color: _disableFtp
-                                                    ? Colors.grey.shade300
-                                                    : const Color(0xFF0052CC),
+                                                color: const Color(0xFF4A90E2),
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                                 border: Border.all(
-                                                    color: _disableFtp
-                                                        ? Colors.grey.shade300
-                                                        : const Color(
-                                                            0xFF0052CC)),
+                                                    color: const Color(
+                                                        0xFF4A90E2)),
                                               ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(Icons.rocket_launch,
-                                                      size: 14,
+                                              child: const Icon(Icons.settings,
+                                                  size: 14,
+                                                  color: Colors.white),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          // FTP button
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(right: 4),
+                                            child: CustomButton(
+                                              onTap: _disableFtp
+                                                  ? null
+                                                  : _onFtpPressed,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: _disableFtp
+                                                      ? Colors.grey.shade300
+                                                      : const Color(0xFF0052CC),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
                                                       color: _disableFtp
-                                                          ? Colors.grey.shade600
-                                                          : Colors.white),
-                                                  const SizedBox(width: 2),
-                                                  Text(
-                                                      _disableFtp
-                                                          ? 'FTP OFF'
-                                                          : (_currentFtpProfile !=
-                                                                  null
-                                                              ? 'FTP: $_currentFtpProfile'
-                                                              : 'FTP'),
-                                                      style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: _disableFtp
-                                                              ? Colors
-                                                                  .grey.shade600
-                                                              : Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.w500)),
-                                                ],
+                                                          ? Colors.grey.shade300
+                                                          : const Color(
+                                                              0xFF0052CC)),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.rocket_launch,
+                                                        size: 14,
+                                                        color: _disableFtp
+                                                            ? Colors
+                                                                .grey.shade600
+                                                            : Colors.white),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                        _disableFtp
+                                                            ? 'FTP OFF'
+                                                            : (_currentFtpProfile !=
+                                                                    null
+                                                                ? 'FTP: $_currentFtpProfile'
+                                                                : 'FTP'),
+                                                        style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: _disableFtp
+                                                                ? Colors.grey
+                                                                    .shade600
+                                                                : Colors.white,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w500)),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              // Third column - same width as player picker (flex: 2)
+                              // Third column - empty space (flex: 2)
                               Expanded(
                                 flex: 2,
-                                child: Container(),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(6),
+                                      bottomRight: Radius.circular(6),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -2925,7 +2952,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCaptionBuildingSection() {
     return Container(
-      padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
+      padding: const EdgeInsets.only(top: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
