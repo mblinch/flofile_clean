@@ -2244,7 +2244,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   padding:
                                       const EdgeInsets.only(left: 4, right: 8),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
                                     borderRadius: const BorderRadius.only(
                                       topLeft: Radius.circular(6),
                                       bottomLeft: Radius.circular(6),
@@ -2302,10 +2301,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         print(
                                             'DEBUG: Checking for h or v in: "$lowerValue"');
 
-                                        // Look for standalone 'h' or 'v' (not part of words like 'home' or 'away')
-                                        final hMatch = RegExp(r'\bh\b')
+                                        // Look for 'h' or 'v' at the end of the input (user's choice)
+                                        final hMatch = RegExp(r'h$')
                                             .firstMatch(lowerValue);
-                                        final vMatch = RegExp(r'\bv\b')
+                                        final vMatch = RegExp(r'v$')
                                             .firstMatch(lowerValue);
 
                                         if (hMatch != null) {
@@ -2812,117 +2811,95 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                               // Middle column - Navigation buttons and FTP/Settings
                               Expanded(
-                                flex: 12,
+                                flex: 11,
                                 child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      // Navigation buttons (left side)
-                                      Expanded(
-                                        child: _buildNavigationButtons(),
-                                      ),
-                                      // FTP and Settings buttons (right side)
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          // Settings button
-                                          CustomButton(
-                                            onTap: _showFtpSettings,
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 6),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF4A90E2),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                    color: const Color(
-                                                        0xFF4A90E2)),
-                                              ),
-                                              child: const Icon(Icons.settings,
-                                                  size: 14,
-                                                  color: Colors.white),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          // FTP button
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.only(right: 4),
-                                            child: CustomButton(
-                                              onTap: _disableFtp
-                                                  ? null
-                                                  : _onFtpPressed,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 6),
-                                                decoration: BoxDecoration(
-                                                  color: _disableFtp
-                                                      ? Colors.grey.shade300
-                                                      : const Color(0xFF0052CC),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                      color: _disableFtp
-                                                          ? Colors.grey.shade300
-                                                          : const Color(
-                                                              0xFF0052CC)),
-                                                ),
-                                                child: Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(Icons.rocket_launch,
-                                                        size: 14,
-                                                        color: _disableFtp
-                                                            ? Colors
-                                                                .grey.shade600
-                                                            : Colors.white),
-                                                    const SizedBox(width: 2),
-                                                    Text(
-                                                        _disableFtp
-                                                            ? 'FTP OFF'
-                                                            : (_currentFtpProfile !=
-                                                                    null
-                                                                ? 'FTP: $_currentFtpProfile'
-                                                                : 'FTP'),
-                                                        style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: _disableFtp
-                                                                ? Colors.grey
-                                                                    .shade600
-                                                                : Colors.white,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w500)),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                  decoration: BoxDecoration(),
+                                  child: _buildNavigationButtons(),
                                 ),
                               ),
-                              // Third column - empty space (flex: 2)
+                              // Third column - FTP and Settings buttons (flex: 3)
                               Expanded(
-                                flex: 2,
+                                flex: 3,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
                                     borderRadius: const BorderRadius.only(
                                       topRight: Radius.circular(6),
                                       bottomRight: Radius.circular(6),
                                     ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      // FTP button
+                                      CustomButton(
+                                        onTap:
+                                            _disableFtp ? null : _onFtpPressed,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: _disableFtp
+                                                ? Colors.grey.shade300
+                                                : const Color(0xFF0052CC),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: _disableFtp
+                                                    ? Colors.grey.shade300
+                                                    : const Color(0xFF0052CC)),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.rocket_launch,
+                                                  size: 14,
+                                                  color: _disableFtp
+                                                      ? Colors.grey.shade600
+                                                      : Colors.white),
+                                              const SizedBox(width: 2),
+                                              Text(
+                                                  _disableFtp
+                                                      ? 'FTP OFF'
+                                                      : (_currentFtpProfile !=
+                                                              null
+                                                          ? 'FTP: $_currentFtpProfile'
+                                                          : 'FTP'),
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: _disableFtp
+                                                          ? Colors.grey.shade600
+                                                          : Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w500)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      // Settings button
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 4),
+                                        child: CustomButton(
+                                          onTap: _showFtpSettings,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF4A90E2),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                  color:
+                                                      const Color(0xFF4A90E2)),
+                                            ),
+                                            child: const Icon(Icons.settings,
+                                                size: 14, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -6408,10 +6385,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
+
+        // Switch player picker to show the selected player's team on the left
+        _homeOnLeft = isHomePlayer;
       });
 
-      // Clear the firebar
-      _magicBarController.clear();
+      // Set the firebar to show the choice that was made (e.g., "v7" for visitor #7)
+      final choicePrefix = isHomePlayer ? 'h' : 'v';
+      _magicBarController.text = '$choicePrefix$jerseyNumber ';
+
+      // Position cursor at the end (after the space)
+      _magicBarController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _magicBarController.text.length),
+      );
 
       // Select the player using the existing method
       _selectPlayerChipByNumber(
@@ -6462,10 +6448,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
+
+        // Switch player picker to show the selected player's team on the left
+        _homeOnLeft = isHomePlayer;
       });
 
-      // Clear the firebar
-      _magicBarController.clear();
+      // Set the firebar to show the choice that was made (e.g., "v7" for visitor #7)
+      final choicePrefix = isHomePlayer ? 'h' : 'v';
+      _magicBarController.text = '$choicePrefix$jerseyNumber ';
+
+      // Position cursor at the end (after the space)
+      _magicBarController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _magicBarController.text.length),
+      );
 
       // Select the player using the existing method
       _selectPlayerChipByNumber(
@@ -13763,7 +13758,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     }
                   : null,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color:
                       (widget.currentIndex != null && widget.currentIndex! > 0)
@@ -13792,7 +13787,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           CustomButton(
             onTap: _copyMetadataFromCaptionWidget,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(4),
@@ -13813,7 +13808,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           CustomButton(
             onTap: _pasteMetadataToCaptionWidget,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(4),
@@ -13845,7 +13840,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     }
                   : null,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color: (widget.currentIndex != null &&
                           widget.totalImages != null &&
@@ -13878,7 +13873,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: CustomButton(
               onTap: _fullReset,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
