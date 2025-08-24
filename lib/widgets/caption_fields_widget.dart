@@ -369,10 +369,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _showMagicInputPlayerOptions = false;
   // Live text typed in the magic bar used to drive verb highlighting
   String _magicBarVerbInput = '';
-  // Controller for the Magic Bar to allow programmatic clearing on reset
+  // Controller for the Firebar to allow programmatic clearing on reset
   final TextEditingController _magicBarController = TextEditingController();
-  // Focus node for Magic Bar to control when verb bolding is visible
+  // Focus node for Firebar to control when verb bolding is visible
   final FocusNode _magicBarFocusNode = FocusNode();
+
+  bool _shouldShowRbiInlineHint() {
+    const verbsWithRbi = {
+      'Single',
+      'Double',
+      'Triple',
+      'Home Run',
+      'Sacrifice Fly',
+    };
+    return verbsWithRbi.contains(_selectedVerb);
+  }
+
+  String _rbiShortcutExample() {
+    // Map selected verb to its firebar shortcut letters
+    const Map<String, String> verbToShortcut = {
+      'Single': 'sin',
+      'Double': 'dou',
+      'Triple': 'tri',
+      'Home Run': 'hr',
+      'Sacrifice Fly': 'sf',
+    };
+    final String letters = verbToShortcut[_selectedVerb] ?? 'hr';
+    return '${letters}3';
+  }
+
+  String _rbiHintNoun() {
+    // Use "runs" for Home Run, otherwise "RBI"
+    return _selectedVerb == 'Home Run' ? 'runs' : 'RBI';
+  }
+
   // Whether the user is currently typing the first magic player token (e.g., "h27")
   bool _typingFirstMagicToken = false;
   bool _waitingForHomeVisitorChoice = false;
@@ -2234,11 +2264,102 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 8, vertical: 8),
                                       isDense: true,
-                                      hintText: 'Magic Bar',
+                                      hintText: _waitingForHomeVisitorChoice
+                                          ? 'Press H for Home or V for Away'
+                                          : '🔥 Firebar',
+                                      suffixText: _waitingForHomeVisitorChoice
+                                          ? null
+                                          : _shouldShowRbiInlineHint()
+                                              ? ' Add # for ' +
+                                                  _rbiHintNoun() +
+                                                  ' (e.g., ' +
+                                                  _rbiShortcutExample() +
+                                                  ')'
+                                              : null,
+                                      suffixStyle: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500,
+                                        fontStyle: FontStyle.italic,
+                                      ),
                                     ),
                                     controller: _magicBarController,
                                     focusNode: _magicBarFocusNode,
                                     onChanged: (value) {
+                                      // Handle H/V input when waiting for home/visitor choice
+                                      if (_waitingForHomeVisitorChoice) {
+                                        print(
+                                            'DEBUG: In choice mode, value: "$value"');
+                                        // Check if user typed 'h' or 'v' anywhere in the text
+                                        final lowerValue = value.toLowerCase();
+                                        print(
+                                            'DEBUG: Checking for h or v in: "$lowerValue"');
+
+                                        // Look for standalone 'h' or 'v' (not part of words like 'home' or 'away')
+                                        final hMatch = RegExp(r'\bh\b')
+                                            .firstMatch(lowerValue);
+                                        final vMatch = RegExp(r'\bv\b')
+                                            .firstMatch(lowerValue);
+
+                                        if (hMatch != null) {
+                                          print(
+                                              'DEBUG: Found H, calling _processHomeVisitorChoice');
+                                          _processHomeVisitorChoice('h');
+                                          return;
+                                        } else if (vMatch != null) {
+                                          print(
+                                              'DEBUG: Found V, calling _processHomeVisitorChoice');
+                                          _processHomeVisitorChoice('v');
+                                          return;
+                                        }
+                                        print(
+                                            'DEBUG: No H or V found, restoring prompt if needed');
+                                        // Restore the prompt text if user tries to edit it
+                                        if (!value.contains(
+                                            'Press H for Home or V for Away')) {
+                                          final numberPart =
+                                              _magicInputMatchingPlayers
+                                                  .first.jerseyNumber;
+                                          print('DEBUG: Restoring prompt text');
+
+                                          // Create player choice text with last names and numbers
+                                          final homePlayer =
+                                              _magicInputMatchingPlayers
+                                                  .firstWhere(
+                                            (p) => _homeRoster.contains(p),
+                                            orElse: () =>
+                                                _magicInputMatchingPlayers
+                                                    .first,
+                                          );
+                                          final awayPlayer =
+                                              _magicInputMatchingPlayers
+                                                  .firstWhere(
+                                            (p) => !_homeRoster.contains(p),
+                                            orElse: () =>
+                                                _magicInputMatchingPlayers
+                                                    .first,
+                                          );
+
+                                          final homeLastName = homePlayer
+                                              .fullName
+                                              .split(' ')
+                                              .last;
+                                          final awayLastName = awayPlayer
+                                              .fullName
+                                              .split(' ')
+                                              .last;
+
+                                          _magicBarController.text =
+                                              '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                                          _magicBarController.selection =
+                                              TextSelection.fromPosition(
+                                            TextPosition(
+                                                offset: _magicBarController
+                                                    .text.length),
+                                          );
+                                        }
+                                        return;
+                                      }
+
                                       // Track magic bar input for verb highlighting
                                       _magicBarVerbInput =
                                           value.trim().toLowerCase();
@@ -2403,21 +2524,102 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         String numberPart = token.replaceAll(
                                             RegExp(r'^(h{1,2}|v{1,2})'), '');
                                         bool isHomeHint = token.startsWith('h');
+
+                                        // If no explicit h/v and both teams have this jersey number,
+                                        // prompt for Home/Away choice inline.
+                                        if (!isHomeHint &&
+                                            !token.startsWith('v')) {
+                                          final homeMatches = _homeRoster
+                                              .where((p) =>
+                                                  p.jerseyNumber == numberPart)
+                                              .toList();
+                                          final awayMatches = _awayRoster
+                                              .where((p) =>
+                                                  p.jerseyNumber == numberPart)
+                                              .toList();
+                                          if (homeMatches.isNotEmpty &&
+                                              awayMatches.isNotEmpty) {
+                                            setState(() {
+                                              _filteredPlayers.clear();
+                                              _noPlayersFound = false;
+                                              _isPlayerSearchMode = false;
+                                              _magicInputMatchingPlayers = [
+                                                ...homeMatches,
+                                                ...awayMatches
+                                              ];
+                                              _magicInputActionText = '';
+                                              _waitingForHomeVisitorChoice =
+                                                  true;
+                                            });
+                                            // Set the text to show the choice prompt with player names
+                                            final homePlayer =
+                                                _magicInputMatchingPlayers
+                                                    .firstWhere(
+                                              (p) => _homeRoster.contains(p),
+                                              orElse: () =>
+                                                  _magicInputMatchingPlayers
+                                                      .first,
+                                            );
+                                            final awayPlayer =
+                                                _magicInputMatchingPlayers
+                                                    .firstWhere(
+                                              (p) => !_homeRoster.contains(p),
+                                              orElse: () =>
+                                                  _magicInputMatchingPlayers
+                                                      .first,
+                                            );
+
+                                            final homeLastName = homePlayer
+                                                .fullName
+                                                .split(' ')
+                                                .last;
+                                            final awayLastName = awayPlayer
+                                                .fullName
+                                                .split(' ')
+                                                .last;
+
+                                            _magicBarController.text =
+                                                '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                                            _magicBarController.selection =
+                                                TextSelection.fromPosition(
+                                              TextPosition(
+                                                  offset: _magicBarController
+                                                      .text.length),
+                                            );
+                                            return;
+                                          }
+                                        }
+
+                                        // Choose team when no explicit h/v was provided:
+                                        // 1) If only one team has players selected, use that team
+                                        // 2) Else if a team was selected first, use that
+                                        // 3) Else fall back to UI side (_homeOnLeft)
+                                        final bool inferredIsHome = isHomeHint
+                                            ? true
+                                            : (selectedHomePlayers.isNotEmpty &&
+                                                    selectedAwayPlayers.isEmpty)
+                                                ? true
+                                                : (selectedAwayPlayers
+                                                            .isNotEmpty &&
+                                                        selectedHomePlayers
+                                                            .isEmpty)
+                                                    ? false
+                                                    : (_firstTeamSelected ??
+                                                        _homeOnLeft);
+
                                         // If a different jersey was previously auto-selected for this team, unselect it
-                                        final prevAuto = isHomeHint
+                                        final prevAuto = inferredIsHome
                                             ? _autoSelectedHomeJersey
                                             : _autoSelectedAwayJersey;
                                         if (prevAuto != null &&
                                             prevAuto != numberPart) {
                                           _unselectAutoSelectedByToken(
-                                            isHomeTeam:
-                                                isHomeHint ? true : _homeOnLeft,
+                                            isHomeTeam: inferredIsHome,
                                             jerseyNumber: prevAuto,
                                           );
                                         }
                                         _selectPlayerChipByNumber(
-                                          isHomeTeam:
-                                              isHomeHint ? true : _homeOnLeft,
+                                          isHomeTeam: inferredIsHome,
                                           jerseyNumber: numberPart,
                                           isProgressive: true,
                                           affectFirstStar: false,
@@ -2599,6 +2801,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ),
                                 ),
                               ),
+
                               // Middle column - Navigation buttons and FTP/Settings
                               Expanded(
                                 flex: 8,
@@ -4411,6 +4614,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildVerbOption(String verb) {
+    // Don't show anything for empty placeholder verbs
+    if (verb.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final isSelected = _selectedVerb == verb;
 
     // Get all verbs for prefix calculation
@@ -4452,8 +4660,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity, // Dynamic width to fit container
-        height: 36, // Fixed height to keep all chips the same height
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 10),
+        height: 34, // Optimal height to accommodate wrapped text
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -4463,178 +4671,178 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             width: 0.5,
           ),
         ),
-        child: Builder(builder: (context) {
-          String typed = _magicBarVerbInput;
-          // Only use trailing letters for verb matching (ignore digits like in "h27")
-          final RegExpMatch? lettersMatch =
-              RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
-          final String typedLetters =
-              lettersMatch?.group(1)?.toLowerCase() ?? '';
+        child: Center(
+          child: Builder(builder: (context) {
+            String typed = _magicBarVerbInput;
+            // Only use trailing letters for verb matching (ignore digits like in "h27")
+            final RegExpMatch? lettersMatch =
+                RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
+            final String typedLetters =
+                lettersMatch?.group(1)?.toLowerCase() ?? '';
 
-          // Debug output
-          // print(
-          //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
+            // Debug output
+            // print(
+            //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
 
-          // Calculate the shortcut letters for this verb
-          String shortcutLetters = '';
-          final words = verb.split(' ');
-          final filtered = words
-              .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
-              .toList();
+            // Calculate the shortcut letters for this verb
+            String shortcutLetters = '';
+            final words = verb.split(' ');
+            final filtered = words
+                .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
+                .toList();
 
-          if (filtered.isEmpty) {
-            // Fallback if no valid words found
-            shortcutLetters = verb.length >= 3
-                ? verb.substring(0, 3).toLowerCase()
-                : verb.toLowerCase();
-          } else if (filtered.length > 1) {
-            // Multi-word verb: use acronym
-            shortcutLetters = filtered.map((w) => w[0].toLowerCase()).join();
-          } else {
-            // Single word verb: use first 2-3 letters
-            final first = filtered.first.toLowerCase();
-            shortcutLetters = first.length >= 3 ? first.substring(0, 3) : first;
-          }
-
-          // Determine what to highlight based on what's typed
-          String displayPrefix;
-          List<int> firstLetterPositions = [];
-
-          if (filtered.length > 1) {
-            // Multi-word verb: find positions of first letters to highlight
-            int currentPos = 0;
-
-            for (int i = 0; i < words.length; i++) {
-              String word = words[i].trim();
-              if (word.isNotEmpty && word.toLowerCase() != 'the') {
-                // Find the position of the first letter in this word
-                int wordStart = currentPos +
-                    (i > 0 ? 1 : 0); // Account for space before word
-                int firstLetterPos = wordStart + word.indexOf(word[0]);
-                firstLetterPositions.add(firstLetterPos);
-              }
-              currentPos +=
-                  word.length + (i > 0 ? 1 : 0); // Add word length + space
+            if (filtered.isEmpty) {
+              // Fallback if no valid words found
+              shortcutLetters = verb.length >= 3
+                  ? verb.substring(0, 3).toLowerCase()
+                  : verb.toLowerCase();
+            } else if (filtered.length > 1) {
+              // Multi-word verb: use acronym
+              shortcutLetters = filtered.map((w) => w[0].toLowerCase()).join();
+            } else {
+              // Single word verb: use first 2-3 letters
+              final first = filtered.first.toLowerCase();
+              shortcutLetters =
+                  first.length >= 3 ? first.substring(0, 3) : first;
             }
 
-            if (typedLetters.isNotEmpty &&
-                shortcutLetters.startsWith(typedLetters)) {
-              // User is typing the shortcut - highlight the first letters they've typed
-              int lettersToHighlight = typedLetters.length;
-              if (lettersToHighlight <= firstLetterPositions.length) {
-                displayPrefix = verb.substring(
-                    0, firstLetterPositions[lettersToHighlight - 1] + 1);
+            // Determine what to highlight based on what's typed
+            String displayPrefix;
+            List<int> firstLetterPositions = [];
+
+            if (filtered.length > 1) {
+              // Multi-word verb: find positions of first letters to highlight
+              int currentPos = 0;
+
+              for (int i = 0; i < words.length; i++) {
+                String word = words[i].trim();
+                if (word.isNotEmpty && word.toLowerCase() != 'the') {
+                  // Find the position of the first letter in this word
+                  int wordStart = currentPos +
+                      (i > 0 ? 1 : 0); // Account for space before word
+                  int firstLetterPos = wordStart + word.indexOf(word[0]);
+                  firstLetterPositions.add(firstLetterPos);
+                }
+                currentPos +=
+                    word.length + (i > 0 ? 1 : 0); // Add word length + space
+              }
+
+              if (typedLetters.isNotEmpty &&
+                  shortcutLetters.startsWith(typedLetters)) {
+                // User is typing the shortcut - highlight the first letters they've typed
+                int lettersToHighlight = typedLetters.length;
+                if (lettersToHighlight <= firstLetterPositions.length) {
+                  displayPrefix = verb.substring(
+                      0, firstLetterPositions[lettersToHighlight - 1] + 1);
+                } else {
+                  displayPrefix =
+                      verb.substring(0, firstLetterPositions.last + 1);
+                }
               } else {
+                // Show all first letters
                 displayPrefix =
                     verb.substring(0, firstLetterPositions.last + 1);
               }
             } else {
-              // Show all first letters
-              displayPrefix = verb.substring(0, firstLetterPositions.last + 1);
-            }
-          } else {
-            // Single word verb: use first 2-3 letters
-            if (typedLetters.isNotEmpty &&
-                shortcutLetters.startsWith(typedLetters)) {
-              // User is typing the shortcut - highlight what they've typed
-              final int len = typedLetters.length < verb.length
-                  ? typedLetters.length
-                  : verb.length;
-              displayPrefix = verb.substring(0, len);
-            } else if (typedLetters.isEmpty) {
-              // No typing - show the shortcut letters
-              displayPrefix = verb.substring(0, shortcutLetters.length);
-            } else {
-              // User typed something else - show shortcut letters
-              displayPrefix = verb.substring(0, shortcutLetters.length);
-            }
-          }
-
-          if (filtered.length > 1) {
-            // Multi-word verb: create spans for each character
-            List<TextSpan> spans = [];
-
-            for (int i = 0; i < verb.length; i++) {
-              bool shouldBold = false;
-
-              // Only show bolded shortcuts when magic bar has focus
-              if (_magicBarFocusNode.hasFocus) {
-                if (typedLetters.isNotEmpty &&
-                    shortcutLetters.startsWith(typedLetters)) {
-                  // User is typing letters – progressively bold first letters
-                  int lettersToHighlight = typedLetters.length;
-                  if (lettersToHighlight <= firstLetterPositions.length) {
-                    shouldBold = firstLetterPositions
-                        .take(lettersToHighlight)
-                        .contains(i);
-                  } else {
-                    shouldBold = firstLetterPositions.contains(i);
-                  }
-                } else {
-                  // No letters (e.g., only numbers typed) – show default shortcut letters
-                  shouldBold = firstLetterPositions.contains(i);
-                }
+              // Single word verb: use first 2-3 letters
+              if (typedLetters.isNotEmpty &&
+                  shortcutLetters.startsWith(typedLetters)) {
+                // User is typing the shortcut - highlight what they've typed
+                final int len = typedLetters.length < verb.length
+                    ? typedLetters.length
+                    : verb.length;
+                displayPrefix = verb.substring(0, len);
+              } else if (typedLetters.isEmpty) {
+                // No typing - show the shortcut letters
+                displayPrefix = verb.substring(0, shortcutLetters.length);
+              } else {
+                // User typed something else - show shortcut letters
+                displayPrefix = verb.substring(0, shortcutLetters.length);
               }
-
-              spans.add(TextSpan(
-                text: verb[i],
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: shouldBold ? FontWeight.w700 : FontWeight.w400,
-                  color: shouldBold ? Colors.black87 : Colors.grey.shade700,
-                ),
-              ));
             }
 
-            return RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(children: spans),
-            );
-          } else {
-            // Single word verb: use simple approach
-            if (_magicBarFocusNode.hasFocus) {
-              // When magic bar is active, bold either progressive letters or default shortcut
-              return RichText(
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: displayPrefix,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    if (displayPrefix.length < verb.length)
+            if (filtered.length > 1) {
+              // Multi-word verb: show fire emoji with shortcut after word
+              if (_magicBarFocusNode.hasFocus) {
+                return RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.visible,
+                  text: TextSpan(
+                    children: [
                       TextSpan(
-                        text: verb.substring(displayPrefix.length),
+                        text: verb,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
                           color: Colors.grey.shade700,
                         ),
                       ),
-                  ],
-                ),
-              );
+                      TextSpan(
+                        text: ' 🔥$shortcutLetters',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                return Text(
+                  verb,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey.shade700,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.visible,
+                );
+              }
             } else {
-              // Magic bar inactive – normal styling
-              return Text(
-                verb,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.grey.shade700,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              );
+              // Single word verb: show fire emoji with shortcut after word
+              if (_magicBarFocusNode.hasFocus) {
+                return RichText(
+                  maxLines: 2,
+                  overflow: TextOverflow.visible,
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: verb,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' 🔥$shortcutLetters',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                // Firebar inactive – normal styling
+                return Text(
+                  verb,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey.shade700,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.visible,
+                );
+              }
             }
-          }
-        }),
+          }),
+        ),
       ),
     );
   }
@@ -6164,23 +6372,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     if (selectedPlayer != null) {
-      print('DEBUG: Clearing waiting state and processing magic input');
+      print('DEBUG: Clearing waiting state and selecting player');
 
-      // Store the original magic input text to restore it
-      final originalMagicInput =
-          '${selectedPlayer.jerseyNumber} $_magicInputActionText';
-      print('DEBUG: Original magic input was: "$originalMagicInput"');
+      final isHomePlayer = _homeRoster.contains(selectedPlayer);
+      final jerseyNumber = selectedPlayer.jerseyNumber ?? '';
 
-      // Clear the waiting state
+      // Clear the waiting state and clear the firebar
       setState(() {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
-        // Restore the original magic input text
-        // Magic bar removed
       });
 
-      // Process the magic input with the selected player
-      _processMagicInputWithPlayer(selectedPlayer, _magicInputActionText);
+      // Clear the firebar
+      _magicBarController.clear();
+
+      // Select the player using the existing method
+      _selectPlayerChipByNumber(
+        isHomeTeam: isHomePlayer,
+        jerseyNumber: jerseyNumber,
+        isProgressive: false,
+        affectFirstStar: true,
+      );
+
+      // Update the caption
+      _updateCaption();
     } else {
       print('DEBUG: No player found for choice: $choice');
     }
@@ -6211,19 +6426,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     if (selectedPlayer != null) {
-      print('DEBUG: Clearing waiting state and restoring original text');
+      print('DEBUG: Clearing waiting state and selecting player');
 
-      // Clear the waiting state and restore original text
+      final isHomePlayer = _homeRoster.contains(selectedPlayer);
+      final jerseyNumber = selectedPlayer.jerseyNumber ?? '';
+
+      // Clear the waiting state and clear the firebar
       setState(() {
         _waitingForHomeVisitorChoice = false;
         _magicInputMatchingPlayers.clear();
-        // Restore the original magic input text and keep it editable
-        // Magic bar removed
       });
 
-      // Process the magic input with the selected player but don't clear the magic bar
-      _processMagicInputWithPlayerKeepBar(
-          selectedPlayer, _magicInputActionText);
+      // Clear the firebar
+      _magicBarController.clear();
+
+      // Select the player using the existing method
+      _selectPlayerChipByNumber(
+        isHomeTeam: isHomePlayer,
+        jerseyNumber: jerseyNumber,
+        isProgressive: false,
+        affectFirstStar: true,
+      );
+
+      // Update the caption
+      _updateCaption();
     } else {
       print('DEBUG: No player found for choice: $choice');
     }
