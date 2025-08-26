@@ -67,7 +67,7 @@ class ApiManager {
                 ))
             .toList();
       } else {
-        return await _mlbService.fetchTeamRoster(teamName);
+        return await _mlbService.fetchRosterByTeamName(teamName);
       }
     } catch (e) {
       print('API Manager: Error fetching roster from $_currentApi: $e');
