@@ -8,7 +8,7 @@ class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
   final BalldontlieApiService _balldontlieService = BalldontlieApiService();
 
-  String _currentApi = _balldontlieApi; // Default to balldontlie
+  String _currentApi = _mlbStatsApi; // Default to MLB
 
   String get currentApi => _currentApi;
 

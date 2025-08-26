@@ -44,7 +44,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   String? selectedAwayTeam;
 
   // API selection
-  String selectedApi = 'Balldontlie.io API'; // Default to new API
+  String selectedApi = 'MLB Stats API'; // Default to MLB
 
   // Personality override for reset
   String? _personalityOverride;

@@ -33,7 +33,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   // State variables for team selection
   String? selectedAwayTeam;
   String? selectedHomeTeam;
-  String selectedApi = 'Balldontlie.io API'; // API selection
+  String selectedApi = 'MLB Stats API'; // API selection
   final bool _isConnectedToApi =
       false; // This would be connected to your API service
   final Set<String> _favoriteTeams =
