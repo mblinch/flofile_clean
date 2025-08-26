@@ -8398,6 +8398,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 if (widget.onSaveIptc != null) {
                   await widget.onSaveIptc!();
                 }
+                // Reset firebar/magic input when navigating
+                _resetFirebar();
                 widget.onPreviousImage?.call();
               },
               child: Container(
@@ -8486,6 +8488,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 if (widget.onSaveIptc != null) {
                   await widget.onSaveIptc!();
                 }
+                // Reset firebar/magic input when navigating
+                _resetFirebar();
                 widget.onNextImage?.call();
               },
               child: Container(
@@ -8580,6 +8584,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ),
       ),
     );
+  }
+
+  // Reset firebar/magic input UI and state
+  void _resetFirebar() {
+    setState(() {
+      _magicBarController.clear();
+      _magicBarVerbInput = '';
+      _typingFirstMagicToken = false;
+      _showMagicInputPlayerOptions = false;
+      _waitingForHomeVisitorChoice = false;
+      _magicInputMatchingPlayers.clear();
+      _magicInputActionText = '';
+    });
   }
 
   void _clearVerbSubSelections() {
