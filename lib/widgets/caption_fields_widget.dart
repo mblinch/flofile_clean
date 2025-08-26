@@ -1498,9 +1498,123 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     resetCaptionSelections();
   }
 
+  // Process player token found in caption box
+  void _processCaptionPlayerToken(
+      String value, RegExpMatch match, Player player, bool isHome) {
+    _isProcessingCaptionShortcut = true;
+
+    // Replace the token with the player name
+    final beforeToken = value.substring(0, match.start);
+    final afterToken = value.substring(match.end);
+    final replacement = '${player.displayName ?? 'Unknown Player'} ';
+
+    final newText = beforeToken + replacement + afterToken;
+    captionController.text = newText;
+
+    // Use the caption box's built-in highlighting system for a lighter color
+    final replacementStart = beforeToken.length;
+    final replacementEnd =
+        replacementStart + replacement.length - 1; // Exclude the trailing space
+
+    setState(() {
+      _highlightedRanges.clear();
+      _highlightedRanges.add(TextRange(
+        start: replacementStart,
+        end: replacementEnd,
+      ));
+    });
+
+    // Position cursor at the end of the highlighted text
+    captionController.selection = TextSelection.fromPosition(
+      TextPosition(offset: replacementEnd + 1), // +1 to go after the space
+    );
+
+    // Visually select the player in the picker
+    _selectPlayerChipByNumber(
+      isHomeTeam: isHome,
+      jerseyNumber: player.jerseyNumber ?? '',
+      isProgressive: true,
+    );
+
+    // Update personality field
+    final current = personalityController.text.trim();
+    final parts = current.isEmpty
+        ? <String>[]
+        : current
+            .split(';')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+    if (!parts.contains(player.fullName ?? '')) {
+      parts.add(player.fullName ?? '');
+      personalityController.text = parts.join(';');
+    }
+
+    _isProcessingCaptionShortcut = false;
+  }
+
   // Handle hNN / vNN shorthand typed in the caption box
   void _onCaptionChanged(String value) {
     if (_isProcessingCaptionShortcut) return;
+
+    // Check for magic input patterns that should be processed when space is pressed
+    if (value.isNotEmpty) {
+      // Get cursor position to find if a space was just typed
+      final selection = captionController.selection;
+      if (selection.isValid) {
+        final cursorPos = selection.baseOffset;
+
+        // Check if there's a space just before the cursor position
+        if (cursorPos > 0 && value[cursorPos - 1] == ' ') {
+          print(
+              'DEBUG: Space detected at cursor position $cursorPos in: "$value"');
+
+          // Look for player tokens that end just before the cursor (just before the space)
+          final playerTokenMatches =
+              RegExp(r'([hv])(\d{1,3}) ').allMatches(value);
+          print(
+              'DEBUG: Found ${playerTokenMatches.length} potential player tokens');
+
+          // Find the token that ends right at the cursor position
+          RegExpMatch? bestMatch;
+
+          for (final match in playerTokenMatches) {
+            print(
+                'DEBUG: Token at ${match.start}-${match.end} (${match.group(0)?.trim()}), ends at: ${match.end}, cursor at: $cursorPos');
+            if (match.end == cursorPos) {
+              // Token ends exactly where cursor is
+              bestMatch = match;
+              break;
+            }
+          }
+
+          if (bestMatch != null) {
+            print('DEBUG: Processing exact match: ${bestMatch.group(0)}');
+            final prefix = bestMatch.group(1)!.toLowerCase();
+            final number = bestMatch.group(2)!;
+            final isHome = prefix == 'h';
+            final roster = isHome ? _homeRoster : _awayRoster;
+
+            // Find the player
+            Player? found;
+            for (final p in roster) {
+              if (p.jerseyNumber == number) {
+                found = p;
+                break;
+              }
+            }
+
+            if (found != null) {
+              print(
+                  'DEBUG: Found player in caption box after space: ${found.displayName}');
+              // Process the player token
+              _processCaptionPlayerToken(value, bestMatch, found, isHome);
+              return;
+            }
+          }
+        }
+      }
+    }
 
     // Only proceed with expansion if the last character typed was a space
     if (value.isEmpty || value.codeUnitAt(value.length - 1) != 32) {
@@ -2795,7 +2909,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         _updateCaption();
                                       }
 
+                                      print(
+                                          'DEBUG: About to check _isMagicInput for: "$value"');
                                       if (_isMagicInput(value)) {
+                                        print(
+                                            'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
                                         _parseMagicInput(value);
                                         return;
                                       }
@@ -5526,6 +5644,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Magic input parsing methods
   bool _isMagicInput(String input) {
+    print('DEBUG: _isMagicInput called with: "$input"');
     if (input.isEmpty) return false;
 
     final parts = input.trim().toLowerCase().split(' ');
@@ -5547,7 +5666,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       };
       if (hrTypeTokens.contains(token)) return true;
       if (_isNumeric(token)) return true;
-      if (RegExp(r'^(h{1,2}|v{1,2})\d+$').hasMatch(token)) return true;
+      final teamPrefixMatch = RegExp(r'^(h{1,2}|v{1,2})\d+$').hasMatch(token);
+      print(
+          'DEBUG: _isMagicInput checking token "$token", teamPrefixMatch: $teamPrefixMatch');
+      if (teamPrefixMatch) return true;
       return false;
     }
 
@@ -5562,8 +5684,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Check if it's a team prefix + number (h27, v23, hh27, vv23)
       final teamPrefixRegex = RegExp(r'^(h{1,2}|v{1,2})(\d+)$');
       final match = teamPrefixRegex.firstMatch(firstPart);
+      print('DEBUG: Checking team prefix for "$firstPart", match: $match');
       if (match != null) {
         isValidFirstPart = true;
+        print('DEBUG: Valid team prefix + number found');
       }
     }
 
@@ -5814,6 +5938,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Find players with this number
     List<Player> matchingPlayers = [];
+    print(
+        'DEBUG: Home roster size: ${_homeRoster.length}, Away roster size: ${_awayRoster.length}');
 
     if (isHomeHint != null) {
       // Team hint provided, search only in the specified team
@@ -5838,6 +5964,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     print('DEBUG: Found ${matchingPlayers.length} matching players');
+    for (final player in matchingPlayers) {
+      print(
+          'DEBUG: Matching player: ${player.displayName} (${player.jerseyNumber}) - ${_homeRoster.contains(player) ? 'Home' : 'Away'}');
+    }
     if (matchingPlayers.isEmpty) {
       print('DEBUG: No matching players found, returning');
       return;
@@ -6523,10 +6653,67 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Parse the action text
     final parts = actionText.trim().toLowerCase().split(' ');
+    print('DEBUG: actionText: "$actionText", parts: $parts');
     String action = '';
     int? inning;
+    bool rbiSetByAbbreviation = false; // Track if RBI was set by abbreviation
 
     for (final part in parts) {
+      // Check for RBI abbreviations first (sin3, dou2, tri4, hr5)
+      final rbiMatch = RegExp(r'^(sin|dou|tri|hr)(\d+)$').firstMatch(part);
+      print(
+          'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch');
+      if (rbiMatch != null) {
+        final actionType = rbiMatch.group(1)!;
+        final rbiCount = int.parse(rbiMatch.group(2)!);
+        print(
+            'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount');
+
+        // Set the action based on the abbreviation
+        switch (actionType) {
+          case 'sin':
+            action = 'Single';
+            break;
+          case 'dou':
+            action = 'Double';
+            break;
+          case 'tri':
+            action = 'Triple';
+            break;
+          case 'hr':
+            action = 'Home Run';
+            break;
+        }
+
+        // Set both action and RBI count with validation
+        setState(() {
+          _selectedVerb = action;
+          _selectedActionVerb = action;
+
+          // Limit RBI count based on hit type (max 3 for buttons)
+          if ((actionType == 'sin' ||
+                  actionType == 'dou' ||
+                  actionType == 'tri') &&
+              rbiCount > 3) {
+            _rbiCount =
+                3; // Singles, doubles, and triples can only have up to 3 RBI
+          } else if (actionType == 'hr') {
+            // Home runs: cap at 3 for button display
+            if (rbiCount >= 1 && rbiCount <= 3) {
+              _rbiCount = rbiCount; // Show on buttons
+            } else {
+              _rbiCount =
+                  null; // 4+ RBI - no button selected but caption will show correct count
+            }
+          } else {
+            _rbiCount = rbiCount <= 3 ? rbiCount : null; // Default case
+          }
+        });
+
+        rbiSetByAbbreviation = true; // Mark that RBI was set by abbreviation
+        continue;
+      }
+
       // Check for inning number
       if (_isNumeric(part)) {
         inning = int.parse(part);
@@ -6535,6 +6722,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Parse action (same switch statement as in _parseMagicInput)
       switch (part) {
+        case 'gs':
+          action = 'Home Run';
+          setState(() {
+            _selectedVerb = action;
+            _selectedActionVerb = action;
+            _rbiCount =
+                null; // Grand slam (4 RBI) - no button selected but caption will show correct count
+          });
+          break;
         case 'hr':
         case 'homerun':
         case 'homer':
@@ -6708,16 +6904,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         // For shortcodes, interpret trailing numbers as RBI count, not inning
         // This prevents automatic inning writing for shortcodes
-        if (inning != null &&
-            (action == 'Home Run' ||
-                action == 'Single' ||
-                action == 'Double' ||
-                action == 'Triple')) {
-          _rbiCount = inning; // Use the inning number as RBI count
-          // Don't set inning for shortcodes - only set inning if explicitly provided as inning
-          // _selectedRbiInning remains null for shortcodes
-        } else {
-          _rbiCount = null; // Don't set RBI count for solo actions
+        // But only if RBI wasn't already set by abbreviation
+        if (!rbiSetByAbbreviation) {
+          if (inning != null &&
+              (action == 'Home Run' ||
+                  action == 'Single' ||
+                  action == 'Double' ||
+                  action == 'Triple')) {
+            _rbiCount = inning; // Use the inning number as RBI count
+            // Don't set inning for shortcodes - only set inning if explicitly provided as inning
+            // _selectedRbiInning remains null for shortcodes
+          } else {
+            _rbiCount = null; // Don't set RBI count for solo actions
+          }
         }
       });
     }
@@ -6759,8 +6958,64 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final parts = actionText.trim().toLowerCase().split(' ');
     String action = '';
     int? inning;
+    bool rbiSetByAbbreviation = false; // Track if RBI was set by abbreviation
 
     for (final part in parts) {
+      // Check for RBI abbreviations first (sin3, dou2, tri4, hr5)
+      final rbiMatch = RegExp(r'^(sin|dou|tri|hr)(\d+)$').firstMatch(part);
+      print(
+          'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch');
+      if (rbiMatch != null) {
+        final actionType = rbiMatch.group(1)!;
+        final rbiCount = int.parse(rbiMatch.group(2)!);
+        print(
+            'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount');
+
+        // Set the action based on the abbreviation
+        switch (actionType) {
+          case 'sin':
+            action = 'Single';
+            break;
+          case 'dou':
+            action = 'Double';
+            break;
+          case 'tri':
+            action = 'Triple';
+            break;
+          case 'hr':
+            action = 'Home Run';
+            break;
+        }
+
+        // Set both action and RBI count with validation
+        setState(() {
+          _selectedVerb = action;
+          _selectedActionVerb = action;
+
+          // Limit RBI count based on hit type (max 3 for buttons)
+          if ((actionType == 'sin' ||
+                  actionType == 'dou' ||
+                  actionType == 'tri') &&
+              rbiCount > 3) {
+            _rbiCount =
+                3; // Singles, doubles, and triples can only have up to 3 RBI
+          } else if (actionType == 'hr') {
+            // Home runs: cap at 3 for button display
+            if (rbiCount >= 1 && rbiCount <= 3) {
+              _rbiCount = rbiCount; // Show on buttons
+            } else {
+              _rbiCount =
+                  null; // 4+ RBI - no button selected but caption will show correct count
+            }
+          } else {
+            _rbiCount = rbiCount <= 3 ? rbiCount : null; // Default case
+          }
+        });
+
+        rbiSetByAbbreviation = true; // Mark that RBI was set by abbreviation
+        continue;
+      }
+
       // Check for inning number
       if (_isNumeric(part)) {
         inning = int.parse(part);
@@ -6769,6 +7024,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Parse action (using same switch as original)
       switch (part) {
+        case 'gs':
+          action = 'Home Run';
+          setState(() {
+            _selectedVerb = action;
+            _selectedActionVerb = action;
+            _rbiCount =
+                null; // Grand slam (4 RBI) - no button selected but caption will show correct count
+          });
+          break;
         case 'hr':
         case 'homerun':
         case 'homer':
