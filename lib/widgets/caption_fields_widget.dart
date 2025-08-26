@@ -4438,22 +4438,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                             ]),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
-                                                                                          // Defense column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory('Defense', [
-                                                                                              'Pitching',
-                                                                                              'Pitching Change',
-                                                                                              'Catches',
-                                                                                              'Throws',
-                                                                                              'Tags',
-                                                                                              'Groundball',
-                                                                                              'Fielding Position',
-                                                                                              'Double Play',
-                                                                                              'Triple Play',
-                                                                                              ''
-                                                                                            ]),
-                                                                                          ),
-                                                                                          const SizedBox(width: 2),
                                                                                           // Running column
                                                                                           Expanded(
                                                                                             child: _buildVerbCategory('Running', [
@@ -4466,6 +4450,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               '',
                                                                                               '',
                                                                                               '',
+                                                                                              ''
+                                                                                            ]),
+                                                                                          ),
+                                                                                          const SizedBox(width: 2),
+                                                                                          // Defense column
+                                                                                          Expanded(
+                                                                                            child: _buildVerbCategory('Defense', [
+                                                                                              'Pitching',
+                                                                                              'Pitching Change',
+                                                                                              'Catches',
+                                                                                              'Throws',
+                                                                                              'Tags',
+                                                                                              'Groundball',
+                                                                                              'Fielding Position',
+                                                                                              'Double Play',
+                                                                                              'Triple Play',
                                                                                               ''
                                                                                             ]),
                                                                                           ),
