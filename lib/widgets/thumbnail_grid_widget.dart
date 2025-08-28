@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
@@ -22,6 +23,13 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Map<String, double> uploadProgress; // Track upload progress
   // Bump this number to request the grid to center the selected index
   final int centerRequestId;
+  // Callback when an image is deleted
+  final Function(String)? onImageDeleted;
+  // Callbacks for metadata operations
+  final Function(String)? onCopyMetadata;
+  final Function(String)? onPasteMetadata;
+  // Callback for FTP operations
+  final Function(String)? onFtpImage;
 
   const ThumbnailGridWidget({
     super.key,
@@ -38,6 +46,10 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.lockedPaths,
     required this.uploadProgress,
     required this.centerRequestId,
+    this.onImageDeleted,
+    this.onCopyMetadata,
+    this.onPasteMetadata,
+    this.onFtpImage,
   });
 
   @override
@@ -415,8 +427,11 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         widget.onImageSelected(originalIndex);
                       }
                     },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
+                    onSecondaryTapDown: (TapDownDetails details) {
+                      _showContextMenu(
+                          context, imagePath, details.globalPosition);
+                    },
+                    child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
@@ -624,7 +639,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: Colors.grey.shade200,
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(8),
                 bottomRight: Radius.circular(8),
@@ -638,11 +653,6 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      const Text(
-                        "FTP'd images: ",
-                        style: TextStyle(fontSize: 12, color: Colors.black),
-                      ),
-                      const SizedBox(width: 4),
                       DropdownButton<String>(
                         value: _ftpFilterMode == null
                             ? 'all'
@@ -709,77 +719,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     ],
                   ),
                   const SizedBox(width: 12),
-                  // Tag/Label filter cluster (compact)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Tag mode dropdown
-                      DropdownButton<String>(
-                        value: _tagFilterMode == 'all'
-                            ? 'all'
-                            : _tagFilterMode == 'tagged'
-                                ? 'tagged'
-                                : 'untagged',
-                        isDense: true,
-                        underline: Container(),
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.black),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'all',
-                            child: Text('Show All Images'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'tagged',
-                            child: Text('Show Tagged Images'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'untagged',
-                            child: Text('Show Untagged Images'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _tagFilterMode = value ?? 'all';
-                          });
-                          _ensureVisibleAfterLayout();
-                        },
-                      ),
-                      const SizedBox(width: 4),
-                      // Label filter: Any / Red / Yellow / Green / Blue / Purple
-                      DropdownButton<String>(
-                        value: _selectedLabel ?? 'Any',
-                        isDense: true,
-                        underline: Container(),
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.black),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'Any', child: Text('Any Label')),
-                          DropdownMenuItem(value: 'Red', child: Text('Red')),
-                          DropdownMenuItem(
-                              value: 'Yellow', child: Text('Yellow')),
-                          DropdownMenuItem(
-                              value: 'Green', child: Text('Green')),
-                          DropdownMenuItem(value: 'Blue', child: Text('Blue')),
-                          DropdownMenuItem(
-                              value: 'Purple', child: Text('Purple')),
-                          DropdownMenuItem(
-                              value: 'Orange', child: Text('Orange')),
-                          DropdownMenuItem(value: 'Cyan', child: Text('Cyan')),
-                        ],
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedLabel =
-                                (val == null || val == 'Any') ? null : val;
-                          });
-                          _ensureVisibleAfterLayout();
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                  // Right-side cluster: [-][slider][+] styled capsule
+                  // Thumbnail size control with plus/minus buttons
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -826,41 +766,17 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        // Slider (chunkier)
-                        SizedBox(
-                          width: 120,
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 6,
-                              activeTrackColor: Colors.grey.shade700,
-                              inactiveTrackColor: Colors.grey.shade300,
-                              thumbColor: Colors.black,
-                              overlayColor: Colors.black.withOpacity(0.06),
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 5,
-                                elevation: 1,
-                              ),
-                            ),
-                            child: Slider(
-                              value: _thumbSize,
-                              min: 80.0,
-                              max: 200.0,
-                              divisions: 4,
-                              onChanged: (value) {
-                                setState(() {
-                                  _thumbSize = value;
-                                  _thumbSpacing = value * 0.1;
-                                });
-                                _ensureVisibleAfterLayout();
-                              },
-                              onChangeEnd: (value) {
-                                _ensureVisibleAfterLayout();
-                              },
-                            ),
+                        const SizedBox(width: 8),
+                        // Size text
+                        Text(
+                          '${_thumbSize.round()}px',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         // Plus button
                         GestureDetector(
                           onTap: () {
@@ -935,4 +851,238 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   }
 
   // Removed dimension probing to speed up thumbnail rendering
+
+  void _showContextMenu(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    // Position the menu at the tap location
+    final double menuWidth = 200.0;
+    final double menuHeight = 300.0;
+
+    // Ensure menu doesn't go off screen
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final Size screenSize = overlay.size;
+
+    double x = tapPosition.dx;
+    double y = tapPosition.dy;
+
+    // Adjust if menu would go off the right edge
+    if (x + menuWidth > screenSize.width) {
+      x = screenSize.width - menuWidth - 10;
+    }
+
+    // Adjust if menu would go off the bottom edge
+    if (y + menuHeight > screenSize.height) {
+      y = screenSize.height - menuHeight - 10;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      useSafeArea: false,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            // Transparent overlay to capture taps outside
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            // Context menu positioned at tap location
+            Positioned(
+              left: x,
+              top: y,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: menuWidth,
+                  constraints: BoxConstraints(maxHeight: menuHeight),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildMenuItem('copy_metadata', 'Copy Metadata',
+                          Icons.copy, imagePath),
+                      _buildMenuItem('paste_metadata', 'Paste Metadata',
+                          Icons.paste, imagePath),
+                      const Divider(height: 1),
+                      if (widget.uploadedImages.contains(imagePath))
+                        _buildMenuItem('remove_ftp', 'Remove FTP Status',
+                            Icons.rocket_launch, imagePath),
+                      if (!widget.uploadedImages.contains(imagePath))
+                        _buildMenuItem('ftp_image', 'FTP Image',
+                            Icons.rocket_launch, imagePath),
+                      const Divider(height: 1),
+                      _buildMenuItem('open', 'Open in Finder',
+                          Icons.open_in_new, imagePath),
+                      const Divider(height: 1),
+                      _buildMenuItem(
+                          'delete', 'Delete Image', Icons.delete, imagePath,
+                          isDestructive: true),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuItem(
+      String value, String text, IconData icon, String imagePath,
+      {bool isDestructive = false}) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop();
+        _handleContextMenuAction(value, imagePath);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isDestructive ? Colors.red : Colors.black87,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(
+                color: isDestructive ? Colors.red : Colors.black87,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleContextMenuAction(String action, String imagePath) {
+    switch (action) {
+      case 'select':
+        final originalIndex = widget.imagePaths.indexOf(imagePath);
+        if (originalIndex != -1) {
+          widget.onImageSelected(originalIndex);
+        }
+        break;
+      case 'open':
+        // Open in Finder (macOS)
+        Process.run('open', ['-R', imagePath]);
+        break;
+      case 'copy_path':
+        // Copy path to clipboard
+        Clipboard.setData(ClipboardData(text: imagePath));
+        break;
+      case 'remove_ftp':
+        // Remove FTP status (would need to be implemented in parent)
+        print('Remove FTP status for: $imagePath');
+        break;
+      case 'mark_ftp':
+        // Mark as FTPd (would need to be implemented in parent)
+        print('Mark as FTPd: $imagePath');
+        break;
+      case 'ftp_image':
+        // FTP the image
+        widget.onFtpImage?.call(imagePath);
+        break;
+      case 'copy_metadata':
+        // Copy metadata from this image
+        widget.onCopyMetadata?.call(imagePath);
+        break;
+      case 'paste_metadata':
+        // Paste metadata to this image
+        widget.onPasteMetadata?.call(imagePath);
+        break;
+      case 'delete':
+        // Show confirmation dialog before deleting
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Delete Image'),
+              content: Text(
+                  'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nThis action cannot be undone.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _deleteImage(imagePath);
+                  },
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+        break;
+    }
+  }
+
+  void _deleteImage(String imagePath) async {
+    try {
+      final file = File(imagePath);
+      if (await file.exists()) {
+        await file.delete();
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Deleted: ${p.basename(imagePath)}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+
+        // Notify parent widget that image was deleted
+        widget.onImageDeleted?.call(imagePath);
+        print('Successfully deleted: $imagePath');
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File not found'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      print('Error deleting file: $e');
+    }
+  }
 }

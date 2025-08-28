@@ -2211,7 +2211,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 controller: captionController,
                                 maxLines: 3,
                                 onChanged: _onCaptionChanged,
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(fontSize: 11),
                                 decoration: InputDecoration(
                                   labelText: 'Caption',
                                   floatingLabelBehavior:
@@ -2295,7 +2295,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               child: TextField(
                                 controller: personalityController,
                                 maxLines: 3,
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(fontSize: 11),
                                 decoration: InputDecoration(
                                   labelText: 'Personality',
                                   floatingLabelBehavior:
@@ -4398,9 +4398,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                               height: 4),
                                                                         ],
 
-                                                                        const SizedBox(
-                                                                            height:
-                                                                                4), // Padding between Magic Bar and verb categories
+                                                                        // Removed padding between Magic Bar and verb categories
 
                                                                         // Verb categories (always visible now that magic bar is removed)
                                                                         if (!_showCustomTextInningSelector) ...[
@@ -4411,7 +4409,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             child:
                                                                                 SingleChildScrollView(
                                                                               child: Padding(
-                                                                                padding: const EdgeInsets.all(0),
+                                                                                padding: const EdgeInsets.only(left: 0, right: 0, bottom: 0, top: 0),
                                                                                 child: LayoutBuilder(
                                                                                   builder: (context, constraints) {
                                                                                     // Calculate width for exactly 3 columns
@@ -4693,7 +4691,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Title with background span
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: BorderRadius.circular(3),
@@ -4782,8 +4780,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity, // Dynamic width to fit container
-        height: 34, // Optimal height to accommodate wrapped text
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+        height: 28, // Reduced height for smaller chips
+        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -4894,7 +4892,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       TextSpan(
                         text: verb,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 10,
                           fontWeight: FontWeight.w400,
                           color: Colors.grey.shade700,
                         ),
@@ -4914,7 +4912,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 return Text(
                   verb,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w400,
                     color: Colors.grey.shade700,
                   ),
@@ -4933,7 +4931,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       TextSpan(
                         text: verb,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 10,
                           fontWeight: FontWeight.w400,
                           color: Colors.grey.shade700,
                         ),
@@ -4954,7 +4952,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 return Text(
                   verb,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     fontWeight: FontWeight.w400,
                     color: Colors.grey.shade700,
                   ),

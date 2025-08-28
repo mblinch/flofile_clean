@@ -708,7 +708,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: Colors.grey.shade50,
+                color: Colors.white,
               ),
               child: Row(
                 children: [
@@ -762,7 +762,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: Colors.grey.shade50,
+                color: Colors.white,
               ),
               child: Row(
                 children: [
@@ -819,7 +819,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: Colors.grey.shade50,
+                color: Colors.white,
               ),
               child: Row(
                 children: [

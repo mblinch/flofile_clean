@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
-import '../utils/exiftool_helper.dart';
 import 'dart:io';
 import 'dart:async';
+import 'package:path/path.dart' as p;
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
@@ -240,15 +241,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-XMP:PMKeep'
       ];
       args.addAll(imageFiles);
-      final proc = await ExiftoolHelper.run(args);
+      final proc = await Process.run('exiftool', args);
       final Map<String, DateTime> times = {};
       final Map<String, String> formatted = {};
       final Map<String, int> ratings = {};
       final Map<String, String> labels = {};
       final Map<String, bool> tagged = {};
 
-      if (proc.isSuccess) {
-        final List data = jsonDecode(proc.stdoutText);
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
         for (final item in data) {
           if (item is Map<String, dynamic>) {
             final sourceFile = item['SourceFile']?.toString();
@@ -365,7 +366,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     try {
       // Extract metadata via exiftool in JSON format
-      final proc = await ExiftoolHelper.run([
+      final proc = await Process.run('exiftool', [
         '-j', // JSON output
         '-Caption-Abstract',
         '-ImageDescription',
@@ -397,8 +398,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         imagePath,
       ]);
 
-      if (proc.isSuccess) {
-        final List data = jsonDecode(proc.stdoutText);
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdout as String);
         if (data.isNotEmpty) {
           setState(() {
             currentMetadata = data.first as Map<String, dynamic>;
@@ -406,7 +407,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           print('Metadata loaded successfully');
         }
       } else {
-        print('Exiftool error: ${proc.stderrText}');
+        print('Exiftool error: ${proc.stderr}');
       }
     } catch (e) {
       print('Error loading metadata: $e');
@@ -488,20 +489,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (args.length > 2) {
         // More than just -overwrite_original and path
         print('Running exiftool with args: $args');
-        final proc = await ExiftoolHelper.run(args);
+        final proc = await Process.run('exiftool', args);
 
-        if (proc.isSuccess) {
+        if (proc.exitCode == 0) {
           print('IPTC metadata saved successfully');
 
           // Debug: Verify caption was actually written
           final verifyProc =
-              await ExiftoolHelper.run(['-Caption-Abstract', imagePath]);
-          print(
-              'DEBUG: Caption verification after save: ${verifyProc.stdoutText}');
+              await Process.run('exiftool', ['-Caption-Abstract', imagePath]);
+          print('DEBUG: Caption verification after save: ${verifyProc.stdout}');
 
           // Don't refresh EXIF data for background saves to avoid UI glitches
         } else {
-          print('Exiftool error saving metadata: ${proc.stderrText}');
+          print('Exiftool error saving metadata: ${proc.stderr}');
         }
       } else {
         print('No metadata values to save');
@@ -586,11 +586,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       print('DEBUG: Background save - args: $args');
       if (args.length > 2) {
         print('DEBUG: Running exiftool for background save');
-        final proc = await ExiftoolHelper.run(args);
-        if (proc.isSuccess) {
+        final proc = await Process.run('exiftool', args);
+        if (proc.exitCode == 0) {
           print('DEBUG: Background IPTC metadata saved successfully');
         } else {
-          print('DEBUG: Background exiftool error: ${proc.stderrText}');
+          print('DEBUG: Background exiftool error: ${proc.stderr}');
         }
       } else {
         print('DEBUG: No metadata to save in background');
@@ -704,6 +704,119 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     });
     _loadMetadata();
     // Center thumbnails only when arrow navigation explicitly requests it
+  }
+
+  // Handle image deletion
+  void _onImageDeleted(String imagePath) {
+    setState(() {
+      // Remove the deleted image from the list
+      imagePaths.remove(imagePath);
+
+      // Remove from uploaded images set
+      _uploadedImages.remove(imagePath);
+
+      // Remove from upload progress
+      _uploadProgress.remove(imagePath);
+
+      // Remove from EXIF times cache
+      _exifTimes?.remove(imagePath);
+
+      // Remove from XMP data
+      _xmpRatings?.remove(imagePath);
+      _xmpLabels?.remove(imagePath);
+      _xmpTagged?.remove(imagePath);
+
+      // Adjust current index if needed
+      if (imagePaths.isEmpty) {
+        currentIndex = 0;
+      } else if (currentIndex >= imagePaths.length) {
+        currentIndex = imagePaths.length - 1;
+      }
+
+      // Load metadata for the current image if there are any images left
+      if (imagePaths.isNotEmpty) {
+        _loadMetadata();
+      }
+    });
+  }
+
+  // Handle metadata copy
+  void _onCopyMetadata(String imagePath) {
+    // Copy current metadata to clipboard
+    final metadataJson = jsonEncode(currentMetadata);
+    Clipboard.setData(ClipboardData(text: metadataJson));
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Metadata copied from ${p.basename(imagePath)}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Handle metadata paste
+  void _onPasteMetadata(String imagePath) {
+    // Get metadata from clipboard
+    Clipboard.getData(Clipboard.kTextPlain).then((data) {
+      if (data?.text != null) {
+        try {
+          final Map<String, dynamic> pastedMetadata = jsonDecode(data!.text!);
+
+          // Update the metadata for the target image
+          setState(() {
+            currentMetadata = pastedMetadata;
+          });
+
+          // Save the metadata to the target image
+          _saveIptcMetadata();
+
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Metadata pasted to ${p.basename(imagePath)}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } catch (e) {
+          // Show error if clipboard doesn't contain valid metadata
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No valid metadata found in clipboard'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No data found in clipboard'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    });
+  }
+
+  // Handle FTP image
+  void _onFtpImage(String imagePath) {
+    // Add to uploaded images set
+    setState(() {
+      _uploadedImages.add(imagePath);
+    });
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Marked as FTPd: ${p.basename(imagePath)}'),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -981,10 +1094,21 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       lockedPaths: _lockedPaths,
                       uploadProgress: _uploadProgress,
                       centerRequestId: _thumbCenterRequestId,
+                      onImageDeleted: _onImageDeleted,
+                      onCopyMetadata: _onCopyMetadata,
+                      onPasteMetadata: _onPasteMetadata,
+                      onFtpImage: _onFtpImage,
                     ),
                   ),
                 ],
               ),
+            ),
+
+            // Divider between top and bottom quadrants
+            Container(
+              height: 1,
+              color: Colors.grey.shade400,
+              margin: const EdgeInsets.symmetric(vertical: 2),
             ),
 
             // BOTTOM ROW - Increased height (68% instead of 60%)

@@ -351,7 +351,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           // EXIF data panel on the right side
           if (_exifData != null || _isLoadingExif)
             Container(
-              width: 180, // Fixed width for EXIF panel
+              width: 140, // Fixed width for EXIF panel
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,

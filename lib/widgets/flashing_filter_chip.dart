@@ -106,7 +106,7 @@ class _FlashingFilterChipState extends State<FlashingFilterChip>
             ),
             child: DefaultTextStyle(
               style: TextStyle(
-                fontSize: 14, // Increased from 11 to 14 for better readability
+                fontSize: 10, // Reduced from 12 to 10
                 fontWeight:
                     widget.selected ? FontWeight.w600 : FontWeight.normal,
                 color: widget.disableColorChange
