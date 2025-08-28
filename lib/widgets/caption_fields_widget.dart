@@ -218,6 +218,7 @@ class CaptionFieldsWidget extends StatefulWidget {
   final VoidCallback? onReset;
   final String? personalityOverride;
   final Function(List<String>)? onImagesLoaded;
+  final Function(String)? onStartFolderWatcher;
   final List<Player>? preloadedHomeRoster;
   final List<Player>? preloadedAwayRoster;
   final String? currentImagePath;
@@ -240,6 +241,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onReset,
     this.personalityOverride,
     this.onImagesLoaded,
+    this.onStartFolderWatcher,
     this.preloadedHomeRoster,
     this.preloadedAwayRoster,
     this.currentImagePath,
@@ -7907,6 +7909,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Notify parent about loaded images
       if (widget.onImagesLoaded != null) {
         widget.onImagesLoaded!(files);
+      }
+
+      // Start folder watcher
+      print('DEBUG: Attempting to start folder watcher for: $dirPath');
+      if (widget.onStartFolderWatcher != null) {
+        print('DEBUG: onStartFolderWatcher callback is available');
+        widget.onStartFolderWatcher!(dirPath);
+      } else {
+        print('DEBUG: onStartFolderWatcher callback is null');
       }
 
       // Show success message

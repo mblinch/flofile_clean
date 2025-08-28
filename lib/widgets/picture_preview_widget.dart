@@ -22,6 +22,12 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function()? onQuickPreviousImage;
   final Future<void> Function()? onSaveIptc;
   final Future<void> Function()? onSaveIptcBackground;
+  // Callbacks for right-click context menu
+  final Function(String)? onCopyMetadata;
+  final Function(String)? onPasteMetadata;
+  final Function(String)? onFtpImage;
+  final Function(String)? onImageDeleted;
+  final Set<String>? uploadedImages;
 
   const PicturePreviewWidget({
     super.key,
@@ -34,6 +40,11 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onQuickPreviousImage,
     this.onSaveIptc,
     this.onSaveIptcBackground,
+    this.onCopyMetadata,
+    this.onPasteMetadata,
+    this.onFtpImage,
+    this.onImageDeleted,
+    this.uploadedImages,
   });
 
   @override
@@ -282,40 +293,46 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                 Expanded(
                   child: Stack(
                     children: [
-                      // Main image
-                      ExtendedImage.file(
-                        File(currentImagePath),
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                        width: double.infinity,
-                        height: double.infinity,
-                        loadStateChanged: (ExtendedImageState state) {
-                          switch (state.extendedImageLoadState) {
-                            case LoadState.loading:
-                              print(
-                                  'DEBUG: ExtendedImage loading: $currentImagePath');
-                              return Container(
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                    child: CircularProgressIndicator()),
-                              );
-                            case LoadState.completed:
-                              print(
-                                  'DEBUG: ExtendedImage completed: $currentImagePath');
-                              return null; // Use default completed state
-                            case LoadState.failed:
-                              print(
-                                  'DEBUG: ExtendedImage failed: $currentImagePath');
-                              return Container(
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                  child: Icon(Icons.error,
-                                      color: Colors.red, size: 48),
-                                ),
-                              );
-                          }
+                      // Main image with right-click support
+                      GestureDetector(
+                        onSecondaryTapDown: (details) {
+                          _showContextMenu(context, currentImagePath,
+                              details.globalPosition);
                         },
-                        mode: ExtendedImageMode.none, // No zoom/pan for speed
+                        child: ExtendedImage.file(
+                          File(currentImagePath),
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                          width: double.infinity,
+                          height: double.infinity,
+                          loadStateChanged: (ExtendedImageState state) {
+                            switch (state.extendedImageLoadState) {
+                              case LoadState.loading:
+                                print(
+                                    'DEBUG: ExtendedImage loading: $currentImagePath');
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Center(
+                                      child: CircularProgressIndicator()),
+                                );
+                              case LoadState.completed:
+                                print(
+                                    'DEBUG: ExtendedImage completed: $currentImagePath');
+                                return null; // Use default completed state
+                              case LoadState.failed:
+                                print(
+                                    'DEBUG: ExtendedImage failed: $currentImagePath');
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Center(
+                                    child: Icon(Icons.error,
+                                        color: Colors.red, size: 48),
+                                  ),
+                                );
+                            }
+                          },
+                          mode: ExtendedImageMode.none, // No zoom/pan for speed
+                        ),
                       ),
 
                       // Zoom button
@@ -640,5 +657,213 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         );
       },
     );
+  }
+
+  // Show context menu for right-click
+  void _showContextMenu(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    // Position the menu at the tap location
+    final double menuWidth = 200.0;
+    final double menuHeight = 300.0;
+
+    // Ensure menu doesn't go off screen
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final Size screenSize = overlay.size;
+
+    double x = tapPosition.dx;
+    double y = tapPosition.dy;
+
+    // Adjust if menu would go off the right edge
+    if (x + menuWidth > screenSize.width) {
+      x = screenSize.width - menuWidth - 10;
+    }
+
+    // Adjust if menu would go off the bottom edge
+    if (y + menuHeight > screenSize.height) {
+      y = screenSize.height - menuHeight - 10;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      useSafeArea: false,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            // Transparent overlay to capture taps outside
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            // Context menu
+            Positioned(
+              left: x,
+              top: y,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: menuWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildMenuItem('copy_metadata', 'Copy Metadata',
+                          Icons.copy, imagePath),
+                      _buildMenuItem('paste_metadata', 'Paste Metadata',
+                          Icons.paste, imagePath),
+                      const Divider(height: 1),
+                      if (widget.uploadedImages?.contains(imagePath) ?? false)
+                        _buildMenuItem('remove_ftp', 'Remove FTP Status',
+                            Icons.rocket_launch, imagePath),
+                      if (!(widget.uploadedImages?.contains(imagePath) ??
+                          false))
+                        _buildMenuItem('ftp_image', 'FTP Image',
+                            Icons.rocket_launch, imagePath),
+                      const Divider(height: 1),
+                      _buildMenuItem('open', 'Open in Finder',
+                          Icons.open_in_new, imagePath),
+                      const Divider(height: 1),
+                      _buildMenuItem(
+                          'delete', 'Delete Image', Icons.delete, imagePath,
+                          isDestructive: true),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Build menu item widget
+  Widget _buildMenuItem(
+      String value, String text, IconData icon, String imagePath,
+      {bool isDestructive = false}) {
+    return InkWell(
+      onTap: () {
+        Navigator.of(context).pop();
+        _handleContextMenuAction(value, imagePath);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isDestructive ? Colors.red : Colors.black87,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(
+                color: isDestructive ? Colors.red : Colors.black87,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Handle context menu actions
+  void _handleContextMenuAction(String action, String imagePath) {
+    switch (action) {
+      case 'open':
+        // Open in Finder
+        Process.run('open', ['-R', imagePath]);
+        break;
+      case 'delete':
+        // Delete image
+        _deleteImage(imagePath);
+        break;
+      case 'ftp_image':
+        // FTP the image
+        widget.onFtpImage?.call(imagePath);
+        break;
+      case 'remove_ftp':
+        // Remove FTP status
+        widget.onFtpImage?.call(imagePath); // This will toggle the status
+        break;
+      case 'copy_metadata':
+        // Copy metadata from this image
+        widget.onCopyMetadata?.call(imagePath);
+        break;
+      case 'paste_metadata':
+        // Paste metadata to this image
+        widget.onPasteMetadata?.call(imagePath);
+        break;
+    }
+  }
+
+  // Delete image
+  void _deleteImage(String imagePath) async {
+    try {
+      final file = File(imagePath);
+      if (await file.exists()) {
+        await file.delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Deleted: ${p.basename(imagePath)}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+
+        // Notify parent about deletion to update thumbnail grid
+        widget.onImageDeleted?.call(imagePath);
+
+        // Navigate to next image after deletion
+        final currentIndex = widget.currentIndex;
+        final totalImages = widget.imagePaths.length;
+
+        if (totalImages > 1) {
+          if (currentIndex < totalImages - 1) {
+            // Go to next image
+            widget.onImageSelected(currentIndex + 1);
+          } else if (currentIndex > 0) {
+            // Go to previous image if we're at the end
+            widget.onImageSelected(currentIndex - 1);
+          }
+        }
+
+        print('Successfully deleted: $imagePath');
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File not found'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      print('Error deleting file: $e');
+    }
   }
 }

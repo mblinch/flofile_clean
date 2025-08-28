@@ -10,6 +10,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(String?)? onHomeTeamChanged;
   final Function(String?)? onAwayTeamChanged;
   final Function(String)? onApiChanged;
+  final Function(String)? onStartFolderWatcher;
 
   const AppHeaderWidget({
     super.key,
@@ -17,6 +18,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
     this.onHomeTeamChanged,
     this.onAwayTeamChanged,
     this.onApiChanged,
+    this.onStartFolderWatcher,
   });
 
   @override
@@ -491,6 +493,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         // Notify parent about loaded images
         print('Notifying parent with ${files.length} images');
         widget.onImagesLoaded(files);
+
+        // Start folder watcher
+        print('DEBUG: Starting folder watcher for: $dirPath');
+        if (widget.onStartFolderWatcher != null) {
+          widget.onStartFolderWatcher!(dirPath!);
+        } else {
+          print('DEBUG: onStartFolderWatcher callback is null');
+        }
 
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(

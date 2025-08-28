@@ -54,7 +54,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Startup configuration
   bool _isStartupComplete = false;
   String? _selectedFolderPath;
-  // Folder watcher disabled to prevent image jumping
+  // File system watcher for detecting new images
+  StreamSubscription<FileSystemEvent>? _folderWatcher;
 
   // Loading states
   bool _isLoadingPlayers = false;
@@ -85,6 +86,159 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   void _handleReset() {
     setState(() {
       _personalityOverride = '';
+    });
+  }
+
+  // Start watching the selected folder for new images
+  void _startFolderWatcher(String folderPath) {
+    print('DEBUG: _startFolderWatcher called with: $folderPath');
+
+    // Stop any existing watcher
+    _stopFolderWatcher();
+
+    try {
+      final directory = Directory(folderPath);
+      print('DEBUG: Created Directory object for: $folderPath');
+
+      _folderWatcher = directory.watch(events: FileSystemEvent.create).listen(
+        (FileSystemEvent event) {
+          print(
+              'DEBUG: File system event detected: ${event.type} - ${event.path}');
+          if (event.type == FileSystemEvent.create) {
+            print('DEBUG: File creation event detected: ${event.path}');
+            _handleNewImageAdded(event.path);
+          }
+        },
+        onError: (error) {
+          print('Error watching folder: $error');
+        },
+      );
+      print('DEBUG: Successfully started watching folder: $folderPath');
+    } catch (e) {
+      print('Error starting folder watcher: $e');
+    }
+  }
+
+  // Stop watching the folder
+  void _stopFolderWatcher() {
+    _folderWatcher?.cancel();
+    _folderWatcher = null;
+  }
+
+  // Handle new image added to folder
+  void _handleNewImageAdded(String newImagePath) {
+    print('DEBUG: _handleNewImageAdded called with: $newImagePath');
+
+    // Check if it's an image file and not a temporary file
+    final imageExtensions = [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.tiff',
+      '.bmp',
+      '.JPG',
+      '.JPEG',
+      '.PNG',
+      '.TIFF',
+      '.BMP'
+    ];
+
+    // Exclude temporary and system files
+    final excludeExtensions = [
+      '.dbf',
+      '.tmp',
+      '.temp',
+      '.db',
+      '.lock',
+      '.cache',
+      '.DS_Store'
+    ];
+
+    final extension = p.extension(newImagePath).toLowerCase();
+    final fileName = p.basename(newImagePath).toLowerCase();
+    print('DEBUG: File extension: $extension');
+
+    // Skip if it's a temporary/system file
+    if (excludeExtensions.contains(extension) ||
+        fileName.startsWith('.') ||
+        fileName.startsWith('tmp.')) {
+      print('DEBUG: Skipping temporary/system file: $newImagePath');
+      return;
+    }
+
+    if (imageExtensions.contains(extension)) {
+      print('DEBUG: Valid image file detected: $newImagePath');
+      print('DEBUG: Current imagePaths count: ${imagePaths.length}');
+
+      // Add to image paths if not already present
+      if (!imagePaths.contains(newImagePath)) {
+        print('DEBUG: Adding new image to imagePaths');
+        setState(() {
+          imagePaths.add(newImagePath);
+          print('DEBUG: imagePaths count after adding: ${imagePaths.length}');
+          // Sort images by date taken
+          _sortImagesByDateTaken(imagePaths);
+        });
+
+        // Show notification
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('New image added: ${p.basename(newImagePath)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        print('DEBUG: Image already exists in imagePaths');
+      }
+    } else {
+      print('DEBUG: Not a valid image file: $newImagePath');
+    }
+  }
+
+  // Remove any temporary files that might already be in the image list
+  void _removeTemporaryFiles() {
+    final excludeExtensions = [
+      '.dbf',
+      '.tmp',
+      '.temp',
+      '.db',
+      '.lock',
+      '.cache',
+      '.DS_Store'
+    ];
+
+    final validExtensions = ['.jpg', '.jpeg', '.png', '.tiff', '.bmp'];
+
+    setState(() {
+      final originalCount = imagePaths.length;
+      imagePaths.removeWhere((path) {
+        final extension = p.extension(path).toLowerCase();
+        final fileName = p.basename(path).toLowerCase();
+
+        // Remove if it's a temporary file or not a valid image
+        return excludeExtensions.contains(extension) ||
+            fileName.startsWith('.') ||
+            fileName.startsWith('tmp.') ||
+            !validExtensions.contains(extension);
+      });
+
+      final removedCount = originalCount - imagePaths.length;
+      if (removedCount > 0) {
+        print('DEBUG: Removed $removedCount temporary files from image list');
+
+        // Adjust current index if needed
+        if (imagePaths.isEmpty) {
+          currentIndex = 0;
+        } else if (currentIndex >= imagePaths.length) {
+          currentIndex = imagePaths.length - 1;
+        }
+
+        // Reload metadata if we have images
+        if (imagePaths.isNotEmpty) {
+          _loadMetadata();
+        }
+      }
     });
   }
 
@@ -185,17 +339,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final directory = Directory(folderPath);
       final List<FileSystemEntity> entities = await directory.list().toList();
 
-      // Filter for image files
-      final List<String> imageFiles = entities
-          .whereType<File>()
-          .map((entity) => entity.path)
-          .where((path) =>
-              path.toLowerCase().endsWith('.jpg') ||
-              path.toLowerCase().endsWith('.jpeg') ||
-              path.toLowerCase().endsWith('.png') ||
-              path.toLowerCase().endsWith('.tiff') ||
-              path.toLowerCase().endsWith('.bmp'))
-          .toList();
+      // Filter for image files and exclude temporary files
+      final List<String> imageFiles =
+          entities.whereType<File>().map((entity) => entity.path).where((path) {
+        final extension = p.extension(path).toLowerCase();
+        final fileName = p.basename(path).toLowerCase();
+
+        // Valid image extensions
+        final validExtensions = ['.jpg', '.jpeg', '.png', '.tiff', '.bmp'];
+
+        // Exclude temporary and system files
+        final excludeExtensions = [
+          '.dbf',
+          '.tmp',
+          '.temp',
+          '.db',
+          '.lock',
+          '.cache'
+        ];
+
+        // Include only valid image files, exclude temporary/system files
+        return validExtensions.contains(extension) &&
+            !excludeExtensions.contains(extension) &&
+            !fileName.startsWith('.') &&
+            !fileName.startsWith('tmp.');
+      }).toList();
 
       // Set images immediately for instant thumbnail rendering and try to
       // preserve the previously selected image (if it still exists)
@@ -209,11 +377,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
+      // Clean up any temporary files that might have been loaded
+      _removeTemporaryFiles();
+
       // In the background: batch EXIF read for DateTimeOriginal, compute formatted times, and sort
       // Fire-and-forget without awaiting
       Future(() => _loadExifTimesAndSort(imageFiles));
 
       print('Loaded ${imageFiles.length} images from folder: $folderPath');
+
+      // Start folder watcher
+      print(
+          'DEBUG: Starting folder watcher from _loadImagesFromFolder: $folderPath');
+      _startFolderWatcher(folderPath);
 
       // Load metadata for the first image
       if (imageFiles.isNotEmpty) {
@@ -822,6 +998,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   @override
   void dispose() {
     _thumbnailScrollController.dispose();
+    _stopFolderWatcher();
     super.dispose();
   }
 
@@ -999,11 +1176,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           });
           print(
               'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
+
           // Load metadata for the first image
           if (images.isNotEmpty) {
             _loadMetadata();
           }
         },
+        onStartFolderWatcher: _startFolderWatcher,
         onHomeTeamChanged: (team) {
           setState(() {
             selectedHomeTeam = team;
@@ -1075,6 +1254,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       },
                       onSaveIptc: _saveIptcMetadata,
                       onSaveIptcBackground: _saveIptcMetadataBackground,
+                      onCopyMetadata: _onCopyMetadata,
+                      onPasteMetadata: _onPasteMetadata,
+                      onFtpImage: _onFtpImage,
+                      onImageDeleted: _onImageDeleted,
+                      uploadedImages: _uploadedImages,
                     ),
                   ),
 
@@ -1147,11 +1331,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onReset: _handleReset,
                       personalityOverride: _personalityOverride,
                       onImagesLoaded: (files) {
+                        print(
+                            'DEBUG: onImagesLoaded called with ${files.length} files');
                         setState(() {
                           imagePaths = files;
                           currentIndex = 0;
                         });
                       },
+                      onStartFolderWatcher: _startFolderWatcher,
                       preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
                           ? _cachedHomeRoster
                           : null,

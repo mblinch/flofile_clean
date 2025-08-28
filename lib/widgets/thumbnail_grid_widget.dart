@@ -653,68 +653,78 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
-                      DropdownButton<String>(
-                        value: _ftpFilterMode == null
-                            ? 'all'
-                            : _ftpFilterMode == 'hide_ftpd'
-                                ? 'hide'
-                                : 'show',
-                        isDense: true,
-                        underline: Container(),
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.black),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'all',
-                            child: Text('Show All Images'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'hide',
-                            child: Text('Hide FTPd Images'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'show',
-                            child: Text('Show FTPd Images'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            if (value == 'all') {
-                              _ftpFilterMode = null;
-                            } else if (value == 'hide') {
-                              _ftpFilterMode = 'hide_ftpd';
-                            } else if (value == 'show') {
-                              _ftpFilterMode = 'show_ftpd';
-                            }
-
-                            // Handle current image selection when hiding FTPd images
-                            if (_ftpFilterMode == 'hide_ftpd' &&
-                                widget.currentIndex <
-                                    widget.imagePaths.length &&
-                                widget.uploadedImages.contains(
-                                    widget.imagePaths[widget.currentIndex])) {
-                              int nextIndex = widget.currentIndex + 1;
-                              while (nextIndex < widget.imagePaths.length &&
-                                  widget.uploadedImages
-                                      .contains(widget.imagePaths[nextIndex])) {
-                                nextIndex++;
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        child: DropdownButton<String>(
+                          value: _ftpFilterMode == null
+                              ? 'all'
+                              : _ftpFilterMode == 'hide_ftpd'
+                                  ? 'hide'
+                                  : 'show',
+                          isDense: true,
+                          underline: Container(),
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.black),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'all',
+                              child: Text('Show All Images'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'hide',
+                              child: Text('Hide FTPd Images'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'show',
+                              child: Text('Show FTPd Images'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == 'all') {
+                                _ftpFilterMode = null;
+                              } else if (value == 'hide') {
+                                _ftpFilterMode = 'hide_ftpd';
+                              } else if (value == 'show') {
+                                _ftpFilterMode = 'show_ftpd';
                               }
-                              if (nextIndex >= widget.imagePaths.length) {
-                                nextIndex = widget.currentIndex - 1;
-                                while (nextIndex >= 0 &&
+
+                              // Handle current image selection when hiding FTPd images
+                              if (_ftpFilterMode == 'hide_ftpd' &&
+                                  widget.currentIndex <
+                                      widget.imagePaths.length &&
+                                  widget.uploadedImages.contains(
+                                      widget.imagePaths[widget.currentIndex])) {
+                                int nextIndex = widget.currentIndex + 1;
+                                while (nextIndex < widget.imagePaths.length &&
                                     widget.uploadedImages.contains(
                                         widget.imagePaths[nextIndex])) {
-                                  nextIndex--;
+                                  nextIndex++;
+                                }
+                                if (nextIndex >= widget.imagePaths.length) {
+                                  nextIndex = widget.currentIndex - 1;
+                                  while (nextIndex >= 0 &&
+                                      widget.uploadedImages.contains(
+                                          widget.imagePaths[nextIndex])) {
+                                    nextIndex--;
+                                  }
+                                }
+                                if (nextIndex >= 0 &&
+                                    nextIndex < widget.imagePaths.length) {
+                                  widget.onImageSelected(nextIndex);
                                 }
                               }
-                              if (nextIndex >= 0 &&
-                                  nextIndex < widget.imagePaths.length) {
-                                widget.onImageSelected(nextIndex);
-                              }
-                            }
-                          });
-                          _ensureVisibleAfterLayout();
-                        },
+                            });
+                            _ensureVisibleAfterLayout();
+                          },
+                        ),
                       ),
                     ],
                   ),
