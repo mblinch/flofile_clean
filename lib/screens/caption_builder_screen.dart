@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import '../utils/exiftool_helper.dart';
 import 'dart:io';
 import 'dart:async';
 import '../widgets/app_header_widget.dart';
@@ -239,15 +240,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-XMP:PMKeep'
       ];
       args.addAll(imageFiles);
-      final proc = await Process.run('exiftool', args);
+      final proc = await ExiftoolHelper.run(args);
       final Map<String, DateTime> times = {};
       final Map<String, String> formatted = {};
       final Map<String, int> ratings = {};
       final Map<String, String> labels = {};
       final Map<String, bool> tagged = {};
 
-      if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
+      if (proc.isSuccess) {
+        final List data = jsonDecode(proc.stdoutText);
         for (final item in data) {
           if (item is Map<String, dynamic>) {
             final sourceFile = item['SourceFile']?.toString();
@@ -364,7 +365,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     try {
       // Extract metadata via exiftool in JSON format
-      final proc = await Process.run('exiftool', [
+      final proc = await ExiftoolHelper.run([
         '-j', // JSON output
         '-Caption-Abstract',
         '-ImageDescription',
@@ -396,8 +397,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         imagePath,
       ]);
 
-      if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
+      if (proc.isSuccess) {
+        final List data = jsonDecode(proc.stdoutText);
         if (data.isNotEmpty) {
           setState(() {
             currentMetadata = data.first as Map<String, dynamic>;
@@ -405,7 +406,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           print('Metadata loaded successfully');
         }
       } else {
-        print('Exiftool error: ${proc.stderr}');
+        print('Exiftool error: ${proc.stderrText}');
       }
     } catch (e) {
       print('Error loading metadata: $e');
@@ -487,19 +488,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (args.length > 2) {
         // More than just -overwrite_original and path
         print('Running exiftool with args: $args');
-        final proc = await Process.run('exiftool', args);
+        final proc = await ExiftoolHelper.run(args);
 
-        if (proc.exitCode == 0) {
+        if (proc.isSuccess) {
           print('IPTC metadata saved successfully');
 
           // Debug: Verify caption was actually written
           final verifyProc =
-              await Process.run('exiftool', ['-Caption-Abstract', imagePath]);
-          print('DEBUG: Caption verification after save: ${verifyProc.stdout}');
+              await ExiftoolHelper.run(['-Caption-Abstract', imagePath]);
+          print(
+              'DEBUG: Caption verification after save: ${verifyProc.stdoutText}');
 
           // Don't refresh EXIF data for background saves to avoid UI glitches
         } else {
-          print('Exiftool error saving metadata: ${proc.stderr}');
+          print('Exiftool error saving metadata: ${proc.stderrText}');
         }
       } else {
         print('No metadata values to save');
@@ -584,11 +586,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       print('DEBUG: Background save - args: $args');
       if (args.length > 2) {
         print('DEBUG: Running exiftool for background save');
-        final proc = await Process.run('exiftool', args);
-        if (proc.exitCode == 0) {
+        final proc = await ExiftoolHelper.run(args);
+        if (proc.isSuccess) {
           print('DEBUG: Background IPTC metadata saved successfully');
         } else {
-          print('DEBUG: Background exiftool error: ${proc.stderr}');
+          print('DEBUG: Background exiftool error: ${proc.stderrText}');
         }
       } else {
         print('DEBUG: No metadata to save in background');

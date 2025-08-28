@@ -385,14 +385,43 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   // Folder picking functionality
   Future<void> _pickFolder() async {
-    print('Starting folder picker...');
-    final dirPath = await FilePicker.platform.getDirectoryPath();
-    if (dirPath == null) {
-      print('No folder selected');
+    String? dirPath;
+    try {
+      print('Starting folder picker...');
+      print('DEBUG: FilePicker.platform.getDirectoryPath() called');
+
+      // Add a try-catch specifically around FilePicker
+      try {
+        dirPath = await FilePicker.platform.getDirectoryPath();
+        print('DEBUG: FilePicker returned: $dirPath');
+      } catch (filePickerError) {
+        print('ERROR in FilePicker: $filePickerError');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting folder: $filePickerError')),
+        );
+        return;
+      }
+
+      if (dirPath == null) {
+        print('No folder selected');
+        return;
+      }
+
+      print('Selected folder: $dirPath');
+      print('DEBUG: About to check directory permissions...');
+    } catch (e, stackTrace) {
+      print('ERROR in _pickFolder: $e');
+      print('Stack trace: $stackTrace');
+      // Show error to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error selecting folder: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
       return;
     }
-
-    print('Selected folder: $dirPath');
 
     // Store the selected folder path
     setState(() {
@@ -400,7 +429,21 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     });
 
     // List image files
-    final files = await _listImageFiles(dirPath);
+    List<String> files;
+    try {
+      files = await _listImageFiles(dirPath);
+    } catch (e, stackTrace) {
+      print('ERROR in _listImageFiles: $e');
+      print('Stack trace: $stackTrace');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error listing images: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
 
     if (files.isNotEmpty) {
       // Show loading dialog
@@ -439,30 +482,70 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       // Close loading dialog
       Navigator.of(context).pop();
 
-      setState(() {
-        imagePaths = files;
-        currentIndex = 0;
-      });
+      try {
+        setState(() {
+          imagePaths = files;
+          currentIndex = 0;
+        });
 
-      // Notify parent about loaded images
-      print('Notifying parent with ${files.length} images');
-      widget.onImagesLoaded(files);
+        // Notify parent about loaded images
+        print('Notifying parent with ${files.length} images');
+        widget.onImagesLoaded(files);
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Loaded ${files.length} images from folder'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Loaded ${files.length} images from folder'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } catch (e, stackTrace) {
+        print('ERROR in image loading: $e');
+        print('Stack trace: $stackTrace');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading images: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
   // Helper method to list image files
   Future<List<String>> _listImageFiles(String dirPath) async {
     try {
+      print('DEBUG: Attempting to access directory: $dirPath');
       final directory = Directory(dirPath);
-      final files = directory.listSync();
+
+      // Check if directory exists and is accessible
+      if (!await directory.exists()) {
+        print('ERROR: Directory does not exist: $dirPath');
+        throw Exception('Directory does not exist: $dirPath');
+      }
+
+      print('DEBUG: Directory exists, checking permissions...');
+
+      // Test read permissions
+      try {
+        print('DEBUG: Testing directory.list().first...');
+        await directory.list().first;
+        print('DEBUG: Directory is readable');
+      } catch (e) {
+        print('ERROR: Cannot read directory contents: $e');
+        throw Exception('Cannot read directory contents: $e');
+      }
+
+      print('DEBUG: About to call directory.listSync()...');
+      List<FileSystemEntity> files;
+      try {
+        files = directory.listSync();
+        print('DEBUG: Successfully listed ${files.length} files in directory');
+      } catch (listError) {
+        print('ERROR in directory.listSync(): $listError');
+        throw Exception('Failed to list directory contents: $listError');
+      }
 
       final imageExtensions = [
         '.jpg',

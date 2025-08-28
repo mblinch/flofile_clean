@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'dart:io';
 import 'dart:convert';
+import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
 
@@ -105,7 +106,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     });
 
     try {
-      final proc = await Process.run('exiftool', [
+      final proc = await ExiftoolHelper.run([
         '-j',
         '-Model',
         '-Make',
@@ -124,8 +125,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         imagePath,
       ]);
 
-      if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
+      if (proc.isSuccess) {
+        final List data = jsonDecode(proc.stdoutText);
         if (data.isNotEmpty) {
           final exifData = data.first as Map<String, dynamic>;
           print('DEBUG: Successfully loaded EXIF data for $imagePath');
@@ -147,7 +148,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           });
         }
       } else {
-        print('DEBUG: exiftool failed for $imagePath: ${proc.stderr}');
+        print('DEBUG: exiftool failed for $imagePath: ${proc.stderrText}');
         // Cache empty result to avoid repeated failed attempts
         _exifCache[imagePath] = {};
         _lastLoadedImagePath = imagePath;

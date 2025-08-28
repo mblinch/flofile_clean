@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
+import '../utils/exiftool_helper.dart';
 
 // Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
 class CustomButton extends StatelessWidget {
@@ -70,6 +71,9 @@ class _StartupDialogState extends State<StartupDialog> {
   bool _isTypingTeamSelection = false;
   int _teamSelectionTypingIndex = 0;
   Timer? _teamSelectionTypingTimer;
+
+  // Network status
+  bool _isOffline = false;
 
   final ApiManager _apiManager = ApiManager();
 
@@ -200,12 +204,46 @@ class _StartupDialogState extends State<StartupDialog> {
     try {
       final teams = await _apiManager.fetchTeams();
       setState(() {
-        availableTeams = teams.map((team) => team.name).toList();
+        availableTeams = teams.map((team) => team.name).toList()..sort();
         isLoadingTeams = false;
       });
     } catch (e) {
       print('Error loading teams: $e');
+      // Fallback to common MLB teams if API fails
       setState(() {
+        _isOffline = true;
+        availableTeams = [
+          'Arizona Diamondbacks',
+          'Atlanta Braves',
+          'Baltimore Orioles',
+          'Boston Red Sox',
+          'Chicago Cubs',
+          'Chicago White Sox',
+          'Cincinnati Reds',
+          'Cleveland Guardians',
+          'Colorado Rockies',
+          'Detroit Tigers',
+          'Houston Astros',
+          'Kansas City Royals',
+          'Los Angeles Angels',
+          'Los Angeles Dodgers',
+          'Miami Marlins',
+          'Milwaukee Brewers',
+          'Minnesota Twins',
+          'New York Mets',
+          'New York Yankees',
+          'Oakland Athletics',
+          'Philadelphia Phillies',
+          'Pittsburgh Pirates',
+          'San Diego Padres',
+          'San Francisco Giants',
+          'Seattle Mariners',
+          'St. Louis Cardinals',
+          'Tampa Bay Rays',
+          'Texas Rangers',
+          'Toronto Blue Jays',
+          'Washington Nationals'
+        ];
         isLoadingTeams = false;
       });
     }
@@ -278,7 +316,7 @@ class _StartupDialogState extends State<StartupDialog> {
       for (String imagePath in imagesToCheck) {
         try {
           // Extract metadata via exiftool
-          final proc = await Process.run('exiftool', [
+          final proc = await ExiftoolHelper.run([
             '-j', // JSON output
             '-DateTimeOriginal',
             '-CreateDate',
@@ -286,8 +324,8 @@ class _StartupDialogState extends State<StartupDialog> {
             imagePath,
           ]);
 
-          if (proc.exitCode == 0) {
-            final List data = jsonDecode(proc.stdout as String);
+          if (proc.isSuccess) {
+            final List data = jsonDecode(proc.stdoutText);
             if (data.isNotEmpty) {
               final metadata = data.first as Map<String, dynamic>;
 
@@ -667,12 +705,37 @@ class _StartupDialogState extends State<StartupDialog> {
                     ],
 
                     // Team selection header
-                    Text(
-                      _teamSelectionText + (_isTypingTeamSelection ? '|' : ''),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          _teamSelectionText +
+                              (_isTypingTeamSelection ? '|' : ''),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (_isOffline) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.orange.shade300),
+                            ),
+                            child: const Text(
+                              'Offline',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 16),
 

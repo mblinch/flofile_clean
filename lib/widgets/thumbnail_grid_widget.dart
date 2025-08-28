@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
+import '../utils/exiftool_helper.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -167,14 +168,14 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     }
 
     try {
-      final proc = await Process.run('exiftool', [
+      final proc = await ExiftoolHelper.run([
         '-j',
         '-DateTimeOriginal',
         imagePath,
       ]);
 
-      if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
+      if (proc.isSuccess) {
+        final List data = jsonDecode(proc.stdoutText);
         if (data.isNotEmpty) {
           final meta = data.first as Map<String, dynamic>;
           final dateTime = meta['DateTimeOriginal']?.toString();
