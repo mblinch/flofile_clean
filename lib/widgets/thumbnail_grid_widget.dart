@@ -46,7 +46,7 @@ class ThumbnailGridWidget extends StatefulWidget {
 
 class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   // Thumbnail size control
-  double _thumbSize = 170.0; // Start at default size (170px)
+  double _thumbSize = 110.0; // Start at second smallest size (110px)
   double _thumbSpacing = 14.0;
   int _lastComputedColumns = 4;
   int _lastCenterRequestId = 0;
@@ -804,9 +804,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             setState(() {
                               // Move to previous division (30px increments)
                               final currentStep =
-                                  ((_thumbSize - 110) / 30).round();
-                              final newStep = (currentStep - 1).clamp(0, 2);
-                              _thumbSize = 110 + (newStep * 30);
+                                  ((_thumbSize - 80) / 30).round();
+                              final newStep = (currentStep - 1).clamp(0, 4);
+                              _thumbSize = 80 + (newStep * 30);
                               _thumbSpacing = _thumbSize * 0.1;
                             });
                             _ensureVisibleAfterLayout();
@@ -844,9 +844,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             ),
                             child: Slider(
                               value: _thumbSize,
-                              min: 110.0,
+                              min: 80.0,
                               max: 200.0,
-                              divisions: 3,
+                              divisions: 4,
                               onChanged: (value) {
                                 setState(() {
                                   _thumbSize = value;
@@ -867,9 +867,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             setState(() {
                               // Move to next division (30px increments)
                               final currentStep =
-                                  ((_thumbSize - 110) / 30).round();
-                              final newStep = (currentStep + 1).clamp(0, 3);
-                              _thumbSize = 110 + (newStep * 30);
+                                  ((_thumbSize - 80) / 30).round();
+                              final newStep = (currentStep + 1).clamp(0, 4);
+                              _thumbSize = 80 + (newStep * 30);
                               _thumbSpacing = _thumbSize * 0.1;
                             });
                             _ensureVisibleAfterLayout();

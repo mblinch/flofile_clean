@@ -610,41 +610,51 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     int? maxLines = 1,
     bool expands = false,
   }) {
-    return SizedBox(
-      height: 48,
-      child: TextField(
-        controller: controller,
-        maxLines: maxLines,
-        expands: expands,
-        style: const TextStyle(fontSize: 11),
-        decoration: InputDecoration(
-          labelText: label,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          // No hint text when empty
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 70,
+          alignment: Alignment.topLeft,
+          child: Text(
+            label,
+            textAlign: TextAlign.left,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.grey.shade400),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(4),
-            borderSide: BorderSide(color: Colors.blue.shade400, width: 1.5),
-          ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-          filled: true,
-          fillColor: Colors.grey.shade50,
-          labelStyle: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: Colors.black87,
-          ),
-          isDense: true,
         ),
-      ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: controller,
+            maxLines: maxLines,
+            expands: expands,
+            textAlign: TextAlign.left,
+            style: const TextStyle(fontSize: 10),
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.blue.shade400, width: 1.2),
+              ),
+              contentPadding: const EdgeInsets.all(10),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              isDense: true,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -654,56 +664,58 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     List<Map<String, String>> items,
     ValueChanged<String?> onChanged,
   ) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(4),
-        color: Colors.grey.shade50,
-      ),
-      child: PopupMenuButton<String>(
-        initialValue: value,
-        onSelected: onChanged,
-        constraints: const BoxConstraints(maxHeight: 300),
-        itemBuilder: (context) => items
-            .map(
-              (item) => PopupMenuItem<String>(
-                value: item['code'],
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  item['name']!,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-        child: Container(
-          width: double.infinity,
-          height: 48, // Increased height to accommodate larger fonts
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Floating label (always visible)
-                    Text(
-                      label,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 70,
+          alignment: Alignment.topLeft,
+          child: Text(
+            label,
+            textAlign: TextAlign.left,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: PopupMenuButton<String>(
+            initialValue: value,
+            onSelected: onChanged,
+            constraints: const BoxConstraints(maxHeight: 300),
+            itemBuilder: (context) => items
+                .map(
+                  (item) => PopupMenuItem<String>(
+                    value: item['code'],
+                    height: 28,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Text(
+                      item['name']!,
                       style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                        fontSize: 10,
+                        color: Colors.black,
+                        fontWeight: FontWeight.normal,
                       ),
                     ),
-                    // Value text
-                    Text(
+                  ),
+                )
+                .toList(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.grey.shade50,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       value ?? 'Select $label',
+                      textAlign: TextAlign.left,
                       style: TextStyle(
                         fontSize: 10,
                         color:
@@ -711,52 +723,55 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, size: 16),
+                ],
               ),
-              const Icon(Icons.arrow_drop_down, size: 16),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildDateField() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(4),
-        color: Colors.grey.shade50,
-      ),
-      child: InkWell(
-        onTap: () async {
-          await _showDatePicker();
-        },
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          width: double.infinity,
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Date',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    Text(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 70,
+          alignment: Alignment.topLeft,
+          child: const Text(
+            'Date',
+            textAlign: TextAlign.left,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: InkWell(
+            onTap: () async {
+              await _showDatePicker();
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.grey.shade50,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       dateController.text.isNotEmpty
                           ? dateController.text
                           : 'Select Date',
+                      textAlign: TextAlign.left,
                       style: TextStyle(
                         fontSize: 10,
                         color: dateController.text.isNotEmpty
@@ -765,52 +780,55 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
+                  ),
+                  const Icon(Icons.calendar_today, size: 16),
+                ],
               ),
-              const Icon(Icons.calendar_today, size: 16),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildTimeField() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400),
-        borderRadius: BorderRadius.circular(4),
-        color: Colors.grey.shade50,
-      ),
-      child: InkWell(
-        onTap: () async {
-          await _showTimePicker();
-        },
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          width: double.infinity,
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Time',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    Text(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 70,
+          alignment: Alignment.topLeft,
+          child: const Text(
+            'Time',
+            textAlign: TextAlign.left,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: InkWell(
+            onTap: () async {
+              await _showTimePicker();
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.grey.shade50,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       timeController.text.isNotEmpty
                           ? timeController.text
                           : 'Select Time',
+                      textAlign: TextAlign.left,
                       style: TextStyle(
                         fontSize: 10,
                         color: timeController.text.isNotEmpty
@@ -819,14 +837,14 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
+                  ),
+                  const Icon(Icons.access_time, size: 16),
+                ],
               ),
-              const Icon(Icons.access_time, size: 16),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -848,146 +866,78 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // All metadata fields - Two Column Layout
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final double columnGap = 8;
-                      final double columnWidth =
-                          (constraints.maxWidth - columnGap) / 2;
+                  // IPTC metadata fields - 3 columns x 10 rows grid
+                  LayoutBuilder(builder: (context, constraints) {
+                    const int columns = 3;
+                    const int rows = 10;
+                    const double gap = 1.0;
+                    final double columnWidth =
+                        (constraints.maxWidth - gap * (columns - 1)) / columns;
 
-                      return Wrap(
-                        spacing: columnGap,
-                        runSpacing: 2,
-                        children: [
-                          // Getty Images fields
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Creator', creatorController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('MEID', jobIdController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Description Writers',
-                                descriptionWritersController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Creator\'s Job Title',
-                                creatorJobTitleController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child:
-                                _buildField('Copyright', copyrightController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Credit', creditController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Source', sourceController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Headline', headlineController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Keywords', keywordsController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField(
-                                'Object Name', titleObjectNameController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Category', categoryController),
-                          ),
-                          // Supp Cats (stacked within left column width)
-                          SizedBox(
-                            width: columnWidth,
-                            child: Column(
-                              children: [
-                                _buildField('Supp Cat 1', suppCat1Controller),
-                                const SizedBox(height: 2),
-                                _buildField('Supp Cat 2', suppCat2Controller),
-                                const SizedBox(height: 2),
-                                _buildField('Supp Cat 3', suppCat3Controller),
-                              ],
-                            ),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildDropdownField(
-                              'Urgency',
-                              urgencyController.text.isNotEmpty
-                                  ? urgencyController.text
-                                  : null,
-                              urgencyLevels,
-                              (value) {
-                                setState(() {
-                                  urgencyController.text = value ?? '';
-                                });
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildDropdownField(
-                              'Country Code',
-                              countryCodeController.text.isNotEmpty
-                                  ? countryCodeController.text
-                                  : null,
-                              countryCodes,
-                              (value) {
-                                setState(() {
-                                  countryCodeController.text = value ?? '';
-                                });
-                              },
-                            ),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Country', countryController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField(
-                              'Special Instructions',
-                              specialInstructionsController,
-                              maxLines: 2,
-                            ),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField(
-                                'Province/State', provinceController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('City', cityController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildField('Stadium', stadiumController),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildDateField(),
-                          ),
-                          SizedBox(
-                            width: columnWidth,
-                            child: _buildTimeField(),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                    final List<Widget> items = [
+                      _buildField('Photographer', creatorController),
+                      _buildField('MEID', jobIdController),
+                      _buildField(
+                          'Description Writers', descriptionWritersController),
+                      _buildField(
+                          'Creator\'s Job Title', creatorJobTitleController),
+                      _buildField('Copyright', copyrightController),
+                      _buildField('Credit', creditController),
+                      _buildField('Source', sourceController),
+                      _buildField('Headline', headlineController),
+                      _buildField('Keywords', keywordsController),
+                      _buildField('Supp Cat 1', suppCat1Controller),
+                      _buildField('Supp Cat 2', suppCat2Controller),
+                      _buildField('Supp Cat 3', suppCat3Controller),
+                      _buildField('Category', categoryController),
+                      _buildField('Object Name', titleObjectNameController),
+                      _buildField('Stadium', stadiumController),
+                      _buildField('City', cityController),
+                      _buildField('Province/State', provinceController),
+                      _buildField('Country', countryController),
+                      _buildField('Country Code', countryCodeController),
+                      _buildDropdownField(
+                        'Urgency',
+                        urgencyController.text.isNotEmpty
+                            ? urgencyController.text
+                            : null,
+                        urgencyLevels,
+                        (value) {
+                          setState(() {
+                            urgencyController.text = value ?? '';
+                          });
+                        },
+                      ),
+                      _buildField(
+                          'Special Instructions', specialInstructionsController,
+                          maxLines: 2),
+                      _buildDateField(),
+                      _buildTimeField(),
+                    ];
+
+                    // Pad to exactly columns*rows slots
+                    final int target = columns * rows;
+                    while (items.length < target) {
+                      items.add(const SizedBox(height: 40));
+                    }
+
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: items
+                          .map((w) => Container(
+                                width: columnWidth,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 0),
+                                child: w,
+                              ))
+                          .toList(),
+                    );
+                  }),
                 ],
               ),
             ),
