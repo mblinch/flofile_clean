@@ -62,11 +62,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   double _playerLoadingProgress = 0.0;
 
   // Global keys for accessing widgets
-  final GlobalKey _metadataKey1 = GlobalKey();
   final GlobalKey _metadataKey2 = GlobalKey();
-  final GlobalKey _captionFieldsKey1 = GlobalKey();
   final GlobalKey _captionFieldsKey2 = GlobalKey();
-  final GlobalKey _picturePreviewKey1 = GlobalKey();
   final GlobalKey _picturePreviewKey2 = GlobalKey();
 
   // Scroll controller for thumbnail grid
@@ -80,6 +77,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Set<String> _uploadedImages = {};
   // Track upload progress for thumbnails
   final Map<String, double> _uploadProgress = {};
+  // Track queued uploads
+  final Set<String> _queuedUploads = {};
+  // Track currently uploading images (max 2)
+  final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
 
@@ -601,8 +602,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     Map<String, String> allValues = {};
 
     // Get metadata values from the metadata widget
-    dynamic metadataState =
-        _metadataKey1.currentState ?? _metadataKey2.currentState;
+    dynamic metadataState = _metadataKey2.currentState;
     if (metadataState != null) {
       Map<String, String> metadataValues = metadataState.getCurrentValues();
       allValues.addAll(metadataValues);
@@ -611,8 +611,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
 
     // Get caption values from the caption fields widget
-    dynamic captionState =
-        _captionFieldsKey1.currentState ?? _captionFieldsKey2.currentState;
+    dynamic captionState = _captionFieldsKey2.currentState;
     if (captionState != null) {
       Map<String, String> captionValues =
           captionState.getCurrentCaptionValues();
@@ -702,16 +701,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     Map<String, String> allValues = {};
 
     // Get metadata values from the metadata widget
-    dynamic metadataState =
-        _metadataKey1.currentState ?? _metadataKey2.currentState;
+    dynamic metadataState = _metadataKey2.currentState;
     if (metadataState != null) {
       Map<String, String> metadataValues = metadataState.getCurrentValues();
       allValues.addAll(metadataValues);
     }
 
     // Get caption values from the caption fields widget
-    dynamic captionState =
-        _captionFieldsKey1.currentState ?? _captionFieldsKey2.currentState;
+    dynamic captionState = _captionFieldsKey2.currentState;
     if (captionState != null) {
       Map<String, String> captionValues =
           captionState.getCurrentCaptionValues();
@@ -784,15 +781,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'DEBUG: Current image path: ${imagePaths.isNotEmpty ? imagePaths[currentIndex] : "none"}');
 
     // Try to access the picture preview widget and refresh its EXIF data
-    final picturePreviewState1 =
-        _picturePreviewKey1.currentState as PicturePreviewWidgetState?;
     final picturePreviewState2 =
         _picturePreviewKey2.currentState as PicturePreviewWidgetState?;
 
-    if (picturePreviewState1 != null) {
-      print('DEBUG: Found picture preview state 1, refreshing EXIF data');
-      picturePreviewState1.refreshExifData();
-    } else if (picturePreviewState2 != null) {
+    if (picturePreviewState2 != null) {
       print('DEBUG: Found picture preview state 2, refreshing EXIF data');
       picturePreviewState2.refreshExifData();
     } else {
@@ -940,13 +932,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         try {
           final Map<String, dynamic> pastedMetadata = jsonDecode(data!.text!);
 
-          // Update the metadata for the target image
-          setState(() {
-            currentMetadata = pastedMetadata;
-          });
-
-          // Save the metadata to the target image
-          _saveIptcMetadata();
+          // Save the metadata directly to the specific image using exiftool
+          _saveMetadataToImage(imagePath, pastedMetadata);
 
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
@@ -978,21 +965,210 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     });
   }
 
-  // Handle FTP image
-  void _onFtpImage(String imagePath) {
-    // Add to uploaded images set
-    setState(() {
-      _uploadedImages.add(imagePath);
+  // Save metadata directly to a specific image file
+  Future<void> _saveMetadataToImage(
+      String imagePath, Map<String, dynamic> metadata) async {
+    print('Saving metadata to specific image: $imagePath');
+
+    // Convert metadata to exiftool arguments
+    List<String> args = [];
+
+    // Add all metadata fields
+    metadata.forEach((key, value) {
+      if (value != null && value.toString().isNotEmpty) {
+        args.addAll(['-$key=$value']);
+      }
     });
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Marked as FTPd: ${p.basename(imagePath)}'),
-        backgroundColor: Colors.blue,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    // Add the target file
+    args.add(imagePath);
+
+    try {
+      final proc = await Process.run('exiftool', args);
+      if (proc.exitCode == 0) {
+        print('Successfully saved metadata to $imagePath');
+      } else {
+        print('Exiftool error saving metadata to $imagePath: ${proc.stderr}');
+      }
+    } catch (e) {
+      print('Error saving metadata to $imagePath: $e');
+    }
+  }
+
+  // Handle FTP image - Add to queue and process
+  void _onFtpImage(String imagePath) {
+    print('DEBUG: _onFtpImage called for: $imagePath');
+
+    // Check if already uploaded, uploading, or queued
+    if (_uploadedImages.contains(imagePath)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${p.basename(imagePath)} already uploaded'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (_currentlyUploading.contains(imagePath)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${p.basename(imagePath)} is currently uploading'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    if (_queuedUploads.contains(imagePath)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${p.basename(imagePath)} is already queued'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Add to queue
+    setState(() {
+      _queuedUploads.add(imagePath);
+    });
+
+    // Try to process queue
+    _processUploadQueue();
+  }
+
+  // Process the upload queue (max 2 concurrent uploads)
+  void _processUploadQueue() {
+    // Get the caption fields widget state to access FTP functionality
+    dynamic captionState = _captionFieldsKey2.currentState;
+    if (captionState == null) {
+      print('DEBUG: Caption fields state not available for FTP');
+      return;
+    }
+
+    // Process queue while we have capacity (max 2 concurrent uploads)
+    while (_currentlyUploading.length < 2 && _queuedUploads.isNotEmpty) {
+      final imagePath = _queuedUploads.first;
+      _queuedUploads.remove(imagePath);
+      _currentlyUploading.add(imagePath);
+
+      print('DEBUG: Starting upload for: $imagePath');
+      print('DEBUG: Currently uploading: ${_currentlyUploading.length}/2');
+      print('DEBUG: Queued: ${_queuedUploads.length}');
+
+      // Start the upload
+      captionState.uploadImageViaFtp(imagePath).then((_) {
+        // Upload successful
+        setState(() {
+          _uploadedImages.add(imagePath);
+          _currentlyUploading.remove(imagePath);
+          _uploadProgress.remove(imagePath); // Clear progress
+        });
+        print('DEBUG: Successfully FTPd and marked: $imagePath');
+
+        // Process next item in queue
+        _processUploadQueue();
+      }).catchError((error) {
+        // Upload failed
+        setState(() {
+          _currentlyUploading.remove(imagePath);
+          _uploadProgress.remove(imagePath); // Clear progress
+        });
+        print('DEBUG: FTP failed for $imagePath: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('FTP failed for ${p.basename(imagePath)}: $error'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Process next item in queue
+        _processUploadQueue();
+      });
+    }
+  }
+
+  // Handle multi-selection
+  void _onMultiSelect(List<String> selectedPaths) {
+    print('Multi-selection: ${selectedPaths.length} images selected');
+    // For now, just log the selection
+    // In the future, this could enable bulk operations
+  }
+
+  // Handle image rename
+  void _onImageRenamed(String oldPath, String newPath) {
+    setState(() {
+      // Update the image path in the list
+      final index = imagePaths.indexOf(oldPath);
+      if (index != -1) {
+        imagePaths[index] = newPath;
+
+        // Update uploaded images set if it was there
+        if (_uploadedImages.contains(oldPath)) {
+          _uploadedImages.remove(oldPath);
+          _uploadedImages.add(newPath);
+        }
+
+        // Update upload progress if it was there
+        if (_uploadProgress.containsKey(oldPath)) {
+          final progress = _uploadProgress[oldPath]!;
+          _uploadProgress.remove(oldPath);
+          _uploadProgress[newPath] = progress;
+        }
+
+        // Update queue state if it was there
+        if (_queuedUploads.contains(oldPath)) {
+          _queuedUploads.remove(oldPath);
+          _queuedUploads.add(newPath);
+        }
+
+        // Update currently uploading if it was there
+        if (_currentlyUploading.contains(oldPath)) {
+          _currentlyUploading.remove(oldPath);
+          _currentlyUploading.add(newPath);
+        }
+
+        // Update EXIF times if they were cached
+        if (_exifTimes?.containsKey(oldPath) ?? false) {
+          final time = _exifTimes![oldPath]!;
+          _exifTimes!.remove(oldPath);
+          _exifTimes![newPath] = time;
+        }
+
+        // Update XMP ratings if they were cached
+        if (_xmpRatings?.containsKey(oldPath) ?? false) {
+          final rating = _xmpRatings![oldPath]!;
+          _xmpRatings!.remove(oldPath);
+          _xmpRatings![newPath] = rating;
+        }
+
+        // Update XMP labels if they were cached
+        if (_xmpLabels?.containsKey(oldPath) ?? false) {
+          final label = _xmpLabels![oldPath]!;
+          _xmpLabels!.remove(oldPath);
+          _xmpLabels![newPath] = label;
+        }
+
+        // Update XMP tagged if they were cached
+        if (_xmpTagged?.containsKey(oldPath) ?? false) {
+          final tagged = _xmpTagged![oldPath]!;
+          _xmpTagged!.remove(oldPath);
+          _xmpTagged![newPath] = tagged;
+        }
+
+        // Update locked paths if it was there
+        if (_lockedPaths?.contains(oldPath) ?? false) {
+          _lockedPaths!.remove(oldPath);
+          _lockedPaths!.add(newPath);
+        }
+      }
+    });
   }
 
   @override
@@ -1258,6 +1434,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onPasteMetadata: _onPasteMetadata,
                       onFtpImage: _onFtpImage,
                       onImageDeleted: _onImageDeleted,
+                      onImageRenamed: _onImageRenamed,
                       uploadedImages: _uploadedImages,
                     ),
                   ),
@@ -1272,6 +1449,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       scrollController: _thumbnailScrollController,
                       exifTimes: _exifTimes,
                       uploadedImages: _uploadedImages,
+                      queuedUploads: _queuedUploads,
+                      currentlyUploading: _currentlyUploading,
                       xmpRatings: _xmpRatings,
                       xmpLabels: _xmpLabels,
                       xmpTagged: _xmpTagged,
@@ -1282,6 +1461,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onCopyMetadata: _onCopyMetadata,
                       onPasteMetadata: _onPasteMetadata,
                       onFtpImage: _onFtpImage,
+                      onImageRenamed: _onImageRenamed,
+                      onMultiSelect: _onMultiSelect,
                     ),
                   ),
                 ],
@@ -1352,11 +1533,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       totalImages: imagePaths.length,
                       onSaveIptc: _saveIptcMetadata,
                       onImageUploaded: (imagePath) {
-                        setState(() {
-                          _uploadedImages.add(imagePath);
-                          _uploadProgress
-                              .remove(imagePath); // Clear progress when done
-                        });
+                        // Queue manager handles adding to uploaded set
+                        // This callback is mainly for the main FTP button
+                        if (!_currentlyUploading.contains(imagePath)) {
+                          setState(() {
+                            _uploadedImages.add(imagePath);
+                            _uploadProgress
+                                .remove(imagePath); // Clear progress when done
+                          });
+                        }
                       },
                       onUploadProgress: (imagePath, progress) {
                         setState(() {

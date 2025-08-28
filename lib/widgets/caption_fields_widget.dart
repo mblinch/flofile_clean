@@ -7778,6 +7778,58 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _updatePersonalityField();
   }
 
+  // Public method to upload any image via FTP (called from thumbnail grid)
+  Future<void> uploadImageViaFtp(String imagePath) async {
+    print('DEBUG: uploadImageViaFtp called for: $imagePath');
+
+    // Check if FTP settings are configured
+    if (_ftpHost.isEmpty || _ftpUsername.isEmpty || _ftpPassword.isEmpty) {
+      throw Exception('Please configure FTP settings first!');
+    }
+
+    // Use original filename
+    final originalFileName = p.basename(imagePath);
+    final remoteFileName = originalFileName;
+
+    // Build full remote path
+    final fullRemotePath = _ftpRemotePath.isNotEmpty
+        ? '${_ftpRemotePath.endsWith('/') ? _ftpRemotePath : '$_ftpRemotePath/'}$remoteFileName'
+        : remoteFileName;
+
+    print('FTP: Uploading $imagePath to $fullRemotePath');
+
+    try {
+      final result = await FtpClientService.uploadFile(
+        localFilePath: imagePath,
+        remoteFilePath: fullRemotePath,
+        host: _ftpHost,
+        username: _ftpUsername,
+        password: _ftpPassword,
+        port: _ftpPort,
+        passiveMode: _ftpPassiveMode,
+        onProgress: (status, progress, error) {
+          // Notify parent about upload progress for overlay
+          if (widget.onUploadProgress != null) {
+            widget.onUploadProgress!(imagePath, progress);
+          }
+        },
+      );
+
+      if (result.success == true) {
+        print('DEBUG: FTP upload successful for $imagePath');
+        // Notify parent that image was uploaded successfully
+        if (widget.onImageUploaded != null) {
+          widget.onImageUploaded!(imagePath);
+        }
+      } else {
+        throw Exception(result.error ?? 'FTP upload failed');
+      }
+    } catch (e) {
+      print('DEBUG: FTP upload failed for $imagePath: $e');
+      throw e;
+    }
+  }
+
   Future<void> _onFtpPressed() async {
     // Save IPTC metadata before uploading
     if (widget.onSaveIptc != null) {

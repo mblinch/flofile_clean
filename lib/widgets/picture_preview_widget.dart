@@ -27,6 +27,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function(String)? onPasteMetadata;
   final Function(String)? onFtpImage;
   final Function(String)? onImageDeleted;
+  final Function(String, String)? onImageRenamed;
   final Set<String>? uploadedImages;
 
   const PicturePreviewWidget({
@@ -44,6 +45,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onPasteMetadata,
     this.onFtpImage,
     this.onImageDeleted,
+    this.onImageRenamed,
     this.uploadedImages,
   });
 
@@ -717,23 +719,26 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildMenuItem('copy_metadata', 'Copy Metadata',
-                          Icons.copy, imagePath),
+                          Icons.copy, imagePath, tapPosition),
                       _buildMenuItem('paste_metadata', 'Paste Metadata',
-                          Icons.paste, imagePath),
+                          Icons.paste, imagePath, tapPosition),
                       const Divider(height: 1),
                       if (widget.uploadedImages?.contains(imagePath) ?? false)
                         _buildMenuItem('remove_ftp', 'Remove FTP Status',
-                            Icons.rocket_launch, imagePath),
+                            Icons.rocket_launch, imagePath, tapPosition),
                       if (!(widget.uploadedImages?.contains(imagePath) ??
                           false))
                         _buildMenuItem('ftp_image', 'FTP Image',
-                            Icons.rocket_launch, imagePath),
+                            Icons.rocket_launch, imagePath, tapPosition),
                       const Divider(height: 1),
                       _buildMenuItem('open', 'Open in Finder',
-                          Icons.open_in_new, imagePath),
+                          Icons.open_in_new, imagePath, tapPosition),
                       const Divider(height: 1),
-                      _buildMenuItem(
-                          'delete', 'Delete Image', Icons.delete, imagePath,
+                      _buildMenuItem('rename', 'Rename Image', Icons.edit,
+                          imagePath, tapPosition),
+                      const Divider(height: 1),
+                      _buildMenuItem('delete', 'Delete Image', Icons.delete,
+                          imagePath, tapPosition,
                           isDestructive: true),
                     ],
                   ),
@@ -747,13 +752,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   }
 
   // Build menu item widget
-  Widget _buildMenuItem(
-      String value, String text, IconData icon, String imagePath,
+  Widget _buildMenuItem(String value, String text, IconData icon,
+      String imagePath, Offset tapPosition,
       {bool isDestructive = false}) {
     return InkWell(
       onTap: () {
         Navigator.of(context).pop();
-        _handleContextMenuAction(value, imagePath);
+        _handleContextMenuAction(value, imagePath, tapPosition);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -779,15 +784,20 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   }
 
   // Handle context menu actions
-  void _handleContextMenuAction(String action, String imagePath) {
+  void _handleContextMenuAction(
+      String action, String imagePath, Offset tapPosition) {
     switch (action) {
       case 'open':
         // Open in Finder
         Process.run('open', ['-R', imagePath]);
         break;
+      case 'rename':
+        // Show rename dialog
+        _showRenameDialog(context, imagePath, tapPosition);
+        break;
       case 'delete':
-        // Delete image
-        _deleteImage(imagePath);
+        // Show confirmation dialog at the click position
+        _showDeleteDialog(context, imagePath, tapPosition);
         break;
       case 'ftp_image':
         // FTP the image
@@ -806,6 +816,276 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         widget.onPasteMetadata?.call(imagePath);
         break;
     }
+  }
+
+  void _showRenameDialog(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    final currentFileName = p.basename(imagePath);
+    final currentNameWithoutExt = p.basenameWithoutExtension(imagePath);
+    final extension = p.extension(imagePath);
+
+    // Calculate dialog position based on tap position
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = 400.0;
+    final dialogHeight = 250.0;
+
+    // Position dialog near the tap position, but ensure it stays on screen
+    double left = tapPosition.dx - (dialogWidth / 2);
+    double top = tapPosition.dy - (dialogHeight / 2);
+
+    // Ensure dialog stays within screen bounds
+    left = left.clamp(16.0, screenSize.width - dialogWidth - 16.0);
+    top = top.clamp(16.0, screenSize.height - dialogHeight - 16.0);
+
+    final TextEditingController controller =
+        TextEditingController(text: currentNameWithoutExt);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Rename Image',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Current name: $currentFileName',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: controller,
+                              decoration: InputDecoration(
+                                labelText: 'New name',
+                                hintText:
+                                    'Enter new filename (without extension)',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                suffixText: extension,
+                              ),
+                              autofocus: true,
+                              onSubmitted: (value) {
+                                if (value.trim().isNotEmpty) {
+                                  _renameImage(
+                                      imagePath, value.trim() + extension);
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () {
+                              final newName = controller.text.trim();
+                              if (newName.isNotEmpty) {
+                                _renameImage(imagePath, newName + extension);
+                                Navigator.of(context).pop();
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.blue),
+                            child: const Text('Rename'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _renameImage(String oldPath, String newFileName) async {
+    try {
+      final oldFile = File(oldPath);
+      if (!await oldFile.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File not found'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final directory = p.dirname(oldPath);
+      final newPath = p.join(directory, newFileName);
+      final newFile = File(newPath);
+
+      // Check if new filename already exists
+      if (await newFile.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File "$newFileName" already exists'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Rename the file
+      await oldFile.rename(newPath);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Renamed to: $newFileName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Notify parent widget that file was renamed
+      widget.onImageRenamed?.call(oldPath, newPath);
+      print('Successfully renamed: $oldPath -> $newPath');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error renaming file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      print('Error renaming file: $e');
+    }
+  }
+
+  void _showDeleteDialog(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    // Calculate dialog position based on tap position
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = 400.0;
+    final dialogHeight = 200.0;
+
+    // Position dialog near the tap position, but ensure it stays on screen
+    double left = tapPosition.dx - (dialogWidth / 2);
+    double top = tapPosition.dy - (dialogHeight / 2);
+
+    // Ensure dialog stays within screen bounds
+    left = left.clamp(16.0, screenSize.width - dialogWidth - 16.0);
+    top = top.clamp(16.0, screenSize.height - dialogHeight - 16.0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Delete Image',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nThis action cannot be undone.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _deleteImage(imagePath);
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.red),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Delete image

@@ -15,6 +15,8 @@ class ThumbnailGridWidget extends StatefulWidget {
   final double? loadingProgress; // Add loading progress parameter
   final Map<String, String>? exifTimes; // Optional precomputed EXIF times
   final Set<String> uploadedImages; // Track uploaded images
+  final Set<String> queuedUploads; // Track queued uploads
+  final Set<String> currentlyUploading; // Track currently uploading images
   final Map<String, int>? xmpRatings; // Optional XMP ratings (0-5)
   final Map<String, String>?
       xmpLabels; // Optional XMP color labels (Red, Yellow, ...)
@@ -30,6 +32,10 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Function(String)? onPasteMetadata;
   // Callback for FTP operations
   final Function(String)? onFtpImage;
+  // Callback when an image is renamed
+  final Function(String, String)? onImageRenamed;
+  // Callback for multi-selection operations
+  final Function(List<String>)? onMultiSelect;
 
   const ThumbnailGridWidget({
     super.key,
@@ -40,6 +46,8 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.loadingProgress,
     this.exifTimes,
     required this.uploadedImages,
+    required this.queuedUploads,
+    required this.currentlyUploading,
     this.xmpRatings,
     this.xmpLabels,
     this.xmpTagged,
@@ -50,6 +58,8 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.onCopyMetadata,
     this.onPasteMetadata,
     this.onFtpImage,
+    this.onImageRenamed,
+    this.onMultiSelect,
   });
 
   @override
@@ -74,6 +84,79 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   bool _isLoadingThumbnails = false;
   int _loadedThumbnails = 0;
   List<String> _previousImagePaths = [];
+
+  // Multi-selection state
+  Set<String> _selectedImages = {};
+  bool _isMultiSelectMode = false;
+
+  void _handleThumbnailTap(String imagePath) {
+    // Check if Cmd/Meta key is pressed
+    final isMetaPressed = RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.metaLeft) ||
+        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight);
+
+    print('DEBUG: _handleThumbnailTap called, isMetaPressed: $isMetaPressed');
+    print('DEBUG: Keys pressed: ${RawKeyboard.instance.keysPressed}');
+
+    // If Cmd is not pressed, clear selection and select single image
+    if (!isMetaPressed) {
+      setState(() {
+        _selectedImages.clear();
+        _isMultiSelectMode = false;
+      });
+
+      final originalIndex = widget.imagePaths.indexOf(imagePath);
+      if (originalIndex != -1) {
+        widget.onImageSelected(originalIndex);
+      }
+      return;
+    }
+
+    // Cmd is pressed - handle multi-selection
+
+    // If we're starting multi-selection and there's a current image, add it first
+    if (_selectedImages.isEmpty &&
+        widget.currentIndex >= 0 &&
+        widget.currentIndex < widget.imagePaths.length) {
+      final currentImagePath = widget.imagePaths[widget.currentIndex];
+      setState(() {
+        _selectedImages.add(currentImagePath);
+        _isMultiSelectMode = true;
+      });
+      print('DEBUG: Added current image to selection: $currentImagePath');
+    }
+
+    if (_selectedImages.contains(imagePath)) {
+      // Remove from selection
+      setState(() {
+        _selectedImages.remove(imagePath);
+        _isMultiSelectMode = _selectedImages.isNotEmpty;
+      });
+
+      // If no more selections, select the clicked image normally
+      if (_selectedImages.isEmpty) {
+        final originalIndex = widget.imagePaths.indexOf(imagePath);
+        if (originalIndex != -1) {
+          widget.onImageSelected(originalIndex);
+        }
+      }
+    } else {
+      // Add to selection
+      setState(() {
+        _selectedImages.add(imagePath);
+        _isMultiSelectMode = true;
+      });
+
+      // Also make this the current image
+      final originalIndex = widget.imagePaths.indexOf(imagePath);
+      if (originalIndex != -1) {
+        widget.onImageSelected(originalIndex);
+      }
+
+      // Notify parent of multi-selection
+      widget.onMultiSelect?.call(_selectedImages.toList());
+    }
+  }
 
   String _formatTime(String? dateTimeStr) {
     if (dateTimeStr == null) return '';
@@ -421,11 +504,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
                     onTap: () {
-                      final originalIndex =
-                          widget.imagePaths.indexOf(imagePath);
-                      if (originalIndex != -1) {
-                        widget.onImageSelected(originalIndex);
-                      }
+                      _handleThumbnailTap(imagePath);
                     },
                     onSecondaryTapDown: (TapDownDetails details) {
                       _showContextMenu(
@@ -436,14 +515,18 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: widget.imagePaths.indexOf(imagePath) ==
-                                  widget.currentIndex
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey.shade500,
-                          width: widget.imagePaths.indexOf(imagePath) ==
-                                  widget.currentIndex
-                              ? 1.5
-                              : 0.5,
+                          color: _selectedImages.contains(imagePath)
+                              ? Colors.blue
+                              : widget.imagePaths.indexOf(imagePath) ==
+                                      widget.currentIndex
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey.shade500,
+                          width: _selectedImages.contains(imagePath)
+                              ? 2.0
+                              : widget.imagePaths.indexOf(imagePath) ==
+                                      widget.currentIndex
+                                  ? 1.5
+                                  : 0.5,
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -490,6 +573,27 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               );
                             }),
                           ),
+                          // Selection checkmark for multi-selected images
+                          if (_selectedImages.contains(imagePath))
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                  border:
+                                      Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: const Icon(
+                                  Icons.check,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
                           // Rocket with checkmark for uploaded images
                           if (widget.uploadedImages.contains(imagePath))
                             Positioned(
@@ -581,8 +685,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             ],
                           ),
                           // Upload progress overlay (must render last to sit on top)
-                          if (widget.uploadProgress.containsKey(imagePath) &&
-                              widget.uploadProgress[imagePath]! < 1.0)
+                          if ((widget.uploadProgress.containsKey(imagePath) &&
+                                  widget.uploadProgress[imagePath]! < 1.0) ||
+                              widget.queuedUploads.contains(imagePath))
                             Positioned.fill(
                               child: Container(
                                 decoration: BoxDecoration(
@@ -593,34 +698,66 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(
-                                        Icons.cloud_upload,
-                                        size: _thumbSize * 0.2,
-                                        color: const Color(0xFF0052CC),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: _thumbSize * 0.75,
-                                        child: LinearProgressIndicator(
-                                          value:
-                                              widget.uploadProgress[imagePath],
-                                          minHeight: 14,
-                                          backgroundColor:
-                                              Colors.white.withOpacity(0.3),
-                                          valueColor:
-                                              const AlwaysStoppedAnimation<
-                                                  Color>(Colors.white),
+                                      // Show different icons and content based on state
+                                      if (widget.uploadProgress
+                                              .containsKey(imagePath) &&
+                                          widget.uploadProgress[imagePath]! <
+                                              1.0) ...[
+                                        // Currently uploading
+                                        Icon(
+                                          Icons.cloud_upload,
+                                          size: _thumbSize * 0.2,
+                                          color: const Color(0xFF0052CC),
                                         ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${(widget.uploadProgress[imagePath]! * 100).toInt()}%',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: _thumbSize * 0.08,
-                                          fontWeight: FontWeight.bold,
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: _thumbSize * 0.75,
+                                          child: LinearProgressIndicator(
+                                            value: widget
+                                                .uploadProgress[imagePath],
+                                            minHeight: 14,
+                                            backgroundColor:
+                                                Colors.white.withOpacity(0.3),
+                                            valueColor:
+                                                const AlwaysStoppedAnimation<
+                                                    Color>(Colors.white),
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${(widget.uploadProgress[imagePath]! * 100).toInt()}%',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: _thumbSize * 0.08,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        // Queued
+                                        Icon(
+                                          Icons.schedule,
+                                          size: _thumbSize * 0.2,
+                                          color: Colors.orange,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Queued',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: _thumbSize * 0.08,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Waiting...',
+                                          style: TextStyle(
+                                            color:
+                                                Colors.white.withOpacity(0.8),
+                                            fontSize: _thumbSize * 0.06,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -864,9 +1001,14 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   void _showContextMenu(
       BuildContext context, String imagePath, Offset tapPosition) {
+    // Check if we're in multi-selection mode
+    final isMultiSelect = _selectedImages.isNotEmpty;
+    final selectedCount = _selectedImages.length;
+
     // Position the menu at the tap location
     final double menuWidth = 200.0;
-    final double menuHeight = 300.0;
+    final double menuHeight =
+        isMultiSelect ? 200.0 : 300.0; // Smaller for multi-select
 
     // Ensure menu doesn't go off screen
     final RenderBox overlay =
@@ -924,26 +1066,55 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildMenuItem('copy_metadata', 'Copy Metadata',
-                          Icons.copy, imagePath),
-                      _buildMenuItem('paste_metadata', 'Paste Metadata',
-                          Icons.paste, imagePath),
-                      const Divider(height: 1),
-                      if (widget.uploadedImages.contains(imagePath))
-                        _buildMenuItem('remove_ftp', 'Remove FTP Status',
-                            Icons.rocket_launch, imagePath),
-                      if (!widget.uploadedImages.contains(imagePath))
-                        _buildMenuItem('ftp_image', 'FTP Image',
-                            Icons.rocket_launch, imagePath),
-                      const Divider(height: 1),
-                      _buildMenuItem('open', 'Open in Finder',
-                          Icons.open_in_new, imagePath),
-                      const Divider(height: 1),
-                      _buildMenuItem(
-                          'delete', 'Delete Image', Icons.delete, imagePath,
-                          isDestructive: true),
-                    ],
+                    children: isMultiSelect
+                        ? [
+                            // Multi-selection menu items
+                            _buildMenuItem(
+                                'paste_metadata',
+                                'Paste Metadata ($selectedCount)',
+                                Icons.paste,
+                                imagePath,
+                                tapPosition),
+                            const Divider(height: 1),
+                            _buildMenuItem(
+                                'ftp_images',
+                                'FTP Images ($selectedCount)',
+                                Icons.rocket_launch,
+                                imagePath,
+                                tapPosition),
+                            const Divider(height: 1),
+                            _buildMenuItem(
+                                'delete_images',
+                                'Delete Images ($selectedCount)',
+                                Icons.delete,
+                                imagePath,
+                                tapPosition,
+                                isDestructive: true),
+                          ]
+                        : [
+                            // Single selection menu items
+                            _buildMenuItem('copy_metadata', 'Copy Metadata',
+                                Icons.copy, imagePath, tapPosition),
+                            _buildMenuItem('paste_metadata', 'Paste Metadata',
+                                Icons.paste, imagePath, tapPosition),
+                            const Divider(height: 1),
+                            if (widget.uploadedImages.contains(imagePath))
+                              _buildMenuItem('remove_ftp', 'Remove FTP Status',
+                                  Icons.rocket_launch, imagePath, tapPosition),
+                            if (!widget.uploadedImages.contains(imagePath))
+                              _buildMenuItem('ftp_image', 'FTP Image',
+                                  Icons.rocket_launch, imagePath, tapPosition),
+                            const Divider(height: 1),
+                            _buildMenuItem('open', 'Open in Finder',
+                                Icons.open_in_new, imagePath, tapPosition),
+                            const Divider(height: 1),
+                            _buildMenuItem('rename', 'Rename Image', Icons.edit,
+                                imagePath, tapPosition),
+                            const Divider(height: 1),
+                            _buildMenuItem('delete', 'Delete Image',
+                                Icons.delete, imagePath, tapPosition,
+                                isDestructive: true),
+                          ],
                   ),
                 ),
               ),
@@ -954,13 +1125,13 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     );
   }
 
-  Widget _buildMenuItem(
-      String value, String text, IconData icon, String imagePath,
+  Widget _buildMenuItem(String value, String text, IconData icon,
+      String imagePath, Offset tapPosition,
       {bool isDestructive = false}) {
     return InkWell(
       onTap: () {
         Navigator.of(context).pop();
-        _handleContextMenuAction(value, imagePath);
+        _handleContextMenuAction(value, imagePath, tapPosition);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -985,7 +1156,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     );
   }
 
-  void _handleContextMenuAction(String action, String imagePath) {
+  void _handleContextMenuAction(
+      String action, String imagePath, Offset tapPosition) {
     switch (action) {
       case 'select':
         final originalIndex = widget.imagePaths.indexOf(imagePath);
@@ -996,6 +1168,10 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       case 'open':
         // Open in Finder (macOS)
         Process.run('open', ['-R', imagePath]);
+        break;
+      case 'rename':
+        // Show rename dialog
+        _showRenameDialog(context, imagePath, tapPosition);
         break;
       case 'copy_path':
         // Copy path to clipboard
@@ -1018,36 +1194,461 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         widget.onCopyMetadata?.call(imagePath);
         break;
       case 'paste_metadata':
-        // Paste metadata to this image
-        widget.onPasteMetadata?.call(imagePath);
+        // Paste metadata to selected images or single image
+        if (_selectedImages.isNotEmpty) {
+          // Paste to all selected images
+          final selectedCount = _selectedImages.length;
+          for (final selectedPath in _selectedImages) {
+            widget.onPasteMetadata?.call(selectedPath);
+          }
+
+          // Keep selection active after paste
+
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Metadata pasted to $selectedCount images'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          // Paste to single image
+          widget.onPasteMetadata?.call(imagePath);
+        }
         break;
       case 'delete':
-        // Show confirmation dialog before deleting
-        showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: const Text('Delete Image'),
-              content: Text(
-                  'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nThis action cannot be undone.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _deleteImage(imagePath);
-                  },
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Delete'),
-                ),
-              ],
-            );
-          },
-        );
+        // Show confirmation dialog at the click position
+        _showDeleteDialog(context, imagePath, tapPosition);
         break;
+      case 'ftp_images':
+        // FTP multiple selected images
+        _ftpMultipleImages();
+        break;
+      case 'delete_images':
+        // Delete multiple selected images
+        _deleteMultipleImages(context, tapPosition);
+        break;
+    }
+  }
+
+  void _ftpMultipleImages() {
+    // FTP all selected images
+    final selectedCount = _selectedImages.length;
+    print('DEBUG: FTPing $selectedCount images: $_selectedImages');
+
+    for (final imagePath in _selectedImages) {
+      print('DEBUG: Calling onFtpImage for: $imagePath');
+      widget.onFtpImage?.call(imagePath);
+    }
+
+    // Keep selection active after FTP (like paste metadata)
+
+    // Show success message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added $selectedCount images to FTP queue'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _deleteMultipleImages(BuildContext context, Offset tapPosition) {
+    // Show confirmation dialog for multiple deletions
+    final selectedCount = _selectedImages.length;
+
+    // Calculate dialog position based on tap position
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = 400.0;
+    final dialogHeight = 200.0;
+
+    // Position dialog near the tap position, but ensure it stays on screen
+    double left = tapPosition.dx - (dialogWidth / 2);
+    double top = tapPosition.dy - (dialogHeight / 2);
+
+    // Ensure dialog stays within screen bounds
+    left = left.clamp(16.0, screenSize.width - dialogWidth - 16.0);
+    top = top.clamp(16.0, screenSize.height - dialogHeight - 16.0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Delete Images',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Are you sure you want to delete $selectedCount images?\n\nThis action cannot be undone.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _executeMultipleDeletions();
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.red),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _executeMultipleDeletions() async {
+    final selectedPaths = _selectedImages.toList();
+    int deletedCount = 0;
+
+    for (final imagePath in selectedPaths) {
+      try {
+        final file = File(imagePath);
+        if (await file.exists()) {
+          await file.delete();
+          deletedCount++;
+
+          // Notify parent widget that image was deleted
+          widget.onImageDeleted?.call(imagePath);
+        }
+      } catch (e) {
+        print('Error deleting file: $e');
+      }
+    }
+
+    // Clear selection after deletion
+    setState(() {
+      _selectedImages.clear();
+      _isMultiSelectMode = false;
+    });
+
+    // Show success message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted $deletedCount images'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _showRenameDialog(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    final currentFileName = p.basename(imagePath);
+    final currentNameWithoutExt = p.basenameWithoutExtension(imagePath);
+    final extension = p.extension(imagePath);
+
+    // Calculate dialog position based on tap position
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = 400.0;
+    final dialogHeight = 250.0;
+
+    // Position dialog near the tap position, but ensure it stays on screen
+    double left = tapPosition.dx - (dialogWidth / 2);
+    double top = tapPosition.dy - (dialogHeight / 2);
+
+    // Ensure dialog stays within screen bounds
+    left = left.clamp(16.0, screenSize.width - dialogWidth - 16.0);
+    top = top.clamp(16.0, screenSize.height - dialogHeight - 16.0);
+
+    final TextEditingController controller =
+        TextEditingController(text: currentNameWithoutExt);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Rename Image',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Current name: $currentFileName',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: controller,
+                              decoration: InputDecoration(
+                                labelText: 'New name',
+                                hintText:
+                                    'Enter new filename (without extension)',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                suffixText: extension,
+                              ),
+                              autofocus: true,
+                              onSubmitted: (value) {
+                                if (value.trim().isNotEmpty) {
+                                  _renameImage(
+                                      imagePath, value.trim() + extension);
+                                  Navigator.of(context).pop();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () {
+                              final newName = controller.text.trim();
+                              if (newName.isNotEmpty) {
+                                _renameImage(imagePath, newName + extension);
+                                Navigator.of(context).pop();
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.blue),
+                            child: const Text('Rename'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteDialog(
+      BuildContext context, String imagePath, Offset tapPosition) {
+    // Calculate dialog position based on tap position
+    final screenSize = MediaQuery.of(context).size;
+    final dialogWidth = 400.0;
+    final dialogHeight = 200.0;
+
+    // Position dialog near the tap position, but ensure it stays on screen
+    double left = tapPosition.dx - (dialogWidth / 2);
+    double top = tapPosition.dy - (dialogHeight / 2);
+
+    // Ensure dialog stays within screen bounds
+    left = left.clamp(16.0, screenSize.width - dialogWidth - 16.0);
+    top = top.clamp(16.0, screenSize.height - dialogHeight - 16.0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: dialogWidth,
+                  height: dialogHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Delete Image',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          'Are you sure you want to delete "${p.basename(imagePath)}"?\n\nThis action cannot be undone.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 16),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              _deleteImage(imagePath);
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.red),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _renameImage(String oldPath, String newFileName) async {
+    try {
+      final oldFile = File(oldPath);
+      if (!await oldFile.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File not found'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final directory = p.dirname(oldPath);
+      final newPath = p.join(directory, newFileName);
+      final newFile = File(newPath);
+
+      // Check if new filename already exists
+      if (await newFile.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File "$newFileName" already exists'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Rename the file
+      await oldFile.rename(newPath);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Renamed to: $newFileName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Notify parent widget that file was renamed
+      widget.onImageRenamed?.call(oldPath, newPath);
+      print('Successfully renamed: $oldPath -> $newPath');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error renaming file: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      print('Error renaming file: $e');
     }
   }
 
