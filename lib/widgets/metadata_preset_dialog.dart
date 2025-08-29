@@ -43,6 +43,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   final TextEditingController presetNameController = TextEditingController();
   List<String> savedPresets = [];
   String? selectedPreset;
+  String? selectedCaptionStyle = 'getty';
 
   // Urgency levels for dropdown
   final List<Map<String, String>> urgencyLevels = [
@@ -368,6 +369,39 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             ),
             const SizedBox(height: 16),
 
+            // Caption Style Section
+            Text(
+              'Caption Style',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Checkbox(
+                  value: selectedCaptionStyle == 'getty',
+                  onChanged: (value) {
+                    setState(() {
+                      selectedCaptionStyle = value == true ? 'getty' : null;
+                    });
+                  },
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                Text(
+                  'Getty Style',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
             // IPTC Fields Section
             Text(
               'IPTC Metadata Fields',
@@ -556,6 +590,19 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                   child: const Text('Save as Template',
                       style: TextStyle(fontSize: 12)),
                 ),
+                ElevatedButton(
+                  onPressed: _loadIptcFromJpg,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade300,
+                    foregroundColor: Colors.black87,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4)),
+                  ),
+                  child: const Text('Load IPTC from JPG',
+                      style: TextStyle(fontSize: 12)),
+                ),
                 Row(
                   children: [
                     TextButton(
@@ -584,6 +631,14 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _loadIptcFromJpg() async {
+    // TODO: Implement file picker and IPTC loading logic
+    // This will need to be connected to the main app's file selection
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Load IPTC from JPG - Coming soon!')),
     );
   }
 
