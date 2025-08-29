@@ -49,9 +49,28 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
   
   assets:
     - assets/images/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/rocket_icon_blue.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/images/rocket_icon_blue.png"
+    background_color: "#1e3a8a"
+    theme_color: "#4a90e2"
+  windows:
+    generate: true
+    image_path: "assets/images/rocket_icon_blue.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/images/rocket_icon_blue.png"

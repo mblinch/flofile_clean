@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="540" height="360" viewBox="0 0 540 360" xmlns="http://www.w3.org/2000/svg">
+  <!-- Clean gradient background -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="540" height="360" fill="url(#bg)"/>
+  
+  <!-- Subtle border -->
+  <rect x="10" y="10" width="520" height="340" fill="none" stroke="#dee2e6" stroke-width="1" rx="8"/>
+  
+  <!-- App title area -->
+  <text x="270" y="80" text-anchor="middle" fill="#495057" font-family="SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif" font-size="24" font-weight="600">FloFile Beta</text>
+  <text x="270" y="100" text-anchor="middle" fill="#6c757d" font-family="SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif" font-size="14">Drag the app to Applications to install</text>
+  
+  <!-- Subtle arrow pointing to Applications -->
+  <path d="M 320 180 L 380 180" stroke="#adb5bd" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#adb5bd"/>
+    </marker>
+  </defs>
+</svg>

@@ -29,6 +29,9 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function(String)? onImageDeleted;
   final Function(String, String)? onImageRenamed;
   final Set<String>? uploadedImages;
+  final Set<String>? queuedUploads;
+  final Set<String>? currentlyUploading;
+  final Map<String, double>? uploadProgress;
 
   const PicturePreviewWidget({
     super.key,
@@ -47,6 +50,9 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onImageDeleted,
     this.onImageRenamed,
     this.uploadedImages,
+    this.queuedUploads,
+    this.currentlyUploading,
+    this.uploadProgress,
   });
 
   @override
@@ -360,6 +366,63 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           ),
                         ),
                       ),
+
+                      // FTP Upload Status Overlay
+                      if ((widget.uploadProgress
+                                      ?.containsKey(currentImagePath) ==
+                                  true &&
+                              widget.uploadProgress![currentImagePath]! <
+                                  1.0) ||
+                          widget.queuedUploads?.contains(currentImagePath) ==
+                              true)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.uploadProgress
+                                            ?.containsKey(currentImagePath) ==
+                                        true &&
+                                    widget.uploadProgress![currentImagePath]! <
+                                        1.0) ...[
+                                  // Currently uploading
+                                  const Icon(Icons.rocket_launch,
+                                      color: Colors.blue, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ] else ...[
+                                  // Queued
+                                  const Icon(Icons.schedule,
+                                      color: Colors.orange, size: 16),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Queued',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

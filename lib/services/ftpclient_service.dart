@@ -35,7 +35,7 @@ class FtpClientService {
     final responseCompleter = <Completer<String>>[];
 
     try {
-      onProgress?.call('Connecting to FTP server...', 0.1, null);
+      onProgress?.call('Connecting to FTP server...', 0.0, null);
 
       // Connect to FTP server
       controlSocket = await Socket.connect(host, port);
@@ -83,7 +83,7 @@ class FtpClientService {
       String response = await getNextResponse();
       print('FTP: Server welcome: $response');
 
-      onProgress?.call('Authenticating...', 0.2, null);
+      onProgress?.call('Authenticating...', 0.0, null);
 
       // Send username
       controlSocket.write('USER $username\r\n');
@@ -104,7 +104,7 @@ class FtpClientService {
       response = await getNextResponse();
       print('FTP: TYPE I response: $response');
 
-      onProgress?.call('Setting up data connection...', 0.3, null);
+      onProgress?.call('Setting up data connection...', 0.0, null);
 
       // Set passive mode if requested
       if (passiveMode) {
@@ -132,7 +132,7 @@ class FtpClientService {
         dataSocket = await Socket.connect(ip, port);
       }
 
-      onProgress?.call('Preparing file upload...', 0.4, null);
+      onProgress?.call('Preparing file upload...', 0.0, null);
 
       // Check if local file exists
       final localFile = File(localFilePath);
@@ -153,16 +153,39 @@ class FtpClientService {
         throw Exception('STOR command failed: $response');
       }
 
-      onProgress?.call('Uploading file...', 0.5, null);
+      onProgress?.call('Uploading file...', 0.0, null);
 
-      // Upload file data
+      // Upload file data with REAL progress tracking
       final fileBytes = await localFile.readAsBytes();
-      print('FTP: Sending ${fileBytes.length} bytes...');
-      dataSocket!.add(fileBytes);
-      await dataSocket.flush();
-      dataSocket.close();
+      final totalBytes = fileBytes.length;
+      print('FTP: Sending $totalBytes bytes...');
 
-      onProgress?.call('Finalizing upload...', 0.8, null);
+      // Upload in chunks to show REAL progress
+      const chunkSize = 32768; // 32KB chunks
+      int uploadedBytes = 0;
+
+      for (int i = 0; i < fileBytes.length; i += chunkSize) {
+        final end = (i + chunkSize < fileBytes.length)
+            ? i + chunkSize
+            : fileBytes.length;
+        final chunk = fileBytes.sublist(i, end);
+        dataSocket!.add(chunk);
+
+        uploadedBytes += chunk.length;
+        final progress =
+            uploadedBytes / totalBytes; // REAL progress from 0.0 to 1.0
+        print(
+            'FTP: Progress: ${(progress * 100).toStringAsFixed(1)}% ($uploadedBytes/$totalBytes bytes)');
+        onProgress?.call('Uploading file...', progress, null);
+
+        // Small delay to make progress visible
+        await Future.delayed(const Duration(milliseconds: 1));
+      }
+
+      await dataSocket!.flush();
+      dataSocket!.close();
+
+      onProgress?.call('Finalizing upload...', 1.0, null);
 
       // Wait for transfer complete response
       response = await getNextResponse();

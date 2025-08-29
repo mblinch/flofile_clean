@@ -13,6 +13,7 @@ import '../widgets/metadata_widget.dart';
 import '../widgets/startup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
+import '../utils/exiftool_helper.dart';
 
 class CaptionBuilderScreen extends StatefulWidget {
   const CaptionBuilderScreen({super.key});
@@ -383,7 +384,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       // In the background: batch EXIF read for DateTimeOriginal, compute formatted times, and sort
       // Fire-and-forget without awaiting
-      Future(() => _loadExifTimesAndSort(imageFiles));
+      Future(() async {
+        try {
+          await _loadExifTimesAndSort(imageFiles);
+        } catch (e) {
+          print('Error loading EXIF data: $e');
+          // App continues to work without EXIF metadata
+        }
+      });
 
       print('Loaded ${imageFiles.length} images from folder: $folderPath');
 
@@ -418,7 +426,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-XMP:PMKeep'
       ];
       args.addAll(imageFiles);
-      final proc = await Process.run('exiftool', args);
+      final proc = await ExiftoolHelper.run(args);
       final Map<String, DateTime> times = {};
       final Map<String, String> formatted = {};
       final Map<String, int> ratings = {};
@@ -426,49 +434,58 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final Map<String, bool> tagged = {};
 
       if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
-        for (final item in data) {
-          if (item is Map<String, dynamic>) {
-            final sourceFile = item['SourceFile']?.toString();
-            final dateStr = item['DateTimeOriginal']?.toString();
-            // ExifTool normalizes keys to simple names like 'Rating' and 'Label'
-            final ratingVal = item['Rating'];
-            final labelVal = item['Label'];
-            final taggedVal = item['Tagged'];
-            final keepVal = item['PMKeep'];
-            if (sourceFile != null && dateStr != null) {
-              try {
-                final dt = DateTime.parse(
-                    dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
-                times[sourceFile] = dt;
-                // format to 12h as per preference
-                final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-                final minute = dt.minute.toString().padLeft(2, '0');
-                final second = dt.second.toString().padLeft(2, '0');
-                final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                formatted[sourceFile] = '$hour:$minute:$second $ampm';
-              } catch (_) {}
-            }
-            if (sourceFile != null) {
-              if (ratingVal != null) {
-                // Ratings are 0-5; ensure int
-                final r = int.tryParse(ratingVal.toString());
-                if (r != null) ratings[sourceFile] = r;
+        try {
+          final List data = jsonDecode(proc.stdoutText);
+          for (final item in data) {
+            if (item is Map<String, dynamic>) {
+              final sourceFile = item['SourceFile']?.toString();
+              final dateStr = item['DateTimeOriginal']?.toString();
+              // ExifTool normalizes keys to simple names like 'Rating' and 'Label'
+              final ratingVal = item['Rating'];
+              final labelVal = item['Label'];
+              final taggedVal = item['Tagged'];
+              final keepVal = item['PMKeep'];
+              if (sourceFile != null && dateStr != null) {
+                try {
+                  final dt = DateTime.parse(
+                      dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                  times[sourceFile] = dt;
+                  // format to 12h as per preference
+                  final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+                  final minute = dt.minute.toString().padLeft(2, '0');
+                  final second = dt.second.toString().padLeft(2, '0');
+                  final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+                  formatted[sourceFile] = '$hour:$minute:$second $ampm';
+                } catch (_) {}
               }
-              if (labelVal != null) {
-                labels[sourceFile] = labelVal.toString();
+              if (sourceFile != null) {
+                if (ratingVal != null) {
+                  // Ratings are 0-5; ensure int
+                  final r = int.tryParse(ratingVal.toString());
+                  if (r != null) ratings[sourceFile] = r;
+                }
+                if (labelVal != null) {
+                  labels[sourceFile] = labelVal.toString();
+                }
+                // Check for tagged/keep flags
+                final isTagged = taggedVal == true ||
+                    taggedVal == 'true' ||
+                    taggedVal == '1' ||
+                    keepVal == true ||
+                    keepVal == 'true' ||
+                    keepVal == '1';
+                tagged[sourceFile] = isTagged;
               }
-              // Check for tagged/keep flags
-              final isTagged = taggedVal == true ||
-                  taggedVal == 'true' ||
-                  taggedVal == '1' ||
-                  keepVal == true ||
-                  keepVal == 'true' ||
-                  keepVal == '1';
-              tagged[sourceFile] = isTagged;
             }
           }
+        } catch (e) {
+          print('Error parsing ExifTool JSON output: $e');
+          // Continue with fallback to file modified time
         }
+      } else {
+        print('ExifTool failed with exit code: ${proc.exitCode}');
+        print('ExifTool error: ${proc.stderrText}');
+        // Continue with fallback to file modified time
       }
 
       // Fallback to file modified time when missing
@@ -543,7 +560,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     try {
       // Extract metadata via exiftool in JSON format
-      final proc = await Process.run('exiftool', [
+      final proc = await ExiftoolHelper.run([
         '-j', // JSON output
         '-Caption-Abstract',
         '-ImageDescription',
@@ -576,15 +593,25 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       ]);
 
       if (proc.exitCode == 0) {
-        final List data = jsonDecode(proc.stdout as String);
-        if (data.isNotEmpty) {
+        try {
+          final List data = jsonDecode(proc.stdoutText);
+          if (data.isNotEmpty) {
+            setState(() {
+              currentMetadata = data.first as Map<String, dynamic>;
+            });
+            print('Metadata loaded successfully');
+          }
+        } catch (e) {
+          print('Error parsing metadata JSON: $e');
           setState(() {
-            currentMetadata = data.first as Map<String, dynamic>;
+            currentMetadata = null;
           });
-          print('Metadata loaded successfully');
         }
       } else {
-        print('Exiftool error: ${proc.stderr}');
+        print('Exiftool error: ${proc.stderrText}');
+        setState(() {
+          currentMetadata = null;
+        });
       }
     } catch (e) {
       print('Error loading metadata: $e');
@@ -664,19 +691,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (args.length > 2) {
         // More than just -overwrite_original and path
         print('Running exiftool with args: $args');
-        final proc = await Process.run('exiftool', args);
+        final proc = await ExiftoolHelper.run(args);
 
         if (proc.exitCode == 0) {
           print('IPTC metadata saved successfully');
 
           // Debug: Verify caption was actually written
           final verifyProc =
-              await Process.run('exiftool', ['-Caption-Abstract', imagePath]);
-          print('DEBUG: Caption verification after save: ${verifyProc.stdout}');
+              await ExiftoolHelper.run(['-Caption-Abstract', imagePath]);
+          print(
+              'DEBUG: Caption verification after save: ${verifyProc.stdoutText}');
 
           // Don't refresh EXIF data for background saves to avoid UI glitches
         } else {
-          print('Exiftool error saving metadata: ${proc.stderr}');
+          print('Exiftool error saving metadata: ${proc.stderrText}');
         }
       } else {
         print('No metadata values to save');
@@ -759,11 +787,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       print('DEBUG: Background save - args: $args');
       if (args.length > 2) {
         print('DEBUG: Running exiftool for background save');
-        final proc = await Process.run('exiftool', args);
+        final proc = await ExiftoolHelper.run(args);
         if (proc.exitCode == 0) {
           print('DEBUG: Background IPTC metadata saved successfully');
         } else {
-          print('DEBUG: Background exiftool error: ${proc.stderr}');
+          print('DEBUG: Background exiftool error: ${proc.stderrText}');
         }
       } else {
         print('DEBUG: No metadata to save in background');
@@ -801,7 +829,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     for (String filePath in imageFiles) {
       try {
-        final proc = await Process.run('exiftool', [
+        final proc = await ExiftoolHelper.run([
           '-j',
           '-DateTimeOriginal',
           '-CreateDate',
@@ -811,22 +839,26 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
         DateTime? dateTime;
         if (proc.exitCode == 0) {
-          final List data = jsonDecode(proc.stdout as String);
-          if (data.isNotEmpty) {
-            final meta = data.first as Map<String, dynamic>;
-            String? dateStr = meta['DateTimeOriginal']?.toString() ??
-                meta['CreateDate']?.toString() ??
-                meta['ModifyDate']?.toString();
+          try {
+            final List data = jsonDecode(proc.stdoutText);
+            if (data.isNotEmpty) {
+              final meta = data.first as Map<String, dynamic>;
+              String? dateStr = meta['DateTimeOriginal']?.toString() ??
+                  meta['CreateDate']?.toString() ??
+                  meta['ModifyDate']?.toString();
 
-            if (dateStr != null) {
-              try {
-                // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
-                dateTime = DateTime.parse(
-                    dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
-              } catch (e) {
-                print('Error parsing date for $filePath: $e');
+              if (dateStr != null) {
+                try {
+                  // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
+                  dateTime = DateTime.parse(
+                      dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                } catch (e) {
+                  print('Error parsing date for $filePath: $e');
+                }
               }
             }
+          } catch (e) {
+            print('Error parsing JSON for $filePath: $e');
           }
         }
 
@@ -984,11 +1016,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     args.add(imagePath);
 
     try {
-      final proc = await Process.run('exiftool', args);
+      final proc = await ExiftoolHelper.run(args);
       if (proc.exitCode == 0) {
         print('Successfully saved metadata to $imagePath');
       } else {
-        print('Exiftool error saving metadata to $imagePath: ${proc.stderr}');
+        print(
+            'Exiftool error saving metadata to $imagePath: ${proc.stderrText}');
       }
     } catch (e) {
       print('Error saving metadata to $imagePath: $e');
@@ -1436,6 +1469,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onImageDeleted: _onImageDeleted,
                       onImageRenamed: _onImageRenamed,
                       uploadedImages: _uploadedImages,
+                      queuedUploads: _queuedUploads,
+                      currentlyUploading: _currentlyUploading,
+                      uploadProgress: _uploadProgress,
                     ),
                   ),
 
@@ -1490,6 +1526,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         setState(() {
                           currentMetadata = metadata;
                         });
+                      },
+                      getCurrentMetadataValues: () {
+                        // Get current values from metadata widget
+                        final metadataState = _metadataKey2.currentState;
+                        if (metadataState != null) {
+                          // Use dynamic to access the method
+                          return (metadataState as dynamic)
+                                  .getCurrentValues() ??
+                              {};
+                        }
+                        return {};
                       },
                       homeTeam: selectedHomeTeam,
                       awayTeam: selectedAwayTeam,

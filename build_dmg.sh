@@ -13,6 +13,14 @@ echo "Building FloFile Beta DMG with version suffix: $VERSION_SUFFIX"
 # Create build_dmgs directory if it doesn't exist
 mkdir -p build_dmgs
 
+# Generate fresh rocket icons
+echo "🚀 Generating rocket app icons..."
+if [ -f "generate_icons.sh" ]; then
+    ./generate_icons.sh
+else
+    echo "Warning: generate_icons.sh not found, using existing icons"
+fi
+
 # Build the macOS app
 echo "Building macOS app..."
 flutter build macos --release
@@ -44,17 +52,31 @@ fi
 DMG_NAME="FloFile_Beta_${VERSION_SUFFIX}.dmg"
 DMG_PATH="build_dmgs/$DMG_NAME"
 
-echo "Creating DMG: $DMG_PATH"
+echo "Creating clean DMG installer: $DMG_PATH"
 
-# Create the DMG with better icon positioning
+# Remove any existing DMG with the same name
+if [ -f "$DMG_PATH" ]; then
+    echo "Removing existing DMG..."
+    rm "$DMG_PATH"
+fi
+
+# Create the DMG with clean, professional layout
+if [ -f "assets/images/dmg_background.png" ]; then
+    BACKGROUND_ARG="--background assets/images/dmg_background.png"
+else
+    BACKGROUND_ARG=""
+    echo "Note: DMG background not found, creating simple DMG"
+fi
+
 create-dmg \
   --volname "FloFile Beta" \
   --window-pos 200 120 \
-  --window-size 600 400 \
-  --icon-size 128 \
-  --icon "FloFile Beta.app" 150 150 \
+  --window-size 540 360 \
+  --icon-size 100 \
+  --icon "FloFile Beta.app" 140 180 \
   --hide-extension "FloFile Beta.app" \
-  --app-drop-link 450 150 \
+  --app-drop-link 400 180 \
+  $BACKGROUND_ARG \
   --no-internet-enable \
   --format UDZO \
   "$DMG_PATH" \

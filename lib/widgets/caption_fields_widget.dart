@@ -229,6 +229,7 @@ class CaptionFieldsWidget extends StatefulWidget {
   final Function(String)? onImageUploaded; // Callback when image is uploaded
   final Function(String, double)?
       onUploadProgress; // Callback for upload progress
+  final Map<String, String> Function()? getCurrentMetadataValues;
 
   const CaptionFieldsWidget({
     super.key,
@@ -251,6 +252,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onSaveIptcBackground,
     this.onImageUploaded,
     this.onUploadProgress,
+    this.getCurrentMetadataValues,
   });
 
   @override
@@ -514,10 +516,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Groundball',
       'Fielding Position',
       'Double Play',
-      'Triple Play'
+      'Triple Play',
+      ''
     ],
-    'Running': ['Steals', 'Slides', 'Runs', 'Rounds'],
-    'Reactions': ['Celebrates', 'Dejection', 'Post Game Win', 'Post Game Loss'],
+    'Running': ['Steals', 'Slides', 'Runs', 'Rounds', '', '', '', '', ''],
+    'Reactions': [
+      'Celebrates',
+      'Dejection',
+      'Post Game Win',
+      'Post Game Loss',
+      '',
+      '',
+      '',
+      '',
+      ''
+    ],
     'Non Game-Action': [
       'Looks On',
       'Batting Practice',
@@ -1155,6 +1168,348 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // Show shortcodes dialog
+  void _showShortcodesDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          child: Container(
+            width: 600,
+            height: 500,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Shortcodes Reference',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Type these codes followed by a SPACE to expand them:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildShortcodeSection(
+                          'Player Codes',
+                          [
+                            'h27 → Home team player #27',
+                            'v15 → Away team player #15',
+                            '27h → Home team player #27',
+                            '15v → Away team player #15',
+                            'hh27 → Home team player #27 (no team name)',
+                            'vv15 → Away team player #15 (no team name)',
+                          ],
+                        ),
+                        _buildShortcodeSection(
+                          'Team Codes',
+                          [
+                            'h → Home team name',
+                            'v → Away team name',
+                            'ht → Home team name',
+                            'vt → Away/visiting team name',
+                          ],
+                        ),
+                        _buildShortcodeSection(
+                          'Inning Codes',
+                          [
+                            '1i → first inning',
+                            'i1 → first inning',
+                            '9i → ninth inning',
+                            'i9 → ninth inning',
+                            'd1i → during the first inning',
+                            'di1 → during the first inning',
+                            'd9i → during the ninth inning',
+                            'di9 → during the ninth inning',
+                          ],
+                        ),
+                        _buildShortcodeSection(
+                          'Against Codes',
+                          [
+                            'ag → against the [opposite team]',
+                            'ah → against the home team',
+                            'av → against the away team',
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Note: All codes must end with a SPACE to activate.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShortcodeSection(String title, List<String> codes) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...codes.map((code) => Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 4),
+              child: Text(
+                code,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            )),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // Show firebar help dialog
+  void _showFirebarHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          child: Container(
+            width: 700,
+            height: 600,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_fix_high,
+                            color: Colors.orange, size: 24),
+                        const SizedBox(width: 8),
+                        const Text(
+                          '🔥 Firebar Guide',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'The Firebar is your quick caption generator! Type player numbers and actions to instantly create captions.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFirebarSection(
+                          '🎯 Basic Format',
+                          'Type: [player] [action] [inning]',
+                          [
+                            '27 hr 1 → Player #27 hits a home run in the 1st inning',
+                            '15 single 3 → Player #15 hits a single in the 3rd inning',
+                            '42 double 2 → Player #42 hits a double in the 2nd inning',
+                            '8 triple 4 → Player #8 hits a triple in the 4th inning',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '⚾ Hitting Actions',
+                          'Quick hitting shortcuts:',
+                          [
+                            'hr, homerun, homer → Home Run',
+                            'single, 1b → Single',
+                            'double, 2b → Double',
+                            'triple, 3b → Triple',
+                            'walks, walk, bb → Walks',
+                            'strikeout, k → Strikeout',
+                            'hbp, hitbypitch → Hit by Pitch',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '🏃‍♂️ Running Actions',
+                          'Player movement actions:',
+                          [
+                            'steals, steal, sb → Steals',
+                            'runs, run → Runs',
+                            'slides, slide → Slides',
+                            'rounds, round → Rounds',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '🥎 Fielding Actions',
+                          'Defensive plays:',
+                          [
+                            'catches, catch → Catches',
+                            'throws, throw → Throws',
+                            'tags, tag → Tags',
+                            'groundball, ground → Groundball',
+                            'doubleplay, dp → Double Play',
+                            'tripleplay, tp → Triple Play',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '🎯 Pitching Actions',
+                          'Pitcher-specific actions:',
+                          [
+                            'pitches, pitch, pitching → Pitching',
+                            'pitchingchange, pitchchange → Pitching Change',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '🎉 Celebration & Other',
+                          'Special moments:',
+                          [
+                            'celebrates, celebrate → Celebrates',
+                            'dejection, dejected → Dejection',
+                            'looks, look → Looks On',
+                            'atbat, at-bat, bat → At Bat',
+                            'fielding, field → Fielding Position',
+                            'warmup, warm → Warm Ups',
+                            'stretching, stretch → Stretching',
+                            'battingpractice, bp → Batting Practice',
+                            'fieldingpractice, fp → Fielding Practice',
+                            'takesthefield, takesfield → Takes the Field',
+                            'comesofffield, offfield → Comes Off the Field',
+                            'nationalanthem, anthem → National Anthem',
+                          ],
+                        ),
+                        _buildFirebarSection(
+                          '💡 Pro Tips',
+                          'Advanced usage:',
+                          [
+                            '• Add RBI count: "27 hr3 1" = 3-run home run',
+                            '• Multiple players: "27 15 hr 1" = both players',
+                            '• Team disambiguation: Type "h" or "v" when prompted',
+                            '• Press SPACE after each code to activate',
+                            '• Use the Quick Codes button for more shortcuts',
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lightbulb,
+                          color: Colors.blue.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'The Firebar automatically selects players and builds captions as you type. Just press SPACE to complete each part!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.blue.shade700,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFirebarSection(
+      String title, String subtitle, List<String> examples) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade600,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...examples.map((example) => Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 4),
+              child: Text(
+                example,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            )),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   // Method to get current values from caption-related controllers
   Map<String, String> getCurrentCaptionValues() {
     return {
@@ -1172,9 +1527,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void initState() {
     super.initState();
-    // Rebuild when magic bar focus changes to toggle verb bolding
+    // Rebuild when magic bar focus changes to toggle verb bolding and switch to list mode
     _magicBarFocusNode.addListener(() {
-      setState(() {});
+      print(
+          'DEBUG: Magic bar focus changed. Has focus: ${_magicBarFocusNode.hasFocus}');
+      setState(() {
+        // Switch to list mode when magic bar is focused for easier player selection
+        if (_magicBarFocusNode.hasFocus) {
+          print('DEBUG: Switching to list mode');
+          _homePlayerGridMode = false;
+          _awayPlayerGridMode = false;
+        }
+      });
     });
     _homeSearchController.addListener(() {
       setState(() {
@@ -1500,6 +1864,255 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     resetCaptionSelections();
   }
 
+  // Process all valid codes when spacebar is pressed
+  void _processAllValidCodesOnSpacebar(String value) {
+    // Find all valid codes that end with a space and process them
+    final codeMatches = RegExp(
+            r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}|\d{1,2}[i]|[d][i]\d{1,3}|[d]\d{1,2}[i]) ')
+        .allMatches(value);
+
+    for (final match in codeMatches) {
+      final code = match.group(0)!.trim();
+      print('DEBUG: Processing code: $code');
+      _processCodeOnSpacebar(value, match, code);
+    }
+  }
+
+  // Process code when spacebar is pressed
+  void _processCodeOnSpacebar(String value, RegExpMatch match, String code) {
+    // Process the code every time spacebar is pressed (allow repetition)
+    print('DEBUG: Processing code: $code');
+
+    // Process different types of codes
+    final lowerCode = code.toLowerCase();
+
+    // Player codes: h27, v15, hh27, vv15
+    if (RegExp(r'^[hv]\d{1,3}$').hasMatch(lowerCode) ||
+        RegExp(r'^[hv]{2}\d{1,3}$').hasMatch(lowerCode)) {
+      _processPlayerCode(value, match, code);
+    }
+    // Team codes: ht, vt, h, v
+    else if (RegExp(r'^[hv][tv]?$').hasMatch(lowerCode)) {
+      _processTeamCode(value, match, code);
+    }
+    // Against codes: ag, ah, av
+    else if (lowerCode == 'ag') {
+      _processAgainstCode(value, match, code);
+    } else if (lowerCode == 'ah') {
+      _processAgainstHomeCode(value, match, code);
+    } else if (lowerCode == 'av') {
+      _processAgainstVisitingCode(value, match, code);
+    }
+    // Inning code: i3, i15, 1i, 27i
+    else if (RegExp(r'^i\d{1,3}$').hasMatch(lowerCode) ||
+        RegExp(r'^\d{1,2}i$').hasMatch(lowerCode)) {
+      _processInningCode(value, match, code);
+    }
+    // During inning code: di3, di15, d1i, d27i
+    else if (RegExp(r'^di\d{1,3}$').hasMatch(lowerCode) ||
+        RegExp(r'^d\d{1,2}i$').hasMatch(lowerCode)) {
+      _processDuringInningCode(value, match, code);
+    }
+  }
+
+  // Process player code (h27, v15, hh27, vv15, etc.)
+  void _processPlayerCode(String value, RegExpMatch match, String code) {
+    final lowerCode = code.toLowerCase();
+
+    // Determine if it's a double-letter code (hh or vv)
+    final isDouble = lowerCode.startsWith('hh') || lowerCode.startsWith('vv');
+
+    // Extract the team prefix and number
+    String prefix;
+    String number;
+    if (isDouble) {
+      prefix = lowerCode.substring(0, 2); // hh or vv
+      number = lowerCode.substring(2); // everything after hh or vv
+    } else {
+      prefix = lowerCode.substring(0, 1); // h or v
+      number = lowerCode.substring(1); // everything after h or v
+    }
+
+    final isHome = prefix.startsWith('h');
+    final roster = isHome ? _homeRoster : _awayRoster;
+
+    // Find the player
+    Player? found;
+    for (final p in roster) {
+      if (p.jerseyNumber == number) {
+        found = p;
+        break;
+      }
+    }
+
+    if (found != null) {
+      print('DEBUG: Found player for code $code: ${found.displayName}');
+
+      // Build replacement text
+      String replacement = found.displayName;
+
+      // Add team name only for single-letter codes (h2, v15), not double-letter codes (hh2, vv15)
+      if (!isDouble) {
+        final teamName = isHome ? selectedHomeTeam : selectedAwayTeam;
+        if (teamName != null && teamName.isNotEmpty) {
+          replacement = '$replacement of the $teamName';
+        }
+      }
+
+      replacement = '$replacement ';
+      _replaceCodeInText(value, match, replacement);
+
+      // Update personality field with clean full name (no number), de-duplicated
+      final current = personalityController.text.trim();
+      final parts = current.isEmpty
+          ? <String>[]
+          : current
+              .split(';')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+      if (!parts.contains(found.fullName)) {
+        parts.add(found.fullName);
+        personalityController.text = parts.join(';');
+      }
+
+      // Visually select the player in the picker
+      _selectPlayerChipByNumber(
+        isHomeTeam: isHome,
+        jerseyNumber: number,
+        isProgressive: true,
+      );
+    }
+  }
+
+  // Process team code (ht, vt, h, v)
+  void _processTeamCode(String value, RegExpMatch match, String code) {
+    final lowerCode = code.toLowerCase();
+    String replacement = '';
+
+    if (lowerCode == 'ht') {
+      replacement = selectedHomeTeam ?? 'Home Team';
+    } else if (lowerCode == 'vt') {
+      replacement = selectedAwayTeam ?? 'Visiting Team';
+    } else if (lowerCode == 'h') {
+      replacement = selectedHomeTeam ?? 'Home Team';
+    } else if (lowerCode == 'v') {
+      replacement = selectedAwayTeam ?? 'Away Team';
+    }
+
+    if (replacement.isNotEmpty) {
+      replacement = '$replacement ';
+      _replaceCodeInText(value, match, replacement);
+    }
+  }
+
+  // Process against code (ag)
+  void _processAgainstCode(String value, RegExpMatch match, String code) {
+    String oppositeTeam = '';
+
+    // Scan the caption text to see which team is already mentioned
+    final captionText = captionController.text;
+    final homeTeamMentioned =
+        selectedHomeTeam != null && captionText.contains(selectedHomeTeam!);
+    final awayTeamMentioned =
+        selectedAwayTeam != null && captionText.contains(selectedAwayTeam!);
+
+    if (homeTeamMentioned && !awayTeamMentioned) {
+      oppositeTeam = selectedAwayTeam ?? '';
+    } else if (awayTeamMentioned && !homeTeamMentioned) {
+      oppositeTeam = selectedHomeTeam ?? '';
+    } else if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+      oppositeTeam = selectedAwayTeam ?? '';
+    } else if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+      oppositeTeam = selectedHomeTeam ?? '';
+    } else {
+      oppositeTeam = selectedAwayTeam ?? '';
+    }
+
+    final replacement = oppositeTeam.isNotEmpty
+        ? 'against the $oppositeTeam '
+        : 'against the opposing team ';
+    _replaceCodeInText(value, match, replacement);
+  }
+
+  // Process against home team code (ah)
+  void _processAgainstHomeCode(String value, RegExpMatch match, String code) {
+    final replacement = selectedHomeTeam != null && selectedHomeTeam!.isNotEmpty
+        ? 'against the $selectedHomeTeam '
+        : 'against the home team ';
+    _replaceCodeInText(value, match, replacement);
+  }
+
+  // Process against visiting team code (av)
+  void _processAgainstVisitingCode(
+      String value, RegExpMatch match, String code) {
+    final replacement = selectedAwayTeam != null && selectedAwayTeam!.isNotEmpty
+        ? 'against the $selectedAwayTeam '
+        : 'against the visiting team ';
+    _replaceCodeInText(value, match, replacement);
+  }
+
+  // Process inning code (i3, i15, 1i, 27i, etc.)
+  void _processInningCode(String value, RegExpMatch match, String code) {
+    String number;
+
+    // Handle both formats: i3 and 3i
+    if (code.startsWith('i')) {
+      number = code.substring(1); // i3 -> 3
+    } else {
+      number = code.substring(0, code.length - 1); // 3i -> 3
+    }
+
+    final inningNum = int.tryParse(number) ?? 0;
+
+    if (inningNum == 0 || inningNum > 27) return;
+
+    final ord = _getOrdinalSuffix(inningNum);
+    final replacement = '$ord inning ';
+    _replaceCodeInText(value, match, replacement);
+  }
+
+  // Process during inning code (di3, di15, d1i, d27i, etc.)
+  void _processDuringInningCode(String value, RegExpMatch match, String code) {
+    String number;
+
+    // Handle both formats: di3 and d3i
+    if (code.toLowerCase().startsWith('di')) {
+      number = code.substring(2); // di3 -> 3
+    } else {
+      number = code.substring(1, code.length - 1); // d3i -> 3
+    }
+
+    final inningNum = int.tryParse(number) ?? 0;
+
+    if (inningNum == 0 || inningNum > 27) return;
+
+    final ord = _getOrdinalSuffix(inningNum);
+    final replacement = 'during the $ord inning ';
+    _replaceCodeInText(value, match, replacement);
+  }
+
+  // Helper method to replace code in text
+  void _replaceCodeInText(String value, RegExpMatch match, String replacement) {
+    final beforeCode = value.substring(0, match.start);
+    final afterCode = value.substring(match.end);
+    final newText = beforeCode + replacement + afterCode;
+
+    _isProcessingCaptionShortcut = true;
+    captionController.text = newText;
+
+    // Position cursor after the replacement
+    final cursorPos = beforeCode.length + replacement.length;
+    captionController.selection = TextSelection.collapsed(offset: cursorPos);
+
+    // Clear highlighting after code is processed
+    captionController.highlightedRanges = [];
+    captionController.invalidRanges = [];
+    _highlightedRanges.clear();
+
+    _isProcessingCaptionShortcut = false;
+  }
+
   // Process player token found in caption box
   void _processCaptionPlayerToken(
       String value, RegExpMatch match, Player player, bool isHome) {
@@ -1559,7 +2172,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _onCaptionChanged(String value) {
     if (_isProcessingCaptionShortcut) return;
 
-    // Check for magic input patterns that should be processed when space is pressed
+    // Check for spacebar-triggered code replacement
     if (value.isNotEmpty) {
       // Get cursor position to find if a space was just typed
       final selection = captionController.selection;
@@ -1571,48 +2184,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           print(
               'DEBUG: Space detected at cursor position $cursorPos in: "$value"');
 
-          // Look for player tokens that end just before the cursor (just before the space)
-          final playerTokenMatches =
-              RegExp(r'([hv])(\d{1,3}) ').allMatches(value);
-          print(
-              'DEBUG: Found ${playerTokenMatches.length} potential player tokens');
+          // Look for codes that end just before the cursor (just before the space)
+          final codeMatches = RegExp(
+                  r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}) ')
+              .allMatches(value);
+          print('DEBUG: Found ${codeMatches.length} potential codes');
 
-          // Find the token that ends right at the cursor position
+          // Find the code that ends right at the cursor position
           RegExpMatch? bestMatch;
 
-          for (final match in playerTokenMatches) {
+          for (final match in codeMatches) {
             print(
-                'DEBUG: Token at ${match.start}-${match.end} (${match.group(0)?.trim()}), ends at: ${match.end}, cursor at: $cursorPos');
+                'DEBUG: Code at ${match.start}-${match.end} (${match.group(0)?.trim()}), ends at: ${match.end}, cursor at: $cursorPos');
             if (match.end == cursorPos) {
-              // Token ends exactly where cursor is
+              // Code ends exactly where cursor is
               bestMatch = match;
               break;
             }
           }
 
           if (bestMatch != null) {
-            print('DEBUG: Processing exact match: ${bestMatch.group(0)}');
-            final prefix = bestMatch.group(1)!.toLowerCase();
-            final number = bestMatch.group(2)!;
-            final isHome = prefix == 'h';
-            final roster = isHome ? _homeRoster : _awayRoster;
+            final code = bestMatch.group(0)!.trim();
+            print('DEBUG: Processing code: $code');
 
-            // Find the player
-            Player? found;
-            for (final p in roster) {
-              if (p.jerseyNumber == number) {
-                found = p;
-                break;
-              }
-            }
-
-            if (found != null) {
-              print(
-                  'DEBUG: Found player in caption box after space: ${found.displayName}');
-              // Process the player token
-              _processCaptionPlayerToken(value, bestMatch, found, isHome);
-              return;
-            }
+            // Process the code (this will handle all types: player, team, inning, against)
+            _processCodeOnSpacebar(value, bestMatch, code);
+            return;
           }
         }
       }
@@ -1620,325 +2217,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Only proceed with expansion if the last character typed was a space
     if (value.isEmpty || value.codeUnitAt(value.length - 1) != 32) {
-      // Check for potential tokens to highlight immediately (only when not expanding)
-      _highlightPotentialTokens(value);
-      return;
-    }
-
-    // Only proceed if rosters are available (except for ag and team tokens)
-    if (_homeRoster.isEmpty &&
-        _awayRoster.isEmpty &&
-        !value.contains(RegExp(r'\b(ag|ht|vt) '))) {
-      return;
-    }
-
-    // Normalize reversed forms first so subsequent matching works for both orders
-    // e.g., `4i` -> `i4`, `27v` -> `v27`, `27vv` -> `vv27`
-    final normalizedValue = value.replaceAllMapped(
-      RegExp(r'(?:^|\b)(\d{1,3})((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]) '),
-      (m) => '${m.group(2)}${m.group(1)} ',
-    );
-
-    // Pattern tokens (require space after):
-    // - hNN / hhNN / vNN / vvNN → player tokens
-    // - iNN → inning token → "during the first inning" (requires at least 1 digit)
-    // - h / v → team names (home / away)
-    // - ht / vt → team names (home / visiting)
-    // - ag → "against the [opposite team]" (based on first selected player)
-    final regex = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[hH][tT]|[vV][tT]|[hH]|[vV]|(?<!a)[aA][gG](?!a))(\d{0,3}) ');
-    final inningRegex = RegExp(r'(?:^|\b)[iI](\d{1,3}) ');
-
-    // Check if there are any valid tokens to process
-    if (!regex.hasMatch(normalizedValue) &&
-        !inningRegex.hasMatch(normalizedValue)) return;
-
-    String newText = value;
-    bool replacedAny = false;
-    int? caretAfterReplacement;
-    final selection = captionController.selection;
-
-    // Normalize reversed forms handled earlier via normalizedValue
-
-    // Convert numbers to written ordinals for innings (1 -> first, 4 -> fourth, 21 -> 21st)
-    String ordinalWord(int n) {
-      switch (n) {
-        case 1:
-          return 'first';
-        case 2:
-          return 'second';
-        case 3:
-          return 'third';
-        case 4:
-          return 'fourth';
-        case 5:
-          return 'fifth';
-        case 6:
-          return 'sixth';
-        case 7:
-          return 'seventh';
-        case 8:
-          return 'eighth';
-        case 9:
-          return 'ninth';
-        case 10:
-          return 'tenth';
-        case 11:
-          return 'eleventh';
-        case 12:
-          return 'twelfth';
-        case 13:
-          return 'thirteenth';
-        case 14:
-          return 'fourteenth';
-        case 15:
-          return 'fifteenth';
-        case 16:
-          return 'sixteenth';
-        case 17:
-          return 'seventeenth';
-        case 18:
-          return 'eighteenth';
-        case 19:
-          return 'nineteenth';
-        case 20:
-          return 'twentieth';
-        default:
-          if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
-          switch (n % 10) {
-            case 1:
-              return '${n}st';
-            case 2:
-              return '${n}nd';
-            case 3:
-              return '${n}rd';
-            default:
-              return '${n}th';
-          }
-      }
-    }
-
-    final buffer = StringBuffer();
-    int lastIndex = 0;
-    final List<TextRange> newHighlightedRanges = [];
-
-    // Process inning tokens first (they require at least 1 digit)
-    for (final match in inningRegex.allMatches(normalizedValue)) {
-      if (match.start > lastIndex) {
-        buffer.write(normalizedValue.substring(lastIndex, match.start));
-      }
-      final number = match.group(1)!;
-
-      replacedAny = true;
-      final inningNum = int.tryParse(number) ?? 0;
-      // Don't process inning 0
-      if (inningNum == 0) {
-        lastIndex = match.end;
-        continue;
-      }
-      final ord = ordinalWord(inningNum);
-      final replacement = 'during the $ord inning ';
-      buffer.write(replacement);
-      // Highlight the entire inserted phrase
-      newHighlightedRanges.add(
-        TextRange(
-            start: buffer.length - replacement.length, end: buffer.length),
-      );
-      if (selection.baseOffset >= match.start &&
-          selection.baseOffset <= match.end) {
-        caretAfterReplacement = buffer.length;
-      }
-      lastIndex = match.end - 1; // Skip the space that triggered the expansion
-    }
-
-    // Process other tokens
-    for (final match in regex.allMatches(normalizedValue)) {
-      if (match.start > lastIndex) {
-        buffer.write(normalizedValue.substring(lastIndex, match.start));
-      }
-      final prefix = match.group(1)!; // h, hh, v, vv, ht, vt, ag
-      final number = match.group(2)!;
-      final lower = prefix.toLowerCase();
-
-      // Against token: ag -> "against the [opposite team]"
-      if (lower == 'ag') {
-        print('DEBUG: ag token detected, processing...');
-        replacedAny = true;
-        String oppositeTeam = '';
-
-        // Scan the caption text to see which team is already mentioned
-        final captionText = captionController.text;
-        final homeTeamMentioned =
-            selectedHomeTeam != null && captionText.contains(selectedHomeTeam!);
-        final awayTeamMentioned =
-            selectedAwayTeam != null && captionText.contains(selectedAwayTeam!);
-
-        if (homeTeamMentioned && !awayTeamMentioned) {
-          // Home team is mentioned, so opposite is away team
-          oppositeTeam = selectedAwayTeam ?? '';
-        } else if (awayTeamMentioned && !homeTeamMentioned) {
-          // Away team is mentioned, so opposite is home team
-          oppositeTeam = selectedHomeTeam ?? '';
-        } else if (selectedHomePlayers.isNotEmpty &&
-            selectedAwayPlayers.isEmpty) {
-          // Fallback: Home player selected first, so opposite is away team
-          oppositeTeam = selectedAwayTeam ?? '';
-        } else if (selectedAwayPlayers.isNotEmpty &&
-            selectedHomePlayers.isEmpty) {
-          // Fallback: Away player selected first, so opposite is home team
-          oppositeTeam = selectedHomeTeam ?? '';
-        } else {
-          // Default to away team as opposite
-          oppositeTeam = selectedAwayTeam ?? '';
-        }
-
-        final replacement = oppositeTeam.isNotEmpty
-            ? 'against the $oppositeTeam '
-            : 'against the opposing team ';
-        buffer.write(replacement);
-        newHighlightedRanges.add(
-          TextRange(
-              start: buffer.length - replacement.length, end: buffer.length),
-        );
-        if (selection.baseOffset >= match.start &&
-            selection.baseOffset <= match.end) {
-          caretAfterReplacement = buffer.length;
-        }
-        lastIndex = match
-            .end; // Don't skip the space - let it be part of the replacement
-        continue;
-      }
-
-      // Team tokens: ht / vt -> full team name
-      if (lower == 'ht' || lower == 'vt') {
-        replacedAny = true;
-        final teamName = lower == 'ht' ? selectedHomeTeam : selectedAwayTeam;
-        final replacement = (teamName != null && teamName.isNotEmpty)
-            ? '$teamName '
-            : (lower == 'ht' ? 'Home Team ' : 'Visiting Team ');
-        buffer.write(replacement);
-        newHighlightedRanges.add(
-          TextRange(
-              start: buffer.length - replacement.length, end: buffer.length),
-        );
-        if (selection.baseOffset >= match.start &&
-            selection.baseOffset <= match.end) {
-          caretAfterReplacement = buffer.length;
-        }
-        lastIndex =
-            match.end - 1; // Skip the space that triggered the expansion
-        continue;
-      }
-
-      // Single team tokens: h / v -> full team name
-      if (lower == 'h' || lower == 'v') {
-        replacedAny = true;
-        final teamName = lower == 'h' ? selectedHomeTeam : selectedAwayTeam;
-        final replacement = (teamName != null && teamName.isNotEmpty)
-            ? '$teamName '
-            : (lower == 'h' ? 'Home Team ' : 'Away Team ');
-        buffer.write(replacement);
-        newHighlightedRanges.add(
-          TextRange(
-              start: buffer.length - replacement.length, end: buffer.length),
-        );
-        if (selection.baseOffset >= match.start &&
-            selection.baseOffset <= match.end) {
-          caretAfterReplacement = buffer.length;
-        }
-        lastIndex =
-            match.end - 1; // Skip the space that triggered the expansion
-        continue;
-      }
-
-      final isHome = lower.startsWith('h');
-      final isDouble = lower.length == 2; // hh or vv
-
-      final roster = isHome ? _homeRoster : _awayRoster;
-      Player? found;
-      for (final p in roster) {
-        if (p.jerseyNumber == number) {
-          found = p;
-          break;
-        }
-      }
-
-      if (found != null) {
-        replacedAny = true;
-        // Visually select the player in the picker below when a valid token is entered
-        _selectPlayerChipByNumber(
-          isHomeTeam: isHome,
-          jerseyNumber: number,
-          isProgressive:
-              true, // don't override existing red star on subsequent tokens
-        );
-        // Update personality field with clean full name (no number), de-duplicated
-        final current = personalityController.text.trim();
-        final parts = current.isEmpty
-            ? <String>[]
-            : current
-                .split(';')
-                .map((s) => s.trim())
-                .where((s) => s.isNotEmpty)
-                .toList();
-        if (!parts.contains(found.fullName)) {
-          parts.add(found.fullName);
-          personalityController.text = parts.join(';');
-        }
-
-        String replacement = found.displayName;
-        if (!isDouble) {
-          final teamName = isHome ? selectedHomeTeam : selectedAwayTeam;
-          if (teamName != null && teamName.isNotEmpty) {
-            replacement = '$replacement of the $teamName';
-          }
-        }
-        replacement = '$replacement ';
-        buffer.write(replacement);
-        newHighlightedRanges.add(
-          TextRange(
-              start: buffer.length - replacement.length, end: buffer.length),
-        );
-        // Record mapping so deletion can remove from personality
-        _tokenToPlayerName[replacement.trim()] = found.fullName;
-        // If caret is within or at end of this token, place it at end of replacement
-        if (selection.baseOffset >= match.start &&
-            selection.baseOffset <= match.end) {
-          caretAfterReplacement = buffer.length;
-        }
-      } else {
-        // No match found; keep token
-        buffer.write(normalizedValue.substring(match.start, match.end));
-      }
-      lastIndex = match.end; // Consume the space that triggered the expansion
-    }
-
-    // Append remaining tail
-    if (lastIndex < normalizedValue.length) {
-      buffer.write(normalizedValue.substring(lastIndex));
-    }
-    newText = buffer.toString();
-    // Safety: remove any stray newlines so subsequent typing doesn't auto-trigger expansions
-    if (newText.contains('\n')) {
-      newText = newText.replaceAll('\n', '');
-    }
-
-    if (replacedAny && newText != value) {
-      _isProcessingCaptionShortcut = true;
-      captionController.text = newText;
-      if (caretAfterReplacement != null) {
-        captionController.selection =
-            TextSelection.collapsed(offset: caretAfterReplacement);
-      } else if (selection.baseOffset >= 0) {
-        final clamped = selection.baseOffset.clamp(0, newText.length);
-        captionController.selection = TextSelection.collapsed(offset: clamped);
-      }
-      // Update highlight ranges for newly inserted phrases
-      _highlightedRanges = newHighlightedRanges;
-      captionController.highlightedRanges = newHighlightedRanges;
+      // Don't highlight tokens until spacebar is pressed - this prevents false matches
+      // like "h" in "eighth" being detected as a player code
+      captionController.highlightedRanges = [];
       captionController.invalidRanges = [];
-      _isProcessingCaptionShortcut = false;
+      return;
     }
+
+    // Process all valid codes when spacebar is pressed
+    _processAllValidCodesOnSpacebar(value);
   }
 
   // Remove a player's full name from the personality field text (semicolon-separated, de-duplicated)
@@ -1967,9 +2254,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final List<TextRange> validRanges = [];
     final List<TextRange> invalidRanges = [];
 
-    // Forward tokens: h, hh, v, vv, i, ht, vt, ag + optional number (for player/inning)
+    // Forward tokens: h, hh, v, vv, i, di, ht, vt, ag, ah, av + optional number (for player/inning)
     final forward = RegExp(
-        r'(?:^|\b)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a))(\d{0,3})');
+        r'(?:^|\s)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[dD][iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a)|[aA][hH]|[aA][vV])(\d{0,3})');
     for (final m in forward.allMatches(value)) {
       final prefix = m.group(1)!.toLowerCase();
       final number = m.group(2) ?? '';
@@ -1978,8 +2265,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           (prefix == 'h' || prefix == 'hh' || prefix == 'v' || prefix == 'vv');
       bool isValid = false;
       if (prefix == 'i') {
-        isValid = number.isNotEmpty; // inning requires a number
-      } else if (prefix == 'ht' || prefix == 'vt' || prefix == 'ag') {
+        // For inning codes (i), only highlight if they are complete (end with space or at end of text)
+        final isComplete = m.end == value.length ||
+            (m.end < value.length && value[m.end] == ' ');
+        isValid = isComplete &&
+            number.isNotEmpty &&
+            int.tryParse(number) != null &&
+            int.parse(number) >= 1 &&
+            int.parse(number) <= 27; // inning requires a number 1-27
+      } else if (prefix == 'di') {
+        // For during inning codes (di), only highlight if they are complete (end with space or at end of text)
+        final isComplete = m.end == value.length ||
+            (m.end < value.length && value[m.end] == ' ');
+        isValid = isComplete &&
+            number.isNotEmpty &&
+            int.tryParse(number) != null &&
+            int.parse(number) >= 1 &&
+            int.parse(number) <= 27; // during inning requires a number 1-27
+      } else if (prefix == 'ht' ||
+          prefix == 'vt' ||
+          prefix == 'ag' ||
+          prefix == 'ah' ||
+          prefix == 'av') {
         isValid = true; // no number required
       } else if (isPlayerToken && number.isNotEmpty) {
         final isHome = prefix.startsWith('h');
@@ -1995,8 +2302,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    // Reversed numeric tokens at the end: NN(h|hh|v|vv|i)
-    final reverse = RegExp(r'(?:^|\b)(\d{1,3})(([hH]{1,2})|([vV]{1,2})|[iI])');
+    // Reversed numeric tokens at the end: NN(h|hh|v|vv|i) - limit to 2 digits for inning
+    final reverse = RegExp(r'(?:^|\s)(\d{1,2})(([hH]{1,2})|([vV]{1,2})|[iI])');
     for (final m in reverse.allMatches(value)) {
       final number = m.group(1) ?? '';
       final suffix = (m.group(2) ?? '').toLowerCase();
@@ -2005,7 +2312,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           (suffix == 'h' || suffix == 'hh' || suffix == 'v' || suffix == 'vv');
       bool isValid = false;
       if (suffix == 'i') {
-        isValid = number.isNotEmpty;
+        // For inning codes (i), only highlight if they are complete (end with space or at end of text)
+        final isComplete = m.end == value.length ||
+            (m.end < value.length && value[m.end] == ' ');
+        isValid = isComplete &&
+            number.isNotEmpty &&
+            int.tryParse(number) != null &&
+            int.parse(number) >= 1 &&
+            int.parse(number) <= 27; // inning requires a number 1-27
       } else if (isPlayerToken && number.isNotEmpty) {
         final isHome = suffix.startsWith('h');
         final roster = isHome ? _homeRoster : _awayRoster;
@@ -2020,6 +2334,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
+    // During inning reversed pattern: d(NN)i - limit to 2 digits for inning
+    final duringReverse = RegExp(r'(?:^|\s)[dD](\d{1,2})[iI]');
+    for (final m in duringReverse.allMatches(value)) {
+      final number = m.group(1) ?? '';
+
+      // For during inning codes (d1i), only highlight if they are complete (end with space or at end of text)
+      final isComplete = m.end == value.length ||
+          (m.end < value.length && value[m.end] == ' ');
+      final isValid = isComplete &&
+          number.isNotEmpty &&
+          int.tryParse(number) != null &&
+          int.parse(number) >= 1 &&
+          int.parse(number) <= 27; // during inning requires a number 1-27
+
+      final range = TextRange(start: m.start, end: m.end);
+      if (isValid) {
+        validRanges.add(range);
+      }
+    }
+
     captionController.highlightedRanges = validRanges;
     captionController.invalidRanges = invalidRanges;
     _highlightedRanges = validRanges;
@@ -2028,9 +2362,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // select that player in the visual pickers below in real time.
     try {
       final trailingForward =
-          RegExp(r'(?:^|\b)((?:h{1,2})|(?:v{1,2}))(\d{1,3})\s*$');
+          RegExp(r'(?:^|\s)((?:h{1,2})|(?:v{1,2}))(\d{1,3})\s*$');
       final trailingReverse =
-          RegExp(r'(?:^|\b)(\d{1,3})((?:h{1,2})|(?:v{1,2}))\s*$');
+          RegExp(r'(?:^|\s)(\d{1,3})((?:h{1,2})|(?:v{1,2}))\s*$');
       String? teamToken;
       String? jersey;
       final m1 = trailingForward.firstMatch(value.toLowerCase());
@@ -2290,6 +2624,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ],
                               ),
                             ),
+                            // Shortcodes button between caption and personality
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  TextButton(
+                                    onPressed: _showShortcodesDialog,
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 2, vertical: 1),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.help_outline,
+                                          size: 14,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          'Quick\nCodes',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.grey.shade600,
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(width: 9),
                             // Personality Box (Right side) - Reduced to make room for caption
                             Expanded(
@@ -2353,579 +2726,676 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           child: Row(
                             children: [
-                              // First column - Magic bar
+                              // First column - Magic bar with help button
                               Expanded(
                                 flex: 6,
-                                child: Container(
-                                  padding:
-                                      const EdgeInsets.only(left: 4, right: 8),
-                                  decoration: BoxDecoration(
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(6),
-                                      bottomLeft: Radius.circular(6),
-                                    ),
-                                  ),
-                                  child: TextField(
-                                    style: const TextStyle(fontSize: 12),
-                                    decoration: InputDecoration(
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade300),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.blue.shade400),
-                                      ),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 8),
-                                      isDense: true,
-                                      hintText: _waitingForHomeVisitorChoice
-                                          ? 'Press H for Home or V for Away'
-                                          : '🔥 Firebar',
-                                      suffixText: _waitingForHomeVisitorChoice
-                                          ? null
-                                          : _shouldShowRbiInlineHint()
-                                              ? ' Add # for ' +
-                                                  _rbiHintNoun() +
-                                                  ' (e.g., ' +
-                                                  _rbiShortcutExample() +
-                                                  ')'
-                                              : null,
-                                      suffixStyle: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade500,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                    controller: _magicBarController,
-                                    focusNode: _magicBarFocusNode,
-                                    onChanged: (value) {
-                                      // Handle H/V input when waiting for home/visitor choice
-                                      if (_waitingForHomeVisitorChoice) {
-                                        print(
-                                            'DEBUG: In choice mode, value: "$value"');
-                                        // Check if user typed 'h' or 'v' anywhere in the text
-                                        final lowerValue = value.toLowerCase();
-                                        print(
-                                            'DEBUG: Checking for h or v in: "$lowerValue"');
-
-                                        // Look for 'h' or 'v' at the end of the input (user's choice)
-                                        final hMatch = RegExp(r'h$')
-                                            .firstMatch(lowerValue);
-                                        final vMatch = RegExp(r'v$')
-                                            .firstMatch(lowerValue);
-
-                                        if (hMatch != null) {
-                                          print(
-                                              'DEBUG: Found H, calling _processHomeVisitorChoice');
-                                          _processHomeVisitorChoice('h');
-                                          return;
-                                        } else if (vMatch != null) {
-                                          print(
-                                              'DEBUG: Found V, calling _processHomeVisitorChoice');
-                                          _processHomeVisitorChoice('v');
-                                          return;
-                                        }
-                                        print(
-                                            'DEBUG: No H or V found, restoring prompt if needed');
-                                        // Restore the prompt text if user tries to edit it
-                                        if (!value.contains(
-                                            'Press H for Home or V for Away')) {
-                                          final numberPart =
-                                              _magicInputMatchingPlayers
-                                                  .first.jerseyNumber;
-                                          print('DEBUG: Restoring prompt text');
-
-                                          // Create player choice text with last names and numbers
-                                          final homePlayer =
-                                              _magicInputMatchingPlayers
-                                                  .firstWhere(
-                                            (p) => _homeRoster.contains(p),
-                                            orElse: () =>
-                                                _magicInputMatchingPlayers
-                                                    .first,
-                                          );
-                                          final awayPlayer =
-                                              _magicInputMatchingPlayers
-                                                  .firstWhere(
-                                            (p) => !_homeRoster.contains(p),
-                                            orElse: () =>
-                                                _magicInputMatchingPlayers
-                                                    .first,
-                                          );
-
-                                          final homeLastName = homePlayer
-                                              .fullName
-                                              .split(' ')
-                                              .last;
-                                          final awayLastName = awayPlayer
-                                              .fullName
-                                              .split(' ')
-                                              .last;
-
-                                          _magicBarController.text =
-                                              '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
-                                          _magicBarController.selection =
-                                              TextSelection.fromPosition(
-                                            TextPosition(
-                                                offset: _magicBarController
-                                                    .text.length),
-                                          );
-                                        }
-                                        return;
-                                      }
-
-                                      // Track magic bar input for verb highlighting
-                                      _magicBarVerbInput =
-                                          value.trim().toLowerCase();
-                                      // Track if we're typing a first magic token (no space yet)
-                                      _typingFirstMagicToken =
-                                          !value.contains(' ');
-                                      // Magic bar functionality
-                                      if (value.isEmpty) {
-                                        // Don't reset caption when magic bar is empty
-                                        // This preserves player selections during multi-player input
-                                        setState(() {}); // refresh highlighting
-                                        return;
-                                      }
-                                      // If user is typing a single player token (no space yet),
-                                      // highlight progressively and postpone parsing until token completes.
-                                      final raw = value;
-                                      final token = raw.trim().toLowerCase();
-                                      final hasSpace = raw.contains(' ');
-                                      final String lastToken =
-                                          raw.trimRight().isEmpty
-                                              ? ''
-                                              : raw
-                                                  .trimRight()
-                                                  .split(' ')
-                                                  .last
-                                                  .toLowerCase();
-
-                                      // Ensure caption updates on deletion of shortcuts (run early before any returns)
-                                      {
-                                        final List<String> tokens = raw
-                                            .trim()
-                                            .toLowerCase()
-                                            .split(RegExp(r'\s+'))
-                                            .where((t) => t.isNotEmpty)
-                                            .toList();
-                                        final bool hasHrToken = tokens.any(
-                                            (t) =>
-                                                RegExp(r'^hr([1-4])$',
-                                                        caseSensitive: false)
-                                                    .hasMatch(t) ||
-                                                t == 'gs');
-                                        final bool hasRbiToken = RegExp(
-                                                r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                            .hasMatch(raw.trim());
-                                        final bool hasExplicitInningToken =
-                                            RegExp(r'(?:^|\b)[iI]\d+')
-                                                .hasMatch(raw);
-                                        final List<String> bareNums = tokens
-                                            .where((t) => RegExp(r'^\d{1,2}$')
-                                                .hasMatch(t))
-                                            .toList();
-                                        final bool hasBareInningToken =
-                                            raw.contains(' ') &&
-                                                bareNums.isNotEmpty;
-
-                                        bool anyChanged = false;
-                                        setState(() {
-                                          // If inning token removed, clear inning selection
-                                          if (!hasExplicitInningToken &&
-                                              !hasBareInningToken &&
-                                              _selectedRbiInning != null) {
-                                            _selectedRbiInning = null;
-                                            anyChanged = true;
-                                          }
-                                          // If HR shortcut removed, clear Home Run selections
-                                          if (!hasHrToken &&
-                                              _selectedVerb == 'Home Run') {
-                                            _selectedVerb = null;
-                                            _selectedActionVerb = null;
-                                            _selectedHomeRunType = null;
-                                            _rbiCount = null;
-                                            anyChanged = true;
-                                          }
-                                          // If RBI shortcut removed (and not HR), clear RBI count
-                                          if (!hasRbiToken &&
-                                              _selectedVerb != 'Home Run' &&
-                                              _rbiCount != null) {
-                                            _rbiCount = null;
-                                            anyChanged = true;
-                                          }
-                                        });
-                                        if (anyChanged) {
-                                          _updateCaption();
-                                        }
-                                      }
-
-                                      // Quick-select Home Run with type via magic bar from the LAST token
-                                      // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
-                                      // Only work when NOT in a submenu (to avoid conflicts)
-                                      if (lastToken.isNotEmpty &&
-                                          _selectedVerb == null) {
-                                        final hrNum = RegExp(r'^hr([1-4])$',
-                                                caseSensitive: false)
-                                            .firstMatch(lastToken);
-                                        if (hrNum != null) {
-                                          final n =
-                                              int.tryParse(hrNum.group(1)!);
-                                          String? hrType;
-                                          switch (n) {
-                                            case 1:
-                                              hrType = 'Solo';
-                                              break;
-                                            case 2:
-                                              hrType = 'Two-Run';
-                                              break;
-                                            case 3:
-                                              hrType = 'Three-Run';
-                                              break;
-                                            case 4:
-                                              hrType = 'Grand Slam';
-                                              break;
-                                          }
-                                          if (hrType != null) {
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.only(
+                                            left: 4, right: 8),
+                                        decoration: BoxDecoration(
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(6),
+                                            bottomLeft: Radius.circular(6),
+                                          ),
+                                        ),
+                                        child: TextField(
+                                          style: const TextStyle(fontSize: 12),
+                                          decoration: InputDecoration(
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              borderSide: BorderSide(
+                                                  color: Colors.blue.shade400),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 8),
+                                            isDense: true,
+                                            hintText: _waitingForHomeVisitorChoice
+                                                ? 'Press H for Home or V for Away'
+                                                : '🔥 Firebar',
+                                            suffixText:
+                                                _waitingForHomeVisitorChoice
+                                                    ? null
+                                                    : _shouldShowRbiInlineHint()
+                                                        ? ' Add # for ' +
+                                                            _rbiHintNoun() +
+                                                            ' (e.g., ' +
+                                                            _rbiShortcutExample() +
+                                                            ')'
+                                                        : null,
+                                            suffixStyle: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade500,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                          controller: _magicBarController,
+                                          focusNode: _magicBarFocusNode,
+                                          onTap: () {
+                                            print(
+                                                'DEBUG: Magic bar tapped, switching to list mode');
                                             setState(() {
-                                              _selectedVerb = 'Home Run';
-                                              _selectedActionVerb = 'Home Run';
-                                              _selectedHomeRunType = hrType;
-                                              _rbiCount = n; // keep in sync
+                                              _homePlayerGridMode = false;
+                                              _awayPlayerGridMode = false;
                                             });
-                                            _updateCaption();
-                                            return;
-                                          }
-                                        }
-                                        if (lastToken == 'gs') {
-                                          setState(() {
-                                            _selectedVerb = 'Home Run';
-                                            _selectedActionVerb = 'Home Run';
-                                            _selectedHomeRunType = 'Grand Slam';
-                                            _rbiCount = 4;
-                                          });
-                                          _updateCaption();
-                                          return;
-                                        }
-                                      }
-
-                                      // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
-                                      // Only trigger when there is at least one space (to avoid conflicting with first player token)
-                                      // Only work when NOT in a submenu (to avoid conflicts)
-                                      if (hasSpace &&
-                                          RegExp(r'^\d{1,2}$')
-                                              .hasMatch(lastToken) &&
-                                          _selectedVerb == null) {
-                                        final int inningNum =
-                                            int.parse(lastToken);
-                                        if (inningNum > 0 && inningNum <= 20) {
-                                          setState(() {
-                                            _selectedRbiInning = inningNum;
-                                          });
-                                          _updateCaption();
-                                          return;
-                                        }
-                                      }
-
-                                      final singlePlayerRegex =
-                                          RegExp(r'^(h{1,2}|v{1,2})?\d+$');
-                                      // Exclude hr patterns from single player regex
-                                      final hrPattern = RegExp(r'^hr\d+$');
-                                      if (_typingFirstMagicToken &&
-                                          !hasSpace &&
-                                          singlePlayerRegex.hasMatch(token) &&
-                                          !hrPattern.hasMatch(token)) {
-                                        String numberPart = token.replaceAll(
-                                            RegExp(r'^(h{1,2}|v{1,2})'), '');
-                                        bool isHomeHint = token.startsWith('h');
-
-                                        // If no explicit h/v and both teams have this jersey number,
-                                        // prompt for Home/Away choice inline.
-                                        if (!isHomeHint &&
-                                            !token.startsWith('v')) {
-                                          final homeMatches = _homeRoster
-                                              .where((p) =>
-                                                  p.jerseyNumber == numberPart)
-                                              .toList();
-                                          final awayMatches = _awayRoster
-                                              .where((p) =>
-                                                  p.jerseyNumber == numberPart)
-                                              .toList();
-                                          if (homeMatches.isNotEmpty &&
-                                              awayMatches.isNotEmpty) {
-                                            setState(() {
-                                              _filteredPlayers.clear();
-                                              _noPlayersFound = false;
-                                              _isPlayerSearchMode = false;
-                                              _magicInputMatchingPlayers = [
-                                                ...homeMatches,
-                                                ...awayMatches
-                                              ];
-                                              _magicInputActionText = '';
-                                              _waitingForHomeVisitorChoice =
-                                                  true;
-                                            });
-                                            // Set the text to show the choice prompt with player names
-                                            final homePlayer =
-                                                _magicInputMatchingPlayers
-                                                    .firstWhere(
-                                              (p) => _homeRoster.contains(p),
-                                              orElse: () =>
-                                                  _magicInputMatchingPlayers
-                                                      .first,
+                                            // Show a brief snackbar to confirm the change
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Switched to list mode for easier player selection'),
+                                                duration: Duration(seconds: 2),
+                                              ),
                                             );
-                                            final awayPlayer =
-                                                _magicInputMatchingPlayers
-                                                    .firstWhere(
-                                              (p) => !_homeRoster.contains(p),
-                                              orElse: () =>
-                                                  _magicInputMatchingPlayers
-                                                      .first,
-                                            );
+                                          },
+                                          onChanged: (value) {
+                                            // Handle H/V input when waiting for home/visitor choice
+                                            if (_waitingForHomeVisitorChoice) {
+                                              print(
+                                                  'DEBUG: In choice mode, value: "$value"');
+                                              // Check if user typed 'h' or 'v' anywhere in the text
+                                              final lowerValue =
+                                                  value.toLowerCase();
+                                              print(
+                                                  'DEBUG: Checking for h or v in: "$lowerValue"');
 
-                                            final homeLastName = homePlayer
-                                                .fullName
-                                                .split(' ')
-                                                .last;
-                                            final awayLastName = awayPlayer
-                                                .fullName
-                                                .split(' ')
-                                                .last;
+                                              // Look for 'h' or 'v' at the end of the input (user's choice)
+                                              final hMatch = RegExp(r'h$')
+                                                  .firstMatch(lowerValue);
+                                              final vMatch = RegExp(r'v$')
+                                                  .firstMatch(lowerValue);
 
-                                            _magicBarController.text =
-                                                '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
-                                            _magicBarController.selection =
-                                                TextSelection.fromPosition(
-                                              TextPosition(
-                                                  offset: _magicBarController
-                                                      .text.length),
-                                            );
-                                            return;
-                                          }
-                                        }
+                                              if (hMatch != null) {
+                                                print(
+                                                    'DEBUG: Found H, calling _processHomeVisitorChoice');
+                                                _processHomeVisitorChoice('h');
+                                                return;
+                                              } else if (vMatch != null) {
+                                                print(
+                                                    'DEBUG: Found V, calling _processHomeVisitorChoice');
+                                                _processHomeVisitorChoice('v');
+                                                return;
+                                              }
+                                              print(
+                                                  'DEBUG: No H or V found, restoring prompt if needed');
+                                              // Restore the prompt text if user tries to edit it
+                                              if (!value.contains(
+                                                  'Press H for Home or V for Away')) {
+                                                final numberPart =
+                                                    _magicInputMatchingPlayers
+                                                        .first.jerseyNumber;
+                                                print(
+                                                    'DEBUG: Restoring prompt text');
 
-                                        // Choose team when no explicit h/v was provided:
-                                        // 1) If only one team has players selected, use that team
-                                        // 2) Else if a team was selected first, use that
-                                        // 3) Else fall back to UI side (_homeOnLeft)
-                                        final bool inferredIsHome = isHomeHint
-                                            ? true
-                                            : (selectedHomePlayers.isNotEmpty &&
-                                                    selectedAwayPlayers.isEmpty)
-                                                ? true
-                                                : (selectedAwayPlayers
-                                                            .isNotEmpty &&
-                                                        selectedHomePlayers
-                                                            .isEmpty)
-                                                    ? false
-                                                    : (_firstTeamSelected ??
-                                                        _homeOnLeft);
+                                                // Create player choice text with last names and numbers
+                                                final homePlayer =
+                                                    _magicInputMatchingPlayers
+                                                        .firstWhere(
+                                                  (p) =>
+                                                      _homeRoster.contains(p),
+                                                  orElse: () =>
+                                                      _magicInputMatchingPlayers
+                                                          .first,
+                                                );
+                                                final awayPlayer =
+                                                    _magicInputMatchingPlayers
+                                                        .firstWhere(
+                                                  (p) =>
+                                                      !_homeRoster.contains(p),
+                                                  orElse: () =>
+                                                      _magicInputMatchingPlayers
+                                                          .first,
+                                                );
 
-                                        // If a different jersey was previously auto-selected for this team, unselect it
-                                        final prevAuto = inferredIsHome
-                                            ? _autoSelectedHomeJersey
-                                            : _autoSelectedAwayJersey;
-                                        if (prevAuto != null &&
-                                            prevAuto != numberPart) {
-                                          _unselectAutoSelectedByToken(
-                                            isHomeTeam: inferredIsHome,
-                                            jerseyNumber: prevAuto,
-                                          );
-                                        }
-                                        _selectPlayerChipByNumber(
-                                          isHomeTeam: inferredIsHome,
-                                          jerseyNumber: numberPart,
-                                          isProgressive: true,
-                                          affectFirstStar: false,
-                                        );
-                                        setState(() {});
-                                        return;
-                                      }
+                                                final homeLastName = homePlayer
+                                                    .fullName
+                                                    .split(' ')
+                                                    .last;
+                                                final awayLastName = awayPlayer
+                                                    .fullName
+                                                    .split(' ')
+                                                    .last;
 
-                                      // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
-                                      final RegExpMatch? hrLettersMatch0 =
-                                          RegExp(r'([a-zA-Z]+)$')
-                                              .firstMatch(value);
-                                      final String hrLetters0 = hrLettersMatch0
-                                              ?.group(1)
-                                              ?.toLowerCase() ??
-                                          '';
-                                      if (_selectedVerb == 'Home Run' &&
-                                          hrLetters0 == 'gs') {
-                                        setState(() {
-                                          _selectedHomeRunType = 'Grand Slam';
-                                        });
-                                        _updateCaption();
-                                        return;
-                                      }
-
-                                      // Try to match typed letters to a verb shortcut and auto-select the verb
-                                      // Only work when NOT in a submenu (to avoid conflicts)
-                                      if (_selectedVerb == null) {
-                                        final RegExpMatch? lettersMatch =
-                                            RegExp(r'([a-zA-Z]+)$')
-                                                .firstMatch(value);
-                                        final String typedLetters = lettersMatch
-                                                ?.group(1)
-                                                ?.toLowerCase() ??
-                                            '';
-                                        if (typedLetters.length >= 2) {
-                                          final matchedVerb =
-                                              _matchVerbToken(typedLetters);
-                                          if (matchedVerb != null) {
-                                            setState(() {
-                                              _selectedVerb = matchedVerb;
-                                              _selectedActionVerb = matchedVerb;
-                                              _clearVerbSubSelections();
-                                            });
-                                            _updateCaption();
-                                            return;
-                                          }
-                                        }
-                                      }
-
-                                      // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
-                                      final RegExpMatch? statMatch = RegExp(
-                                              r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
-                                          .firstMatch(value.trim());
-                                      if (statMatch != null) {
-                                        final int number =
-                                            int.tryParse(statMatch.group(1)!) ??
-                                                0;
-                                        final String suffix =
-                                            (statMatch.group(2) ?? '')
-                                                .toLowerCase();
-                                        if (suffix == 'r' ||
-                                            suffix == 'rb' ||
-                                            suffix == 'rbi') {
-                                          if (_selectedVerb == 'Home Run') {
-                                            String? hrType;
-                                            if (number <= 1) {
-                                              hrType = 'Solo';
-                                            } else if (number == 2) {
-                                              hrType = 'Two-Run';
-                                            } else if (number == 3) {
-                                              hrType = 'Three-Run';
-                                            } else if (number >= 4) {
-                                              hrType = 'Grand Slam';
+                                                _magicBarController.text =
+                                                    '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                                                _magicBarController.selection =
+                                                    TextSelection.fromPosition(
+                                                  TextPosition(
+                                                      offset:
+                                                          _magicBarController
+                                                              .text.length),
+                                                );
+                                              }
+                                              return;
                                             }
-                                            if (hrType != null) {
+
+                                            // Track magic bar input for verb highlighting
+                                            _magicBarVerbInput =
+                                                value.trim().toLowerCase();
+                                            // Track if we're typing a first magic token (no space yet)
+                                            _typingFirstMagicToken =
+                                                !value.contains(' ');
+                                            // Magic bar functionality
+                                            if (value.isEmpty) {
+                                              // Don't reset caption when magic bar is empty
+                                              // This preserves player selections during multi-player input
+                                              setState(
+                                                  () {}); // refresh highlighting
+                                              return;
+                                            }
+                                            // If user is typing a single player token (no space yet),
+                                            // highlight progressively and postpone parsing until token completes.
+                                            final raw = value;
+                                            final token =
+                                                raw.trim().toLowerCase();
+                                            final hasSpace = raw.contains(' ');
+                                            final String lastToken =
+                                                raw.trimRight().isEmpty
+                                                    ? ''
+                                                    : raw
+                                                        .trimRight()
+                                                        .split(' ')
+                                                        .last
+                                                        .toLowerCase();
+
+                                            // Ensure caption updates on deletion of shortcuts (run early before any returns)
+                                            {
+                                              final List<String> tokens = raw
+                                                  .trim()
+                                                  .toLowerCase()
+                                                  .split(RegExp(r'\s+'))
+                                                  .where((t) => t.isNotEmpty)
+                                                  .toList();
+                                              final bool hasHrToken =
+                                                  tokens.any((t) =>
+                                                      RegExp(r'^hr([1-4])$',
+                                                              caseSensitive:
+                                                                  false)
+                                                          .hasMatch(t) ||
+                                                      t == 'gs');
+                                              final bool hasRbiToken = RegExp(
+                                                      r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
+                                                  .hasMatch(raw.trim());
+                                              final bool
+                                                  hasExplicitInningToken =
+                                                  RegExp(r'(?:^|\b)[iI]\d+')
+                                                      .hasMatch(raw);
+                                              final List<String> bareNums =
+                                                  tokens
+                                                      .where((t) =>
+                                                          RegExp(r'^\d{1,2}$')
+                                                              .hasMatch(t))
+                                                      .toList();
+                                              final bool hasBareInningToken =
+                                                  raw.contains(' ') &&
+                                                      bareNums.isNotEmpty;
+
+                                              bool anyChanged = false;
                                               setState(() {
-                                                _selectedHomeRunType = hrType;
+                                                // If inning token removed, clear inning selection
+                                                if (!hasExplicitInningToken &&
+                                                    !hasBareInningToken &&
+                                                    _selectedRbiInning !=
+                                                        null) {
+                                                  _selectedRbiInning = null;
+                                                  anyChanged = true;
+                                                }
+                                                // If HR shortcut removed, clear Home Run selections
+                                                if (!hasHrToken &&
+                                                    _selectedVerb ==
+                                                        'Home Run') {
+                                                  _selectedVerb = null;
+                                                  _selectedActionVerb = null;
+                                                  _selectedHomeRunType = null;
+                                                  _rbiCount = null;
+                                                  anyChanged = true;
+                                                }
+                                                // If RBI shortcut removed (and not HR), clear RBI count
+                                                if (!hasRbiToken &&
+                                                    _selectedVerb !=
+                                                        'Home Run' &&
+                                                    _rbiCount != null) {
+                                                  _rbiCount = null;
+                                                  anyChanged = true;
+                                                }
+                                              });
+                                              if (anyChanged) {
+                                                _updateCaption();
+                                              }
+                                            }
+
+                                            // Quick-select Home Run with type via magic bar from the LAST token
+                                            // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
+                                            // Only work when NOT in a submenu (to avoid conflicts)
+                                            if (lastToken.isNotEmpty &&
+                                                _selectedVerb == null) {
+                                              final hrNum = RegExp(
+                                                      r'^hr([1-4])$',
+                                                      caseSensitive: false)
+                                                  .firstMatch(lastToken);
+                                              if (hrNum != null) {
+                                                final n = int.tryParse(
+                                                    hrNum.group(1)!);
+                                                String? hrType;
+                                                switch (n) {
+                                                  case 1:
+                                                    hrType = 'Solo';
+                                                    break;
+                                                  case 2:
+                                                    hrType = 'Two-Run';
+                                                    break;
+                                                  case 3:
+                                                    hrType = 'Three-Run';
+                                                    break;
+                                                  case 4:
+                                                    hrType = 'Grand Slam';
+                                                    break;
+                                                }
+                                                if (hrType != null) {
+                                                  setState(() {
+                                                    _selectedVerb = 'Home Run';
+                                                    _selectedActionVerb =
+                                                        'Home Run';
+                                                    _selectedHomeRunType =
+                                                        hrType;
+                                                    _rbiCount =
+                                                        n; // keep in sync
+                                                  });
+                                                  _updateCaption();
+                                                  return;
+                                                }
+                                              }
+                                              if (lastToken == 'gs') {
+                                                setState(() {
+                                                  _selectedVerb = 'Home Run';
+                                                  _selectedActionVerb =
+                                                      'Home Run';
+                                                  _selectedHomeRunType =
+                                                      'Grand Slam';
+                                                  _rbiCount = 4;
+                                                });
+                                                _updateCaption();
+                                                return;
+                                              }
+                                            }
+
+                                            // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
+                                            // Only trigger when there is at least one space (to avoid conflicting with first player token)
+                                            // Only work when NOT in a submenu (to avoid conflicts)
+                                            if (hasSpace &&
+                                                RegExp(r'^\d{1,2}$')
+                                                    .hasMatch(lastToken) &&
+                                                _selectedVerb == null) {
+                                              final int inningNum =
+                                                  int.parse(lastToken);
+                                              if (inningNum > 0 &&
+                                                  inningNum <= 20) {
+                                                setState(() {
+                                                  _selectedRbiInning =
+                                                      inningNum;
+                                                });
+                                                _updateCaption();
+                                                return;
+                                              }
+                                            }
+
+                                            final singlePlayerRegex = RegExp(
+                                                r'^(h{1,2}|v{1,2})?\d+$');
+                                            // Exclude hr patterns from single player regex
+                                            final hrPattern =
+                                                RegExp(r'^hr\d+$');
+                                            if (_typingFirstMagicToken &&
+                                                !hasSpace &&
+                                                singlePlayerRegex
+                                                    .hasMatch(token) &&
+                                                !hrPattern.hasMatch(token)) {
+                                              String numberPart =
+                                                  token.replaceAll(
+                                                      RegExp(
+                                                          r'^(h{1,2}|v{1,2})'),
+                                                      '');
+                                              bool isHomeHint =
+                                                  token.startsWith('h');
+
+                                              // If no explicit h/v and both teams have this jersey number,
+                                              // prompt for Home/Away choice inline.
+                                              if (!isHomeHint &&
+                                                  !token.startsWith('v')) {
+                                                final homeMatches = _homeRoster
+                                                    .where((p) =>
+                                                        p.jerseyNumber ==
+                                                        numberPart)
+                                                    .toList();
+                                                final awayMatches = _awayRoster
+                                                    .where((p) =>
+                                                        p.jerseyNumber ==
+                                                        numberPart)
+                                                    .toList();
+                                                if (homeMatches.isNotEmpty &&
+                                                    awayMatches.isNotEmpty) {
+                                                  setState(() {
+                                                    _filteredPlayers.clear();
+                                                    _noPlayersFound = false;
+                                                    _isPlayerSearchMode = false;
+                                                    _magicInputMatchingPlayers =
+                                                        [
+                                                      ...homeMatches,
+                                                      ...awayMatches
+                                                    ];
+                                                    _magicInputActionText = '';
+                                                    _waitingForHomeVisitorChoice =
+                                                        true;
+                                                  });
+                                                  // Set the text to show the choice prompt with player names
+                                                  final homePlayer =
+                                                      _magicInputMatchingPlayers
+                                                          .firstWhere(
+                                                    (p) =>
+                                                        _homeRoster.contains(p),
+                                                    orElse: () =>
+                                                        _magicInputMatchingPlayers
+                                                            .first,
+                                                  );
+                                                  final awayPlayer =
+                                                      _magicInputMatchingPlayers
+                                                          .firstWhere(
+                                                    (p) => !_homeRoster
+                                                        .contains(p),
+                                                    orElse: () =>
+                                                        _magicInputMatchingPlayers
+                                                            .first,
+                                                  );
+
+                                                  final homeLastName =
+                                                      homePlayer.fullName
+                                                          .split(' ')
+                                                          .last;
+                                                  final awayLastName =
+                                                      awayPlayer.fullName
+                                                          .split(' ')
+                                                          .last;
+
+                                                  _magicBarController.text =
+                                                      '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                                                  _magicBarController
+                                                          .selection =
+                                                      TextSelection
+                                                          .fromPosition(
+                                                    TextPosition(
+                                                        offset:
+                                                            _magicBarController
+                                                                .text.length),
+                                                  );
+                                                  return;
+                                                }
+                                              }
+
+                                              // Choose team when no explicit h/v was provided:
+                                              // 1) If only one team has players selected, use that team
+                                              // 2) Else if a team was selected first, use that
+                                              // 3) Else fall back to UI side (_homeOnLeft)
+                                              final bool inferredIsHome =
+                                                  isHomeHint
+                                                      ? true
+                                                      : (selectedHomePlayers
+                                                                  .isNotEmpty &&
+                                                              selectedAwayPlayers
+                                                                  .isEmpty)
+                                                          ? true
+                                                          : (selectedAwayPlayers
+                                                                      .isNotEmpty &&
+                                                                  selectedHomePlayers
+                                                                      .isEmpty)
+                                                              ? false
+                                                              : (_firstTeamSelected ??
+                                                                  _homeOnLeft);
+
+                                              // If a different jersey was previously auto-selected for this team, unselect it
+                                              final prevAuto = inferredIsHome
+                                                  ? _autoSelectedHomeJersey
+                                                  : _autoSelectedAwayJersey;
+                                              if (prevAuto != null &&
+                                                  prevAuto != numberPart) {
+                                                _unselectAutoSelectedByToken(
+                                                  isHomeTeam: inferredIsHome,
+                                                  jerseyNumber: prevAuto,
+                                                );
+                                              }
+                                              _selectPlayerChipByNumber(
+                                                isHomeTeam: inferredIsHome,
+                                                jerseyNumber: numberPart,
+                                                isProgressive: true,
+                                                affectFirstStar: false,
+                                              );
+                                              setState(() {});
+                                              return;
+                                            }
+
+                                            // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
+                                            final RegExpMatch? hrLettersMatch0 =
+                                                RegExp(r'([a-zA-Z]+)$')
+                                                    .firstMatch(value);
+                                            final String hrLetters0 =
+                                                hrLettersMatch0
+                                                        ?.group(1)
+                                                        ?.toLowerCase() ??
+                                                    '';
+                                            if (_selectedVerb == 'Home Run' &&
+                                                hrLetters0 == 'gs') {
+                                              setState(() {
+                                                _selectedHomeRunType =
+                                                    'Grand Slam';
                                               });
                                               _updateCaption();
                                               return;
                                             }
-                                          } else {
+
+                                            // Try to match typed letters to a verb shortcut and auto-select the verb
+                                            // Only work when NOT in a submenu (to avoid conflicts)
+                                            if (_selectedVerb == null) {
+                                              final RegExpMatch? lettersMatch =
+                                                  RegExp(r'([a-zA-Z]+)$')
+                                                      .firstMatch(value);
+                                              final String typedLetters =
+                                                  lettersMatch
+                                                          ?.group(1)
+                                                          ?.toLowerCase() ??
+                                                      '';
+                                              if (typedLetters.length >= 2) {
+                                                final matchedVerb =
+                                                    _matchVerbToken(
+                                                        typedLetters);
+                                                if (matchedVerb != null) {
+                                                  setState(() {
+                                                    _selectedVerb = matchedVerb;
+                                                    _selectedActionVerb =
+                                                        matchedVerb;
+                                                    _clearVerbSubSelections();
+                                                  });
+                                                  _updateCaption();
+                                                  return;
+                                                }
+                                              }
+                                            }
+
+                                            // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
+                                            final RegExpMatch? statMatch = RegExp(
+                                                    r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
+                                                .firstMatch(value.trim());
+                                            if (statMatch != null) {
+                                              final int number = int.tryParse(
+                                                      statMatch.group(1)!) ??
+                                                  0;
+                                              final String suffix =
+                                                  (statMatch.group(2) ?? '')
+                                                      .toLowerCase();
+                                              if (suffix == 'r' ||
+                                                  suffix == 'rb' ||
+                                                  suffix == 'rbi') {
+                                                if (_selectedVerb ==
+                                                    'Home Run') {
+                                                  String? hrType;
+                                                  if (number <= 1) {
+                                                    hrType = 'Solo';
+                                                  } else if (number == 2) {
+                                                    hrType = 'Two-Run';
+                                                  } else if (number == 3) {
+                                                    hrType = 'Three-Run';
+                                                  } else if (number >= 4) {
+                                                    hrType = 'Grand Slam';
+                                                  }
+                                                  if (hrType != null) {
+                                                    setState(() {
+                                                      _selectedHomeRunType =
+                                                          hrType;
+                                                    });
+                                                    _updateCaption();
+                                                    return;
+                                                  }
+                                                } else {
+                                                  setState(() {
+                                                    _rbiCount = number;
+                                                  });
+                                                  _updateCaption();
+                                                  return;
+                                                }
+                                              }
+                                            }
+
+                                            // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
+                                            if (_selectedVerb != null) {
+                                              final RegExpMatch? inningMatch =
+                                                  RegExp(r'^(\d{1,2})$')
+                                                      .firstMatch(lastToken);
+                                              if (inningMatch != null) {
+                                                final int inningNum =
+                                                    int.tryParse(inningMatch
+                                                            .group(1)!) ??
+                                                        0;
+                                                if (inningNum > 0 &&
+                                                    inningNum <= 20) {
+                                                  setState(() {
+                                                    _selectedRbiInning =
+                                                        inningNum;
+                                                  });
+                                                  _updateCaption();
+                                                  return;
+                                                }
+                                              }
+                                            }
+
+                                            // Cleanup: if user deletes shortcuts, clear derived selections and update caption
+                                            final List<String> tokens = raw
+                                                .trim()
+                                                .toLowerCase()
+                                                .split(RegExp(r'\s+'))
+                                                .where((t) => t.isNotEmpty)
+                                                .toList();
+                                            final bool hasHrToken = tokens.any(
+                                                (t) =>
+                                                    RegExp(r'^hr([1-4])$',
+                                                            caseSensitive:
+                                                                false)
+                                                        .hasMatch(t) ||
+                                                    t == 'gs');
+                                            final bool hasRbiToken = RegExp(
+                                                    r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
+                                                .hasMatch(raw.trim());
+                                            final bool hasExplicitInningToken =
+                                                RegExp(r'(?:^|\b)[iI]\d+')
+                                                    .hasMatch(raw);
+                                            final List<String> bareNums = tokens
+                                                .where((t) =>
+                                                    RegExp(r'^\d{1,2}$')
+                                                        .hasMatch(t))
+                                                .toList();
+                                            final bool hasBareInningToken =
+                                                raw.contains(' ') &&
+                                                    bareNums.isNotEmpty;
+
+                                            bool anyChanged = false;
                                             setState(() {
-                                              _rbiCount = number;
+                                              // If HR shortcut removed, clear Home Run selections
+                                              if (!hasHrToken &&
+                                                  _selectedVerb == 'Home Run') {
+                                                _selectedVerb = null;
+                                                _selectedActionVerb = null;
+                                                _selectedHomeRunType = null;
+                                                _rbiCount = null;
+                                                anyChanged = true;
+                                              }
+                                              // If RBI shortcut removed (and not HR), clear RBI count
+                                              if (!hasRbiToken &&
+                                                  _selectedVerb != 'Home Run' &&
+                                                  _rbiCount != null) {
+                                                _rbiCount = null;
+                                                anyChanged = true;
+                                              }
+                                              // If inning token removed, clear inning selection
+                                              if (!hasExplicitInningToken &&
+                                                  !hasBareInningToken &&
+                                                  _selectedRbiInning != null) {
+                                                _selectedRbiInning = null;
+                                                anyChanged = true;
+                                              }
                                             });
-                                            _updateCaption();
-                                            return;
-                                          }
-                                        }
-                                      }
+                                            if (anyChanged) {
+                                              _updateCaption();
+                                            }
 
-                                      // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
-                                      if (_selectedVerb != null) {
-                                        final RegExpMatch? inningMatch =
-                                            RegExp(r'^(\d{1,2})$')
-                                                .firstMatch(lastToken);
-                                        if (inningMatch != null) {
-                                          final int inningNum = int.tryParse(
-                                                  inningMatch.group(1)!) ??
-                                              0;
-                                          if (inningNum > 0 &&
-                                              inningNum <= 20) {
-                                            setState(() {
-                                              _selectedRbiInning = inningNum;
-                                            });
-                                            _updateCaption();
-                                            return;
-                                          }
-                                        }
-                                      }
+                                            print(
+                                                'DEBUG: About to check _isMagicInput for: "$value"');
+                                            if (_isMagicInput(value)) {
+                                              print(
+                                                  'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
+                                              _parseMagicInput(value);
+                                              return;
+                                            }
 
-                                      // Cleanup: if user deletes shortcuts, clear derived selections and update caption
-                                      final List<String> tokens = raw
-                                          .trim()
-                                          .toLowerCase()
-                                          .split(RegExp(r'\s+'))
-                                          .where((t) => t.isNotEmpty)
-                                          .toList();
-                                      final bool hasHrToken = tokens.any((t) =>
-                                          RegExp(r'^hr([1-4])$',
-                                                  caseSensitive: false)
-                                              .hasMatch(t) ||
-                                          t == 'gs');
-                                      final bool hasRbiToken = RegExp(
-                                              r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                          .hasMatch(raw.trim());
-                                      final bool hasExplicitInningToken =
-                                          RegExp(r'(?:^|\b)[iI]\d+')
-                                              .hasMatch(raw);
-                                      final List<String> bareNums = tokens
-                                          .where((t) =>
-                                              RegExp(r'^\d{1,2}$').hasMatch(t))
-                                          .toList();
-                                      final bool hasBareInningToken =
-                                          raw.contains(' ') &&
-                                              bareNums.isNotEmpty;
-
-                                      bool anyChanged = false;
-                                      setState(() {
-                                        // If HR shortcut removed, clear Home Run selections
-                                        if (!hasHrToken &&
-                                            _selectedVerb == 'Home Run') {
-                                          _selectedVerb = null;
-                                          _selectedActionVerb = null;
-                                          _selectedHomeRunType = null;
-                                          _rbiCount = null;
-                                          anyChanged = true;
-                                        }
-                                        // If RBI shortcut removed (and not HR), clear RBI count
-                                        if (!hasRbiToken &&
-                                            _selectedVerb != 'Home Run' &&
-                                            _rbiCount != null) {
-                                          _rbiCount = null;
-                                          anyChanged = true;
-                                        }
-                                        // If inning token removed, clear inning selection
-                                        if (!hasExplicitInningToken &&
-                                            !hasBareInningToken &&
-                                            _selectedRbiInning != null) {
-                                          _selectedRbiInning = null;
-                                          anyChanged = true;
-                                        }
-                                      });
-                                      if (anyChanged) {
-                                        _updateCaption();
-                                      }
-
-                                      print(
-                                          'DEBUG: About to check _isMagicInput for: "$value"');
-                                      if (_isMagicInput(value)) {
-                                        print(
-                                            'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
-                                        _parseMagicInput(value);
-                                        return;
-                                      }
-
-                                      // Handle multiple player numbers (e.g., "27 23")
-                                      _handleMultiplePlayerInput(value);
-                                      setState(
-                                          () {}); // refresh highlighting while typing
-                                    },
-                                  ),
+                                            // Handle multiple player numbers (e.g., "27 23")
+                                            _handleMultiplePlayerInput(value);
+                                            setState(
+                                                () {}); // refresh highlighting while typing
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    // Help button beside firebar
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 2),
+                                      child: IconButton(
+                                        onPressed: _showFirebarHelpDialog,
+                                        icon: Icon(
+                                          Icons.help_outline,
+                                          size: 16,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                        tooltip: 'Firebar Help',
+                                        style: IconButton.styleFrom(
+                                          padding: const EdgeInsets.all(2),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
 
@@ -3681,35 +4151,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    // Edit Teams button
-                                    MouseRegion(
-                                      cursor: SystemMouseCursors.click,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          _showTeamEditorDialog(
-                                              isHome: _homeOnLeft);
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                            border: Border.all(
-                                                color: Colors.grey.shade300),
-                                          ),
-                                          child: Text(
-                                            'Edit Teams',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              color: Colors.grey.shade700,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -3719,51 +4160,91 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         const SizedBox(height: 0),
                         // small spacer above the player search bar
                         const SizedBox(height: 4),
-                        // Search bar below team names and controls
-                        SizedBox(
-                          height: 24,
-                          child: TextField(
-                            controller: searchController,
-                            cursorWidth: 1.5,
-                            cursorHeight: 20,
-                            style: const TextStyle(fontSize: 11, height: 1.1),
-                            onChanged: (value) {
-                              setState(() {
-                                if (_homeOnLeft) {
-                                  _homeSearchText = value;
-                                } else {
-                                  _awaySearchText = value;
-                                }
-                              });
-                            },
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.only(
-                                  left: 6, right: 6, top: 2, bottom: 2),
-                              prefixIcon: const Icon(Icons.search,
-                                  size: 14, color: Colors.grey),
-                              prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 24),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade400),
+                        // Search bar and Edit Teams button row
+                        Row(
+                          children: [
+                            // Search bar
+                            Expanded(
+                              child: SizedBox(
+                                height: 24,
+                                child: TextField(
+                                  controller: searchController,
+                                  cursorWidth: 1.5,
+                                  cursorHeight: 20,
+                                  style: const TextStyle(
+                                      fontSize: 11, height: 1.1),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      if (_homeOnLeft) {
+                                        _homeSearchText = value;
+                                      } else {
+                                        _awaySearchText = value;
+                                      }
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.only(
+                                        left: 6, right: 6, top: 2, bottom: 2),
+                                    prefixIcon: const Icon(Icons.search,
+                                        size: 14, color: Colors.grey),
+                                    prefixIconConstraints: const BoxConstraints(
+                                        minWidth: 28, minHeight: 24),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.grey.shade400),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.grey.shade400),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                      borderSide: BorderSide(
+                                          color: Colors.blue.shade400,
+                                          width: 1),
+                                    ),
+                                    hintText: 'Search players...',
+                                    hintStyle: const TextStyle(
+                                        fontSize: 10, color: Colors.grey),
+                                  ),
+                                ),
                               ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade400),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide: BorderSide(
-                                    color: Colors.blue.shade400, width: 1),
-                              ),
-                              hintText: 'Search players...',
-                              hintStyle: const TextStyle(
-                                  fontSize: 10, color: Colors.grey),
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            // Edit Teams button
+                            MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _showTeamEditorDialog(isHome: _homeOnLeft);
+                                },
+                                child: Container(
+                                  height: 24,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      'Edit Teams',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.grey,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -3798,124 +4279,129 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     : (_homeOnLeft ? _homePlayerGridMode : _awayPlayerGridMode)
                         ? _buildPlayerGrid(
                             filteredRoster, selectedPlayers, _homeOnLeft)
-                        : Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: filteredRoster.length,
-                              itemBuilder: (context, index) {
-                                final player = filteredRoster[index];
-                                final isSelected = selectedPlayers
-                                    .contains(player.displayName);
-                                final isHomePlayer = _homeOnLeft
-                                    ? selectedHomePlayers
-                                        .contains(player.displayName)
-                                    : selectedAwayPlayers
+                        : _magicBarFocusNode.hasFocus
+                            ? _buildBothTeamsList()
+                            : Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: filteredRoster.length,
+                                  itemBuilder: (context, index) {
+                                    final player = filteredRoster[index];
+                                    final isSelected = selectedPlayers
                                         .contains(player.displayName);
+                                    final isHomePlayer = _homeOnLeft
+                                        ? selectedHomePlayers
+                                            .contains(player.displayName)
+                                        : selectedAwayPlayers
+                                            .contains(player.displayName);
 
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      if (isSelected) {
-                                        if (isHome) {
-                                          selectedHomePlayers
-                                              .remove(player.displayName);
-                                        } else {
-                                          selectedAwayPlayers
-                                              .remove(player.displayName);
-                                        }
-                                      } else {
-                                        // Track which team was selected first
-                                        if (_firstTeamSelected == null) {
-                                          _firstTeamSelected = isHome;
-                                          _firstPlayerSelected =
-                                              _removeJerseyNumberFromName(
-                                                  player.displayName);
-                                        } else {}
-                                        if (isHome) {
-                                          selectedHomePlayers
-                                              .add(player.displayName);
-                                        } else {
-                                          selectedAwayPlayers
-                                              .add(player.displayName);
-                                        }
+                                    return GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          if (isSelected) {
+                                            if (isHome) {
+                                              selectedHomePlayers
+                                                  .remove(player.displayName);
+                                            } else {
+                                              selectedAwayPlayers
+                                                  .remove(player.displayName);
+                                            }
+                                          } else {
+                                            // Track which team was selected first
+                                            if (_firstTeamSelected == null) {
+                                              _firstTeamSelected = isHome;
+                                              _firstPlayerSelected =
+                                                  _removeJerseyNumberFromName(
+                                                      player.displayName);
+                                            } else {}
+                                            if (isHome) {
+                                              selectedHomePlayers
+                                                  .add(player.displayName);
+                                            } else {
+                                              selectedAwayPlayers
+                                                  .add(player.displayName);
+                                            }
 
-                                        // Switch to custom verb mode when a player is selected
-                                        _isPlayerSearchMode = false;
-                                        print(
-                                            'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
-                                      }
-                                    });
-                                    _updateCaption();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? (isHomePlayer
-                                              ? Colors.grey.shade700
-                                              : Colors.white)
-                                          : Colors.grey.shade100,
-                                      border: Border(
-                                        bottom: BorderSide(
-                                            color: isSelected
-                                                ? (isHomePlayer
-                                                    ? Colors.grey.shade700
-                                                    : Colors.grey.shade400)
-                                                : Colors.grey.shade200,
-                                            width: 0.5),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Red star for first selected player
-                                        if (isSelected &&
-                                            _isFirstSelectedPlayer(
-                                                player.displayName))
-                                          Container(
-                                            margin:
-                                                const EdgeInsets.only(right: 4),
-                                            padding: const EdgeInsets.all(1),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red,
-                                              borderRadius:
-                                                  BorderRadius.circular(2),
-                                            ),
-                                            child: const Icon(
-                                              Icons.star,
-                                              size: 8,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        Expanded(
-                                          child: Text(
-                                            _getFormattedPlayerName(
-                                                player.displayName,
-                                                isHome
-                                                    ? _homeSortOption
-                                                    : _awaySortOption),
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.w600
-                                                  : FontWeight.normal,
-                                              color: isSelected
-                                                  ? (isHomePlayer
-                                                      ? Colors.white
-                                                      : Colors.grey.shade800)
-                                                  : Colors.black87,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
+                                            // Switch to custom verb mode when a player is selected
+                                            _isPlayerSearchMode = false;
+                                            print(
+                                                'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
+                                          }
+                                        });
+                                        _updateCaption();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? (isHomePlayer
+                                                  ? Colors.grey.shade700
+                                                  : Colors.white)
+                                              : Colors.grey.shade100,
+                                          border: Border(
+                                            bottom: BorderSide(
+                                                color: isSelected
+                                                    ? (isHomePlayer
+                                                        ? Colors.grey.shade700
+                                                        : Colors.grey.shade400)
+                                                    : Colors.grey.shade200,
+                                                width: 0.5),
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
+                                        child: Row(
+                                          children: [
+                                            // Red star for first selected player
+                                            if (isSelected &&
+                                                _isFirstSelectedPlayer(
+                                                    player.displayName))
+                                              Container(
+                                                margin: const EdgeInsets.only(
+                                                    right: 4),
+                                                padding:
+                                                    const EdgeInsets.all(1),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red,
+                                                  borderRadius:
+                                                      BorderRadius.circular(2),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.star,
+                                                  size: 8,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            Expanded(
+                                              child: Text(
+                                                _getFormattedPlayerName(
+                                                    player.displayName,
+                                                    isHome
+                                                        ? _homeSortOption
+                                                        : _awaySortOption),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: isSelected
+                                                      ? FontWeight.w600
+                                                      : FontWeight.normal,
+                                                  color: isSelected
+                                                      ? (isHomePlayer
+                                                          ? Colors.white
+                                                          : Colors
+                                                              .grey.shade800)
+                                                      : Colors.black87,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
           ),
         ],
       ),
@@ -4707,7 +5193,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          const SizedBox(height: 14),
           // Verb options
           ...verbs.map((verb) => _buildVerbOption(verb)).toList(),
         ],
@@ -4736,9 +5221,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildVerbOption(String verb) {
-    // Don't show anything for empty placeholder verbs
+    // Show blank chip for empty placeholder verbs
     if (verb.isEmpty) {
-      return const SizedBox.shrink();
+      return Container(
+        width: double.infinity,
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+        margin: const EdgeInsets.only(bottom: 1),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: Colors.grey.shade200,
+            width: 0.5,
+          ),
+        ),
+        child: const Center(
+          child: Text(
+            '',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+              color: Colors.transparent,
+            ),
+          ),
+        ),
+      );
     }
 
     final isSelected = _selectedVerb == verb;
@@ -5210,6 +5718,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(child: _buildVerbChip('Running', 'Running')),
             const SizedBox(width: 2),
             Expanded(child: _buildVerbChip('Reactions', 'Reactions')),
+            const SizedBox(width: 2),
+            Expanded(child: _buildVerbChip('Non Game-Action', 'Non Game')),
             const SizedBox(width: 2),
             Expanded(child: _buildVerbChip('Magic', 'Magic')),
           ],
@@ -7708,25 +8218,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
-    // Get creator and credit from metadata widget or use default
-    final creatorValue = widget.metadata?['Creator'];
-    final creditValue = widget.metadata?['Credit'];
-    String photoBy;
-    if (creatorValue is List) {
-      // If it's a list, take the first value only
-      photoBy = creatorValue.isNotEmpty
-          ? creatorValue.first.toString()
-          : 'Mark Blinch';
+    // Get creator and credit from current metadata widget values or fall back to original metadata
+    String? creatorValue;
+    String? creditValue;
+
+    // Try to get current values from metadata widget first
+    if (widget.getCurrentMetadataValues != null) {
+      final currentValues = widget.getCurrentMetadataValues!();
+      creatorValue = currentValues['Creator'];
+      creditValue = currentValues['Credit'];
+      print(
+          'DEBUG: Using current metadata values - Creator: "$creatorValue", Credit: "$creditValue"');
     } else {
-      photoBy = creatorValue?.toString() ?? 'Mark Blinch';
+      // Fall back to original metadata
+      creatorValue = widget.metadata?['Creator']?.toString();
+      creditValue = widget.metadata?['Credit']?.toString();
+      print(
+          'DEBUG: Using original metadata - Creator: "$creatorValue", Credit: "$creditValue"');
     }
 
-    // Build the byline with Getty Images style
+    // Debug logging
+    print('DEBUG: Creator: "$creatorValue", Credit: "$creditValue"');
+
+    String photoBy;
+    // Since we're now getting String values from the metadata widget, we don't need List handling
+    photoBy = creatorValue ?? '';
+
+    // Build the byline using EXIF Creator/Credit data
     String byline;
-    if (creditValue != null && creditValue.toString().isNotEmpty) {
-      byline = 'Photo by $photoBy/$creditValue';
+    if (photoBy.isNotEmpty &&
+        creditValue != null &&
+        creditValue.toString().isNotEmpty) {
+      byline = '$photoBy/$creditValue';
+    } else if (photoBy.isNotEmpty) {
+      byline = photoBy;
+    } else if (creditValue != null && creditValue.toString().isNotEmpty) {
+      byline = creditValue.toString();
     } else {
-      byline = 'Photo by $photoBy/Getty Images';
+      byline = ''; // No creator/credit info available
     }
 
     // Add custom text between players if provided (but not magic input)
@@ -7769,7 +8298,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${_isPriorToGame ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix. ($byline)';
+        '$gamePart at $stadium on $formattedDate $locationSuffix${byline.isNotEmpty ? ' ($byline)' : ''}';
 
     // Set caption text directly (no diacritic removal)
     captionController.text = caption;
@@ -13315,7 +13844,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Triple',
                           'Home Run',
                           'At Bat',
-                          'Swings'
+                          'Swings',
+                          '',
+                          '',
+                          ''
                         ]),
                       ),
                     ),
@@ -13331,7 +13863,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Throws',
                           'Tags',
                           'Groundball',
-                          'Fielding Position'
+                          'Fielding Position',
+                          '',
+                          '',
+                          ''
                         ]),
                       ),
                     ),
@@ -13341,8 +13876,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory(
-                            'Running', ['Steals', 'Slides', 'Runs', 'Rounds']),
+                        child: _buildVerbCategory('Running', [
+                          'Steals',
+                          'Slides',
+                          'Runs',
+                          'Rounds',
+                          '',
+                          '',
+                          '',
+                          '',
+                          ''
+                        ]),
                       ),
                     ),
                   ),
@@ -13366,6 +13910,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Dejection',
                           'Post Game Win',
                           'Post Game Loss',
+                          '',
+                          '',
                           '',
                           '',
                           ''
@@ -15607,6 +16153,248 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBothTeamsList() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          // Home team header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border(
+                bottom: BorderSide(color: Colors.blue.shade200, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.home, size: 14, color: Colors.blue.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  selectedHomeTeam ?? 'Home Team',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Home team players
+          Expanded(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _homeRoster.length,
+              itemBuilder: (context, index) {
+                final player = _homeRoster[index];
+                final isSelected =
+                    selectedHomePlayers.contains(player.displayName);
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        selectedHomePlayers.remove(player.displayName);
+                      } else {
+                        if (_firstTeamSelected == null) {
+                          _firstTeamSelected = true;
+                          _firstPlayerSelected =
+                              _removeJerseyNumberFromName(player.displayName);
+                        }
+                        selectedHomePlayers.add(player.displayName);
+                        _isPlayerSearchMode = false;
+                      }
+                    });
+                    _updateCaption();
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.blue.shade700
+                          : Colors.blue.shade50,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isSelected
+                              ? Colors.blue.shade700
+                              : Colors.blue.shade100,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (isSelected &&
+                            _isFirstSelectedPlayer(player.displayName))
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.all(1),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                            child: const Icon(
+                              Icons.star,
+                              size: 8,
+                              color: Colors.white,
+                            ),
+                          ),
+                        Text(
+                          'H${player.jerseyNumber ?? "?"}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? Colors.white
+                                : Colors.blue.shade600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _getFormattedPlayerName(
+                                player.displayName, _homeSortOption),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isSelected ? Colors.white : Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // Away team header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border(
+                bottom: BorderSide(color: Colors.red.shade200, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.flight, size: 14, color: Colors.red.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  selectedAwayTeam ?? 'Away Team',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Away team players
+          Expanded(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _awayRoster.length,
+              itemBuilder: (context, index) {
+                final player = _awayRoster[index];
+                final isSelected =
+                    selectedAwayPlayers.contains(player.displayName);
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        selectedAwayPlayers.remove(player.displayName);
+                      } else {
+                        if (_firstTeamSelected == null) {
+                          _firstTeamSelected = false;
+                          _firstPlayerSelected =
+                              _removeJerseyNumberFromName(player.displayName);
+                        }
+                        selectedAwayPlayers.add(player.displayName);
+                        _isPlayerSearchMode = false;
+                      }
+                    });
+                    _updateCaption();
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color:
+                          isSelected ? Colors.red.shade700 : Colors.red.shade50,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isSelected
+                              ? Colors.red.shade700
+                              : Colors.red.shade100,
+                          width: 0.5,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        if (isSelected &&
+                            _isFirstSelectedPlayer(player.displayName))
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.all(1),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                            child: const Icon(
+                              Icons.star,
+                              size: 8,
+                              color: Colors.white,
+                            ),
+                          ),
+                        Text(
+                          'V${player.jerseyNumber ?? "?"}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                isSelected ? Colors.white : Colors.red.shade600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _getFormattedPlayerName(
+                                player.displayName, _awaySortOption),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isSelected ? Colors.white : Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
