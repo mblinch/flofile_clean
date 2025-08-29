@@ -2709,9 +2709,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                         // Action buttons are now beside the magic bar
                         // (Old action button container removed)
-
                         const SizedBox(height: 1),
-
                         // New container spanning bottom left quadrant
                         Container(
                           width: double.infinity,
@@ -2794,15 +2792,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               _homePlayerGridMode = false;
                                               _awayPlayerGridMode = false;
                                             });
-                                            // Show a brief snackbar to confirm the change
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                    'Switched to list mode for easier player selection'),
-                                                duration: Duration(seconds: 2),
-                                              ),
-                                            );
                                           },
                                           onChanged: (value) {
                                             // Handle H/V input when waiting for home/visitor choice
@@ -3877,375 +3866,385 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             const SizedBox(width: 0),
                             // Team tabs
-                            Row(
-                              children: [
-                                // Home team tab
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _homeOnLeft = true;
-                                    });
-                                    _updateCaption();
-                                  },
-                                  child: Container(
-                                    height: 22,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8),
-                                    decoration: BoxDecoration(
-                                      color: _homeOnLeft
-                                          ? Colors.grey.shade300
-                                          : Colors.grey.shade100,
-                                      borderRadius: const BorderRadius.only(
-                                        topLeft: Radius.circular(4),
-                                        bottomLeft: Radius.circular(4),
-                                      ),
-                                      border: Border.all(
+                            if (!_magicBarFocusNode.hasFocus)
+                              Row(
+                                children: [
+                                  // Home team tab
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _homeOnLeft = true;
+                                      });
+                                      _updateCaption();
+                                    },
+                                    child: Container(
+                                      height: 22,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      decoration: BoxDecoration(
                                         color: _homeOnLeft
-                                            ? Colors.grey.shade500
-                                            : Colors.grey.shade300,
+                                            ? Colors.grey.shade300
+                                            : Colors.grey.shade100,
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(4),
+                                          bottomLeft: Radius.circular(4),
+                                        ),
+                                        border: Border.all(
+                                          color: _homeOnLeft
+                                              ? Colors.grey.shade500
+                                              : Colors.grey.shade300,
+                                        ),
                                       ),
-                                    ),
-                                    child: Center(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.home,
-                                            size: 10,
-                                            color: _homeOnLeft
-                                                ? Colors.black87
-                                                : Colors.grey.shade500,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            _getTeamAbbreviation(
-                                                selectedHomeTeam ?? 'Home'),
-                                            style: TextStyle(
-                                              fontSize: 10,
+                                      child: Center(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.home,
+                                              size: 10,
                                               color: _homeOnLeft
                                                   ? Colors.black87
                                                   : Colors.grey.shade500,
-                                              fontWeight: FontWeight.w500,
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Away team tab
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _homeOnLeft = false;
-                                    });
-                                    _updateCaption();
-                                  },
-                                  child: Container(
-                                    height: 22,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8),
-                                    decoration: BoxDecoration(
-                                      color: !_homeOnLeft
-                                          ? Colors.grey.shade300
-                                          : Colors.grey.shade100,
-                                      borderRadius: const BorderRadius.only(
-                                        topRight: Radius.circular(4),
-                                        bottomRight: Radius.circular(4),
-                                      ),
-                                      border: Border.all(
-                                        color: !_homeOnLeft
-                                            ? Colors.grey.shade500
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.flight,
-                                            size: 10,
-                                            color: !_homeOnLeft
-                                                ? Colors.black87
-                                                : Colors.grey.shade500,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            _getTeamAbbreviation(
-                                                selectedAwayTeam ?? 'Away'),
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: !_homeOnLeft
-                                                  ? Colors.black87
-                                                  : Colors.grey.shade500,
-                                              fontWeight: FontWeight.w500,
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              _getTeamAbbreviation(
+                                                  selectedHomeTeam ?? 'Home'),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: _homeOnLeft
+                                                    ? Colors.black87
+                                                    : Colors.grey.shade500,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                            // Display options to the right of switch button
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Display title
-                                    Text(
-                                      'Display:',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 1),
-                                    // Type button
-                                    MouseRegion(
-                                      cursor: SystemMouseCursors.click,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            if (_homeOnLeft) {
-                                              _homePlayerGridMode =
-                                                  !_homePlayerGridMode;
-                                              // Reset sort order when switching to grid mode
-                                              if (_homePlayerGridMode) {
-                                                _homeSortOption = 'number';
-                                                _homeSortAscending = true;
-                                              }
-                                            } else {
-                                              _awayPlayerGridMode =
-                                                  !_awayPlayerGridMode;
-                                              // Reset sort order when switching to grid mode
-                                              if (_awayPlayerGridMode) {
-                                                _awaySortOption = 'number';
-                                                _awaySortAscending = true;
-                                              }
-                                            }
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 4, vertical: 2),
-                                          child: Text(
-                                            _homeOnLeft
-                                                ? (_homePlayerGridMode
-                                                    ? 'Grid'
-                                                    : 'List')
-                                                : (_awayPlayerGridMode
-                                                    ? 'Grid'
-                                                    : 'List'),
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500),
-                                          ),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-
-                                    // Sort by options (only show when in List mode)
-                                    if (!(_homeOnLeft
-                                        ? _homePlayerGridMode
-                                        : _awayPlayerGridMode)) ...[
+                                  ),
+                                  // Away team tab
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _homeOnLeft = false;
+                                      });
+                                      _updateCaption();
+                                    },
+                                    child: Container(
+                                      height: 22,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      decoration: BoxDecoration(
+                                        color: !_homeOnLeft
+                                            ? Colors.grey.shade300
+                                            : Colors.grey.shade100,
+                                        borderRadius: const BorderRadius.only(
+                                          topRight: Radius.circular(4),
+                                          bottomRight: Radius.circular(4),
+                                        ),
+                                        border: Border.all(
+                                          color: !_homeOnLeft
+                                              ? Colors.grey.shade500
+                                              : Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.flight,
+                                              size: 10,
+                                              color: !_homeOnLeft
+                                                  ? Colors.black87
+                                                  : Colors.grey.shade500,
+                                            ),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              _getTeamAbbreviation(
+                                                  selectedAwayTeam ?? 'Away'),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: !_homeOnLeft
+                                                    ? Colors.black87
+                                                    : Colors.grey.shade500,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            const SizedBox(width: 8),
+                            // Display options to the right of switch button
+                            if (!_magicBarFocusNode.hasFocus)
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Display title
                                       Text(
-                                        'Sort:',
+                                        'Display:',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           color: Colors.black87,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 1),
+                                      // Type button
                                       MouseRegion(
                                         cursor: SystemMouseCursors.click,
                                         child: GestureDetector(
                                           onTap: () {
                                             setState(() {
                                               if (_homeOnLeft) {
-                                                if (_homeSortOption ==
-                                                    'number') {
-                                                  _homeSortOption = 'lastName';
-                                                } else if (_homeSortOption ==
-                                                    'lastName') {
-                                                  _homeSortOption = 'firstName';
-                                                } else {
+                                                _homePlayerGridMode =
+                                                    !_homePlayerGridMode;
+                                                // Reset sort order when switching to grid mode
+                                                if (_homePlayerGridMode) {
                                                   _homeSortOption = 'number';
+                                                  _homeSortAscending = true;
                                                 }
                                               } else {
-                                                if (_awaySortOption ==
-                                                    'number') {
-                                                  _awaySortOption = 'lastName';
-                                                } else if (_awaySortOption ==
-                                                    'lastName') {
-                                                  _awaySortOption = 'firstName';
-                                                } else {
+                                                _awayPlayerGridMode =
+                                                    !_awayPlayerGridMode;
+                                                // Reset sort order when switching to grid mode
+                                                if (_awayPlayerGridMode) {
                                                   _awaySortOption = 'number';
+                                                  _awaySortAscending = true;
                                                 }
+                                              }
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 2),
+                                            child: Text(
+                                              _homeOnLeft
+                                                  ? (_homePlayerGridMode
+                                                      ? 'Grid'
+                                                      : 'List')
+                                                  : (_awayPlayerGridMode
+                                                      ? 'Grid'
+                                                      : 'List'),
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+
+                                      // Sort by options (only show when in List mode)
+                                      if (!(_homeOnLeft
+                                          ? _homePlayerGridMode
+                                          : _awayPlayerGridMode)) ...[
+                                        Text(
+                                          'Sort:',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        MouseRegion(
+                                          cursor: SystemMouseCursors.click,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                if (_homeOnLeft) {
+                                                  if (_homeSortOption ==
+                                                      'number') {
+                                                    _homeSortOption =
+                                                        'lastName';
+                                                  } else if (_homeSortOption ==
+                                                      'lastName') {
+                                                    _homeSortOption =
+                                                        'firstName';
+                                                  } else {
+                                                    _homeSortOption = 'number';
+                                                  }
+                                                } else {
+                                                  if (_awaySortOption ==
+                                                      'number') {
+                                                    _awaySortOption =
+                                                        'lastName';
+                                                  } else if (_awaySortOption ==
+                                                      'lastName') {
+                                                    _awaySortOption =
+                                                        'firstName';
+                                                  } else {
+                                                    _awaySortOption = 'number';
+                                                  }
+                                                }
+                                              });
+                                            },
+                                            child: Text(
+                                              _homeOnLeft
+                                                  ? (_homeSortOption == 'number'
+                                                      ? 'Player Numbers'
+                                                      : _homeSortOption ==
+                                                              'lastName'
+                                                          ? 'Last Name'
+                                                          : 'First Name')
+                                                  : (_awaySortOption == 'number'
+                                                      ? 'Player Numbers'
+                                                      : _awaySortOption ==
+                                                              'lastName'
+                                                          ? 'Last Name'
+                                                          : 'First Name'),
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      // Ascending/Descending button
+                                      MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              if (_homeOnLeft) {
+                                                _homeSortAscending =
+                                                    !_homeSortAscending;
+                                              } else {
+                                                _awaySortAscending =
+                                                    !_awaySortAscending;
                                               }
                                             });
                                           },
                                           child: Text(
                                             _homeOnLeft
-                                                ? (_homeSortOption == 'number'
-                                                    ? 'Player Numbers'
-                                                    : _homeSortOption ==
-                                                            'lastName'
-                                                        ? 'Last Name'
-                                                        : 'First Name')
-                                                : (_awaySortOption == 'number'
-                                                    ? 'Player Numbers'
-                                                    : _awaySortOption ==
-                                                            'lastName'
-                                                        ? 'Last Name'
-                                                        : 'First Name'),
-                                            style: TextStyle(
+                                                ? (_homeSortAscending
+                                                    ? '↑'
+                                                    : '↓')
+                                                : (_awaySortAscending
+                                                    ? '↑'
+                                                    : '↓'),
+                                            style: const TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.grey.shade700,
-                                                fontWeight: FontWeight.w500),
+                                                color: Colors.black87,
+                                                fontWeight: FontWeight.bold),
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 6),
                                     ],
-                                    // Ascending/Descending button
-                                    MouseRegion(
-                                      cursor: SystemMouseCursors.click,
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            if (_homeOnLeft) {
-                                              _homeSortAscending =
-                                                  !_homeSortAscending;
-                                            } else {
-                                              _awaySortAscending =
-                                                  !_awaySortAscending;
-                                            }
-                                          });
-                                        },
-                                        child: Text(
-                                          _homeOnLeft
-                                              ? (_homeSortAscending ? '↑' : '↓')
-                                              : (_awaySortAscending
-                                                  ? '↑'
-                                                  : '↓'),
-                                          style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.black87,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(height: 0),
                         // small spacer above the player search bar
                         const SizedBox(height: 4),
                         // Search bar and Edit Teams button row
-                        Row(
-                          children: [
-                            // Search bar
-                            Expanded(
-                              child: SizedBox(
-                                height: 24,
-                                child: TextField(
-                                  controller: searchController,
-                                  cursorWidth: 1.5,
-                                  cursorHeight: 20,
-                                  style: const TextStyle(
-                                      fontSize: 11, height: 1.1),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      if (_homeOnLeft) {
-                                        _homeSearchText = value;
-                                      } else {
-                                        _awaySearchText = value;
-                                      }
-                                    });
-                                  },
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.only(
-                                        left: 6, right: 6, top: 2, bottom: 2),
-                                    prefixIcon: const Icon(Icons.search,
-                                        size: 14, color: Colors.grey),
-                                    prefixIconConstraints: const BoxConstraints(
-                                        minWidth: 28, minHeight: 24),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade400),
+                        if (!_magicBarFocusNode.hasFocus)
+                          Row(
+                            children: [
+                              // Search bar
+                              Expanded(
+                                child: SizedBox(
+                                  height: 24,
+                                  child: TextField(
+                                    controller: searchController,
+                                    cursorWidth: 1.5,
+                                    cursorHeight: 20,
+                                    style: const TextStyle(
+                                        fontSize: 11, height: 1.1),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (_homeOnLeft) {
+                                          _homeSearchText = value;
+                                        } else {
+                                          _awaySearchText = value;
+                                        }
+                                      });
+                                    },
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.only(
+                                          left: 6, right: 6, top: 2, bottom: 2),
+                                      prefixIcon: const Icon(Icons.search,
+                                          size: 14, color: Colors.grey),
+                                      prefixIconConstraints:
+                                          const BoxConstraints(
+                                              minWidth: 28, minHeight: 24),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade400),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey.shade400),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                        borderSide: BorderSide(
+                                            color: Colors.blue.shade400,
+                                            width: 1),
+                                      ),
+                                      hintText: 'Search players...',
+                                      hintStyle: const TextStyle(
+                                          fontSize: 10, color: Colors.grey),
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.grey.shade400),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      borderSide: BorderSide(
-                                          color: Colors.blue.shade400,
-                                          width: 1),
-                                    ),
-                                    hintText: 'Search players...',
-                                    hintStyle: const TextStyle(
-                                        fontSize: 10, color: Colors.grey),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Edit Teams button
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: GestureDetector(
-                                onTap: () {
-                                  _showTeamEditorDialog(isHome: _homeOnLeft);
-                                },
-                                child: Container(
-                                  height: 24,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Edit Teams',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        color: Colors.grey,
-                                        fontWeight: FontWeight.w500,
+                              const SizedBox(width: 4),
+                              // Edit Teams button
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _showTeamEditorDialog(isHome: _homeOnLeft);
+                                  },
+                                  child: Container(
+                                    height: 24,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        'Edit Teams',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: Colors.grey,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
@@ -16157,240 +16156,290 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBothTeamsList() {
+    // Sort rosters by jersey number
+    final sortedHomeRoster = List<Player>.from(_homeRoster)
+      ..sort((a, b) {
+        final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+        final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+        return aNum.compareTo(bNum);
+      });
+    final sortedAwayRoster = List<Player>.from(_awayRoster)
+      ..sort((a, b) {
+        final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+        final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+        return aNum.compareTo(bNum);
+      });
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
+      child: Row(
         children: [
-          // Home team header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              border: Border(
-                bottom: BorderSide(color: Colors.blue.shade200, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.home, size: 14, color: Colors.blue.shade700),
-                const SizedBox(width: 6),
-                Text(
-                  selectedHomeTeam ?? 'Home Team',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Home team players
+          // Home team column
           Expanded(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _homeRoster.length,
-              itemBuilder: (context, index) {
-                final player = _homeRoster[index];
-                final isSelected =
-                    selectedHomePlayers.contains(player.displayName);
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        selectedHomePlayers.remove(player.displayName);
-                      } else {
-                        if (_firstTeamSelected == null) {
-                          _firstTeamSelected = true;
-                          _firstPlayerSelected =
-                              _removeJerseyNumberFromName(player.displayName);
-                        }
-                        selectedHomePlayers.add(player.displayName);
-                        _isPlayerSearchMode = false;
-                      }
-                    });
-                    _updateCaption();
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.blue.shade700
-                          : Colors.blue.shade50,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isSelected
-                              ? Colors.blue.shade700
-                              : Colors.blue.shade100,
-                          width: 0.5,
+            child: Column(
+              children: [
+                // Home team header
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.home, size: 14, color: Colors.grey.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          selectedHomeTeam ?? 'Home Team',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                    child: Row(
-                      children: [
-                        if (isSelected &&
-                            _isFirstSelectedPlayer(player.displayName))
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.all(1),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                            child: const Icon(
-                              Icons.star,
-                              size: 8,
-                              color: Colors.white,
-                            ),
-                          ),
-                        Text(
-                          'H${player.jerseyNumber ?? "?"}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                    ],
+                  ),
+                ),
+                // Home team players
+                Expanded(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: sortedHomeRoster.length,
+                    itemBuilder: (context, index) {
+                      final player = sortedHomeRoster[index];
+                      final isSelected =
+                          selectedHomePlayers.contains(player.displayName);
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              selectedHomePlayers.remove(player.displayName);
+                            } else {
+                              if (_firstTeamSelected == null) {
+                                _firstTeamSelected = true;
+                                _firstPlayerSelected =
+                                    _removeJerseyNumberFromName(
+                                        player.displayName);
+                              }
+                              selectedHomePlayers.add(player.displayName);
+                              _isPlayerSearchMode = false;
+                            }
+                          });
+                          _updateCaption();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
                             color: isSelected
-                                ? Colors.white
-                                : Colors.blue.shade600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _getFormattedPlayerName(
-                                player.displayName, _homeSortOption),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: isSelected ? Colors.white : Colors.black87,
+                                ? Colors.blue.shade600
+                                : Colors.white,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isSelected
+                                    ? Colors.blue.shade600
+                                    : Colors.grey.shade200,
+                                width: 0.5,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                          ),
+                          child: Row(
+                            children: [
+                              if (isSelected &&
+                                  _isFirstSelectedPlayer(player.displayName))
+                                Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.all(1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: const Icon(
+                                    Icons.star,
+                                    size: 8,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              Text(
+                                '🔥H${player.jerseyNumber ?? "?"}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _removeJerseyNumberFromName(
+                                      player.displayName),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          // Away team header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              border: Border(
-                bottom: BorderSide(color: Colors.red.shade200, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.flight, size: 14, color: Colors.red.shade700),
-                const SizedBox(width: 6),
-                Text(
-                  selectedAwayTeam ?? 'Away Team',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red.shade700,
+                      );
+                    },
                   ),
                 ),
               ],
             ),
           ),
-          // Away team players
+          // Divider between teams
+          Container(
+            width: 1,
+            color: Colors.grey.shade300,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+          // Away team column
           Expanded(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _awayRoster.length,
-              itemBuilder: (context, index) {
-                final player = _awayRoster[index];
-                final isSelected =
-                    selectedAwayPlayers.contains(player.displayName);
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isSelected) {
-                        selectedAwayPlayers.remove(player.displayName);
-                      } else {
-                        if (_firstTeamSelected == null) {
-                          _firstTeamSelected = false;
-                          _firstPlayerSelected =
-                              _removeJerseyNumberFromName(player.displayName);
-                        }
-                        selectedAwayPlayers.add(player.displayName);
-                        _isPlayerSearchMode = false;
-                      }
-                    });
-                    _updateCaption();
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected ? Colors.red.shade700 : Colors.red.shade50,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isSelected
-                              ? Colors.red.shade700
-                              : Colors.red.shade100,
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        if (isSelected &&
-                            _isFirstSelectedPlayer(player.displayName))
-                          Container(
-                            margin: const EdgeInsets.only(right: 6),
-                            padding: const EdgeInsets.all(1),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                            child: const Icon(
-                              Icons.star,
-                              size: 8,
-                              color: Colors.white,
-                            ),
-                          ),
-                        Text(
-                          'V${player.jerseyNumber ?? "?"}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color:
-                                isSelected ? Colors.white : Colors.red.shade600,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _getFormattedPlayerName(
-                                player.displayName, _awaySortOption),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                              color: isSelected ? Colors.white : Colors.black87,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+            child: Column(
+              children: [
+                // Away team header
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                     ),
                   ),
-                );
-              },
+                  child: Row(
+                    children: [
+                      Icon(Icons.flight, size: 14, color: Colors.grey.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          selectedAwayTeam ?? 'Away Team',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Away team players
+                Expanded(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: sortedAwayRoster.length,
+                    itemBuilder: (context, index) {
+                      final player = sortedAwayRoster[index];
+                      final isSelected =
+                          selectedAwayPlayers.contains(player.displayName);
+
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              selectedAwayPlayers.remove(player.displayName);
+                            } else {
+                              if (_firstTeamSelected == null) {
+                                _firstTeamSelected = false;
+                                _firstPlayerSelected =
+                                    _removeJerseyNumberFromName(
+                                        player.displayName);
+                              }
+                              selectedAwayPlayers.add(player.displayName);
+                              _isPlayerSearchMode = false;
+                            }
+                          });
+                          _updateCaption();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.blue.shade600
+                                : Colors.grey.shade50,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: isSelected
+                                    ? Colors.blue.shade600
+                                    : Colors.grey.shade200,
+                                width: 0.5,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              if (isSelected &&
+                                  _isFirstSelectedPlayer(player.displayName))
+                                Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.all(1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: const Icon(
+                                    Icons.star,
+                                    size: 8,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              Text(
+                                '🔥V${player.jerseyNumber ?? "?"}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _removeJerseyNumberFromName(
+                                      player.displayName),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],

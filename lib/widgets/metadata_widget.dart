@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class MetadataWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -106,6 +108,56 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     {'code': '8', 'name': '8 - Low'},
     {'code': '0', 'name': '0 - Undefined'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMetadataPreset();
+  }
+
+  Future<void> _loadMetadataPreset() async {
+    final prefs = await SharedPreferences.getInstance();
+    final presetJson = prefs.getString('selected_metadata_preset');
+
+    if (presetJson != null) {
+      try {
+        final presetData = jsonDecode(presetJson) as Map<String, dynamic>;
+
+        // Apply preset values to controllers
+        creatorController.text = presetData['Creator'] ?? '';
+        jobIdController.text = presetData['MEID'] ?? '';
+        descriptionWritersController.text =
+            presetData['Description Writers'] ?? '';
+        creatorJobTitleController.text =
+            presetData['Creator\'s Job Title'] ?? '';
+        copyrightController.text = presetData['Copyright'] ?? '';
+        creditController.text = presetData['Credit'] ?? '';
+        sourceController.text = presetData['Source'] ?? '';
+        headlineController.text = presetData['Headline'] ?? '';
+        keywordsController.text = presetData['Keywords'] ?? '';
+        suppCat1Controller.text = presetData['Supp Cat 1'] ?? '';
+        suppCat2Controller.text = presetData['Supp Cat 2'] ?? '';
+        suppCat3Controller.text = presetData['Supp Cat 3'] ?? '';
+        categoryController.text = presetData['Category'] ?? '';
+        titleObjectNameController.text = presetData['Object Name'] ?? '';
+        stadiumController.text = presetData['Stadium'] ?? '';
+        cityController.text = presetData['City'] ?? '';
+        provinceController.text = presetData['Province/State'] ?? '';
+        countryController.text = presetData['Country'] ?? '';
+        countryCodeController.text = presetData['Country Code'] ?? '';
+        urgencyController.text = presetData['Urgency'] ?? '';
+        specialInstructionsController.text =
+            presetData['Special Instructions'] ?? '';
+
+        // Clear the preset after applying it
+        await prefs.remove('selected_metadata_preset');
+
+        print('DEBUG: Applied metadata preset successfully');
+      } catch (e) {
+        print('DEBUG: Error applying metadata preset: $e');
+      }
+    }
+  }
 
   @override
   void didUpdateWidget(MetadataWidget oldWidget) {

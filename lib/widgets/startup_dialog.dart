@@ -5,6 +5,8 @@ import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
 import '../utils/exiftool_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'metadata_preset_dialog.dart';
 
 // Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
 class CustomButton extends StatelessWidget {
@@ -407,14 +409,25 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
-  void _openMetadataPreset() {
-    // Placeholder for upcoming feature
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Metadata Preset feature coming soon.'),
-        duration: Duration(seconds: 2),
-      ),
+  void _openMetadataPreset() async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => const MetadataPresetDialog(currentPreset: null),
     );
+
+    if (result != null) {
+      // Store the selected preset data to be used when the app starts
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selected_metadata_preset', jsonEncode(result));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Metadata preset will be applied when you start the app.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   bool get _canProceed {
