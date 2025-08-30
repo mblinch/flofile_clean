@@ -257,8 +257,13 @@ class _StartupDialogState extends State<StartupDialog> {
     });
 
     try {
+      // Get the last used directory
+      final prefs = await SharedPreferences.getInstance();
+      final lastDirectory = prefs.getString('last_images_folder');
+
       String? result = await FilePicker.platform.getDirectoryPath(
         dialogTitle: 'Select folder containing your images',
+        initialDirectory: lastDirectory,
       );
 
       if (result != null) {
@@ -276,6 +281,9 @@ class _StartupDialogState extends State<StartupDialog> {
                 path.toLowerCase().endsWith('.tiff') ||
                 path.toLowerCase().endsWith('.bmp'))
             .toList();
+
+        // Save the directory for next time
+        await prefs.setString('last_images_folder', result);
 
         setState(() {
           selectedFolderPath = result;

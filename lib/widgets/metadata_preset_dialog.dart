@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
+import 'dart:io';
+import '../utils/exiftool_helper.dart';
 
 class MetadataPresetDialog extends StatefulWidget {
   final Map<String, String>? currentPreset;
@@ -38,6 +41,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   final TextEditingController urgencyController = TextEditingController();
   final TextEditingController specialInstructionsController =
       TextEditingController();
+  final TextEditingController personalityController = TextEditingController();
+  final TextEditingController captionController = TextEditingController();
+  final TextEditingController dateController = TextEditingController();
+  final TextEditingController timeController = TextEditingController();
 
   // Preset management
   final TextEditingController presetNameController = TextEditingController();
@@ -103,6 +110,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       urgencyController.text = widget.currentPreset!['Urgency'] ?? '';
       specialInstructionsController.text =
           widget.currentPreset!['Special Instructions'] ?? '';
+      personalityController.text = widget.currentPreset!['Personality'] ?? '';
+      captionController.text = widget.currentPreset!['Caption'] ?? '';
     }
   }
 
@@ -137,6 +146,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Country Code': countryCodeController.text,
       'Urgency': urgencyController.text,
       'Special Instructions': specialInstructionsController.text,
+      'Personality': personalityController.text,
+      'Caption': captionController.text,
     };
 
     final prefs = await SharedPreferences.getInstance();
@@ -195,6 +206,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           urgencyController.text = presetData['Urgency'] ?? '';
           specialInstructionsController.text =
               presetData['Special Instructions'] ?? '';
+          personalityController.text = presetData['Personality'] ?? '';
+          captionController.text = presetData['Caption'] ?? '';
           selectedPreset = presetName;
         });
       }
@@ -291,8 +304,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
         borderRadius: BorderRadius.circular(8.0),
       ),
       child: Container(
-        width: 900,
-        height: 800,
+        width: 1000,
+        height: 900,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,7 +325,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             // Select Profile Section
             Text(
@@ -416,9 +429,9 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             // Caption and Personality fields row
             Row(
               children: [
-                // Caption box (75% width)
+                // Caption box (2/3 width - spans 2 grid columns)
                 Expanded(
-                  flex: 3,
+                  flex: 2,
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     height: 80,
@@ -440,6 +453,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                         ),
                         const SizedBox(height: 4),
                         TextField(
+                          controller: captionController,
                           maxLines: 2,
                           style: const TextStyle(fontSize: 11),
                           decoration: const InputDecoration(
@@ -453,8 +467,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                // Personality field (25% width)
+                const SizedBox(width: 6),
+                // Personality field (1/3 width - spans 1 grid column)
                 Expanded(
                   flex: 1,
                   child: Container(
@@ -478,6 +492,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                         ),
                         const SizedBox(height: 4),
                         TextField(
+                          controller: personalityController,
                           maxLines: 2,
                           style: const TextStyle(fontSize: 11),
                           decoration: const InputDecoration(
@@ -490,6 +505,27 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                       ],
                     ),
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            // Generate Caption button under caption box
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _generateCaption,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade300,
+                    foregroundColor: Colors.black87,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(3)),
+                  ),
+                  child: const Text('Generate Caption from IPTC',
+                      style: TextStyle(fontSize: 11)),
                 ),
               ],
             ),
@@ -536,95 +572,100 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                     });
                   },
                 ),
+                _buildField(
+                    'Special Instructions', specialInstructionsController,
+                    maxLines: 1),
               ];
 
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: items
-                    .map((w) => Container(
-                          width: columnWidth,
-                          height: 45,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
-                          child: w,
-                        ))
-                    .toList(),
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final widget = entry.value;
+                    final isSpecialInstructions = index ==
+                        items.length - 1; // Last item is Special Instructions
+
+                    return Container(
+                      width: columnWidth,
+                      height: 45, // All fields same height now
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      child: widget,
+                    );
+                  }).toList(),
+                ),
               );
             }),
 
-            // Special Instructions field as full-width row
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.white,
-                ),
-                child: _buildField(
-                    'Special Instructions', specialInstructionsController,
-                    maxLines: 2),
-              ),
-            ),
+            const SizedBox(height: 12),
 
             // Action buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ElevatedButton(
-                  onPressed: _savePreset,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4)),
-                  ),
-                  child: const Text('Save as Template',
-                      style: TextStyle(fontSize: 12)),
-                ),
-                ElevatedButton(
-                  onPressed: _loadIptcFromJpg,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4)),
-                  ),
-                  child: const Text('Load IPTC from JPG',
-                      style: TextStyle(fontSize: 12)),
-                ),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child:
-                          const Text('Cancel', style: TextStyle(fontSize: 12)),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ElevatedButton(
+                    onPressed: _savePreset,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade300,
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(3)),
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _savePreset,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4)),
+                    child: const Text('Save as Template',
+                        style: TextStyle(fontSize: 11)),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ElevatedButton(
+                    onPressed: _loadIptcFromJpg,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade300,
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(3)),
+                    ),
+                    child: const Text('Load IPTC from JPG',
+                        style: TextStyle(fontSize: 11)),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel',
+                            style: TextStyle(fontSize: 11)),
                       ),
-                      child: const Text('Save Settings',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _savePreset,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(3)),
+                        ),
+                        child: const Text('Save Settings',
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -635,11 +676,432 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   }
 
   Future<void> _loadIptcFromJpg() async {
-    // TODO: Implement file picker and IPTC loading logic
-    // This will need to be connected to the main app's file selection
+    try {
+      // Get the last used directory
+      final prefs = await SharedPreferences.getInstance();
+      final lastDirectory = prefs.getString('last_iptc_folder');
+
+      // Pick a JPG file
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg'],
+        dialogTitle: 'Select JPG file to load IPTC metadata from',
+        initialDirectory: lastDirectory,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return; // User cancelled
+      }
+
+      final filePath = result.files.first.path;
+      if (filePath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Could not get file path'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Save the directory for next time
+      final file = File(filePath);
+      final directory = file.parent.path;
+      await prefs.setString('last_iptc_folder', directory);
+
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text('Loading IPTC metadata...'),
+              ],
+            ),
+          );
+        },
+      );
+
+      // Read all metadata first to see what's available
+      final args = ['-j', filePath];
+
+      final exifResult = await ExiftoolHelper.run(args);
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (exifResult == null || !exifResult.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Error reading IPTC metadata: ${exifResult?.stderrText ?? 'Unknown error'}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Parse JSON response
+      print('DEBUG: ExifTool stdout: ${exifResult.stdoutText}');
+      final jsonData = jsonDecode(exifResult.stdoutText);
+      if (jsonData.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No metadata found in the selected file'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final metadata = jsonData[0]; // First (and only) file
+      print('DEBUG: Extracted metadata: $metadata');
+      print('DEBUG: Available fields: ${metadata.keys.toList()}');
+      print('DEBUG: MEID value: ${metadata['MEID']}');
+      print(
+          'DEBUG: TransmissionReference value: ${metadata['TransmissionReference']}');
+      print('DEBUG: JobID value: ${metadata['JobID']}');
+      print('DEBUG: ImageUniqueID value: ${metadata['ImageUniqueID']}');
+      print('DEBUG: DocumentName value: ${metadata['DocumentName']}');
+      print('DEBUG: Personality field - checking for possible mappings:');
+      print('DEBUG: - CaptionWriter: ${metadata['CaptionWriter']}');
+      print('DEBUG: - By-lineTitle: ${metadata['By-lineTitle']}');
+      print('DEBUG: - CreatorTool: ${metadata['CreatorTool']}');
+      print(
+          'DEBUG: - XMP-getty:Personality: ${metadata['XMP-getty:Personality']}');
+      print('DEBUG: - Personality: ${metadata['Personality']}');
+
+      // Helper function to safely extract string values from metadata
+      String _extractString(dynamic value) {
+        if (value == null) return '';
+        if (value is String) return value;
+        if (value is List) {
+          return value.map((item) => item.toString()).join('; ');
+        }
+        return value.toString();
+      }
+
+      // Populate the form fields with the extracted metadata using correct ExifTool field names
+      setState(() {
+        // Load Caption from Caption-Abstract
+        captionController.text = _extractString(metadata['Caption-Abstract']) ??
+            _extractString(metadata['Description']) ??
+            _extractString(metadata['XMP:Description']) ??
+            '';
+
+        creatorController.text = _extractString(metadata['By-line']) ??
+            _extractString(metadata['Creator']);
+        // Load Personality from XMP-getty:Personality (same as main app)
+        final xmpGettyPersonality =
+            _extractString(metadata['XMP-getty:Personality']);
+        final personality = _extractString(metadata['Personality']);
+        final xmpPersonality = _extractString(metadata['XMP:Personality']);
+
+        print('DEBUG: - xmpGettyPersonality: "$xmpGettyPersonality"');
+        print('DEBUG: - personality: "$personality"');
+        print('DEBUG: - xmpPersonality: "$xmpPersonality"');
+        print(
+            'DEBUG: - Raw metadata["Personality"]: ${metadata['Personality']}');
+        print(
+            'DEBUG: - Type of metadata["Personality"]: ${metadata['Personality'].runtimeType}');
+
+        // Choose the first non-empty personality value
+        final List<String> personalityCandidates = [
+          xmpGettyPersonality,
+          personality,
+          xmpPersonality,
+        ];
+        final String selectedPersonality = personalityCandidates.firstWhere(
+          (p) => p.trim().isNotEmpty,
+          orElse: () => '',
+        );
+        personalityController.text = selectedPersonality;
+        print(
+            'DEBUG: - Final Personality value loaded: "${personalityController.text}"');
+        jobIdController.text =
+            _extractString(metadata['OriginalTransmissionReference']) ??
+                _extractString(metadata['JobID']) ??
+                _extractString(metadata['MEID']) ??
+                _extractString(metadata['TransmissionReference']) ??
+                _extractString(metadata['ImageUniqueID']) ??
+                _extractString(metadata['DocumentName']);
+        descriptionWritersController.text =
+            _extractString(metadata['CaptionWriter']);
+        creatorJobTitleController.text =
+            _extractString(metadata['By-lineTitle']) ??
+                _extractString(metadata['AuthorsPosition']);
+        copyrightController.text =
+            _extractString(metadata['CopyrightNotice']) ??
+                _extractString(metadata['Copyright']);
+        creditController.text = _extractString(metadata['Credit']);
+        sourceController.text = _extractString(metadata['Source']);
+        headlineController.text = _extractString(metadata['Headline']);
+        keywordsController.text = _extractString(metadata['Keywords']);
+        // Handle supplemental categories - they come as a list in SupplementalCategories
+        final suppCats = metadata['SupplementalCategories'];
+        if (suppCats != null) {
+          if (suppCats is List) {
+            if (suppCats.isNotEmpty) {
+              suppCat1Controller.text = suppCats[0].toString();
+            }
+            if (suppCats.length > 1) {
+              suppCat2Controller.text = suppCats[1].toString();
+            }
+            if (suppCats.length > 2) {
+              suppCat3Controller.text = suppCats[2].toString();
+            }
+          } else {
+            // Single string - check if it's comma-separated
+            String suppCatsStr = suppCats.toString();
+            if (suppCatsStr.contains(',')) {
+              // Split comma-separated values
+              List<String> parts =
+                  suppCatsStr.split(',').map((s) => s.trim()).toList();
+              if (parts.isNotEmpty) {
+                suppCat1Controller.text = parts[0];
+              }
+              if (parts.length > 1) {
+                suppCat2Controller.text = parts[1];
+              }
+              if (parts.length > 2) {
+                suppCat3Controller.text = parts[2];
+              }
+            } else {
+              // Single value, put in first field
+              suppCat1Controller.text = suppCatsStr;
+              suppCat2Controller.text = '';
+              suppCat3Controller.text = '';
+            }
+          }
+        } else {
+          // Try individual fields as fallback
+          suppCat1Controller.text =
+              _extractString(metadata['SupplementalCategories1']);
+          suppCat2Controller.text =
+              _extractString(metadata['SupplementalCategories2']);
+          suppCat3Controller.text =
+              _extractString(metadata['SupplementalCategories3']);
+        }
+        categoryController.text = _extractString(metadata['Category']);
+        titleObjectNameController.text = _extractString(metadata['ObjectName']);
+        stadiumController.text = _extractString(metadata['Sub-location']);
+        cityController.text = _extractString(metadata['City']);
+        provinceController.text = _extractString(metadata['Province-State']);
+        countryController.text =
+            _extractString(metadata['Country-PrimaryLocationName']) ??
+                _extractString(metadata['Country']);
+        countryCodeController.text =
+            _extractString(metadata['Country-PrimaryLocationCode']) ??
+                _extractString(metadata['CountryCode']);
+        // Handle urgency - extract just the number from descriptive text
+        final urgencyValue = _extractString(metadata['Urgency']);
+        if (urgencyValue.isNotEmpty) {
+          // Extract just the number from "5 (normal urgency)" format
+          final match = RegExp(r'^(\d+)').firstMatch(urgencyValue);
+          urgencyController.text = match?.group(1) ?? '5';
+        } else {
+          urgencyController.text = '5'; // Default to 5 if no urgency found
+        }
+        specialInstructionsController.text =
+            _extractString(metadata['SpecialInstructions']);
+
+        // Load date and time from metadata
+        final dateTimeOriginal = _extractString(metadata['DateTimeOriginal']);
+        final createDate = _extractString(metadata['CreateDate']);
+        final dateCreated = _extractString(metadata['DateCreated']);
+
+        // Use the first available date/time field
+        final dateTimeString = dateTimeOriginal.isNotEmpty
+            ? dateTimeOriginal
+            : createDate.isNotEmpty
+                ? createDate
+                : dateCreated.isNotEmpty
+                    ? dateCreated
+                    : '';
+
+        if (dateTimeString.isNotEmpty) {
+          try {
+            // Parse the date string (format: YYYY:MM:DD HH:MM:SS or YYYY:MM:DD)
+            final parts = dateTimeString.split(' ');
+            if (parts.isNotEmpty) {
+              final datePart = parts[0].replaceAll(':', '-');
+              dateController.text = datePart;
+
+              if (parts.length > 1) {
+                final timePart = parts[1];
+                // Convert 24-hour time to 12-hour format with AM/PM
+                final timeComponents = timePart.split(':');
+                if (timeComponents.length >= 3) {
+                  int hour = int.parse(timeComponents[0]);
+                  final minute = timeComponents[1];
+                  final second = timeComponents[2];
+                  final period = hour >= 12 ? 'PM' : 'AM';
+
+                  // Convert to 12-hour format
+                  if (hour == 0) {
+                    hour = 12;
+                  } else if (hour > 12) {
+                    hour -= 12;
+                  }
+
+                  final formattedTime = '$hour:$minute:$second $period';
+                  timeController.text = formattedTime;
+                }
+              }
+            }
+          } catch (e) {
+            print('Error parsing date/time: $e');
+          }
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('IPTC metadata loaded from ${result.files.first.name}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Close loading dialog if it's still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading IPTC metadata: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _generateCaption() {
+    // Build caption based on IPTC metadata in Getty style
+    final List<String> captionParts = [];
+
+    // Add city and country/state if available
+    if (cityController.text.isNotEmpty && countryController.text.isNotEmpty) {
+      if (countryController.text.toUpperCase() == 'UNITED STATES' ||
+          countryController.text.toUpperCase() == 'USA') {
+        // For US locations, use state instead of country
+        if (provinceController.text.isNotEmpty) {
+          captionParts.add(
+              '${cityController.text.toUpperCase()}, ${provinceController.text.toUpperCase()}');
+        } else {
+          captionParts.add(cityController.text.toUpperCase());
+        }
+      } else {
+        // For non-US locations, use country
+        captionParts.add(
+            '${cityController.text.toUpperCase()}, ${countryController.text.toUpperCase()}');
+      }
+    } else if (cityController.text.isNotEmpty) {
+      captionParts.add(cityController.text.toUpperCase());
+    }
+
+    // Add date if available (extract from date/time fields)
+    final dateText = dateController.text.isNotEmpty ? dateController.text : '';
+    if (dateText.isNotEmpty) {
+      try {
+        final date = DateTime.parse(dateText);
+        final month = _getMonthName(date.month).toUpperCase();
+        final day = date.day;
+        final year = date.year;
+        captionParts.add('- $month $day:');
+      } catch (e) {
+        // If date parsing fails, skip it
+      }
+    }
+
+    // Add placeholder for caption content
+    captionParts.add('<<enter caption here>>');
+
+    // Add location/stadium if available
+    if (stadiumController.text.isNotEmpty) {
+      captionParts.add('at ${stadiumController.text}');
+    }
+
+    // Add date and location info
+    if (dateText.isNotEmpty) {
+      try {
+        final date = DateTime.parse(dateText);
+        final month = _getMonthName(date.month);
+        final day = date.day;
+        final year = date.year;
+        captionParts.add('on $month $day, $year');
+      } catch (e) {
+        // If date parsing fails, skip it
+      }
+    }
+
+    // Add city and country/state again for location
+    if (cityController.text.isNotEmpty && countryController.text.isNotEmpty) {
+      if (countryController.text.toUpperCase() == 'UNITED STATES' ||
+          countryController.text.toUpperCase() == 'USA') {
+        // For US locations, use state instead of country
+        if (provinceController.text.isNotEmpty) {
+          captionParts
+              .add('in ${cityController.text}, ${provinceController.text}.');
+        } else {
+          captionParts.add('in ${cityController.text}.');
+        }
+      } else {
+        // For non-US locations, use country
+        captionParts
+            .add('in ${cityController.text}, ${countryController.text}.');
+      }
+    } else if (cityController.text.isNotEmpty) {
+      captionParts.add('in ${cityController.text}.');
+    }
+
+    // Add photographer credit
+    if (creatorController.text.isNotEmpty) {
+      String credit = '(Photo by ${creatorController.text}';
+      if (creditController.text.isNotEmpty) {
+        credit += '/${creditController.text}';
+      }
+      credit += ')';
+      captionParts.add(credit);
+    }
+
+    // Combine all parts
+    final generatedCaption = captionParts.join(' ');
+
+    // Set the caption
+    setState(() {
+      captionController.text = generatedCaption;
+    });
+
+    // Show success message
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Load IPTC from JPG - Coming soon!')),
+      const SnackBar(
+        content: Text('Caption generated from IPTC metadata!'),
+        backgroundColor: Colors.green,
+      ),
     );
+  }
+
+  String _getMonthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
+    ];
+    return months[month - 1];
   }
 
   @override
@@ -665,6 +1127,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     countryCodeController.dispose();
     urgencyController.dispose();
     specialInstructionsController.dispose();
+    personalityController.dispose();
+    captionController.dispose();
+    dateController.dispose();
+    timeController.dispose();
     presetNameController.dispose();
     super.dispose();
   }
