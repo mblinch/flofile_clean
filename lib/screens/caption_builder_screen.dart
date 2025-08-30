@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
@@ -403,6 +404,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Load metadata for the first image
       if (imageFiles.isNotEmpty) {
         _loadMetadata();
+
+        // Check if we should apply metadata preset to all images
+        _checkAndApplyMetadataPreset();
       }
     } catch (e) {
       print('Error loading images from folder: $e');
@@ -1025,6 +1029,289 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     } catch (e) {
       print('Error saving metadata to $imagePath: $e');
+    }
+  }
+
+  // Apply metadata to all images in the session
+  Future<void> _applyMetadataToAllImages(Map<String, String> metadata) async {
+    if (imagePaths.isEmpty) return;
+
+    print('Applying metadata to all ${imagePaths.length} images...');
+
+    // Filter out locked files
+    final writableImages =
+        imagePaths.where((path) => !_lockedPaths.contains(path)).toList();
+
+    if (writableImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No writable images found to apply metadata to.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // Show progress dialog with progress bar
+    double progress = 0.0;
+    int processedCount = 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Applying IPTC Metadata'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                      'Processed $processedCount of ${writableImages.length} images...'),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('${(progress * 100).toInt()}%',
+                      style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    try {
+      // Convert metadata to exiftool format
+      Map<String, dynamic> exifMetadata = {};
+
+      // Map the metadata fields to exiftool field names
+      metadata.forEach((key, value) {
+        if (value.isNotEmpty) {
+          switch (key) {
+            case 'Creator':
+              exifMetadata['By-line'] = value;
+              exifMetadata['XMP:Creator'] = value;
+              break;
+            case 'MEID':
+              exifMetadata['TransmissionReference'] = value;
+              break;
+            case 'Description Writers':
+              exifMetadata['CaptionWriter'] = value;
+              break;
+            case 'Creator\'s Job Title':
+              exifMetadata['By-lineTitle'] = value;
+              exifMetadata['AuthorsPosition'] = value;
+              break;
+            case 'Copyright':
+              exifMetadata['CopyrightNotice'] = value;
+              exifMetadata['XMP:Rights'] = value;
+              break;
+            case 'Credit':
+              exifMetadata['Credit'] = value;
+              break;
+            case 'Source':
+              exifMetadata['Source'] = value;
+              exifMetadata['XMP:Source'] = value;
+              break;
+            case 'Headline':
+              exifMetadata['Headline'] = value;
+              exifMetadata['XMP:Title'] = value;
+              break;
+            case 'Keywords':
+              exifMetadata['Keywords'] = value;
+              exifMetadata['XMP:Subject'] = value;
+              break;
+            case 'Supp Cat 1':
+            case 'Supp Cat 2':
+            case 'Supp Cat 3':
+              // Handle supplemental categories
+              if (!exifMetadata.containsKey('SupplementalCategories')) {
+                exifMetadata['SupplementalCategories'] = [];
+              }
+              (exifMetadata['SupplementalCategories'] as List).add(value);
+              break;
+            case 'Category':
+              exifMetadata['Category'] = value;
+              break;
+            case 'Object Name':
+              exifMetadata['ObjectName'] = value;
+              break;
+            case 'Stadium':
+              exifMetadata['Sub-location'] = value;
+              exifMetadata['XMP:Location'] = value;
+              break;
+            case 'City':
+              exifMetadata['City'] = value;
+              exifMetadata['XMP:City'] = value;
+              break;
+            case 'Province/State':
+              exifMetadata['Province-State'] = value;
+              exifMetadata['XMP:State'] = value;
+              break;
+            case 'Country':
+              exifMetadata['Country-PrimaryLocationName'] = value;
+              exifMetadata['XMP:Country'] = value;
+              break;
+            case 'Country Code':
+              exifMetadata['Country-PrimaryLocationCode'] = value;
+              break;
+            case 'Urgency':
+              exifMetadata['Urgency'] = value;
+              break;
+            case 'Special Instructions':
+              exifMetadata['SpecialInstructions'] = value;
+              exifMetadata['XMP:Instructions'] = value;
+              break;
+            case 'Personality':
+              exifMetadata['XMP-getty:Personality'] = value;
+              break;
+            case 'Caption':
+              exifMetadata['Caption-Abstract'] = value;
+              exifMetadata['ImageDescription'] = value;
+              break;
+            case 'Date':
+            case 'Time':
+              // Handle date/time separately if needed
+              break;
+          }
+        }
+      });
+
+      // Build exiftool arguments once
+      List<String> args = [];
+      exifMetadata.forEach((key, value) {
+        if (value != null && value.toString().isNotEmpty) {
+          if (key == 'SupplementalCategories' && value is List) {
+            args.addAll(['-$key=${value.join(',')}']);
+          } else {
+            args.addAll(['-$key=$value']);
+          }
+        }
+      });
+
+      // Add overwrite flag
+      args.add('-overwrite_original');
+
+      // Process images in batches for better performance
+      const int batchSize = 10;
+      int processedCount = 0;
+      int totalImages = writableImages.length;
+
+      for (int i = 0; i < writableImages.length; i += batchSize) {
+        final batch = writableImages.skip(i).take(batchSize).toList();
+
+        // Create batch command
+        List<String> batchArgs = List.from(args);
+        batchArgs.addAll(batch);
+
+        try {
+          final proc = await ExiftoolHelper.run(batchArgs);
+          if (proc.exitCode == 0) {
+            processedCount += batch.length;
+            print(
+                'Successfully processed batch ${(i ~/ batchSize) + 1}: ${batch.length} images (Total: $processedCount/$totalImages)');
+          } else {
+            print('Error processing batch: ${proc.stderrText}');
+          }
+        } catch (e) {
+          print('Error processing batch: $e');
+        }
+
+        // Update progress - show real progress to user
+        if (mounted) {
+          progress = processedCount / totalImages;
+          // Force dialog update by closing and reopening with new progress
+          Navigator.of(context).pop();
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Applying IPTC Metadata'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                        'Processed $processedCount of ${writableImages.length} images...'),
+                    const SizedBox(height: 16),
+                    LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Colors.grey.shade300,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('${(progress * 100).toInt()}%',
+                        style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              );
+            },
+          );
+        }
+      }
+
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text('Metadata applied to $processedCount images successfully!'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      // Close progress dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error applying metadata: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // Check and apply metadata preset to all images if enabled
+  Future<void> _checkAndApplyMetadataPreset() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final applyToAllImages =
+          prefs.getBool('apply_preset_to_all_images') ?? false;
+
+      if (applyToAllImages) {
+        final presetJson = prefs.getString('selected_metadata_preset');
+        if (presetJson != null) {
+          final presetData = jsonDecode(presetJson) as Map<String, dynamic>;
+          final metadata = Map<String, String>.from(presetData);
+
+          // Apply metadata to all images
+          await _applyMetadataToAllImages(metadata);
+
+          // Clear the flag after applying
+          await prefs.setBool('apply_preset_to_all_images', false);
+        }
+      }
+    } catch (e) {
+      print('Error checking/applying metadata preset: $e');
     }
   }
 

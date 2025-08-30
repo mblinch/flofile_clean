@@ -7,8 +7,10 @@ import '../utils/exiftool_helper.dart';
 
 class MetadataPresetDialog extends StatefulWidget {
   final Map<String, String>? currentPreset;
+  final DateTime? detectedDate;
 
-  const MetadataPresetDialog({Key? key, this.currentPreset}) : super(key: key);
+  const MetadataPresetDialog({Key? key, this.currentPreset, this.detectedDate})
+      : super(key: key);
 
   @override
   State<MetadataPresetDialog> createState() => _MetadataPresetDialogState();
@@ -51,6 +53,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   List<String> savedPresets = [];
   String? selectedPreset;
   String? selectedCaptionStyle = 'getty';
+  DateTime? detectedDate;
+  bool applyToAllImages = false;
 
   // Urgency levels for dropdown
   final List<Map<String, String>> urgencyLevels = [
@@ -70,6 +74,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     super.initState();
     _loadSavedPresets();
     _loadCurrentPreset();
+    detectedDate = widget.detectedDate;
   }
 
   Future<void> _loadSavedPresets() async {
@@ -116,12 +121,110 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   }
 
   Future<void> _savePreset() async {
-    final presetName = presetNameController.text.trim();
-    if (presetName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a preset name')),
-      );
-      return;
+    // Show dialog to get template name
+    final presetName = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        final nameController =
+            TextEditingController(text: selectedPreset ?? '');
+        return Dialog(
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Icon(Icons.save, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Save Template',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Content
+                Text(
+                  'Enter a name for this template:',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.white,
+                  ),
+                  child: TextField(
+                    controller: nameController,
+                    style: const TextStyle(fontSize: 10),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      hintText: 'Template name',
+                      hintStyle: TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                    autofocus: true,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Action buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel',
+                          style:
+                              TextStyle(fontSize: 10, color: Colors.black87)),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        final name = nameController.text.trim();
+                        if (name.isNotEmpty) {
+                          Navigator.of(context).pop(name);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade200,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2)),
+                      ),
+                      child: const Text('Save', style: TextStyle(fontSize: 10)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (presetName == null || presetName.isEmpty) {
+      return; // User cancelled or entered empty name
     }
 
     final presetData = {
@@ -148,6 +251,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Special Instructions': specialInstructionsController.text,
       'Personality': personalityController.text,
       'Caption': captionController.text,
+      'Date': dateController.text,
+      'Time': timeController.text,
     };
 
     final prefs = await SharedPreferences.getInstance();
@@ -171,6 +276,43 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
         SnackBar(content: Text('Preset "$presetName" saved successfully!')),
       );
     }
+  }
+
+  Future<void> _saveSettings() async {
+    // Get current metadata values
+    final metadataValues = {
+      'Creator': creatorController.text,
+      'MEID': jobIdController.text,
+      'Description Writers': descriptionWritersController.text,
+      'Creator\'s Job Title': creatorJobTitleController.text,
+      'Copyright': copyrightController.text,
+      'Credit': creditController.text,
+      'Source': sourceController.text,
+      'Headline': headlineController.text,
+      'Keywords': keywordsController.text,
+      'Supp Cat 1': suppCat1Controller.text,
+      'Supp Cat 2': suppCat2Controller.text,
+      'Supp Cat 3': suppCat3Controller.text,
+      'Category': categoryController.text,
+      'Object Name': titleObjectNameController.text,
+      'Stadium': stadiumController.text,
+      'City': cityController.text,
+      'Province/State': provinceController.text,
+      'Country': countryController.text,
+      'Country Code': countryCodeController.text,
+      'Urgency': urgencyController.text,
+      'Special Instructions': specialInstructionsController.text,
+      'Personality': personalityController.text,
+      'Caption': captionController.text,
+      'Date': dateController.text,
+      'Time': timeController.text,
+    };
+
+    // Return the metadata and apply to all images flag
+    Navigator.of(context).pop({
+      'metadata': metadataValues,
+      'applyToAllImages': applyToAllImages,
+    });
   }
 
   Future<void> _loadPreset(String presetName) async {
@@ -208,6 +350,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
               presetData['Special Instructions'] ?? '';
           personalityController.text = presetData['Personality'] ?? '';
           captionController.text = presetData['Caption'] ?? '';
+          dateController.text = presetData['Date'] ?? '';
+          timeController.text = presetData['Time'] ?? '';
           selectedPreset = presetName;
         });
       }
@@ -300,32 +444,34 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8.0),
-      ),
       child: Container(
         width: 1000,
         height: 900,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header with title
             Row(
               children: [
-                Icon(Icons.settings, size: 20, color: Colors.grey.shade700),
-                const SizedBox(width: 8),
+                Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
                 Text(
                   'IPTC Metadata Settings',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Select Profile Section
             Text(
@@ -342,7 +488,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(2),
                 color: Colors.white,
               ),
               child: DropdownButtonHideUnderline(
@@ -380,7 +526,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Caption Style Section
             Text(
@@ -413,7 +559,14 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+
+            // Divider line under Getty Style
+            Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 12),
 
             // IPTC Fields Section
             Text(
@@ -437,7 +590,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                     height: 80,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(2),
                       color: Colors.white,
                     ),
                     child: Column(
@@ -476,7 +629,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                     height: 80,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(2),
                       color: Colors.white,
                     ),
                     child: Column(
@@ -512,21 +665,40 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
 
             // Generate Caption button under caption box
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 ElevatedButton(
                   onPressed: _generateCaption,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
+                    backgroundColor: Colors.grey.shade200,
                     foregroundColor: Colors.black87,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(3)),
+                        borderRadius: BorderRadius.circular(2)),
                   ),
                   child: const Text('Generate Caption from IPTC',
                       style: TextStyle(fontSize: 11)),
                 ),
+                if (detectedDate != null) ...[
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_today,
+                          size: 12, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Date detected: ${_formatDate(detectedDate!)}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 10),
@@ -591,8 +763,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                     return Container(
                       width: columnWidth,
                       height: 45, // All fields same height now
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
@@ -605,40 +779,75 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
 
             const SizedBox(height: 12),
 
+            // Apply to all images checkbox
+            Row(
+              children: [
+                Checkbox(
+                  value: applyToAllImages,
+                  onChanged: (value) {
+                    setState(() {
+                      applyToAllImages = value ?? false;
+                    });
+                  },
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: Text(
+                    'Apply preset to all images in session',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Divider line above buttons
+            Container(
+              height: 1,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 12),
+
             // Action buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: ElevatedButton(
-                    onPressed: _savePreset,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade300,
-                      foregroundColor: Colors.black87,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3)),
-                    ),
-                    child: const Text('Save as Template',
-                        style: TextStyle(fontSize: 11)),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: ElevatedButton(
-                    onPressed: _loadIptcFromJpg,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade300,
-                      foregroundColor: Colors.black87,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3)),
-                    ),
-                    child: const Text('Load IPTC from JPG',
-                        style: TextStyle(fontSize: 11)),
+                  child: Row(
+                    children: [
+                      ElevatedButton(
+                        onPressed: _savePreset,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade200,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: const Text('Save as Template',
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _loadIptcFromJpg,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade200,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: const Text('Load IPTC from JPG',
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -648,18 +857,19 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
                         child: const Text('Cancel',
-                            style: TextStyle(fontSize: 11)),
+                            style:
+                                TextStyle(fontSize: 11, color: Colors.black87)),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: _savePreset,
+                        onPressed: _saveSettings,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.grey.shade200,
+                          foregroundColor: Colors.black87,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(3)),
+                              borderRadius: BorderRadius.circular(2)),
                         ),
                         child: const Text('Save Settings',
                             style: TextStyle(fontSize: 11)),
@@ -1004,18 +1214,23 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       captionParts.add(cityController.text.toUpperCase());
     }
 
-    // Add date if available (extract from date/time fields)
-    final dateText = dateController.text.isNotEmpty ? dateController.text : '';
-    if (dateText.isNotEmpty) {
+    // Add date if available (use detected date first, then fallback to date field)
+    DateTime? dateToUse;
+    if (detectedDate != null) {
+      dateToUse = detectedDate;
+    } else if (dateController.text.isNotEmpty) {
       try {
-        final date = DateTime.parse(dateText);
-        final month = _getMonthName(date.month).toUpperCase();
-        final day = date.day;
-        final year = date.year;
-        captionParts.add('- $month $day:');
+        dateToUse = DateTime.parse(dateController.text);
       } catch (e) {
         // If date parsing fails, skip it
       }
+    }
+
+    if (dateToUse != null) {
+      final month = _getMonthName(dateToUse.month).toUpperCase();
+      final day = dateToUse.day;
+      final year = dateToUse.year;
+      captionParts.add('- $month $day:');
     }
 
     // Add placeholder for caption content
@@ -1027,16 +1242,11 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     }
 
     // Add date and location info
-    if (dateText.isNotEmpty) {
-      try {
-        final date = DateTime.parse(dateText);
-        final month = _getMonthName(date.month);
-        final day = date.day;
-        final year = date.year;
-        captionParts.add('on $month $day, $year');
-      } catch (e) {
-        // If date parsing fails, skip it
-      }
+    if (dateToUse != null) {
+      final month = _getMonthName(dateToUse.month);
+      final day = dateToUse.day;
+      final year = dateToUse.year;
+      captionParts.add('on $month $day, $year');
     }
 
     // Add city and country/state again for location
@@ -1102,6 +1312,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'December'
     ];
     return months[month - 1];
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
   }
 
   @override

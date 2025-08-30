@@ -60,6 +60,7 @@ class _StartupDialogState extends State<StartupDialog> {
   bool isLoadingFolder = false;
   bool hasImagesInFolder = false;
   bool isExtractingDate = false;
+  bool _applyPresetToAllImages = false;
 
   // Questionnaire state
   int currentQuestion = 0;
@@ -418,21 +419,32 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   void _openMetadataPreset() async {
-    final result = await showDialog<Map<String, String>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const MetadataPresetDialog(currentPreset: null),
+      builder: (context) => MetadataPresetDialog(
+        currentPreset: null,
+        detectedDate: selectedGameDate,
+      ),
     );
 
     if (result != null) {
+      // Extract metadata and apply to all images flag
+      final metadata = result['metadata'] as Map<String, String>;
+      final applyToAllImages = result['applyToAllImages'] as bool;
+
       // Store the selected preset data to be used when the app starts
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('selected_metadata_preset', jsonEncode(result));
+      await prefs.setString('selected_metadata_preset', jsonEncode(metadata));
+
+      // Store the checkbox value
+      await prefs.setBool('apply_preset_to_all_images', applyToAllImages);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Metadata preset will be applied when you start the app.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(applyToAllImages
+              ? 'Metadata preset will be applied to all images in the session.'
+              : 'Metadata preset will be applied when you start the app.'),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -908,31 +920,62 @@ class _StartupDialogState extends State<StartupDialog> {
                       FractionallySizedBox(
                         widthFactor: 0.75,
                         alignment: Alignment.centerLeft,
-                        child: CustomButton(
-                          onTap: _openMetadataPreset,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade300),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CustomButton(
+                              onTap: _openMetadataPreset,
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.description,
+                                        size: 12, color: Colors.grey.shade700),
+                                    const SizedBox(width: 4),
+                                    Text('Metadata Preset',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            const SizedBox(height: 8),
+                            Row(
                               children: [
-                                Icon(Icons.description,
-                                    size: 12, color: Colors.grey.shade700),
-                                const SizedBox(width: 4),
-                                Text('Metadata Preset',
+                                Checkbox(
+                                  value: _applyPresetToAllImages,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _applyPresetToAllImages = value ?? false;
+                                    });
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    'Apply preset to all images in session',
                                     style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500)),
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
