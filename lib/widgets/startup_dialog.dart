@@ -435,15 +435,19 @@ class _StartupDialogState extends State<StartupDialog> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('selected_metadata_preset', jsonEncode(metadata));
 
+      // Automatically check the "Apply preset to all images" checkbox when template is applied
+      setState(() {
+        _applyPresetToAllImages = true;
+      });
+
       // Store the checkbox value from the startup dialog
       await prefs.setBool(
           'apply_preset_to_all_images', _applyPresetToAllImages);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_applyPresetToAllImages
-              ? 'Metadata preset will be applied to all images in the session.'
-              : 'Metadata preset will be applied when you start the app.'),
+          content: Text(
+              'Metadata preset will be applied to all images in the session.'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -981,47 +985,87 @@ class _StartupDialogState extends State<StartupDialog> {
                       const SizedBox(height: 16),
 
                       // Start button
-                      if (_canProceed)
-                        FractionallySizedBox(
-                          widthFactor: 0.75,
-                          alignment: Alignment.centerLeft,
-                          child: CustomButton(
-                            onTap: () {
-                              widget.onConfigurationComplete(
-                                selectedFolderPath!,
-                                selectedHomeTeam,
-                                selectedAwayTeam,
-                              );
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0052CC),
-                                borderRadius: BorderRadius.circular(6),
-                                border:
-                                    Border.all(color: const Color(0xFF0052CC)),
+                      FractionallySizedBox(
+                        widthFactor: 0.75,
+                        alignment: Alignment.centerLeft,
+                        child: CustomButton(
+                          onTap: _canProceed
+                              ? () {
+                                  widget.onConfigurationComplete(
+                                    selectedFolderPath!,
+                                    selectedHomeTeam,
+                                    selectedAwayTeam,
+                                  );
+                                }
+                              : null,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _canProceed
+                                  ? const Color(0xFF0052CC)
+                                  : Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: _canProceed
+                                    ? const Color(0xFF0052CC)
+                                    : Colors.grey.shade400,
                               ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.rocket_launch,
-                                      size: 12, color: Colors.white),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Go Time',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.rocket_launch,
+                                      size: 12,
+                                      color: _canProceed
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
                                     ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Go Time',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: _canProceed
+                                            ? Colors.white
+                                            : Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (!_canProceed) ...[
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.warning,
+                                        size: 10,
+                                        color: Colors.red.shade600,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Select home and away teams',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.red.shade600,
+                                          fontWeight: FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ] else ...[
                     const Center(

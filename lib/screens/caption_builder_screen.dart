@@ -33,6 +33,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Metadata state
   Map<String, dynamic>? currentMetadata;
+  Map<String, dynamic>?
+      _originalMetadata; // Track original metadata for change detection
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
   // XMP metadata for rating and color label
@@ -565,6 +567,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     try {
       // Extract metadata via exiftool in JSON format
       final proc = await ExiftoolHelper.run([
+        '-a', // allow duplicate tags (return all values)
         '-j', // JSON output
         '-Caption-Abstract',
         '-ImageDescription',
@@ -598,10 +601,18 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       if (proc.exitCode == 0) {
         try {
+          print('DEBUG: Raw ExifTool JSON output: ${proc.stdoutText}');
           final List data = jsonDecode(proc.stdoutText);
           if (data.isNotEmpty) {
+            final loadedMetadata = data.first as Map<String, dynamic>;
+            print(
+                'DEBUG: Raw parsed SupplementalCategories: ${loadedMetadata['SupplementalCategories']} (${loadedMetadata['SupplementalCategories'].runtimeType})');
+            print(
+                'DEBUG: Parsed metadata SupplementalCategories: ${loadedMetadata['SupplementalCategories']}');
             setState(() {
-              currentMetadata = data.first as Map<String, dynamic>;
+              currentMetadata = loadedMetadata;
+              _originalMetadata = Map<String, dynamic>.from(
+                  loadedMetadata); // Store original for change detection
             });
             print('Metadata loaded successfully');
           }
@@ -609,12 +620,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           print('Error parsing metadata JSON: $e');
           setState(() {
             currentMetadata = null;
+            _originalMetadata = null;
           });
         }
       } else {
         print('Exiftool error: ${proc.stderrText}');
         setState(() {
           currentMetadata = null;
+          _originalMetadata = null;
         });
       }
     } catch (e) {
@@ -903,11 +916,179 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Handle image selection
   void _onImageSelected(int index) {
+    // Check if there are unsaved changes before switching
+    if (_hasUnsavedChanges()) {
+      _showSaveChangesDialog(index);
+    } else {
+      _switchToImage(index);
+    }
+  }
+
+  // Check if there are unsaved changes
+  bool _hasUnsavedChanges() {
+    if (_originalMetadata == null || currentMetadata == null) return false;
+
+    // Compare current metadata with original metadata
+    return !_mapsAreEqual(_originalMetadata!, currentMetadata!);
+  }
+
+  // Compare two maps for equality
+  bool _mapsAreEqual(Map<String, dynamic> map1, Map<String, dynamic> map2) {
+    if (map1.length != map2.length) return false;
+
+    for (String key in map1.keys) {
+      if (!map2.containsKey(key) || map1[key] != map2[key]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Show save changes confirmation dialog
+  void _showSaveChangesDialog(int newIndex) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Unsaved Changes'),
+          content: const Text(
+              'You have unsaved changes to the current image. Do you want to save them before switching?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Don't save, just switch
+                _switchToImage(newIndex);
+              },
+              child: const Text('Don\'t Save'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Cancel the switch
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                // Save changes first, then switch
+                await _saveCurrentMetadata();
+                _switchToImage(newIndex);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Save current metadata to the current image
+  Future<void> _saveCurrentMetadata() async {
+    if (currentMetadata != null && imagePaths.isNotEmpty) {
+      final currentImagePath = imagePaths[currentIndex];
+
+      // Convert currentMetadata from ExifTool format to template format for _saveMetadataToImage
+      final templateMetadata = <String, dynamic>{};
+
+      // Map ExifTool fields back to template display names
+      currentMetadata!.forEach((exifToolField, value) {
+        switch (exifToolField) {
+          case 'Creator':
+            templateMetadata['Creator'] = value;
+            break;
+          case 'TransmissionReference':
+            templateMetadata['MEID'] = value;
+            break;
+          case 'CaptionWriter':
+            templateMetadata['Description Writers'] = value;
+            break;
+          case 'AuthorsPosition':
+            templateMetadata['Creator\'s Job Title'] = value;
+            break;
+          case 'Copyright':
+            templateMetadata['Copyright'] = value;
+            break;
+          case 'Credit':
+            templateMetadata['Credit'] = value;
+            break;
+          case 'Source':
+            templateMetadata['Source'] = value;
+            break;
+          case 'Headline':
+            templateMetadata['Headline'] = value;
+            break;
+          case 'Keywords':
+            templateMetadata['Keywords'] = value;
+            break;
+          case 'SupplementalCategories':
+            // Split the comma-separated string back into individual fields
+            final categories = value.toString().split(',');
+            if (categories.isNotEmpty)
+              templateMetadata['Supp Cat 1'] = categories[0].trim();
+            if (categories.length > 1)
+              templateMetadata['Supp Cat 2'] = categories[1].trim();
+            if (categories.length > 2)
+              templateMetadata['Supp Cat 3'] = categories[2].trim();
+            break;
+          case 'Category':
+            templateMetadata['Category'] = value;
+            break;
+          case 'ObjectName':
+            templateMetadata['Object Name'] = value;
+            break;
+          case 'Sub-location':
+            templateMetadata['Stadium'] = value;
+            break;
+          case 'City':
+            templateMetadata['City'] = value;
+            break;
+          case 'Province-State':
+            templateMetadata['Province/State'] = value;
+            break;
+          case 'Country':
+            templateMetadata['Country'] = value;
+            break;
+          case 'CountryCode':
+            templateMetadata['Country Code'] = value;
+            break;
+          case 'Urgency':
+            templateMetadata['Urgency'] = value;
+            break;
+          case 'SpecialInstructions':
+          case 'Instructions':
+          case 'XMP-photoshop:Instructions':
+            templateMetadata['Special Instructions'] = value;
+            break;
+          case 'Caption-Abstract':
+            templateMetadata['Caption'] = value;
+            break;
+          case 'XMP-getty:Personality':
+            templateMetadata['Personality'] = value;
+            break;
+        }
+      });
+
+      await _saveMetadataToImage(currentImagePath, templateMetadata);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Changes saved to ${p.basename(currentImagePath)}'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Switch to a new image (internal method)
+  void _switchToImage(int index) {
     setState(() {
       currentIndex = index;
     });
     _loadMetadata();
-    // Center thumbnails only when arrow navigation explicitly requests it
   }
 
   // Handle image deletion
@@ -1001,34 +1182,226 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     });
   }
 
-  // Save metadata directly to a specific image file
+  // Handle IPTC template application to a single image
+  void _onApplyIptcTemplate(String imagePath) async {
+    // Load the default IPTC template from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final defaultTemplateJson = prefs.getString('default_metadata_template');
+
+    if (defaultTemplateJson != null) {
+      try {
+        final Map<String, dynamic> templateMetadata =
+            jsonDecode(defaultTemplateJson);
+
+        // Save the template metadata to the specific image
+        await _saveMetadataToImage(imagePath, templateMetadata);
+
+        // Check if this is the currently selected image and update UI if so
+        if (imagePaths.isNotEmpty &&
+            currentIndex < imagePaths.length &&
+            imagePaths[currentIndex] == imagePath) {
+          // Convert template display names to ExifTool field names for UI update
+          final uiMetadata = <String, dynamic>{};
+
+          // Collect supplemental categories to combine them
+          List<String> suppCats = [];
+          if (templateMetadata['Supp Cat 1']?.toString().isNotEmpty == true) {
+            suppCats.add(templateMetadata['Supp Cat 1']!);
+          }
+          if (templateMetadata['Supp Cat 2']?.toString().isNotEmpty == true) {
+            suppCats.add(templateMetadata['Supp Cat 2']!);
+          }
+          if (templateMetadata['Supp Cat 3']?.toString().isNotEmpty == true) {
+            suppCats.add(templateMetadata['Supp Cat 3']!);
+          }
+
+          templateMetadata.forEach((displayName, value) {
+            // Special handling for supplemental categories - combine into single field
+            if (displayName == 'Supp Cat 1' ||
+                displayName == 'Supp Cat 2' ||
+                displayName == 'Supp Cat 3') {
+              // Skip individual fields, we'll add the combined one
+              return;
+            } else {
+              final exifToolField = _mapTemplateFieldToExifTool(displayName);
+              uiMetadata[exifToolField] = value;
+            }
+          });
+
+          // Add combined supplemental categories
+          if (suppCats.isNotEmpty) {
+            uiMetadata['SupplementalCategories'] = suppCats.join(',');
+          }
+
+          // Update the current metadata and original metadata to reflect the applied template
+          setState(() {
+            currentMetadata = uiMetadata;
+            _originalMetadata = Map<String, dynamic>.from(uiMetadata);
+          });
+        }
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('IPTC template applied to ${p.basename(imagePath)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } catch (e) {
+        // Show error if template is invalid
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error applying IPTC template'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      // Show error if no template is saved
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No IPTC template found. Please create one first.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // Map template display names to ExifTool field names
+  String _mapTemplateFieldToExifTool(String templateField) {
+    switch (templateField) {
+      case 'Creator':
+        return 'Creator';
+      case 'MEID':
+        return 'TransmissionReference';
+      case 'Description Writers':
+        return 'CaptionWriter';
+      case 'Creator\'s Job Title':
+        return 'AuthorsPosition';
+      case 'Copyright':
+        return 'Copyright';
+      case 'Credit':
+        return 'Credit';
+      case 'Source':
+        return 'Source';
+      case 'Headline':
+        return 'Headline';
+      case 'Keywords':
+        return 'Keywords';
+      case 'Supp Cat 1':
+      case 'Supp Cat 2':
+      case 'Supp Cat 3':
+        return 'SupplementalCategories';
+      case 'Category':
+        return 'Category';
+      case 'Object Name':
+        return 'ObjectName';
+      case 'Stadium':
+        return 'Sub-location';
+      case 'City':
+        return 'City';
+      case 'Province/State':
+        return 'Province-State';
+      case 'Country':
+        return 'Country';
+      case 'Country Code':
+        return 'CountryCode';
+      case 'Urgency':
+        return 'Urgency';
+      case 'Special Instructions':
+        return 'XMP-photoshop:Instructions';
+      case 'Personality':
+        return 'XMP-getty:Personality';
+      case 'Caption':
+        return 'Caption-Abstract';
+      case 'Date':
+        return 'TimeDate';
+      case 'Time':
+        return 'TimeDate';
+      default:
+        return templateField;
+    }
+  }
+
+  // Save metadata directly to a specific image file using the exact same logic as the working batch function
   Future<void> _saveMetadataToImage(
       String imagePath, Map<String, dynamic> metadata) async {
-    print('Saving metadata to specific image: $imagePath');
+    print('DEBUG: _saveMetadataToImage called with: $imagePath');
 
-    // Convert metadata to exiftool arguments
-    List<String> args = [];
+    // Get values from metadata widget in the exact same way as the working batch path
+    Map<String, String> allValues = {};
 
-    // Add all metadata fields
+    // Convert template metadata to the same format that _saveIptcMetadata uses
     metadata.forEach((key, value) {
       if (value != null && value.toString().isNotEmpty) {
-        args.addAll(['-$key=$value']);
+        // Never write date/time from template
+        if (key == 'Date' || key == 'Time') return;
+
+        // Special handling for supplemental categories to match batch function format
+        if (key == 'Supp Cat 1') {
+          allValues['SupplementalCategories1'] = value.toString();
+        } else if (key == 'Supp Cat 2') {
+          allValues['SupplementalCategories2'] = value.toString();
+        } else if (key == 'Supp Cat 3') {
+          allValues['SupplementalCategories3'] = value.toString();
+        } else {
+          // Map other template display names to ExifTool field names
+          final exifToolField = _mapTemplateFieldToExifTool(key);
+          allValues[exifToolField] = value.toString();
+        }
       }
     });
 
-    // Add the target file
-    args.add(imagePath);
+    print('DEBUG: Converted to allValues format: $allValues');
 
     try {
-      final proc = await ExiftoolHelper.run(args);
-      if (proc.exitCode == 0) {
-        print('Successfully saved metadata to $imagePath');
-      } else {
+      // Build exiftool command arguments using EXACT same logic as _saveIptcMetadata
+      List<String> args = [];
+
+      // Add each field that has a value
+      allValues.forEach((key, value) {
+        if (value.trim().isNotEmpty) {
+          args.add('-$key=$value');
+        }
+      });
+
+      // Handle supplemental categories specially (combine them into array) - EXACT same logic
+      List<String> suppCats = [];
+      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories1']!);
+      }
+      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories2']!);
+      }
+      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
+        suppCats.add(allValues['SupplementalCategories3']!);
+      }
+
+      // Remove individual supplemental category args and add combined one
+      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
+      if (suppCats.isNotEmpty) {
+        args.add('-SupplementalCategories=${suppCats.join(',')}');
         print(
-            'Exiftool error saving metadata to $imagePath: ${proc.stderrText}');
+            'DEBUG: Added combined SupplementalCategories: ${suppCats.join(',')}');
+      }
+
+      // Always overwrite original file
+      args.add('-overwrite_original');
+      args.add(imagePath);
+
+      print('DEBUG: Final exiftool args: $args');
+      final proc = await ExiftoolHelper.run(args);
+
+      if (proc.exitCode == 0) {
+        print('DEBUG: Successfully saved metadata to $imagePath');
+      } else {
+        print('DEBUG: Exiftool error: ${proc.stderrText}');
       }
     } catch (e) {
-      print('Error saving metadata to $imagePath: $e');
+      print('DEBUG: Error saving metadata: $e');
     }
   }
 
@@ -1822,6 +2195,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       onImageDeleted: _onImageDeleted,
                       onCopyMetadata: _onCopyMetadata,
                       onPasteMetadata: _onPasteMetadata,
+                      onApplyIptcTemplate: _onApplyIptcTemplate,
                       onFtpImage: _onFtpImage,
                       onImageRenamed: _onImageRenamed,
                       onMultiSelect: _onMultiSelect,

@@ -72,8 +72,12 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   void initState() {
     super.initState();
     _loadSavedPresets();
-    _loadCurrentPreset();
+    _initializePreset();
     detectedDate = widget.detectedDate;
+  }
+
+  Future<void> _initializePreset() async {
+    await _loadCurrentPreset();
   }
 
   Future<void> _loadSavedPresets() async {
@@ -87,7 +91,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     }
   }
 
-  void _loadCurrentPreset() {
+  Future<void> _loadCurrentPreset() async {
+    // First try to load from widget.currentPreset if provided
     if (widget.currentPreset != null) {
       creatorController.text = widget.currentPreset!['Creator'] ?? '';
       jobIdController.text = widget.currentPreset!['MEID'] ?? '';
@@ -116,6 +121,44 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           widget.currentPreset!['Special Instructions'] ?? '';
       personalityController.text = widget.currentPreset!['Personality'] ?? '';
       captionController.text = widget.currentPreset!['Caption'] ?? '';
+    } else {
+      // If no current preset provided, try to load the default template
+      final prefs = await SharedPreferences.getInstance();
+      final defaultTemplateJson = prefs.getString('default_metadata_template');
+      if (defaultTemplateJson != null) {
+        try {
+          final defaultTemplate =
+              jsonDecode(defaultTemplateJson) as Map<String, dynamic>;
+          creatorController.text = defaultTemplate['Creator'] ?? '';
+          jobIdController.text = defaultTemplate['MEID'] ?? '';
+          descriptionWritersController.text =
+              defaultTemplate['Description Writers'] ?? '';
+          creatorJobTitleController.text =
+              defaultTemplate['Creator\'s Job Title'] ?? '';
+          copyrightController.text = defaultTemplate['Copyright'] ?? '';
+          creditController.text = defaultTemplate['Credit'] ?? '';
+          sourceController.text = defaultTemplate['Source'] ?? '';
+          headlineController.text = defaultTemplate['Headline'] ?? '';
+          keywordsController.text = defaultTemplate['Keywords'] ?? '';
+          suppCat1Controller.text = defaultTemplate['Supp Cat 1'] ?? '';
+          suppCat2Controller.text = defaultTemplate['Supp Cat 2'] ?? '';
+          suppCat3Controller.text = defaultTemplate['Supp Cat 3'] ?? '';
+          categoryController.text = defaultTemplate['Category'] ?? '';
+          titleObjectNameController.text = defaultTemplate['Object Name'] ?? '';
+          stadiumController.text = defaultTemplate['Stadium'] ?? '';
+          cityController.text = defaultTemplate['City'] ?? '';
+          provinceController.text = defaultTemplate['Province/State'] ?? '';
+          countryController.text = defaultTemplate['Country'] ?? '';
+          countryCodeController.text = defaultTemplate['Country Code'] ?? '';
+          urgencyController.text = defaultTemplate['Urgency'] ?? '';
+          specialInstructionsController.text =
+              defaultTemplate['Special Instructions'] ?? '';
+          personalityController.text = defaultTemplate['Personality'] ?? '';
+          captionController.text = defaultTemplate['Caption'] ?? '';
+        } catch (e) {
+          print('Error loading default template: $e');
+        }
+      }
     }
   }
 
@@ -306,6 +349,11 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Date': dateController.text,
       'Time': timeController.text,
     };
+
+    // Save as default template for next time
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        'default_metadata_template', jsonEncode(metadataValues));
 
     // Return just the metadata - apply to all images is handled in startup dialog
     Navigator.of(context).pop({

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'metadata_preset_dialog.dart';
 
 class MetadataWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -451,6 +452,168 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     }
   }
 
+  // Clear all metadata fields (except date and time)
+  void _clearAllMetadata() {
+    setState(() {
+      jobIdController.clear();
+      descriptionWritersController.clear();
+      headlineController.clear();
+      keywordsController.clear();
+      creatorController.clear();
+      creatorJobTitleController.clear();
+      creditController.clear();
+      copyrightController.clear();
+      sourceController.clear();
+      urgencyController.clear();
+      countryController.clear();
+      countryCodeController.clear();
+      stadiumController.clear();
+      cityController.clear();
+      provinceController.clear();
+      // dateController.clear(); // Keep date
+      // timeController.clear(); // Keep time
+      titleObjectNameController.clear();
+      categoryController.clear();
+      suppCat1Controller.clear();
+      suppCat2Controller.clear();
+      suppCat3Controller.clear();
+      specialInstructionsController.clear();
+    });
+
+    // Notify parent of changes
+    _notifyMetadataChanged();
+  }
+
+  // Apply metadata preset from saved template (excluding date and time)
+  void _applyMetadataPreset() async {
+    final prefs = await SharedPreferences.getInstance();
+    final defaultTemplateJson = prefs.getString('default_metadata_template');
+
+    if (defaultTemplateJson != null) {
+      try {
+        final Map<String, dynamic> templateMetadata =
+            jsonDecode(defaultTemplateJson);
+
+        // Debug: Show entire template content
+        print('DEBUG: Entire template content:');
+        templateMetadata.forEach((key, value) {
+          print('  $key: "$value"');
+        });
+
+        setState(() {
+          creatorController.text = templateMetadata['Creator'] ?? '';
+          jobIdController.text = templateMetadata['MEID'] ?? '';
+          descriptionWritersController.text =
+              templateMetadata['Description Writers'] ?? '';
+          creatorJobTitleController.text =
+              templateMetadata['Creator\'s Job Title'] ?? '';
+          copyrightController.text = templateMetadata['Copyright'] ?? '';
+          creditController.text = templateMetadata['Credit'] ?? '';
+          sourceController.text = templateMetadata['Source'] ?? '';
+          headlineController.text = templateMetadata['Headline'] ?? '';
+          keywordsController.text = templateMetadata['Keywords'] ?? '';
+          suppCat1Controller.text = templateMetadata['Supp Cat 1'] ?? '';
+          suppCat2Controller.text = templateMetadata['Supp Cat 2'] ?? '';
+          suppCat3Controller.text = templateMetadata['Supp Cat 3'] ?? '';
+          categoryController.text = templateMetadata['Category'] ?? '';
+          titleObjectNameController.text =
+              templateMetadata['Object Name'] ?? '';
+          stadiumController.text = templateMetadata['Stadium'] ?? '';
+          cityController.text = templateMetadata['City'] ?? '';
+          provinceController.text = templateMetadata['Province/State'] ?? '';
+          countryController.text = templateMetadata['Country'] ?? '';
+          countryCodeController.text = templateMetadata['Country Code'] ?? '';
+          urgencyController.text = templateMetadata['Urgency'] ?? '';
+          specialInstructionsController.text =
+              templateMetadata['Special Instructions'] ?? '';
+          // dateController.text = templateMetadata['Date'] ?? ''; // Keep original date
+          // timeController.text = templateMetadata['Time'] ?? ''; // Keep original time
+        });
+
+        // Debug output for supplemental categories
+        print('DEBUG: Template supplemental categories:');
+        print('  Supp Cat 1: "${templateMetadata['Supp Cat 1']}"');
+        print('  Supp Cat 2: "${templateMetadata['Supp Cat 2']}"');
+        print('  Supp Cat 3: "${templateMetadata['Supp Cat 3']}"');
+        print('DEBUG: Controller values after setState:');
+        print('  suppCat1Controller: "${suppCat1Controller.text}"');
+        print('  suppCat2Controller: "${suppCat2Controller.text}"');
+        print('  suppCat3Controller: "${suppCat3Controller.text}"');
+
+        // Force a rebuild to ensure UI updates
+        if (mounted) {
+          setState(() {});
+        }
+
+        // Notify parent of changes
+        _notifyMetadataChanged();
+
+        // Debug: Check current values after applying template
+        print('DEBUG: Values after applying template and notifying changes:');
+        final currentValues = getCurrentValues();
+        currentValues.forEach((key, value) {
+          print('  $key: "$value"');
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Metadata preset applied successfully'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error applying metadata preset'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No metadata preset found. Please create one first.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // Helper method to notify parent of metadata changes
+  void _notifyMetadataChanged() {
+    if (widget.onMetadataUpdated != null) {
+      final currentValues = getCurrentValues();
+      widget.onMetadataUpdated!(currentValues);
+    }
+  }
+
+  // Edit IPTC template
+  void _editIptcTemplate() async {
+    // Show the metadata preset dialog
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => MetadataPresetDialog(
+        currentPreset: null,
+        detectedDate: null, // You might want to pass the current date here
+      ),
+    );
+
+    if (result != null) {
+      // Template was updated, show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('IPTC template updated successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   void _loadMetadata() {
     if (widget.metadata == null) return;
 
@@ -524,48 +687,56 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
       categoryController.text = meta['Category']?.toString() ?? '';
 
-      // Handle supplemental categories (could be a single string, comma-separated string, or array)
-      final suppCats = meta['SupplementalCategories'];
-      if (suppCats != null) {
-        if (suppCats is List) {
-          if (suppCats.isNotEmpty) {
-            suppCat1Controller.text = suppCats[0].toString();
-          }
-          if (suppCats.length > 1) {
-            suppCat2Controller.text = suppCats[1].toString();
-          }
-          if (suppCats.length > 2) {
-            suppCat3Controller.text = suppCats[2].toString();
-          }
+      // Handle supplemental categories from multiple possible keys
+      List<String> supplementalValues = [];
+      final dynamic sc1 = meta['SupplementalCategories'];
+      final dynamic sc2 = meta['IPTC:SupplementalCategory'];
+      final dynamic sc3 = meta['XMP-photoshop:SupplementalCategories'];
+
+      print('DEBUG: Loading supplemental categories:');
+      print('  SupplementalCategories: $sc1 (${sc1.runtimeType})');
+      print('  IPTC:SupplementalCategory: $sc2 (${sc2.runtimeType})');
+      print(
+          '  XMP-photoshop:SupplementalCategories: $sc3 (${sc3.runtimeType})');
+      print('DEBUG: All metadata keys: ${meta.keys.toList()}');
+
+      // The issue is ExifTool is only returning the last value instead of comma-separated
+      // Let's check if sc1 should be split but isn't being detected properly
+      if (sc1 != null && sc1.toString() == 'BBN') {
+        print(
+            'DEBUG: FOUND THE BUG! ExifTool returning only last value instead of "SPO,BBA,BBN"');
+      }
+
+      void _collect(dynamic v) {
+        if (v == null) return;
+        if (v is List) {
+          supplementalValues.addAll(v.map((e) => e.toString()));
         } else {
-          // Single string - check if it's comma-separated
-          String suppCatsStr = suppCats.toString();
-          if (suppCatsStr.contains(',')) {
-            // Split comma-separated values
-            List<String> parts =
-                suppCatsStr.split(',').map((s) => s.trim()).toList();
-            if (parts.isNotEmpty) {
-              suppCat1Controller.text = parts[0];
-            }
-            if (parts.length > 1) {
-              suppCat2Controller.text = parts[1];
-            }
-            if (parts.length > 2) {
-              suppCat3Controller.text = parts[2];
-            }
-          } else {
-            // Single value, put in first field
-            suppCat1Controller.text = suppCatsStr;
-            suppCat2Controller.text = '';
-            suppCat3Controller.text = '';
+          final s = v.toString();
+          if (s.contains(',')) {
+            supplementalValues.addAll(s.split(',').map((e) => e.trim()));
+          } else if (s.isNotEmpty) {
+            supplementalValues.add(s);
           }
         }
-      } else {
-        // Explicitly clear when not present
-        suppCat1Controller.text = '';
-        suppCat2Controller.text = '';
-        suppCat3Controller.text = '';
       }
+
+      _collect(sc1);
+      _collect(sc2);
+      _collect(sc3);
+
+      // Deduplicate while preserving order
+      final seen = <String>{};
+      supplementalValues =
+          supplementalValues.where((e) => seen.add(e)).toList(growable: false);
+
+      // Assign to controllers
+      suppCat1Controller.text =
+          supplementalValues.isNotEmpty ? supplementalValues[0] : '';
+      suppCat2Controller.text =
+          supplementalValues.length > 1 ? supplementalValues[1] : '';
+      suppCat3Controller.text =
+          supplementalValues.length > 2 ? supplementalValues[2] : '';
 
       // Load special instructions - try IPTC field first, then XMP field
       final specialInstructions = meta['SpecialInstructions']?.toString() ??
@@ -973,21 +1144,148 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       items.add(const SizedBox(height: 40));
                     }
 
-                    return Wrap(
-                      spacing: gap,
-                      runSpacing: gap,
-                      children: items
-                          .map((w) => Container(
-                                width: columnWidth,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
+                    return Column(
+                      children: [
+                        Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: items
+                              .map((w) => Container(
+                                    width: columnWidth,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 0),
+                                    child: w,
+                                  ))
+                              .toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        // Action buttons at the bottom
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Left side - Edit IPTC Template button
+                            Container(
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _editIptcTemplate,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.edit,
+                                            size: 10,
+                                            color: Colors.grey.shade700),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Edit IPTC Template',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 0),
-                                child: w,
-                              ))
-                          .toList(),
+                              ),
+                            ),
+                            // Right side - Clear and Apply buttons
+                            Row(
+                              children: [
+                                Container(
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: _clearAllMetadata,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.clear,
+                                                size: 10,
+                                                color: Colors.grey.shade700),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'Clear Metadata',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade700,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0052CC),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: const Color(0xFF0052CC)),
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: _applyMetadataPreset,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.settings,
+                                                size: 10, color: Colors.white),
+                                            const SizedBox(width: 3),
+                                            const Text(
+                                              'Apply IPTC Template',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     );
                   }),
                 ],

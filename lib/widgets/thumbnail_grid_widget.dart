@@ -30,6 +30,7 @@ class ThumbnailGridWidget extends StatefulWidget {
   // Callbacks for metadata operations
   final Function(String)? onCopyMetadata;
   final Function(String)? onPasteMetadata;
+  final Function(String)? onApplyIptcTemplate;
   // Callback for FTP operations
   final Function(String)? onFtpImage;
   // Callback when an image is renamed
@@ -57,6 +58,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.onImageDeleted,
     this.onCopyMetadata,
     this.onPasteMetadata,
+    this.onApplyIptcTemplate,
     this.onFtpImage,
     this.onImageRenamed,
     this.onMultiSelect,
@@ -1097,6 +1099,12 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 Icons.copy, imagePath, tapPosition),
                             _buildMenuItem('paste_metadata', 'Paste Metadata',
                                 Icons.paste, imagePath, tapPosition),
+                            _buildMenuItem(
+                                'apply_iptc_template',
+                                'Apply IPTC Template',
+                                Icons.description,
+                                imagePath,
+                                tapPosition),
                             const Divider(height: 1),
                             if (widget.uploadedImages.contains(imagePath))
                               _buildMenuItem('remove_ftp', 'Remove FTP Status',
@@ -1218,6 +1226,10 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           // Paste to single image
           widget.onPasteMetadata?.call(imagePath);
         }
+        break;
+      case 'apply_iptc_template':
+        // Apply IPTC template to this image
+        widget.onApplyIptcTemplate?.call(imagePath);
         break;
       case 'delete':
         // Show confirmation dialog at the click position
