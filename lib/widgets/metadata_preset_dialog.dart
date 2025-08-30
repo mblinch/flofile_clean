@@ -54,7 +54,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   String? selectedPreset;
   String? selectedCaptionStyle = 'getty';
   DateTime? detectedDate;
-  bool applyToAllImages = false;
 
   // Urgency levels for dropdown
   final List<Map<String, String>> urgencyLevels = [
@@ -308,10 +307,9 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Time': timeController.text,
     };
 
-    // Return the metadata and apply to all images flag
+    // Return just the metadata - apply to all images is handled in startup dialog
     Navigator.of(context).pop({
       'metadata': metadataValues,
-      'applyToAllImages': applyToAllImages,
     });
   }
 
@@ -483,48 +481,99 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
               ),
             ),
             const SizedBox(height: 6),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(2),
-                color: Colors.white,
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: selectedPreset,
-                  hint: Row(
-                    children: [
-                      Icon(Icons.settings,
-                          size: 16, color: Colors.grey.shade600),
-                      const SizedBox(width: 6),
-                      Text('Select an IPTC profile',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade600)),
-                    ],
-                  ),
-                  items: [
-                    ...savedPresets.map((preset) => DropdownMenuItem(
-                          value: preset,
-                          child: Row(
+            Row(
+              children: [
+                // Dropdown
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(2),
+                      color: Colors.white,
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedPreset,
+                        hint: Row(
+                          children: [
+                            Icon(Icons.settings,
+                                size: 16, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Text('Select an IPTC profile',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                        items: [
+                          ...savedPresets.map((preset) => DropdownMenuItem(
+                                value: preset,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.settings,
+                                        size: 16, color: Colors.grey.shade600),
+                                    const SizedBox(width: 6),
+                                    Text(preset,
+                                        style: const TextStyle(fontSize: 11)),
+                                  ],
+                                ),
+                              )),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            _loadPreset(value);
+                          }
+                        },
+                        selectedItemBuilder: (context) => [
+                          Row(
                             children: [
                               Icon(Icons.settings,
                                   size: 16, color: Colors.grey.shade600),
                               const SizedBox(width: 6),
-                              Text(preset,
-                                  style: const TextStyle(fontSize: 11)),
+                              Text('Select an IPTC profile',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600)),
                             ],
                           ),
-                        )),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      _loadPreset(value);
-                    }
-                  },
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // Save as Template button
+                ElevatedButton(
+                  onPressed: _savePreset,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade200,
+                    foregroundColor: Colors.black87,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                  child: const Text('Save as Template',
+                      style: TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(width: 8),
+                // Load IPTC from JPG button
+                ElevatedButton(
+                  onPressed: _loadIptcFromJpg,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade200,
+                    foregroundColor: Colors.black87,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                  child: const Text('Load IPTC from JPG',
+                      style: TextStyle(fontSize: 11)),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
 
@@ -779,32 +828,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
 
             const SizedBox(height: 12),
 
-            // Apply to all images checkbox
-            Row(
-              children: [
-                Checkbox(
-                  value: applyToAllImages,
-                  onChanged: (value) {
-                    setState(() {
-                      applyToAllImages = value ?? false;
-                    });
-                  },
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-                Expanded(
-                  child: Text(
-                    'Apply preset to all images in session',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
             // Divider line above buttons
             Container(
               height: 1,
@@ -814,68 +837,26 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
 
             // Action buttons
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      ElevatedButton(
-                        onPressed: _savePreset,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade200,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2)),
-                        ),
-                        child: const Text('Save as Template',
-                            style: TextStyle(fontSize: 11)),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: _loadIptcFromJpg,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade200,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2)),
-                        ),
-                        child: const Text('Load IPTC from JPG',
-                            style: TextStyle(fontSize: 11)),
-                      ),
-                    ],
-                  ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel',
+                      style: TextStyle(fontSize: 11, color: Colors.black87)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel',
-                            style:
-                                TextStyle(fontSize: 11, color: Colors.black87)),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: _saveSettings,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade200,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2)),
-                        ),
-                        child: const Text('Save Settings',
-                            style: TextStyle(fontSize: 11)),
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _saveSettings,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade200,
+                    foregroundColor: Colors.black87,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2)),
                   ),
+                  child: const Text('Apply Template',
+                      style: TextStyle(fontSize: 11)),
                 ),
               ],
             ),

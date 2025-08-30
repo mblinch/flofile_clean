@@ -1063,27 +1063,69 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         return ValueListenableBuilder<int>(
           valueListenable: processedNotifier,
           builder: (context, processedCount, child) {
-            return AlertDialog(
-              title: const Text('Applying IPTC Metadata'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                      'Processed $processedCount of ${writableImages.length} images'),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: writableImages.length > 0
-                        ? processedCount / writableImages.length
-                        : 0.0,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Colors.blue),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
+            return Dialog(
+              child: Container(
+                width: 400,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with title
+                    Row(
+                      children: [
+                        Icon(Icons.settings,
+                            size: 16, color: Colors.grey.shade600),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Applying IPTC Metadata',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Progress text
+                    Text(
+                      'Processed $processedCount of ${writableImages.length} images',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Progress bar
+                    LinearProgressIndicator(
+                      value: writableImages.length > 0
+                          ? processedCount / writableImages.length
+                          : 0.0,
+                      backgroundColor: Colors.grey.shade300,
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Percentage
+                    Text(
                       '${writableImages.length > 0 ? ((processedCount / writableImages.length) * 100).toInt() : 0}%',
-                      style: const TextStyle(fontSize: 12)),
-                ],
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },

@@ -428,20 +428,20 @@ class _StartupDialogState extends State<StartupDialog> {
     );
 
     if (result != null) {
-      // Extract metadata and apply to all images flag
+      // Extract metadata
       final metadata = result['metadata'] as Map<String, String>;
-      final applyToAllImages = result['applyToAllImages'] as bool;
 
       // Store the selected preset data to be used when the app starts
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('selected_metadata_preset', jsonEncode(metadata));
 
-      // Store the checkbox value
-      await prefs.setBool('apply_preset_to_all_images', applyToAllImages);
+      // Store the checkbox value from the startup dialog
+      await prefs.setBool(
+          'apply_preset_to_all_images', _applyPresetToAllImages);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(applyToAllImages
+          content: Text(_applyPresetToAllImages
               ? 'Metadata preset will be applied to all images in the session.'
               : 'Metadata preset will be applied when you start the app.'),
           duration: const Duration(seconds: 2),
