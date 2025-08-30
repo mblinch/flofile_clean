@@ -1054,31 +1054,34 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
 
     // Show progress dialog with progress bar
-    double progress = 0.0;
-    int processedCount = 0;
+    ValueNotifier<int> processedNotifier = ValueNotifier<int>(0);
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
+        return ValueListenableBuilder<int>(
+          valueListenable: processedNotifier,
+          builder: (context, processedCount, child) {
             return AlertDialog(
               title: const Text('Applying IPTC Metadata'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                      'Processed $processedCount of ${writableImages.length} images...'),
+                      'Processed $processedCount of ${writableImages.length} images'),
                   const SizedBox(height: 16),
                   LinearProgressIndicator(
-                    value: progress,
+                    value: writableImages.length > 0
+                        ? processedCount / writableImages.length
+                        : 0.0,
                     backgroundColor: Colors.grey.shade300,
                     valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                        const AlwaysStoppedAnimation<Color>(Colors.blue),
                   ),
                   const SizedBox(height: 8),
-                  Text('${(progress * 100).toInt()}%',
+                  Text(
+                      '${writableImages.length > 0 ? ((processedCount / writableImages.length) * 100).toInt() : 0}%',
                       style: const TextStyle(fontSize: 12)),
                 ],
               ),
@@ -1087,6 +1090,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         );
       },
     );
+    // Ensure the dialog renders before heavy work begins
+    await Future.delayed(const Duration(milliseconds: 50));
 
     try {
       // Convert metadata to exiftool format
@@ -1186,7 +1191,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       });
 
       // Build exiftool arguments once
-      List<String> args = [];
+      // Include common flags to improve reliability on IPTC writes
+      List<String> args = [
+        '-overwrite_original',
+        '-P',
+        '-m',
+        '-charset',
+        'iptc=UTF8'
+      ];
       exifMetadata.forEach((key, value) {
         if (value != null && value.toString().isNotEmpty) {
           if (key == 'SupplementalCategories' && value is List) {
@@ -1197,13 +1209,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      // Add overwrite flag
-      args.add('-overwrite_original');
-
       // Process images in batches for better performance
-      const int batchSize = 10;
+      const int batchSize = 5;
       int processedCount = 0;
       int totalImages = writableImages.length;
+      String? lastError;
 
       for (int i = 0; i < writableImages.length; i += batchSize) {
         final batch = writableImages.skip(i).take(batchSize).toList();
@@ -1220,64 +1230,51 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 'Successfully processed batch ${(i ~/ batchSize) + 1}: ${batch.length} images (Total: $processedCount/$totalImages)');
           } else {
             print('Error processing batch: ${proc.stderrText}');
+            lastError = proc.stderrText;
           }
         } catch (e) {
           print('Error processing batch: $e');
+          lastError = e.toString();
         }
 
-        // Update progress - show real progress to user
-        if (mounted) {
-          progress = processedCount / totalImages;
-          // Force dialog update by closing and reopening with new progress
-          Navigator.of(context).pop();
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Applying IPTC Metadata'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                        'Processed $processedCount of ${writableImages.length} images...'),
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('${(progress * 100).toInt()}%',
-                        style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-              );
-            },
-          );
-        }
+        // Update progress counter and yield a frame
+        processedNotifier.value = processedCount;
+        await Future.delayed(const Duration(milliseconds: 16));
       }
 
       // Close progress dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
+      processedNotifier.dispose();
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Metadata applied to $processedCount images successfully!'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      if (processedCount > 0) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Metadata applied to $processedCount of $totalImages images successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        // Show error if nothing was processed
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'No images updated. ExifTool error: ${lastError ?? 'Unknown error'}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       // Close progress dialog
       if (mounted) {
         Navigator.of(context).pop();
       }
+      processedNotifier.dispose();
 
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
