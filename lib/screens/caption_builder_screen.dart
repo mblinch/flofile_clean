@@ -35,6 +35,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Map<String, dynamic>? currentMetadata;
   Map<String, dynamic>?
       _originalMetadata; // Track original metadata for change detection
+  Map<String, dynamic>?
+      _originalCaptionData; // Track original caption data for change detection
+  Map<String, String>?
+      _originalMetadataUi; // Track original metadata (UI schema) for change detection
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
   // XMP metadata for rating and color label
@@ -613,6 +617,47 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentMetadata = loadedMetadata;
               _originalMetadata = Map<String, dynamic>.from(
                   loadedMetadata); // Store original for change detection
+
+              // Also track original caption data for change detection directly from loaded metadata
+              final Map<String, dynamic> originalCaptionFromMeta = {
+                'Caption-Abstract':
+                    loadedMetadata['Caption-Abstract']?.toString() ?? '',
+                'XMP:Description':
+                    loadedMetadata['ImageDescription']?.toString() ?? '',
+                'ImageDescription':
+                    loadedMetadata['ImageDescription']?.toString() ?? '',
+                'XMP-getty:Personality':
+                    (loadedMetadata['XMP-getty:Personality'] ??
+                                loadedMetadata['Personality'])
+                            ?.toString() ??
+                        '',
+                'Sub-location':
+                    loadedMetadata['Sub-location']?.toString() ?? '',
+                'City': loadedMetadata['City']?.toString() ?? '',
+                'Province-State':
+                    loadedMetadata['Province-State']?.toString() ?? '',
+              };
+              _originalCaptionData = originalCaptionFromMeta;
+              print(
+                  'DEBUG: Set original caption data (from meta): $_originalCaptionData');
+            });
+            // Also capture original metadata values in UI schema after widgets update
+            Future.delayed(const Duration(milliseconds: 50), () {
+              final metadataState = _metadataKey2.currentState;
+              if (metadataState != null) {
+                try {
+                  final uiValues = (metadataState as dynamic).getCurrentValues()
+                      as Map<String, String>;
+                  _originalMetadataUi = Map<String, String>.from(uiValues);
+                  print(
+                      'DEBUG: Set original metadata UI values: $_originalMetadataUi');
+                } catch (e) {
+                  print('DEBUG: Failed to read initial metadata UI values: $e');
+                  _originalMetadataUi = null;
+                }
+              } else {
+                _originalMetadataUi = null;
+              }
             });
             print('Metadata loaded successfully');
           }
@@ -621,6 +666,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           setState(() {
             currentMetadata = null;
             _originalMetadata = null;
+            _originalCaptionData = null;
           });
         }
       } else {
@@ -628,6 +674,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         setState(() {
           currentMetadata = null;
           _originalMetadata = null;
+          _originalCaptionData = null;
         });
       }
     } catch (e) {
@@ -916,28 +963,98 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Handle image selection
   void _onImageSelected(int index) {
+    print('DEBUG: _onImageSelected called with index: $index');
+    print('DEBUG: _originalCaptionData is: $_originalCaptionData');
+
     // Check if there are unsaved changes before switching
     if (_hasUnsavedChanges()) {
+      print('DEBUG: Changes detected, showing save dialog');
       _showSaveChangesDialog(index);
     } else {
+      print('DEBUG: No changes detected, switching directly');
       _switchToImage(index);
     }
   }
 
-  // Check if there are unsaved changes
+  // Check if there are unsaved changes (only for the current image, not when switching)
   bool _hasUnsavedChanges() {
-    if (_originalMetadata == null || currentMetadata == null) return false;
+    // If we're in the middle of switching images, don't check for changes
+    if (_originalCaptionData == null) {
+      return false;
+    }
 
-    // Compare current metadata with original metadata
-    return !_mapsAreEqual(_originalMetadata!, currentMetadata!);
+    bool hasMetadataChanges = false;
+    bool hasCaptionChanges = false;
+
+    // Check metadata changes
+    if (_originalMetadataUi != null) {
+      final metadataState = _metadataKey2.currentState;
+      if (metadataState != null) {
+        try {
+          final uiValues = (metadataState as dynamic).getCurrentValues()
+              as Map<String, String>;
+          hasMetadataChanges = !_mapsAreEqual(
+              Map<String, dynamic>.from(_originalMetadataUi!),
+              Map<String, dynamic>.from(uiValues));
+          if (hasMetadataChanges) {
+            print('DEBUG: Metadata changes detected (UI schema)');
+            print('  Original: $_originalMetadataUi');
+            print('  Current: $uiValues');
+          }
+        } catch (e) {
+          // fallback to previous behavior if needed
+          if (_originalMetadata != null && currentMetadata != null) {
+            hasMetadataChanges =
+                !_mapsAreEqual(_originalMetadata!, currentMetadata!);
+            if (hasMetadataChanges) {
+              print('DEBUG: Metadata changes detected (fallback)');
+            }
+          }
+        }
+      }
+    }
+
+    // Check caption changes
+    if (_originalCaptionData != null) {
+      final captionState = _captionFieldsKey2.currentState;
+      if (captionState != null && captionState is State) {
+        try {
+          final currentCaptionData =
+              (captionState as dynamic).getCurrentCaptionValues();
+          hasCaptionChanges =
+              !_mapsAreEqual(_originalCaptionData!, currentCaptionData);
+          if (hasCaptionChanges) {
+            print('DEBUG: Caption changes detected');
+            print('  Original: $_originalCaptionData');
+            print('  Current: $currentCaptionData');
+          }
+        } catch (e) {
+          print('Error getting caption values: $e');
+        }
+      }
+    }
+
+    final hasChanges = hasMetadataChanges || hasCaptionChanges;
+    print('DEBUG: _hasUnsavedChanges returning: $hasChanges');
+    return hasChanges;
   }
 
   // Compare two maps for equality
   bool _mapsAreEqual(Map<String, dynamic> map1, Map<String, dynamic> map2) {
-    if (map1.length != map2.length) return false;
+    if (map1.length != map2.length) {
+      print(
+          'DEBUG: Maps have different lengths: ${map1.length} vs ${map2.length}');
+      return false;
+    }
 
     for (String key in map1.keys) {
-      if (!map2.containsKey(key) || map1[key] != map2[key]) {
+      if (!map2.containsKey(key)) {
+        print('DEBUG: Key "$key" missing from second map');
+        return false;
+      }
+      if (map1[key] != map2[key]) {
+        print(
+            'DEBUG: Value different for key "$key": "${map1[key]}" vs "${map2[key]}"');
         return false;
       }
     }
@@ -1070,7 +1187,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      await _saveMetadataToImage(currentImagePath, templateMetadata);
+      // Save both metadata and caption changes
+      await _saveIptcMetadata();
+
+      // Update original caption data to mark changes as saved
+      final captionState = _captionFieldsKey2.currentState;
+      if (captionState != null && captionState is State) {
+        try {
+          final currentCaptionData =
+              (captionState as dynamic).getCurrentCaptionValues();
+          _originalCaptionData = Map<String, dynamic>.from(currentCaptionData);
+        } catch (e) {
+          print('Error updating original caption data: $e');
+        }
+      }
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1085,9 +1215,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Switch to a new image (internal method)
   void _switchToImage(int index) {
+    print('DEBUG: _switchToImage called with index: $index');
+    print('DEBUG: Clearing _originalCaptionData');
+
     setState(() {
       currentIndex = index;
     });
+
+    // Clear the original caption data to prevent false change detection
+    _originalCaptionData = null;
+    print('DEBUG: _originalCaptionData after clearing: $_originalCaptionData');
+
     _loadMetadata();
   }
 

@@ -114,6 +114,37 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   void initState() {
     super.initState();
     _loadMetadataPreset();
+
+    // Wire change listeners so edits notify parent immediately
+    void addListener(TextEditingController c) {
+      c.addListener(() {
+        _notifyMetadataChanged();
+      });
+    }
+
+    addListener(jobIdController);
+    addListener(descriptionWritersController);
+    addListener(headlineController);
+    addListener(keywordsController);
+    addListener(creatorController);
+    addListener(creatorJobTitleController);
+    addListener(creditController);
+    addListener(copyrightController);
+    addListener(sourceController);
+    addListener(urgencyController);
+    addListener(countryController);
+    addListener(countryCodeController);
+    addListener(stadiumController);
+    addListener(cityController);
+    addListener(provinceController);
+    addListener(dateController);
+    addListener(timeController);
+    addListener(titleObjectNameController);
+    addListener(categoryController);
+    addListener(suppCat1Controller);
+    addListener(suppCat2Controller);
+    addListener(suppCat3Controller);
+    addListener(specialInstructionsController);
   }
 
   Future<void> _loadMetadataPreset() async {
