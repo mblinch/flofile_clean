@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import 'filmstrip_widget.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -32,6 +33,11 @@ class PicturePreviewWidget extends StatefulWidget {
   final Set<String>? queuedUploads;
   final Set<String>? currentlyUploading;
   final Map<String, double>? uploadProgress;
+  final Map<String, int>? xmpRatings;
+  final Map<String, String>? xmpLabels;
+  final Map<String, bool>? xmpTagged;
+  final Set<String>? lockedPaths;
+  final VoidCallback? onShowThumbnails;
 
   const PicturePreviewWidget({
     super.key,
@@ -53,6 +59,11 @@ class PicturePreviewWidget extends StatefulWidget {
     this.queuedUploads,
     this.currentlyUploading,
     this.uploadProgress,
+    this.xmpRatings,
+    this.xmpLabels,
+    this.xmpTagged,
+    this.lockedPaths,
+    this.onShowThumbnails,
   });
 
   @override
@@ -424,6 +435,24 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           ),
                         ),
                     ],
+                  ),
+                ),
+                // Filmstrip area at the bottom of the picture preview
+                SizedBox(
+                  height: 80,
+                  child: FilmstripWidget(
+                    imagePaths: widget.imagePaths,
+                    currentIndex: widget.currentIndex,
+                    onImageSelected: widget.onImageSelected,
+                    uploadedImages: widget.uploadedImages ?? {},
+                    queuedUploads: widget.queuedUploads ?? {},
+                    currentlyUploading: widget.currentlyUploading ?? {},
+                    uploadProgress: widget.uploadProgress ?? const {},
+                    xmpRatings: widget.xmpRatings ?? const {},
+                    xmpLabels: widget.xmpLabels ?? const {},
+                    xmpTagged: widget.xmpTagged ?? const {},
+                    lockedPaths: widget.lockedPaths ?? {},
+                    onShowThumbnails: widget.onShowThumbnails,
                   ),
                 ),
               ],

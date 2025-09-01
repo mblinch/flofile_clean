@@ -2330,6 +2330,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       queuedUploads: _queuedUploads,
                       currentlyUploading: _currentlyUploading,
                       uploadProgress: _uploadProgress,
+                      xmpRatings: _xmpRatings,
+                      xmpLabels: _xmpLabels,
+                      xmpTagged: _xmpTagged,
+                      lockedPaths: _lockedPaths,
+                      onShowThumbnails: _showThumbnailPopup,
                     ),
                   ),
 
@@ -2377,7 +2382,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue.shade600,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
                               ),
                             ),
                           ],
@@ -2389,22 +2395,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             ),
 
-            // Filmstrip under the picture preview
-            FilmstripWidget(
-              imagePaths: imagePaths,
-              currentIndex: currentIndex,
-              onImageSelected: _onImageSelected,
-              uploadedImages: _uploadedImages,
-              queuedUploads: _queuedUploads,
-              currentlyUploading: _currentlyUploading,
-              uploadProgress: _uploadProgress,
-              xmpRatings: _xmpRatings,
-              xmpLabels: _xmpLabels,
-              xmpTagged: _xmpTagged,
-              lockedPaths: _lockedPaths,
-              onShowThumbnails: _showThumbnailPopup,
-            ),
-            
+            // Filmstrip moved into PicturePreviewWidget bottom; removed here
+
             // Divider between top and bottom quadrants
             Container(
               height: 1,
