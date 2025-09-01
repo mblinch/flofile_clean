@@ -199,32 +199,57 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     }
   }
 
-  // Method to get current values from all controllers
+  // Method to get current values from all controllers - using Photo Mechanic's preferred fields
   Map<String, String> getCurrentValues() {
     final values = {
-      // IPTC fields
-      'TransmissionReference': jobIdController.text,
+      // Photo Mechanic's preferred IPTC fields
+      'IPTC:OriginalTransmissionReference': jobIdController.text,
+      'OriginalTransmissionReference': jobIdController.text,
+      'TransmissionReference': jobIdController.text, // fallback
       'CaptionWriter': descriptionWritersController.text,
-      'Headline': headlineController.text,
-      'Keywords': keywordsController.text,
-      'Creator': creatorController.text,
-      'AuthorsPosition': creatorJobTitleController.text,
+      'IPTC:Headline': headlineController.text,
+      'Headline': headlineController.text, // fallback
+      'IPTC:Keywords': keywordsController.text,
+      'Keywords': keywordsController.text, // fallback
+      'IPTC:By-line': creatorController.text,
+      'By-line': creatorController.text,
+      'Creator': creatorController.text, // fallback
+      'IPTC:By-lineTitle': creatorJobTitleController.text,
+      'By-lineTitle': creatorJobTitleController.text,
+      'AuthorsPosition': creatorJobTitleController.text, // fallback
+      'IPTC:Credit': creditController.text,
       'Credit': creditController.text,
-      'Copyright': copyrightController.text,
+      'IPTC:CopyrightNotice': copyrightController.text,
+      'CopyrightNotice': copyrightController.text,
+      'Copyright': copyrightController.text, // fallback
+      'IPTC:Source': sourceController.text,
       'Source': sourceController.text,
+      'IPTC:Urgency': urgencyController.text,
       'Urgency': urgencyController.text,
-      'Country': countryController.text,
-      'CountryCode': countryCodeController.text,
-      'Sub-location': stadiumController.text,
+      'IPTC:CountryPrimaryLocationName': countryController.text,
+      'CountryPrimaryLocationName': countryController.text,
+      'Country': countryController.text, // fallback
+      'IPTC:CountryPrimaryLocationCode': countryCodeController.text,
+      'CountryPrimaryLocationCode': countryCodeController.text,
+      'CountryCode': countryCodeController.text, // fallback
+      'IPTC:SubLocation': stadiumController.text,
+      'SubLocation': stadiumController.text,
+      'Sub-location': stadiumController.text, // fallback
+      'IPTC:City': cityController.text,
       'City': cityController.text,
-      'Province-State': provinceController.text,
+      'IPTC:ProvinceState': provinceController.text,
+      'ProvinceState': provinceController.text,
+      'Province-State': provinceController.text, // fallback
       'Date': dateController.text,
       'Time': timeController.text,
+      'IPTC:ObjectName': titleObjectNameController.text,
       'ObjectName': titleObjectNameController.text,
+      'IPTC:Category': categoryController.text,
       'Category': categoryController.text,
       'SupplementalCategories1': suppCat1Controller.text,
       'SupplementalCategories2': suppCat2Controller.text,
       'SupplementalCategories3': suppCat3Controller.text,
+      'IPTC:SpecialInstructions': specialInstructionsController.text,
       'SpecialInstructions': specialInstructionsController.text,
 
       // XMP equivalents for Photo Mechanic compatibility
@@ -651,25 +676,31 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     final meta = widget.metadata!;
 
     setState(() {
-      // Load Getty metadata fields
-      jobIdController.text = meta['TransmissionReference']?.toString() ?? '';
+      // Load Getty metadata fields - prefer Photo Mechanic's IPTC fields
+      jobIdController.text = (meta['IPTC:OriginalTransmissionReference'] ??
+                  meta['OriginalTransmissionReference'] ??
+                  meta['TransmissionReference'])
+              ?.toString() ??
+          '';
 
       // Load Description Writer from CaptionWriter (Photoshop XMP field)
       descriptionWritersController.text =
           meta['CaptionWriter']?.toString() ?? '';
 
-      headlineController.text = meta['Headline']?.toString() ?? '';
+      headlineController.text =
+          (meta['IPTC:Headline'] ?? meta['Headline'])?.toString() ?? '';
 
       // Handle Keywords properly - convert arrays to comma-separated strings
-      final keywords = meta['Keywords'];
+      final keywords = meta['IPTC:Keywords'] ?? meta['Keywords'];
       if (keywords is List) {
         keywordsController.text = keywords.join(', ');
       } else {
         keywordsController.text = keywords?.toString() ?? '';
       }
 
-      // Handle Creator field - could be String or List
-      final creatorValue = meta['Creator'];
+      // Handle Creator field - prefer Photo Mechanic's IPTC field, could be String or List
+      final creatorValue =
+          meta['IPTC:By-line'] ?? meta['By-line'] ?? meta['Creator'];
       if (creatorValue != null) {
         if (creatorValue is List) {
           // If it's a list, take the first value only to avoid duplication
@@ -688,22 +719,32 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         print('DEBUG: Creator field is null or empty');
       }
 
-      // Load Creator's Job Title from AuthorsPosition (Photoshop XMP field)
-      creatorJobTitleController.text =
-          meta['AuthorsPosition']?.toString() ?? '';
+      // Load Creator's Job Title from Photo Mechanic's preferred field
+      creatorJobTitleController.text = (meta['IPTC:By-lineTitle'] ??
+                  meta['By-lineTitle'] ??
+                  meta['AuthorsPosition'])
+              ?.toString() ??
+          '';
 
-      final extractedCredit = meta['Credit']?.toString() ?? '';
+      final extractedCredit =
+          (meta['IPTC:Credit'] ?? meta['Credit'])?.toString() ?? '';
       creditController.text = extractedCredit;
 
-      final extractedCopyright = meta['Copyright']?.toString() ?? '';
+      final extractedCopyright = (meta['IPTC:CopyrightNotice'] ??
+                  meta['CopyrightNotice'] ??
+                  meta['Copyright'])
+              ?.toString() ??
+          '';
       copyrightController.text = extractedCopyright;
 
-      final extractedSource = meta['Source']?.toString() ?? '';
+      final extractedSource =
+          (meta['IPTC:Source'] ?? meta['Source'])?.toString() ?? '';
       sourceController.text = extractedSource;
 
-      // Load IPTC metadata fields only if they exist
+      // Load IPTC metadata fields only if they exist - prefer Photo Mechanic's fields
       // Extract urgency number from descriptive text like "5 (normal urgency)"
-      final urgencyValue = meta['Urgency']?.toString() ?? '';
+      final urgencyValue =
+          (meta['IPTC:Urgency'] ?? meta['Urgency'])?.toString() ?? '';
       if (urgencyValue.isNotEmpty) {
         // Extract just the number from "5 (normal urgency)" format
         final match = RegExp(r'^(\d+)').firstMatch(urgencyValue);
@@ -711,12 +752,22 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       } else {
         urgencyController.text = '';
       }
-      countryController.text = meta['Country']?.toString() ?? '';
-      countryCodeController.text = meta['CountryCode']?.toString() ?? '';
+      countryController.text = (meta['IPTC:CountryPrimaryLocationName'] ??
+                  meta['Country'] ??
+                  meta['Country-PrimaryLocationName'])
+              ?.toString() ??
+          '';
+      countryCodeController.text = (meta['IPTC:CountryPrimaryLocationCode'] ??
+                  meta['CountryCode'] ??
+                  meta['Country-PrimaryLocationCode'])
+              ?.toString() ??
+          '';
 
-      // Load categorization metadata
-      titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
-      categoryController.text = meta['Category']?.toString() ?? '';
+      // Load categorization metadata - prefer Photo Mechanic's fields
+      titleObjectNameController.text =
+          (meta['IPTC:ObjectName'] ?? meta['ObjectName'])?.toString() ?? '';
+      categoryController.text =
+          (meta['IPTC:Category'] ?? meta['Category'])?.toString() ?? '';
 
       // Handle supplemental categories from multiple possible keys
       List<String> supplementalValues = [];
@@ -769,22 +820,33 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       suppCat3Controller.text =
           supplementalValues.length > 2 ? supplementalValues[2] : '';
 
-      // Load special instructions - try IPTC field first, then XMP field
-      final specialInstructions = meta['SpecialInstructions']?.toString() ??
-          meta['Instructions']?.toString() ??
-          meta['XMP-photoshop:Instructions']?.toString() ??
-          '';
+      // Load special instructions - prefer Photo Mechanic's IPTC field, then fallback
+      final specialInstructions =
+          (meta['IPTC:SpecialInstructions'] ?? meta['SpecialInstructions'])
+                  ?.toString() ??
+              meta['Instructions']?.toString() ??
+              meta['XMP-photoshop:Instructions']?.toString() ??
+              '';
       // Always assign (clears when empty)
       specialInstructionsController.text = specialInstructions;
 
-      // Load location fields from JPEG metadata
-      final extractedStadium = meta['Sub-location']?.toString() ?? '';
+      // Load location fields from JPEG metadata - prefer Photo Mechanic's IPTC fields
+      final extractedStadium = (meta['IPTC:SubLocation'] ??
+                  meta['SubLocation'] ??
+                  meta['Sub-location'])
+              ?.toString() ??
+          '';
       stadiumController.text = extractedStadium;
 
-      final extractedCity = meta['City']?.toString() ?? '';
+      final extractedCity =
+          (meta['IPTC:City'] ?? meta['City'])?.toString() ?? '';
       cityController.text = extractedCity;
 
-      final extractedProvince = meta['Province-State']?.toString() ?? '';
+      final extractedProvince = (meta['IPTC:ProvinceState'] ??
+                  meta['ProvinceState'] ??
+                  meta['Province-State'])
+              ?.toString() ??
+          '';
       provinceController.text = extractedProvince;
 
       // Load date and time from metadata

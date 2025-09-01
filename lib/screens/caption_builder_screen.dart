@@ -116,11 +116,55 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Show metadata popup dialog
   void _showMetadataPopup() {
     if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
-    
+
+    // Merge current metadata with current caption values for complete data
+    final Map<String, dynamic> mergedMetadata =
+        Map<String, dynamic>.from(currentMetadata ?? {});
+
+    // Get current caption values from the caption fields widget
+    final captionState = _captionFieldsKey2.currentState;
+    if (captionState != null) {
+      try {
+        final currentCaptionData = (captionState as dynamic)
+            .getCurrentCaptionValues() as Map<String, String>;
+        // Merge caption data into metadata
+        currentCaptionData.forEach((key, value) {
+          if (value.isNotEmpty) {
+            mergedMetadata[key] = value;
+          }
+        });
+        print(
+            'DEBUG: Merged caption data into metadata for popup: $currentCaptionData');
+      } catch (e) {
+        print('DEBUG: Error getting caption values for popup: $e');
+      }
+    }
+
+    // Get current metadata values from the metadata widget
+    final metadataState = _metadataKey2.currentState;
+    if (metadataState != null) {
+      try {
+        final currentMetadataValues = (metadataState as dynamic)
+            .getCurrentValues() as Map<String, String>;
+        // Merge metadata values
+        currentMetadataValues.forEach((key, value) {
+          if (value.isNotEmpty) {
+            mergedMetadata[key] = value;
+          }
+        });
+        print(
+            'DEBUG: Merged metadata values into popup data: $currentMetadataValues');
+      } catch (e) {
+        print('DEBUG: Error getting metadata values for popup: $e');
+      }
+    }
+
+    print('DEBUG: Final merged metadata for popup: $mergedMetadata');
+
     showDialog(
       context: context,
       builder: (context) => MetadataPopupDialog(
-        metadata: currentMetadata,
+        metadata: mergedMetadata,
         imagePath: imagePaths[currentIndex],
         onMetadataUpdated: (updatedMetadata) {
           setState(() {
@@ -610,32 +654,92 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     print('Loading metadata from: $imagePath');
 
     try {
-      // Extract metadata via exiftool in JSON format
+      // Extract metadata via exiftool in JSON format - using Photo Mechanic's preferred IPTC fields
       final proc = await ExiftoolHelper.run([
         '-a', // allow duplicate tags (return all values)
         '-j', // JSON output
+        // Photo Mechanic's preferred caption field
+        '-IPTC:Description',
+        '-Description',
+        // Standard IPTC fields
         '-Caption-Abstract',
         '-ImageDescription',
-        '-XMP-getty:Personality',
-        '-TransmissionReference',
-        '-CaptionWriter',
-        '-Headline',
-        '-Keywords',
+        '-IPTC:Caption-Abstract',
+        // Photo Mechanic's preferred creator fields
+        '-IPTC:By-line',
+        '-By-line',
         '-Creator',
+        '-XMP:Creator',
+        // Photo Mechanic's preferred job ID field
+        '-IPTC:OriginalTransmissionReference',
+        '-OriginalTransmissionReference',
+        '-TransmissionReference',
+        '-JobID',
+        '-MEID',
+        // Photo Mechanic's preferred job title field
+        '-IPTC:By-lineTitle',
+        '-By-lineTitle',
         '-AuthorsPosition',
-        '-Credit',
+        // Photo Mechanic's preferred copyright field
+        '-IPTC:CopyrightNotice',
+        '-CopyrightNotice',
         '-Copyright',
+        '-XMP:Rights',
+        // Photo Mechanic's preferred credit field
+        '-IPTC:Credit',
+        '-Credit',
+        // Photo Mechanic's preferred source field
+        '-IPTC:Source',
         '-Source',
-        '-ObjectName',
+        '-XMP:Source',
+        // Photo Mechanic's preferred headline field
+        '-IPTC:Headline',
+        '-Headline',
+        '-XMP:Title',
+        // Photo Mechanic's preferred keywords field
+        '-IPTC:Keywords',
+        '-Keywords',
+        '-XMP:Subject',
+        // Photo Mechanic's preferred category fields
+        '-IPTC:Category',
         '-Category',
         '-SupplementalCategories',
-        '-XMP-photoshop:Instructions',
+        // Photo Mechanic's preferred object name field
+        '-IPTC:ObjectName',
+        '-ObjectName',
+        // Photo Mechanic's preferred location fields
+        '-IPTC:SubLocation',
         '-Sub-location',
+        '-SubLocation',
+        '-XMP:Location',
+        '-IPTC:City',
         '-City',
+        '-XMP:City',
+        '-IPTC:ProvinceState',
         '-Province-State',
-        '-Urgency',
+        '-ProvinceState',
+        '-XMP:State',
+        '-IPTC:CountryPrimaryLocationName',
         '-Country',
+        '-Country-PrimaryLocationName',
+        '-XMP:Country',
+        '-IPTC:CountryPrimaryLocationCode',
         '-CountryCode',
+        '-Country-PrimaryLocationCode',
+        // Photo Mechanic's preferred urgency field
+        '-IPTC:Urgency',
+        '-Urgency',
+        // Photo Mechanic's preferred instructions field
+        '-IPTC:SpecialInstructions',
+        '-SpecialInstructions',
+        '-XMP:Instructions',
+        '-XMP-photoshop:Instructions',
+        // Photo Mechanic's preferred personality field
+        '-XMP-getty:Personality',
+        '-XMP:Personality',
+        '-Personality',
+        // Additional fields for compatibility
+        '-CaptionWriter',
         '-TimeDate',
         '-DateTimeOriginal',
         '-CreateDate',
@@ -1007,14 +1111,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     print('DEBUG: _onImageSelected called with index: $index');
     print('DEBUG: _originalCaptionData is: $_originalCaptionData');
 
-    // Check if there are unsaved changes before switching
-    if (_hasUnsavedChanges()) {
-      print('DEBUG: Changes detected, showing save dialog');
-      _showSaveChangesDialog(index);
-    } else {
-      print('DEBUG: No changes detected, switching directly');
-      _switchToImage(index);
-    }
+    // Directly switch to the selected image without checking for unsaved changes
+    print('DEBUG: Switching directly to image $index');
+    _switchToImage(index);
   }
 
   // Check if there are unsaved changes (only for the current image, not when switching)
@@ -1449,53 +1548,53 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Map template display names to ExifTool field names
+  // Map template display names to Photo Mechanic's preferred ExifTool field names
   String _mapTemplateFieldToExifTool(String templateField) {
     switch (templateField) {
       case 'Creator':
-        return 'Creator';
+        return 'IPTC:By-line'; // Photo Mechanic's preferred field
       case 'MEID':
-        return 'TransmissionReference';
+        return 'IPTC:OriginalTransmissionReference'; // Photo Mechanic's preferred field
       case 'Description Writers':
         return 'CaptionWriter';
       case 'Creator\'s Job Title':
-        return 'AuthorsPosition';
+        return 'IPTC:By-lineTitle'; // Photo Mechanic's preferred field
       case 'Copyright':
-        return 'Copyright';
+        return 'IPTC:CopyrightNotice'; // Photo Mechanic's preferred field
       case 'Credit':
-        return 'Credit';
+        return 'IPTC:Credit'; // Photo Mechanic's preferred field
       case 'Source':
-        return 'Source';
+        return 'IPTC:Source'; // Photo Mechanic's preferred field
       case 'Headline':
-        return 'Headline';
+        return 'IPTC:Headline'; // Photo Mechanic's preferred field
       case 'Keywords':
-        return 'Keywords';
+        return 'IPTC:Keywords'; // Photo Mechanic's preferred field
       case 'Supp Cat 1':
       case 'Supp Cat 2':
       case 'Supp Cat 3':
         return 'SupplementalCategories';
       case 'Category':
-        return 'Category';
+        return 'IPTC:Category'; // Photo Mechanic's preferred field
       case 'Object Name':
-        return 'ObjectName';
+        return 'IPTC:ObjectName'; // Photo Mechanic's preferred field
       case 'Stadium':
-        return 'Sub-location';
+        return 'IPTC:SubLocation'; // Photo Mechanic's preferred field
       case 'City':
-        return 'City';
+        return 'IPTC:City'; // Photo Mechanic's preferred field
       case 'Province/State':
-        return 'Province-State';
+        return 'IPTC:ProvinceState'; // Photo Mechanic's preferred field
       case 'Country':
-        return 'Country';
+        return 'IPTC:CountryPrimaryLocationName'; // Photo Mechanic's preferred field
       case 'Country Code':
-        return 'CountryCode';
+        return 'IPTC:CountryPrimaryLocationCode'; // Photo Mechanic's preferred field
       case 'Urgency':
-        return 'Urgency';
+        return 'IPTC:Urgency'; // Photo Mechanic's preferred field
       case 'Special Instructions':
-        return 'XMP-photoshop:Instructions';
+        return 'IPTC:SpecialInstructions'; // Photo Mechanic's preferred field
       case 'Personality':
         return 'XMP-getty:Personality';
       case 'Caption':
-        return 'Caption-Abstract';
+        return 'IPTC:Description'; // Photo Mechanic's preferred field
       case 'Date':
         return 'TimeDate';
       case 'Time':

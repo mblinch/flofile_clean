@@ -1513,7 +1513,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Method to get current values from caption-related controllers
   Map<String, String> getCurrentCaptionValues() {
     return {
+      'IPTC:Description':
+          captionController.text, // Photo Mechanic's preferred field
+      'Description': captionController.text, // Alternative name
       'Caption-Abstract': captionController.text,
+      'IPTC:Caption-Abstract': captionController.text,
       'XMP:Description':
           captionController.text, // Photo Mechanic compatible caption field
       'ImageDescription': captionController.text, // EXIF description field
@@ -1770,12 +1774,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (widget.metadata == null) return;
     final meta = widget.metadata!;
 
-    // Load Caption: Prefer IPTC "Caption-Abstract", fallback to EXIF "ImageDescription"
-    final dynamic captionAbstract = meta['Caption-Abstract'];
+    // Load Caption: Prefer Photo Mechanic's IPTC Description, then fallback to other fields
+    final dynamic iptcDescription =
+        meta['IPTC:Description'] ?? meta['Description'];
+    final dynamic captionAbstract =
+        meta['Caption-Abstract'] ?? meta['IPTC:Caption-Abstract'];
     final dynamic imageDescription = meta['ImageDescription'];
+    final dynamic xmpDescription = meta['XMP:Description'];
     final extractedCaption =
-        (captionAbstract is String ? captionAbstract : '') ??
+        (iptcDescription is String ? iptcDescription : '') ??
+            (captionAbstract is String ? captionAbstract : '') ??
             (imageDescription is String ? imageDescription : '') ??
+            (xmpDescription is String ? xmpDescription : '') ??
             '';
 
     // Load Personality: Read from XMP-getty:Personality
@@ -1785,10 +1795,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ? extractedPersonality.join(';')
         : (extractedPersonality is String ? extractedPersonality : '');
 
-    // Load location fields from metadata
-    final dynamic subLocation = meta['Sub-location'];
-    final dynamic city = meta['City'];
-    final dynamic province = meta['Province-State'];
+    // Load location fields from metadata - prefer Photo Mechanic's IPTC fields
+    final dynamic subLocation =
+        meta['IPTC:SubLocation'] ?? meta['SubLocation'] ?? meta['Sub-location'];
+    final dynamic city = meta['IPTC:City'] ?? meta['City'];
+    final dynamic province = meta['IPTC:ProvinceState'] ??
+        meta['ProvinceState'] ??
+        meta['Province-State'];
     final extractedStadium = subLocation is String ? subLocation : '';
     final extractedCity = city is String ? city : '';
     final extractedProvince = province is String ? province : '';
