@@ -115,10 +115,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Show metadata popup dialog
   void _showMetadataPopup() {
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+    
     showDialog(
       context: context,
       builder: (context) => MetadataPopupDialog(
         metadata: currentMetadata,
+        imagePath: imagePaths[currentIndex],
         onMetadataUpdated: (updatedMetadata) {
           setState(() {
             currentMetadata = updatedMetadata;
