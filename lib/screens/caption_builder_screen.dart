@@ -12,6 +12,7 @@ import '../widgets/thumbnail_grid_widget.dart';
 import '../widgets/caption_fields_widget.dart';
 import '../widgets/metadata_widget.dart';
 import '../widgets/startup_dialog.dart';
+import '../widgets/filmstrip_widget.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../utils/exiftool_helper.dart';
@@ -2250,9 +2251,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         padding: const EdgeInsets.fromLTRB(4.0, 1.0, 4.0, 4.0),
         child: Column(
           children: [
-            // TOP ROW - Increased height (40% instead of 35%)
+            // TOP ROW - Adjusted height to accommodate filmstrip
             SizedBox(
-              height: MediaQuery.of(context).size.height * 0.40,
+              height: MediaQuery.of(context).size.height * 0.35,
               child: Row(
                 children: [
                   // TOP LEFT BOX - Picture Preview
@@ -2343,6 +2344,21 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             ),
 
+            // Filmstrip under the picture preview
+            FilmstripWidget(
+              imagePaths: imagePaths,
+              currentIndex: currentIndex,
+              onImageSelected: _onImageSelected,
+              uploadedImages: _uploadedImages,
+              queuedUploads: _queuedUploads,
+              currentlyUploading: _currentlyUploading,
+              uploadProgress: _uploadProgress,
+              xmpRatings: _xmpRatings,
+              xmpLabels: _xmpLabels,
+              xmpTagged: _xmpTagged,
+              lockedPaths: _lockedPaths,
+            ),
+            
             // Divider between top and bottom quadrants
             Container(
               height: 1,
@@ -2350,7 +2366,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               margin: const EdgeInsets.symmetric(vertical: 2),
             ),
 
-            // BOTTOM ROW - Increased height (68% instead of 60%)
+            // BOTTOM ROW - Adjusted height for filmstrip layout
             Expanded(
               child: Row(
                 children: [
