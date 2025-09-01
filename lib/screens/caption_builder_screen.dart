@@ -126,14 +126,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           // Save the updated metadata
           _saveCurrentMetadata();
         },
-        onSaveAsTemplate: () {
-          // TODO: Implement save as template functionality
-          Navigator.of(context).pop();
-        },
-        onLoadFromJpg: () {
-          // TODO: Implement load from JPG functionality
-          Navigator.of(context).pop();
-        },
       ),
     );
   }
