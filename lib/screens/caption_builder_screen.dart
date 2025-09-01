@@ -8,11 +8,11 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
-import '../widgets/thumbnail_grid_widget.dart';
 import '../widgets/caption_fields_widget.dart';
 import '../widgets/metadata_widget.dart';
 import '../widgets/startup_dialog.dart';
 import '../widgets/filmstrip_widget.dart';
+import '../widgets/thumbnail_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../utils/exiftool_helper.dart';
@@ -92,6 +92,26 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
+
+  // Show thumbnail popup dialog
+  void _showThumbnailPopup() {
+    showDialog(
+      context: context,
+      builder: (context) => ThumbnailPopupDialog(
+        imagePaths: imagePaths,
+        currentIndex: currentIndex,
+        onImageSelected: _onImageSelected,
+        uploadedImages: _uploadedImages,
+        queuedUploads: _queuedUploads,
+        currentlyUploading: _currentlyUploading,
+        uploadProgress: _uploadProgress,
+        xmpRatings: _xmpRatings,
+        xmpLabels: _xmpLabels,
+        xmpTagged: _xmpTagged,
+        lockedPaths: _lockedPaths,
+      ),
+    );
+  }
 
   void _handleReset() {
     setState(() {
@@ -2313,31 +2333,56 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     ),
                   ),
 
-                  // TOP RIGHT BOX - Thumbnail Grid
+                  // TOP RIGHT BOX - Thumbnail Grid (Hidden - use filmstrip instead)
                   Expanded(
                     flex: 4,
-                    child: ThumbnailGridWidget(
-                      imagePaths: imagePaths,
-                      currentIndex: currentIndex,
-                      onImageSelected: _onImageSelected,
-                      scrollController: _thumbnailScrollController,
-                      exifTimes: _exifTimes,
-                      uploadedImages: _uploadedImages,
-                      queuedUploads: _queuedUploads,
-                      currentlyUploading: _currentlyUploading,
-                      xmpRatings: _xmpRatings,
-                      xmpLabels: _xmpLabels,
-                      xmpTagged: _xmpTagged,
-                      lockedPaths: _lockedPaths,
-                      uploadProgress: _uploadProgress,
-                      centerRequestId: _thumbCenterRequestId,
-                      onImageDeleted: _onImageDeleted,
-                      onCopyMetadata: _onCopyMetadata,
-                      onPasteMetadata: _onPasteMetadata,
-                      onApplyIptcTemplate: _onApplyIptcTemplate,
-                      onFtpImage: _onFtpImage,
-                      onImageRenamed: _onImageRenamed,
-                      onMultiSelect: _onMultiSelect,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.photo_library,
+                              size: 48,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Thumbnail Grid Hidden',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Use the filmstrip below or click\n"Show All Thumbnails" for full view',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _showThumbnailPopup,
+                              icon: const Icon(Icons.grid_view),
+                              label: const Text('Show All Thumbnails'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade600,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -2357,6 +2402,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               xmpLabels: _xmpLabels,
               xmpTagged: _xmpTagged,
               lockedPaths: _lockedPaths,
+              onShowThumbnails: _showThumbnailPopup,
             ),
             
             // Divider between top and bottom quadrants
