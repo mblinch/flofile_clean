@@ -38,6 +38,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Map<String, bool>? xmpTagged;
   final Set<String>? lockedPaths;
   final VoidCallback? onShowThumbnails;
+  final VoidCallback? onEditMetadata;
 
   const PicturePreviewWidget({
     super.key,
@@ -64,6 +65,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.xmpTagged,
     this.lockedPaths,
     this.onShowThumbnails,
+    this.onEditMetadata,
   });
 
   @override
@@ -312,12 +314,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                 Expanded(
                   child: Stack(
                     children: [
-                      // Main image with right-click support
+                      // Main image with right-click and double-click support
                       GestureDetector(
                         onSecondaryTapDown: (details) {
                           _showContextMenu(context, currentImagePath,
                               details.globalPosition);
                         },
+                        onDoubleTap: widget.onEditMetadata != null ? () => widget.onEditMetadata!() : null,
                         child: ExtendedImage.file(
                           File(currentImagePath),
                           fit: BoxFit.contain,

@@ -14,6 +14,7 @@ class FilmstripWidget extends StatelessWidget {
   final Map<String, bool> xmpTagged;
   final Set<String> lockedPaths;
   final VoidCallback? onShowThumbnails;
+  final VoidCallback? onEditMetadata;
 
   const FilmstripWidget({
     super.key,
@@ -29,6 +30,7 @@ class FilmstripWidget extends StatelessWidget {
     required this.xmpTagged,
     required this.lockedPaths,
     this.onShowThumbnails,
+    this.onEditMetadata,
   });
 
   @override
@@ -86,6 +88,7 @@ class FilmstripWidget extends StatelessWidget {
 
                 return GestureDetector(
                   onTap: () => onImageSelected(index),
+                  onDoubleTap: onEditMetadata != null ? () => onEditMetadata!() : null,
                   child: Container(
                     width: 70,
                     margin: const EdgeInsets.only(right: 8),

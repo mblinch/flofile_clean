@@ -11,8 +11,8 @@ import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
 import '../widgets/metadata_widget.dart';
 import '../widgets/startup_dialog.dart';
-import '../widgets/filmstrip_widget.dart';
 import '../widgets/thumbnail_popup_dialog.dart';
+import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../utils/exiftool_helper.dart';
@@ -109,6 +109,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         xmpLabels: _xmpLabels,
         xmpTagged: _xmpTagged,
         lockedPaths: _lockedPaths,
+      ),
+    );
+  }
+
+  // Show metadata popup dialog
+  void _showMetadataPopup() {
+    showDialog(
+      context: context,
+      builder: (context) => MetadataPopupDialog(
+        metadata: currentMetadata,
+        onMetadataUpdated: (updatedMetadata) {
+          setState(() {
+            currentMetadata = updatedMetadata;
+          });
+          // Save the updated metadata
+          _saveCurrentMetadata();
+        },
+        onSaveAsTemplate: () {
+          // TODO: Implement save as template functionality
+          Navigator.of(context).pop();
+        },
+        onLoadFromJpg: () {
+          // TODO: Implement load from JPG functionality
+          Navigator.of(context).pop();
+        },
       ),
     );
   }
@@ -2335,6 +2360,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       xmpTagged: _xmpTagged,
                       lockedPaths: _lockedPaths,
                       onShowThumbnails: _showThumbnailPopup,
+                      onEditMetadata: _showMetadataPopup,
                     ),
                   ),
 
