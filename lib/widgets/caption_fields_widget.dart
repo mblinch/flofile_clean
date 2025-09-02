@@ -2751,390 +2751,143 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // (Old action button container removed)
                         const SizedBox(height: 1),
                         // Firebar container aligned to the left
-                        Container(
-                          width: MediaQuery.of(context).size.width *
-                              0.5 *
-                              0.6, // 50% of 60% column (same as caption)
-                          height: 40, // Single line height
-                          padding: EdgeInsets.zero,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: Colors.grey.shade400,
-                              width: 1.0,
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            width: MediaQuery.of(context).size.width *
+                                0.5 *
+                                0.6, // 50% of 60% column (same as caption)
+                            height: 40, // Single line height
+                            padding: EdgeInsets.zero,
+                            margin: EdgeInsets.zero,
+                            alignment: Alignment.centerLeft,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 1.0,
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              // First column - Magic bar with help button
-                              Expanded(
-                                flex: 6,
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Container(
-                                        padding: const EdgeInsets.only(
-                                            left: 4, right: 8),
-                                        decoration: BoxDecoration(
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(6),
-                                            bottomLeft: Radius.circular(6),
-                                          ),
-                                        ),
-                                        child: TextField(
-                                          style: const TextStyle(fontSize: 12),
-                                          decoration: InputDecoration(
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              borderSide: BorderSide(
-                                                  color: Colors.blue.shade400),
-                                            ),
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                    horizontal: 8, vertical: 8),
-                                            isDense: true,
-                                            hintText: _waitingForHomeVisitorChoice
-                                                ? 'Press H for Home or V for Away'
-                                                : '🔥 Firebar',
-                                            suffixText:
-                                                _waitingForHomeVisitorChoice
-                                                    ? null
-                                                    : _shouldShowRbiInlineHint()
-                                                        ? ' Add # for ' +
-                                                            _rbiHintNoun() +
-                                                            ' (e.g., ' +
-                                                            _rbiShortcutExample() +
-                                                            ')'
-                                                        : null,
-                                            suffixStyle: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey.shade500,
-                                              fontStyle: FontStyle.italic,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                // First column - Magic bar with help button
+                                Expanded(
+                                  flex: 6,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.only(
+                                              left: 0, right: 8),
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                const BorderRadius.only(
+                                              topLeft: Radius.circular(6),
+                                              bottomLeft: Radius.circular(6),
                                             ),
                                           ),
-                                          controller: _magicBarController,
-                                          focusNode: _magicBarFocusNode,
-                                          onTap: () {
-                                            print(
-                                                'DEBUG: Magic bar tapped, switching to list mode');
-                                            setState(() {
-                                              _homePlayerGridMode = false;
-                                              _awayPlayerGridMode = false;
-                                            });
-                                          },
-                                          onChanged: (value) {
-                                            // Handle H/V input when waiting for home/visitor choice
-                                            if (_waitingForHomeVisitorChoice) {
+                                          child: TextField(
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                            decoration: InputDecoration(
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                borderSide: BorderSide(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                borderSide: BorderSide(
+                                                    color:
+                                                        Colors.grey.shade300),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                borderSide: BorderSide(
+                                                    color:
+                                                        Colors.blue.shade400),
+                                              ),
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                              isDense: true,
+                                              hintText: _waitingForHomeVisitorChoice
+                                                  ? 'Press H for Home or V for Away'
+                                                  : '🔥 Firebar',
+                                              suffixText:
+                                                  _waitingForHomeVisitorChoice
+                                                      ? null
+                                                      : _shouldShowRbiInlineHint()
+                                                          ? ' Add # for ' +
+                                                              _rbiHintNoun() +
+                                                              ' (e.g., ' +
+                                                              _rbiShortcutExample() +
+                                                              ')'
+                                                          : null,
+                                              suffixStyle: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey.shade500,
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                            controller: _magicBarController,
+                                            focusNode: _magicBarFocusNode,
+                                            onTap: () {
                                               print(
-                                                  'DEBUG: In choice mode, value: "$value"');
-                                              // Check if user typed 'h' or 'v' anywhere in the text
-                                              final lowerValue =
-                                                  value.toLowerCase();
-                                              print(
-                                                  'DEBUG: Checking for h or v in: "$lowerValue"');
-
-                                              // Look for 'h' or 'v' at the end of the input (user's choice)
-                                              final hMatch = RegExp(r'h$')
-                                                  .firstMatch(lowerValue);
-                                              final vMatch = RegExp(r'v$')
-                                                  .firstMatch(lowerValue);
-
-                                              if (hMatch != null) {
-                                                print(
-                                                    'DEBUG: Found H, calling _processHomeVisitorChoice');
-                                                _processHomeVisitorChoice('h');
-                                                return;
-                                              } else if (vMatch != null) {
-                                                print(
-                                                    'DEBUG: Found V, calling _processHomeVisitorChoice');
-                                                _processHomeVisitorChoice('v');
-                                                return;
-                                              }
-                                              print(
-                                                  'DEBUG: No H or V found, restoring prompt if needed');
-                                              // Restore the prompt text if user tries to edit it
-                                              if (!value.contains(
-                                                  'Press H for Home or V for Away')) {
-                                                final numberPart =
-                                                    _magicInputMatchingPlayers
-                                                        .first.jerseyNumber;
-                                                print(
-                                                    'DEBUG: Restoring prompt text');
-
-                                                // Create player choice text with last names and numbers
-                                                final homePlayer =
-                                                    _magicInputMatchingPlayers
-                                                        .firstWhere(
-                                                  (p) =>
-                                                      _homeRoster.contains(p),
-                                                  orElse: () =>
-                                                      _magicInputMatchingPlayers
-                                                          .first,
-                                                );
-                                                final awayPlayer =
-                                                    _magicInputMatchingPlayers
-                                                        .firstWhere(
-                                                  (p) =>
-                                                      !_homeRoster.contains(p),
-                                                  orElse: () =>
-                                                      _magicInputMatchingPlayers
-                                                          .first,
-                                                );
-
-                                                final homeLastName = homePlayer
-                                                    .fullName
-                                                    .split(' ')
-                                                    .last;
-                                                final awayLastName = awayPlayer
-                                                    .fullName
-                                                    .split(' ')
-                                                    .last;
-
-                                                _magicBarController.text =
-                                                    '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
-                                                _magicBarController.selection =
-                                                    TextSelection.fromPosition(
-                                                  TextPosition(
-                                                      offset:
-                                                          _magicBarController
-                                                              .text.length),
-                                                );
-                                              }
-                                              return;
-                                            }
-
-                                            // Track magic bar input for verb highlighting
-                                            _magicBarVerbInput =
-                                                value.trim().toLowerCase();
-                                            // Track if we're typing a first magic token (no space yet)
-                                            _typingFirstMagicToken =
-                                                !value.contains(' ');
-                                            // Magic bar functionality
-                                            if (value.isEmpty) {
-                                              // Don't reset caption when magic bar is empty
-                                              // This preserves player selections during multi-player input
-                                              setState(
-                                                  () {}); // refresh highlighting
-                                              return;
-                                            }
-                                            // If user is typing a single player token (no space yet),
-                                            // highlight progressively and postpone parsing until token completes.
-                                            final raw = value;
-                                            final token =
-                                                raw.trim().toLowerCase();
-                                            final hasSpace = raw.contains(' ');
-                                            final String lastToken =
-                                                raw.trimRight().isEmpty
-                                                    ? ''
-                                                    : raw
-                                                        .trimRight()
-                                                        .split(' ')
-                                                        .last
-                                                        .toLowerCase();
-
-                                            // Ensure caption updates on deletion of shortcuts (run early before any returns)
-                                            {
-                                              final List<String> tokens = raw
-                                                  .trim()
-                                                  .toLowerCase()
-                                                  .split(RegExp(r'\s+'))
-                                                  .where((t) => t.isNotEmpty)
-                                                  .toList();
-                                              final bool hasHrToken =
-                                                  tokens.any((t) =>
-                                                      RegExp(r'^hr([1-4])$',
-                                                              caseSensitive:
-                                                                  false)
-                                                          .hasMatch(t) ||
-                                                      t == 'gs');
-                                              final bool hasRbiToken = RegExp(
-                                                      r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                                  .hasMatch(raw.trim());
-                                              final bool
-                                                  hasExplicitInningToken =
-                                                  RegExp(r'(?:^|\b)[iI]\d+')
-                                                      .hasMatch(raw);
-                                              final List<String> bareNums =
-                                                  tokens
-                                                      .where((t) =>
-                                                          RegExp(r'^\d{1,2}$')
-                                                              .hasMatch(t))
-                                                      .toList();
-                                              final bool hasBareInningToken =
-                                                  raw.contains(' ') &&
-                                                      bareNums.isNotEmpty;
-
-                                              bool anyChanged = false;
+                                                  'DEBUG: Magic bar tapped, switching to list mode');
                                               setState(() {
-                                                // If inning token removed, clear inning selection
-                                                if (!hasExplicitInningToken &&
-                                                    !hasBareInningToken &&
-                                                    _selectedRbiInning !=
-                                                        null) {
-                                                  _selectedRbiInning = null;
-                                                  anyChanged = true;
-                                                }
-                                                // If HR shortcut removed, clear Home Run selections
-                                                if (!hasHrToken &&
-                                                    _selectedVerb ==
-                                                        'Home Run') {
-                                                  _selectedVerb = null;
-                                                  _selectedActionVerb = null;
-                                                  _selectedHomeRunType = null;
-                                                  _rbiCount = null;
-                                                  anyChanged = true;
-                                                }
-                                                // If RBI shortcut removed (and not HR), clear RBI count
-                                                if (!hasRbiToken &&
-                                                    _selectedVerb !=
-                                                        'Home Run' &&
-                                                    _rbiCount != null) {
-                                                  _rbiCount = null;
-                                                  anyChanged = true;
-                                                }
+                                                _homePlayerGridMode = false;
+                                                _awayPlayerGridMode = false;
                                               });
-                                              if (anyChanged) {
-                                                _updateCaption();
-                                              }
-                                            }
+                                            },
+                                            onChanged: (value) {
+                                              // Handle H/V input when waiting for home/visitor choice
+                                              if (_waitingForHomeVisitorChoice) {
+                                                print(
+                                                    'DEBUG: In choice mode, value: "$value"');
+                                                // Check if user typed 'h' or 'v' anywhere in the text
+                                                final lowerValue =
+                                                    value.toLowerCase();
+                                                print(
+                                                    'DEBUG: Checking for h or v in: "$lowerValue"');
 
-                                            // Quick-select Home Run with type via magic bar from the LAST token
-                                            // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
-                                            // Only work when NOT in a submenu (to avoid conflicts)
-                                            if (lastToken.isNotEmpty &&
-                                                _selectedVerb == null) {
-                                              final hrNum = RegExp(
-                                                      r'^hr([1-4])$',
-                                                      caseSensitive: false)
-                                                  .firstMatch(lastToken);
-                                              if (hrNum != null) {
-                                                final n = int.tryParse(
-                                                    hrNum.group(1)!);
-                                                String? hrType;
-                                                switch (n) {
-                                                  case 1:
-                                                    hrType = 'Solo';
-                                                    break;
-                                                  case 2:
-                                                    hrType = 'Two-Run';
-                                                    break;
-                                                  case 3:
-                                                    hrType = 'Three-Run';
-                                                    break;
-                                                  case 4:
-                                                    hrType = 'Grand Slam';
-                                                    break;
-                                                }
-                                                if (hrType != null) {
-                                                  setState(() {
-                                                    _selectedVerb = 'Home Run';
-                                                    _selectedActionVerb =
-                                                        'Home Run';
-                                                    _selectedHomeRunType =
-                                                        hrType;
-                                                    _rbiCount =
-                                                        n; // keep in sync
-                                                  });
-                                                  _updateCaption();
+                                                // Look for 'h' or 'v' at the end of the input (user's choice)
+                                                final hMatch = RegExp(r'h$')
+                                                    .firstMatch(lowerValue);
+                                                final vMatch = RegExp(r'v$')
+                                                    .firstMatch(lowerValue);
+
+                                                if (hMatch != null) {
+                                                  print(
+                                                      'DEBUG: Found H, calling _processHomeVisitorChoice');
+                                                  _processHomeVisitorChoice(
+                                                      'h');
+                                                  return;
+                                                } else if (vMatch != null) {
+                                                  print(
+                                                      'DEBUG: Found V, calling _processHomeVisitorChoice');
+                                                  _processHomeVisitorChoice(
+                                                      'v');
                                                   return;
                                                 }
-                                              }
-                                              if (lastToken == 'gs') {
-                                                setState(() {
-                                                  _selectedVerb = 'Home Run';
-                                                  _selectedActionVerb =
-                                                      'Home Run';
-                                                  _selectedHomeRunType =
-                                                      'Grand Slam';
-                                                  _rbiCount = 4;
-                                                });
-                                                _updateCaption();
-                                                return;
-                                              }
-                                            }
+                                                print(
+                                                    'DEBUG: No H or V found, restoring prompt if needed');
+                                                // Restore the prompt text if user tries to edit it
+                                                if (!value.contains(
+                                                    'Press H for Home or V for Away')) {
+                                                  final numberPart =
+                                                      _magicInputMatchingPlayers
+                                                          .first.jerseyNumber;
+                                                  print(
+                                                      'DEBUG: Restoring prompt text');
 
-                                            // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
-                                            // Only trigger when there is at least one space (to avoid conflicting with first player token)
-                                            // Only work when NOT in a submenu (to avoid conflicts)
-                                            if (hasSpace &&
-                                                RegExp(r'^\d{1,2}$')
-                                                    .hasMatch(lastToken) &&
-                                                _selectedVerb == null) {
-                                              final int inningNum =
-                                                  int.parse(lastToken);
-                                              if (inningNum > 0 &&
-                                                  inningNum <= 20) {
-                                                setState(() {
-                                                  _selectedRbiInning =
-                                                      inningNum;
-                                                });
-                                                _updateCaption();
-                                                return;
-                                              }
-                                            }
-
-                                            final singlePlayerRegex = RegExp(
-                                                r'^(h{1,2}|v{1,2})?\d+$');
-                                            // Exclude hr patterns from single player regex
-                                            final hrPattern =
-                                                RegExp(r'^hr\d+$');
-                                            if (_typingFirstMagicToken &&
-                                                !hasSpace &&
-                                                singlePlayerRegex
-                                                    .hasMatch(token) &&
-                                                !hrPattern.hasMatch(token)) {
-                                              String numberPart =
-                                                  token.replaceAll(
-                                                      RegExp(
-                                                          r'^(h{1,2}|v{1,2})'),
-                                                      '');
-                                              bool isHomeHint =
-                                                  token.startsWith('h');
-
-                                              // If no explicit h/v and both teams have this jersey number,
-                                              // prompt for Home/Away choice inline.
-                                              if (!isHomeHint &&
-                                                  !token.startsWith('v')) {
-                                                final homeMatches = _homeRoster
-                                                    .where((p) =>
-                                                        p.jerseyNumber ==
-                                                        numberPart)
-                                                    .toList();
-                                                final awayMatches = _awayRoster
-                                                    .where((p) =>
-                                                        p.jerseyNumber ==
-                                                        numberPart)
-                                                    .toList();
-                                                if (homeMatches.isNotEmpty &&
-                                                    awayMatches.isNotEmpty) {
-                                                  setState(() {
-                                                    _filteredPlayers.clear();
-                                                    _noPlayersFound = false;
-                                                    _isPlayerSearchMode = false;
-                                                    _magicInputMatchingPlayers =
-                                                        [
-                                                      ...homeMatches,
-                                                      ...awayMatches
-                                                    ];
-                                                    _magicInputActionText = '';
-                                                    _waitingForHomeVisitorChoice =
-                                                        true;
-                                                  });
-                                                  // Set the text to show the choice prompt with player names
+                                                  // Create player choice text with last names and numbers
                                                   final homePlayer =
                                                       _magicInputMatchingPlayers
                                                           .firstWhere(
@@ -3174,152 +2927,171 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             _magicBarController
                                                                 .text.length),
                                                   );
-                                                  return;
                                                 }
+                                                return;
                                               }
 
-                                              // Choose team when no explicit h/v was provided:
-                                              // 1) If only one team has players selected, use that team
-                                              // 2) Else if a team was selected first, use that
-                                              // 3) Else fall back to UI side (_homeOnLeft)
-                                              final bool inferredIsHome =
-                                                  isHomeHint
-                                                      ? true
-                                                      : (selectedHomePlayers
-                                                                  .isNotEmpty &&
-                                                              selectedAwayPlayers
-                                                                  .isEmpty)
-                                                          ? true
-                                                          : (selectedAwayPlayers
-                                                                      .isNotEmpty &&
-                                                                  selectedHomePlayers
-                                                                      .isEmpty)
-                                                              ? false
-                                                              : (_firstTeamSelected ??
-                                                                  _homeOnLeft);
-
-                                              // If a different jersey was previously auto-selected for this team, unselect it
-                                              final prevAuto = inferredIsHome
-                                                  ? _autoSelectedHomeJersey
-                                                  : _autoSelectedAwayJersey;
-                                              if (prevAuto != null &&
-                                                  prevAuto != numberPart) {
-                                                _unselectAutoSelectedByToken(
-                                                  isHomeTeam: inferredIsHome,
-                                                  jerseyNumber: prevAuto,
-                                                );
+                                              // Track magic bar input for verb highlighting
+                                              _magicBarVerbInput =
+                                                  value.trim().toLowerCase();
+                                              // Track if we're typing a first magic token (no space yet)
+                                              _typingFirstMagicToken =
+                                                  !value.contains(' ');
+                                              // Magic bar functionality
+                                              if (value.isEmpty) {
+                                                // Don't reset caption when magic bar is empty
+                                                // This preserves player selections during multi-player input
+                                                setState(
+                                                    () {}); // refresh highlighting
+                                                return;
                                               }
-                                              _selectPlayerChipByNumber(
-                                                isHomeTeam: inferredIsHome,
-                                                jerseyNumber: numberPart,
-                                                isProgressive: true,
-                                                affectFirstStar: false,
-                                              );
-                                              setState(() {});
-                                              return;
-                                            }
+                                              // If user is typing a single player token (no space yet),
+                                              // highlight progressively and postpone parsing until token completes.
+                                              final raw = value;
+                                              final token =
+                                                  raw.trim().toLowerCase();
+                                              final hasSpace =
+                                                  raw.contains(' ');
+                                              final String lastToken =
+                                                  raw.trimRight().isEmpty
+                                                      ? ''
+                                                      : raw
+                                                          .trimRight()
+                                                          .split(' ')
+                                                          .last
+                                                          .toLowerCase();
 
-                                            // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
-                                            final RegExpMatch? hrLettersMatch0 =
-                                                RegExp(r'([a-zA-Z]+)$')
-                                                    .firstMatch(value);
-                                            final String hrLetters0 =
-                                                hrLettersMatch0
-                                                        ?.group(1)
-                                                        ?.toLowerCase() ??
-                                                    '';
-                                            if (_selectedVerb == 'Home Run' &&
-                                                hrLetters0 == 'gs') {
-                                              setState(() {
-                                                _selectedHomeRunType =
-                                                    'Grand Slam';
-                                              });
-                                              _updateCaption();
-                                              return;
-                                            }
+                                              // Ensure caption updates on deletion of shortcuts (run early before any returns)
+                                              {
+                                                final List<String> tokens = raw
+                                                    .trim()
+                                                    .toLowerCase()
+                                                    .split(RegExp(r'\s+'))
+                                                    .where((t) => t.isNotEmpty)
+                                                    .toList();
+                                                final bool hasHrToken =
+                                                    tokens.any((t) =>
+                                                        RegExp(r'^hr([1-4])$',
+                                                                caseSensitive:
+                                                                    false)
+                                                            .hasMatch(t) ||
+                                                        t == 'gs');
+                                                final bool hasRbiToken = RegExp(
+                                                        r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
+                                                    .hasMatch(raw.trim());
+                                                final bool
+                                                    hasExplicitInningToken =
+                                                    RegExp(r'(?:^|\b)[iI]\d+')
+                                                        .hasMatch(raw);
+                                                final List<String> bareNums =
+                                                    tokens
+                                                        .where((t) =>
+                                                            RegExp(r'^\d{1,2}$')
+                                                                .hasMatch(t))
+                                                        .toList();
+                                                final bool hasBareInningToken =
+                                                    raw.contains(' ') &&
+                                                        bareNums.isNotEmpty;
 
-                                            // Try to match typed letters to a verb shortcut and auto-select the verb
-                                            // Only work when NOT in a submenu (to avoid conflicts)
-                                            if (_selectedVerb == null) {
-                                              final RegExpMatch? lettersMatch =
-                                                  RegExp(r'([a-zA-Z]+)$')
-                                                      .firstMatch(value);
-                                              final String typedLetters =
-                                                  lettersMatch
-                                                          ?.group(1)
-                                                          ?.toLowerCase() ??
-                                                      '';
-                                              if (typedLetters.length >= 2) {
-                                                final matchedVerb =
-                                                    _matchVerbToken(
-                                                        typedLetters);
-                                                if (matchedVerb != null) {
-                                                  setState(() {
-                                                    _selectedVerb = matchedVerb;
-                                                    _selectedActionVerb =
-                                                        matchedVerb;
-                                                    _clearVerbSubSelections();
-                                                  });
+                                                bool anyChanged = false;
+                                                setState(() {
+                                                  // If inning token removed, clear inning selection
+                                                  if (!hasExplicitInningToken &&
+                                                      !hasBareInningToken &&
+                                                      _selectedRbiInning !=
+                                                          null) {
+                                                    _selectedRbiInning = null;
+                                                    anyChanged = true;
+                                                  }
+                                                  // If HR shortcut removed, clear Home Run selections
+                                                  if (!hasHrToken &&
+                                                      _selectedVerb ==
+                                                          'Home Run') {
+                                                    _selectedVerb = null;
+                                                    _selectedActionVerb = null;
+                                                    _selectedHomeRunType = null;
+                                                    _rbiCount = null;
+                                                    anyChanged = true;
+                                                  }
+                                                  // If RBI shortcut removed (and not HR), clear RBI count
+                                                  if (!hasRbiToken &&
+                                                      _selectedVerb !=
+                                                          'Home Run' &&
+                                                      _rbiCount != null) {
+                                                    _rbiCount = null;
+                                                    anyChanged = true;
+                                                  }
+                                                });
+                                                if (anyChanged) {
                                                   _updateCaption();
-                                                  return;
                                                 }
                                               }
-                                            }
 
-                                            // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
-                                            final RegExpMatch? statMatch = RegExp(
-                                                    r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
-                                                .firstMatch(value.trim());
-                                            if (statMatch != null) {
-                                              final int number = int.tryParse(
-                                                      statMatch.group(1)!) ??
-                                                  0;
-                                              final String suffix =
-                                                  (statMatch.group(2) ?? '')
-                                                      .toLowerCase();
-                                              if (suffix == 'r' ||
-                                                  suffix == 'rb' ||
-                                                  suffix == 'rbi') {
-                                                if (_selectedVerb ==
-                                                    'Home Run') {
+                                              // Quick-select Home Run with type via magic bar from the LAST token
+                                              // Support: hr1/hr2/hr3/hr4 and gs (works even when there are prior tokens)
+                                              // Only work when NOT in a submenu (to avoid conflicts)
+                                              if (lastToken.isNotEmpty &&
+                                                  _selectedVerb == null) {
+                                                final hrNum = RegExp(
+                                                        r'^hr([1-4])$',
+                                                        caseSensitive: false)
+                                                    .firstMatch(lastToken);
+                                                if (hrNum != null) {
+                                                  final n = int.tryParse(
+                                                      hrNum.group(1)!);
                                                   String? hrType;
-                                                  if (number <= 1) {
-                                                    hrType = 'Solo';
-                                                  } else if (number == 2) {
-                                                    hrType = 'Two-Run';
-                                                  } else if (number == 3) {
-                                                    hrType = 'Three-Run';
-                                                  } else if (number >= 4) {
-                                                    hrType = 'Grand Slam';
+                                                  switch (n) {
+                                                    case 1:
+                                                      hrType = 'Solo';
+                                                      break;
+                                                    case 2:
+                                                      hrType = 'Two-Run';
+                                                      break;
+                                                    case 3:
+                                                      hrType = 'Three-Run';
+                                                      break;
+                                                    case 4:
+                                                      hrType = 'Grand Slam';
+                                                      break;
                                                   }
                                                   if (hrType != null) {
                                                     setState(() {
+                                                      _selectedVerb =
+                                                          'Home Run';
+                                                      _selectedActionVerb =
+                                                          'Home Run';
                                                       _selectedHomeRunType =
                                                           hrType;
+                                                      _rbiCount =
+                                                          n; // keep in sync
                                                     });
                                                     _updateCaption();
                                                     return;
                                                   }
-                                                } else {
+                                                }
+                                                if (lastToken == 'gs') {
                                                   setState(() {
-                                                    _rbiCount = number;
+                                                    _selectedVerb = 'Home Run';
+                                                    _selectedActionVerb =
+                                                        'Home Run';
+                                                    _selectedHomeRunType =
+                                                        'Grand Slam';
+                                                    _rbiCount = 4;
                                                   });
                                                   _updateCaption();
                                                   return;
                                                 }
                                               }
-                                            }
 
-                                            // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
-                                            if (_selectedVerb != null) {
-                                              final RegExpMatch? inningMatch =
-                                                  RegExp(r'^(\d{1,2})$')
-                                                      .firstMatch(lastToken);
-                                              if (inningMatch != null) {
+                                              // Bare inning number without 'i' suffix: set inning from last token if numeric (e.g., "5")
+                                              // Only trigger when there is at least one space (to avoid conflicting with first player token)
+                                              // Only work when NOT in a submenu (to avoid conflicts)
+                                              if (hasSpace &&
+                                                  RegExp(r'^\d{1,2}$')
+                                                      .hasMatch(lastToken) &&
+                                                  _selectedVerb == null) {
                                                 final int inningNum =
-                                                    int.tryParse(inningMatch
-                                                            .group(1)!) ??
-                                                        0;
+                                                    int.parse(lastToken);
                                                 if (inningNum > 0 &&
                                                     inningNum <= 20) {
                                                   setState(() {
@@ -3330,109 +3102,366 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   return;
                                                 }
                                               }
-                                            }
 
-                                            // Cleanup: if user deletes shortcuts, clear derived selections and update caption
-                                            final List<String> tokens = raw
-                                                .trim()
-                                                .toLowerCase()
-                                                .split(RegExp(r'\s+'))
-                                                .where((t) => t.isNotEmpty)
-                                                .toList();
-                                            final bool hasHrToken = tokens.any(
-                                                (t) =>
-                                                    RegExp(r'^hr([1-4])$',
-                                                            caseSensitive:
-                                                                false)
-                                                        .hasMatch(t) ||
-                                                    t == 'gs');
-                                            final bool hasRbiToken = RegExp(
-                                                    r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                                .hasMatch(raw.trim());
-                                            final bool hasExplicitInningToken =
-                                                RegExp(r'(?:^|\b)[iI]\d+')
-                                                    .hasMatch(raw);
-                                            final List<String> bareNums = tokens
-                                                .where((t) =>
-                                                    RegExp(r'^\d{1,2}$')
-                                                        .hasMatch(t))
-                                                .toList();
-                                            final bool hasBareInningToken =
-                                                raw.contains(' ') &&
-                                                    bareNums.isNotEmpty;
+                                              final singlePlayerRegex = RegExp(
+                                                  r'^(h{1,2}|v{1,2})?\d+$');
+                                              // Exclude hr patterns from single player regex
+                                              final hrPattern =
+                                                  RegExp(r'^hr\d+$');
+                                              if (_typingFirstMagicToken &&
+                                                  !hasSpace &&
+                                                  singlePlayerRegex
+                                                      .hasMatch(token) &&
+                                                  !hrPattern.hasMatch(token)) {
+                                                String numberPart =
+                                                    token.replaceAll(
+                                                        RegExp(
+                                                            r'^(h{1,2}|v{1,2})'),
+                                                        '');
+                                                bool isHomeHint =
+                                                    token.startsWith('h');
 
-                                            bool anyChanged = false;
-                                            setState(() {
-                                              // If HR shortcut removed, clear Home Run selections
-                                              if (!hasHrToken &&
-                                                  _selectedVerb == 'Home Run') {
-                                                _selectedVerb = null;
-                                                _selectedActionVerb = null;
-                                                _selectedHomeRunType = null;
-                                                _rbiCount = null;
-                                                anyChanged = true;
-                                              }
-                                              // If RBI shortcut removed (and not HR), clear RBI count
-                                              if (!hasRbiToken &&
-                                                  _selectedVerb != 'Home Run' &&
-                                                  _rbiCount != null) {
-                                                _rbiCount = null;
-                                                anyChanged = true;
-                                              }
-                                              // If inning token removed, clear inning selection
-                                              if (!hasExplicitInningToken &&
-                                                  !hasBareInningToken &&
-                                                  _selectedRbiInning != null) {
-                                                _selectedRbiInning = null;
-                                                anyChanged = true;
-                                              }
-                                            });
-                                            if (anyChanged) {
-                                              _updateCaption();
-                                            }
+                                                // If no explicit h/v and both teams have this jersey number,
+                                                // prompt for Home/Away choice inline.
+                                                if (!isHomeHint &&
+                                                    !token.startsWith('v')) {
+                                                  final homeMatches =
+                                                      _homeRoster
+                                                          .where((p) =>
+                                                              p.jerseyNumber ==
+                                                              numberPart)
+                                                          .toList();
+                                                  final awayMatches =
+                                                      _awayRoster
+                                                          .where((p) =>
+                                                              p.jerseyNumber ==
+                                                              numberPart)
+                                                          .toList();
+                                                  if (homeMatches.isNotEmpty &&
+                                                      awayMatches.isNotEmpty) {
+                                                    setState(() {
+                                                      _filteredPlayers.clear();
+                                                      _noPlayersFound = false;
+                                                      _isPlayerSearchMode =
+                                                          false;
+                                                      _magicInputMatchingPlayers =
+                                                          [
+                                                        ...homeMatches,
+                                                        ...awayMatches
+                                                      ];
+                                                      _magicInputActionText =
+                                                          '';
+                                                      _waitingForHomeVisitorChoice =
+                                                          true;
+                                                    });
+                                                    // Set the text to show the choice prompt with player names
+                                                    final homePlayer =
+                                                        _magicInputMatchingPlayers
+                                                            .firstWhere(
+                                                      (p) => _homeRoster
+                                                          .contains(p),
+                                                      orElse: () =>
+                                                          _magicInputMatchingPlayers
+                                                              .first,
+                                                    );
+                                                    final awayPlayer =
+                                                        _magicInputMatchingPlayers
+                                                            .firstWhere(
+                                                      (p) => !_homeRoster
+                                                          .contains(p),
+                                                      orElse: () =>
+                                                          _magicInputMatchingPlayers
+                                                              .first,
+                                                    );
 
-                                            print(
-                                                'DEBUG: About to check _isMagicInput for: "$value"');
-                                            if (_isMagicInput(value)) {
+                                                    final homeLastName =
+                                                        homePlayer.fullName
+                                                            .split(' ')
+                                                            .last;
+                                                    final awayLastName =
+                                                        awayPlayer.fullName
+                                                            .split(' ')
+                                                            .last;
+
+                                                    _magicBarController.text =
+                                                        '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                                                    _magicBarController
+                                                            .selection =
+                                                        TextSelection
+                                                            .fromPosition(
+                                                      TextPosition(
+                                                          offset:
+                                                              _magicBarController
+                                                                  .text.length),
+                                                    );
+                                                    return;
+                                                  }
+                                                }
+
+                                                // Choose team when no explicit h/v was provided:
+                                                // 1) If only one team has players selected, use that team
+                                                // 2) Else if a team was selected first, use that
+                                                // 3) Else fall back to UI side (_homeOnLeft)
+                                                final bool inferredIsHome =
+                                                    isHomeHint
+                                                        ? true
+                                                        : (selectedHomePlayers
+                                                                    .isNotEmpty &&
+                                                                selectedAwayPlayers
+                                                                    .isEmpty)
+                                                            ? true
+                                                            : (selectedAwayPlayers
+                                                                        .isNotEmpty &&
+                                                                    selectedHomePlayers
+                                                                        .isEmpty)
+                                                                ? false
+                                                                : (_firstTeamSelected ??
+                                                                    _homeOnLeft);
+
+                                                // If a different jersey was previously auto-selected for this team, unselect it
+                                                final prevAuto = inferredIsHome
+                                                    ? _autoSelectedHomeJersey
+                                                    : _autoSelectedAwayJersey;
+                                                if (prevAuto != null &&
+                                                    prevAuto != numberPart) {
+                                                  _unselectAutoSelectedByToken(
+                                                    isHomeTeam: inferredIsHome,
+                                                    jerseyNumber: prevAuto,
+                                                  );
+                                                }
+                                                _selectPlayerChipByNumber(
+                                                  isHomeTeam: inferredIsHome,
+                                                  jerseyNumber: numberPart,
+                                                  isProgressive: true,
+                                                  affectFirstStar: false,
+                                                );
+                                                setState(() {});
+                                                return;
+                                              }
+
+                                              // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
+                                              final RegExpMatch?
+                                                  hrLettersMatch0 =
+                                                  RegExp(r'([a-zA-Z]+)$')
+                                                      .firstMatch(value);
+                                              final String hrLetters0 =
+                                                  hrLettersMatch0
+                                                          ?.group(1)
+                                                          ?.toLowerCase() ??
+                                                      '';
+                                              if (_selectedVerb == 'Home Run' &&
+                                                  hrLetters0 == 'gs') {
+                                                setState(() {
+                                                  _selectedHomeRunType =
+                                                      'Grand Slam';
+                                                });
+                                                _updateCaption();
+                                                return;
+                                              }
+
+                                              // Try to match typed letters to a verb shortcut and auto-select the verb
+                                              // Only work when NOT in a submenu (to avoid conflicts)
+                                              if (_selectedVerb == null) {
+                                                final RegExpMatch?
+                                                    lettersMatch =
+                                                    RegExp(r'([a-zA-Z]+)$')
+                                                        .firstMatch(value);
+                                                final String typedLetters =
+                                                    lettersMatch
+                                                            ?.group(1)
+                                                            ?.toLowerCase() ??
+                                                        '';
+                                                if (typedLetters.length >= 2) {
+                                                  final matchedVerb =
+                                                      _matchVerbToken(
+                                                          typedLetters);
+                                                  if (matchedVerb != null) {
+                                                    setState(() {
+                                                      _selectedVerb =
+                                                          matchedVerb;
+                                                      _selectedActionVerb =
+                                                          matchedVerb;
+                                                      _clearVerbSubSelections();
+                                                    });
+                                                    _updateCaption();
+                                                    return;
+                                                  }
+                                                }
+                                              }
+
+                                              // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
+                                              final RegExpMatch? statMatch =
+                                                  RegExp(r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
+                                                      .firstMatch(value.trim());
+                                              if (statMatch != null) {
+                                                final int number = int.tryParse(
+                                                        statMatch.group(1)!) ??
+                                                    0;
+                                                final String suffix =
+                                                    (statMatch.group(2) ?? '')
+                                                        .toLowerCase();
+                                                if (suffix == 'r' ||
+                                                    suffix == 'rb' ||
+                                                    suffix == 'rbi') {
+                                                  if (_selectedVerb ==
+                                                      'Home Run') {
+                                                    String? hrType;
+                                                    if (number <= 1) {
+                                                      hrType = 'Solo';
+                                                    } else if (number == 2) {
+                                                      hrType = 'Two-Run';
+                                                    } else if (number == 3) {
+                                                      hrType = 'Three-Run';
+                                                    } else if (number >= 4) {
+                                                      hrType = 'Grand Slam';
+                                                    }
+                                                    if (hrType != null) {
+                                                      setState(() {
+                                                        _selectedHomeRunType =
+                                                            hrType;
+                                                      });
+                                                      _updateCaption();
+                                                      return;
+                                                    }
+                                                  } else {
+                                                    setState(() {
+                                                      _rbiCount = number;
+                                                    });
+                                                    _updateCaption();
+                                                    return;
+                                                  }
+                                                }
+                                              }
+
+                                              // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
+                                              if (_selectedVerb != null) {
+                                                final RegExpMatch? inningMatch =
+                                                    RegExp(r'^(\d{1,2})$')
+                                                        .firstMatch(lastToken);
+                                                if (inningMatch != null) {
+                                                  final int inningNum =
+                                                      int.tryParse(inningMatch
+                                                              .group(1)!) ??
+                                                          0;
+                                                  if (inningNum > 0 &&
+                                                      inningNum <= 20) {
+                                                    setState(() {
+                                                      _selectedRbiInning =
+                                                          inningNum;
+                                                    });
+                                                    _updateCaption();
+                                                    return;
+                                                  }
+                                                }
+                                              }
+
+                                              // Cleanup: if user deletes shortcuts, clear derived selections and update caption
+                                              final List<String> tokens = raw
+                                                  .trim()
+                                                  .toLowerCase()
+                                                  .split(RegExp(r'\s+'))
+                                                  .where((t) => t.isNotEmpty)
+                                                  .toList();
+                                              final bool hasHrToken =
+                                                  tokens.any((t) =>
+                                                      RegExp(r'^hr([1-4])$',
+                                                              caseSensitive:
+                                                                  false)
+                                                          .hasMatch(t) ||
+                                                      t == 'gs');
+                                              final bool hasRbiToken = RegExp(
+                                                      r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
+                                                  .hasMatch(raw.trim());
+                                              final bool
+                                                  hasExplicitInningToken =
+                                                  RegExp(r'(?:^|\b)[iI]\d+')
+                                                      .hasMatch(raw);
+                                              final List<String> bareNums =
+                                                  tokens
+                                                      .where((t) =>
+                                                          RegExp(r'^\d{1,2}$')
+                                                              .hasMatch(t))
+                                                      .toList();
+                                              final bool hasBareInningToken =
+                                                  raw.contains(' ') &&
+                                                      bareNums.isNotEmpty;
+
+                                              bool anyChanged = false;
+                                              setState(() {
+                                                // If HR shortcut removed, clear Home Run selections
+                                                if (!hasHrToken &&
+                                                    _selectedVerb ==
+                                                        'Home Run') {
+                                                  _selectedVerb = null;
+                                                  _selectedActionVerb = null;
+                                                  _selectedHomeRunType = null;
+                                                  _rbiCount = null;
+                                                  anyChanged = true;
+                                                }
+                                                // If RBI shortcut removed (and not HR), clear RBI count
+                                                if (!hasRbiToken &&
+                                                    _selectedVerb !=
+                                                        'Home Run' &&
+                                                    _rbiCount != null) {
+                                                  _rbiCount = null;
+                                                  anyChanged = true;
+                                                }
+                                                // If inning token removed, clear inning selection
+                                                if (!hasExplicitInningToken &&
+                                                    !hasBareInningToken &&
+                                                    _selectedRbiInning !=
+                                                        null) {
+                                                  _selectedRbiInning = null;
+                                                  anyChanged = true;
+                                                }
+                                              });
+                                              if (anyChanged) {
+                                                _updateCaption();
+                                              }
+
                                               print(
-                                                  'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
-                                              _parseMagicInput(value);
-                                              return;
-                                            }
+                                                  'DEBUG: About to check _isMagicInput for: "$value"');
+                                              if (_isMagicInput(value)) {
+                                                print(
+                                                    'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
+                                                _parseMagicInput(value);
+                                                return;
+                                              }
 
-                                            // Handle multiple player numbers (e.g., "27 23")
-                                            _handleMultiplePlayerInput(value);
-                                            setState(
-                                                () {}); // refresh highlighting while typing
-                                          },
+                                              // Handle multiple player numbers (e.g., "27 23")
+                                              _handleMultiplePlayerInput(value);
+                                              setState(
+                                                  () {}); // refresh highlighting while typing
+                                            },
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    // Help button beside firebar
-                                    Container(
-                                      margin: const EdgeInsets.only(left: 2),
-                                      child: IconButton(
-                                        onPressed: _showFirebarHelpDialog,
-                                        icon: Icon(
-                                          Icons.help_outline,
-                                          size: 16,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                        tooltip: 'Firebar Help',
-                                        style: IconButton.styleFrom(
-                                          padding: const EdgeInsets.all(2),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
+                                      // Help button beside firebar
+                                      Container(
+                                        margin: const EdgeInsets.only(left: 2),
+                                        child: IconButton(
+                                          onPressed: _showFirebarHelpDialog,
+                                          icon: Icon(
+                                            Icons.help_outline,
+                                            size: 16,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          tooltip: 'Firebar Help',
+                                          style: IconButton.styleFrom(
+                                            padding: const EdgeInsets.all(2),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
 
-                              // Middle and right columns with buttons removed; firebar now stands alone in this row
-                            ],
+                                // Middle and right columns with buttons removed; firebar now stands alone in this row
+                              ],
+                            ),
                           ),
                         ),
 
