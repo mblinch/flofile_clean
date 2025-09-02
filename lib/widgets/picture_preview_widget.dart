@@ -424,26 +424,95 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                             ),
                           ),
 
-                        // Right: Date and time
-                        if (_exifData != null &&
-                            _exifData!['DateTimeOriginal'] != null)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _formatDateTime(
-                                      _exifData!['DateTimeOriginal']),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                  textAlign: TextAlign.right,
+                        // Right: Navigation buttons
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              // Previous button
+                              IconButton(
+                                onPressed: widget.currentIndex > 0
+                                    ? () async {
+                                        // Save in background without waiting
+                                        if (widget.onSaveIptcBackground != null) {
+                                          try {
+                                            await widget.onSaveIptcBackground!();
+                                          } catch (e) {
+                                            print('Background save error: $e');
+                                          }
+                                        }
+                                        // Prefer quick navigation if provided (no extra reloads)
+                                        if (widget.onQuickPreviousImage != null) {
+                                          print(
+                                              'DEBUG: Using quick previous navigation');
+                                          widget.onQuickPreviousImage!();
+                                        } else {
+                                          print(
+                                              'DEBUG: Using regular previous navigation');
+                                          widget.onPreviousImage();
+                                        }
+                                      }
+                                    : null,
+                                icon: Icon(
+                                  Icons.chevron_left,
+                                  color: widget.currentIndex > 0
+                                      ? Colors.black87
+                                      : Colors.grey,
+                                  size: 16,
                                 ),
-                              ],
-                            ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 24, minHeight: 24),
+                              ),
+
+                              // Image counter between arrows
+                              Text(
+                                '${widget.currentIndex + 1}/$imageCount',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+
+                              // Next button
+                              IconButton(
+                                onPressed: widget.currentIndex < imageCount - 1
+                                    ? () async {
+                                        // Save in background without waiting
+                                        if (widget.onSaveIptcBackground != null) {
+                                          try {
+                                            await widget.onSaveIptcBackground!();
+                                          } catch (e) {
+                                            print('Background save error: $e');
+                                          }
+                                        }
+                                        // Prefer quick navigation if provided (no extra reloads)
+                                        if (widget.onQuickNextImage != null) {
+                                          print(
+                                              'DEBUG: Using quick next navigation');
+                                          widget.onQuickNextImage!();
+                                        } else {
+                                          print(
+                                              'DEBUG: Using regular next navigation');
+                                          widget.onNextImage();
+                                        }
+                                      }
+                                    : null,
+                                icon: Icon(
+                                  Icons.chevron_right,
+                                  color: widget.currentIndex < imageCount - 1
+                                      ? Colors.black87
+                                      : Colors.grey,
+                                  size: 16,
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 24, minHeight: 24),
+                              ),
+                            ],
                           ),
+                        ),
                       ],
                     ),
             ),
