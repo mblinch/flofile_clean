@@ -2422,9 +2422,74 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // LEFT COLUMN - Player picker, firebar, verbs
+            // LEFT COLUMN - Picture Preview
             Expanded(
-              flex: 1,
+              flex: 4,
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  // Quick navigation (no thumbnail centering or extra state churn)
+                  onQuickNextImage: () {
+                    print('DEBUG: Quick next image called');
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    print('DEBUG: Quick previous image called');
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                ),
+              ),
+            ),
+
+            // RIGHT COLUMN - Player picker, firebar, verbs
+            Expanded(
+              flex: 6,
               child: CaptionFieldsWidget(
                 key: _captionFieldsKey2,
                 metadata: currentMetadata,
@@ -2491,71 +2556,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     _uploadProgress[imagePath] = progress;
                   });
                 },
-              ),
-            ),
-
-            // RIGHT COLUMN - Picture Preview
-            Expanded(
-              flex: 1,
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: PicturePreviewWidget(
-                  key: _picturePreviewKey2,
-                  imagePaths: imagePaths,
-                  currentIndex: currentIndex,
-                  onImageSelected: _onImageSelected,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onPreviousImage: () {
-                    if (currentIndex > 0) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex - 1);
-                    }
-                  },
-                  // Quick navigation (no thumbnail centering or extra state churn)
-                  onQuickNextImage: () {
-                    print('DEBUG: Quick next image called');
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        currentIndex = currentIndex + 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onQuickPreviousImage: () {
-                    print('DEBUG: Quick previous image called');
-                    if (currentIndex > 0) {
-                      setState(() {
-                        currentIndex = currentIndex - 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onSaveIptc: _saveIptcMetadata,
-                  onSaveIptcBackground: _saveIptcMetadataBackground,
-                  onCopyMetadata: _onCopyMetadata,
-                  onPasteMetadata: _onPasteMetadata,
-                  onFtpImage: _onFtpImage,
-                  onImageDeleted: _onImageDeleted,
-                  onImageRenamed: _onImageRenamed,
-                  uploadedImages: _uploadedImages,
-                  queuedUploads: _queuedUploads,
-                  currentlyUploading: _currentlyUploading,
-                  uploadProgress: _uploadProgress,
-                  xmpRatings: _xmpRatings,
-                  xmpLabels: _xmpLabels,
-                  xmpTagged: _xmpTagged,
-                  lockedPaths: _lockedPaths,
-                  onEditMetadata: _showMetadataPopup,
-                ),
               ),
             ),
           ],
