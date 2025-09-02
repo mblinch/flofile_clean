@@ -254,6 +254,17 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     if (focalLength == null) return '';
     // Remove any "mm" or "mmmm" suffix and add our own "mm"
     String value = focalLength.toString().replaceAll(RegExp(r'm+$'), '');
+    
+    // Try to parse as double and remove decimal places
+    try {
+      double? numericValue = double.tryParse(value);
+      if (numericValue != null) {
+        return '${numericValue.toInt()}mm';
+      }
+    } catch (e) {
+      // If parsing fails, use original value
+    }
+    
     return '${value}mm';
   }
 
@@ -609,14 +620,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
                         // Center: Natural language camera settings
                         Expanded(
-                          child: Text(
-                            _buildNaturalLanguageSettings(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey,
+                          child: Center(
+                            child: Text(
+                              _buildNaturalLanguageSettings(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
 
