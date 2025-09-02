@@ -678,10 +678,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                             child: Text(
                               '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
                                   .trim(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.black87,
+                                color: Colors.grey.shade600,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -693,10 +693,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           child: Center(
                             child: Text(
                               _buildNaturalLanguageSettings(),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.black87,
+                                color: Colors.grey.shade600,
                               ),
                               textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
@@ -715,10 +715,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 Text(
                                   _formatDateTime(
                                       _exifData!['DateTimeOriginal']),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.black87,
+                                    color: Colors.grey.shade600,
                                   ),
                                   textAlign: TextAlign.right,
                                 ),
