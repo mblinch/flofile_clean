@@ -390,43 +390,42 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     )
                   : Row(
                       children: [
-                        // Left: Filename
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                p.basename(
-                                    widget.imagePaths[widget.currentIndex]),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                        // Left: Filename (flexible, can shrink)
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            p.basename(widget.imagePaths[widget.currentIndex]),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
 
-                        // Center: Pixel size
+                        // Spacing
+                        const SizedBox(width: 8),
+
+                        // Center: Pixel size (fixed content)
                         if (_exifData!['ImageWidth'] != null &&
                             _exifData!['ImageHeight'] != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black87,
-                              ),
+                          Text(
+                            '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
                             ),
                           ),
 
-                        // Right: Navigation buttons
-                        Expanded(
+                        // Spacing
+                        const SizedBox(width: 8),
+
+                        // Right: Navigation buttons (flexible, can shrink)
+                        Flexible(
+                          flex: 1,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
