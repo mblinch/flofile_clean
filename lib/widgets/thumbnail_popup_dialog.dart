@@ -6,6 +6,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
   final List<String> imagePaths;
   final int currentIndex;
   final Function(int) onImageSelected;
+  final VoidCallback? onEditMetadata;
   final Set<String> uploadedImages;
   final Set<String> queuedUploads;
   final Set<String> currentlyUploading;
@@ -20,6 +21,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
     required this.imagePaths,
     required this.currentIndex,
     required this.onImageSelected,
+    this.onEditMetadata,
     required this.uploadedImages,
     required this.queuedUploads,
     required this.currentlyUploading,
@@ -37,12 +39,13 @@ class ThumbnailPopupDialog extends StatefulWidget {
 class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
   late ScrollController _scrollController;
   int? _hoveredIndex;
+  Offset? _lastSecondaryTapPosition;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    
+
     // Scroll to current image after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentImage();
@@ -57,14 +60,154 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
 
   void _scrollToCurrentImage() {
     if (widget.imagePaths.isNotEmpty) {
-      const itemHeight = 120.0; // Approximate height of each thumbnail row
-      final targetOffset = (widget.currentIndex / 4) * itemHeight; // 4 columns
+      // Calculate approximate position based on dynamic grid layout
+      // With maxCrossAxisExtent: 500, we'll have roughly 2 columns depending on screen width
+      const itemHeight = 500.0; // Height of each thumbnail item
+      const estimatedColumns =
+          2.0; // Average columns across different screen sizes
+      final targetOffset =
+          (widget.currentIndex / estimatedColumns) * itemHeight;
       _scrollController.animateTo(
         targetOffset,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     }
+  }
+
+  void _showContextMenu(BuildContext context, int index) {
+    // Prefer using the last pointer position for accurate menu placement
+    final Size screenSize = MediaQuery.of(context).size;
+    final Offset anchor = _lastSecondaryTapPosition ??
+        Offset(screenSize.width / 2, screenSize.height / 2);
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        anchor.dx,
+        anchor.dy,
+        screenSize.width - anchor.dx,
+        screenSize.height - anchor.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'select',
+          child: Row(
+            children: [
+              const Icon(Icons.check, size: 16),
+              const SizedBox(width: 8),
+              const Text('Select Image'),
+            ],
+          ),
+        ),
+        if (widget.onEditMetadata != null)
+          PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                const Icon(Icons.edit, size: 16),
+                const SizedBox(width: 8),
+                const Text('Edit IPTC'),
+              ],
+            ),
+          ),
+        PopupMenuItem(
+          value: 'copy_metadata',
+          child: Row(
+            children: [
+              const Icon(Icons.copy, size: 16),
+              const SizedBox(width: 8),
+              const Text('Copy Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'paste_metadata',
+          child: Row(
+            children: [
+              const Icon(Icons.paste, size: 16),
+              const SizedBox(width: 8),
+              const Text('Paste Metadata'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'apply_iptc_template',
+          child: Row(
+            children: [
+              const Icon(Icons.description, size: 16),
+              const SizedBox(width: 8),
+              const Text('Apply IPTC Template'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'open',
+          child: Row(
+            children: [
+              const Icon(Icons.open_in_new, size: 16),
+              const SizedBox(width: 8),
+              const Text('Open in Finder'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'rename',
+          child: Row(
+            children: [
+              const Icon(Icons.edit, size: 16),
+              const SizedBox(width: 8),
+              const Text('Rename Image'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              const Icon(Icons.delete, size: 16),
+              const SizedBox(width: 8),
+              const Text('Delete Image'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'select') {
+        widget.onImageSelected(index);
+        Navigator.of(context).pop();
+      } else if (value == 'edit') {
+        // Select the image first so the editor opens for the correct file
+        widget.onImageSelected(index);
+        Navigator.of(context).pop();
+        // Call editor after dialog closes
+        Future.microtask(() => widget.onEditMetadata!());
+      } else if (value == 'copy_metadata') {
+        // Copy metadata from this image
+        // Note: This would need to be implemented in the parent widget
+        Navigator.of(context).pop();
+      } else if (value == 'paste_metadata') {
+        // Paste metadata to this image
+        // Note: This would need to be implemented in the parent widget
+        Navigator.of(context).pop();
+      } else if (value == 'apply_iptc_template') {
+        // Apply IPTC template to this image
+        // Note: This would need to be implemented in the parent widget
+        Navigator.of(context).pop();
+      } else if (value == 'open') {
+        // Open in Finder
+        Navigator.of(context).pop();
+        Process.run('open', ['-R', widget.imagePaths[index]]);
+      } else if (value == 'rename') {
+        // Rename image
+        // Note: This would need to be implemented in the parent widget
+        Navigator.of(context).pop();
+      } else if (value == 'delete') {
+        // Delete image
+        // Note: This would need to be implemented in the parent widget
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   @override
@@ -104,8 +247,9 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                   Text(
                     'Image Thumbnails (${widget.imagePaths.length})',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
+                      color: Colors.black87,
                     ),
                   ),
                   const Spacer(),
@@ -117,17 +261,17 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                 ],
               ),
             ),
-            
+
             // Thumbnails grid
             Expanded(
               child: GridView.builder(
                 controller: _scrollController,
                 padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  childAspectRatio: 0.8,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 500,
+                  childAspectRatio: 1.0,
+                  crossAxisSpacing: 24,
+                  mainAxisSpacing: 24,
                 ),
                 itemCount: widget.imagePaths.length,
                 itemBuilder: (context, index) {
@@ -135,7 +279,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                   final isSelected = index == widget.currentIndex;
                   final isUploaded = widget.uploadedImages.contains(imagePath);
                   final isQueued = widget.queuedUploads.contains(imagePath);
-                  final isUploading = widget.currentlyUploading.contains(imagePath);
+                  final isUploading =
+                      widget.currentlyUploading.contains(imagePath);
                   final progress = widget.uploadProgress[imagePath] ?? 0.0;
                   final rating = widget.xmpRatings[imagePath] ?? 0;
                   final label = widget.xmpLabels[imagePath] ?? '';
@@ -154,30 +299,44 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                       });
                     },
                     child: GestureDetector(
+                      onSecondaryTapDown: (details) {
+                        _lastSecondaryTapPosition = details.globalPosition;
+                      },
                       onTap: () {
                         widget.onImageSelected(index);
                         Navigator.of(context).pop();
                       },
+                      onSecondaryTap: widget.onEditMetadata != null
+                          ? () {
+                              _showContextMenu(context, index);
+                            }
+                          : null,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: isSelected 
-                              ? Colors.blue.shade600 
-                              : _hoveredIndex == index 
-                                ? Colors.blue.shade300
-                                : Colors.grey.shade300,
-                            width: isSelected ? 3 : _hoveredIndex == index ? 2 : 1,
+                            color: isSelected
+                                ? Colors.blue.shade600
+                                : _hoveredIndex == index
+                                    ? Colors.blue.shade300
+                                    : Colors.grey.shade300,
+                            width: isSelected
+                                ? 3
+                                : _hoveredIndex == index
+                                    ? 2
+                                    : 1,
                           ),
                           borderRadius: BorderRadius.circular(8),
                           color: Colors.grey.shade100,
-                          boxShadow: _hoveredIndex == index ? [
-                            BoxShadow(
-                              color: Colors.blue.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ] : null,
+                          boxShadow: _hoveredIndex == index
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.blue.withValues(alpha: 0.2),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: Stack(
                           children: [
@@ -188,7 +347,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                 File(imagePath),
                                 width: double.infinity,
                                 height: double.infinity,
-                                fit: BoxFit.cover,
+                                fit: BoxFit.contain,
                                 errorBuilder: (context, error, stackTrace) {
                                   return Container(
                                     width: double.infinity,
@@ -203,7 +362,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                 },
                               ),
                             ),
-                            
+
                             // Upload status indicators
                             if (isUploaded)
                               Positioned(
@@ -222,7 +381,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   ),
                                 ),
                               ),
-                            
+
                             if (isQueued)
                               Positioned(
                                 top: 4,
@@ -240,7 +399,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   ),
                                 ),
                               ),
-                            
+
                             if (isUploading)
                               Positioned(
                                 top: 4,
@@ -256,20 +415,23 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                     height: 14,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
                                       value: progress,
                                     ),
                                   ),
                                 ),
                               ),
-                            
+
                             // Rating indicator
                             if (rating > 0)
                               Positioned(
                                 bottom: 4,
                                 left: 4,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: Colors.amber.shade600,
                                     borderRadius: BorderRadius.circular(6),
@@ -284,7 +446,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   ),
                                 ),
                               ),
-                            
+
                             // Color label indicator
                             if (label.isNotEmpty)
                               Positioned(
@@ -296,11 +458,12 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   decoration: BoxDecoration(
                                     color: _getLabelColor(label),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.white, width: 1.5),
+                                    border: Border.all(
+                                        color: Colors.white, width: 1.5),
                                   ),
                                 ),
                               ),
-                            
+
                             // Tagged indicator
                             if (isTagged)
                               Positioned(
@@ -319,7 +482,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   ),
                                 ),
                               ),
-                            
+
                             // Locked indicator
                             if (isLocked)
                               Positioned(
@@ -338,13 +501,14 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                   ),
                                 ),
                               ),
-                            
+
                             // Image number overlay
                             Positioned(
                               top: 4,
                               left: 4,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(6),
@@ -359,14 +523,38 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                 ),
                               ),
                             ),
-                            
+
+                            // Right-click hint (only show if edit metadata is available)
+                            if (widget.onEditMetadata != null)
+                              Positioned(
+                                bottom: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: const Text(
+                                    'Right-click to edit',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
                             // Filename overlay
                             Positioned(
                               bottom: 0,
                               left: 0,
                               right: 0,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.7),
                                   borderRadius: const BorderRadius.only(

@@ -5,7 +5,6 @@ import 'dart:convert';
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
-import 'thumbnail_grid_widget.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -26,6 +25,7 @@ class PicturePreviewWidget extends StatefulWidget {
   // Callbacks for right-click context menu
   final Function(String)? onCopyMetadata;
   final Function(String)? onPasteMetadata;
+  final Function(String)? onApplyIptcTemplate;
   final Function(String)? onFtpImage;
   final Function(String)? onImageDeleted;
   final Function(String, String)? onImageRenamed;
@@ -53,6 +53,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onSaveIptcBackground,
     this.onCopyMetadata,
     this.onPasteMetadata,
+    this.onApplyIptcTemplate,
     this.onFtpImage,
     this.onImageDeleted,
     this.onImageRenamed,
@@ -363,404 +364,407 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
       ),
-      child: Column(
-        children: [
-          // Top bar: Filename, pixel size, date and time
-          if (_exifData != null || _isLoadingExif)
-            Container(
-              height: 36, // Reduced height for top info bar
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                ),
-              ),
-              child: _isLoadingExif
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : Row(
-                      children: [
-                        // Left: Filename
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                p.basename(
-                                    widget.imagePaths[widget.currentIndex]),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Center: Pixel size
-                        if (_exifData!['ImageWidth'] != null &&
-                            _exifData!['ImageHeight'] != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-
-                        // Right: Navigation buttons
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              // Previous button
-                              IconButton(
-                                onPressed: widget.currentIndex > 0
-                                    ? () async {
-                                        // Save in background without waiting
-                                        if (widget.onSaveIptcBackground !=
-                                            null) {
-                                          try {
-                                            await widget
-                                                .onSaveIptcBackground!();
-                                          } catch (e) {
-                                            print('Background save error: $e');
-                                          }
-                                        }
-                                        // Prefer quick navigation if provided (no extra reloads)
-                                        if (widget.onQuickPreviousImage !=
-                                            null) {
-                                          print(
-                                              'DEBUG: Using quick previous navigation');
-                                          widget.onQuickPreviousImage!();
-                                        } else {
-                                          print(
-                                              'DEBUG: Using regular previous navigation');
-                                          widget.onPreviousImage();
-                                        }
-                                      }
-                                    : null,
-                                icon: Icon(
-                                  Icons.chevron_left,
-                                  color: widget.currentIndex > 0
-                                      ? Colors.black87
-                                      : Colors.grey,
-                                  size: 16,
-                                ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 24, minHeight: 24),
-                              ),
-
-                              // Image counter between arrows
-                              Text(
-                                '${widget.currentIndex + 1}/$imageCount',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-
-                              // Next button
-                              IconButton(
-                                onPressed: widget.currentIndex < imageCount - 1
-                                    ? () async {
-                                        // Save in background without waiting
-                                        if (widget.onSaveIptcBackground !=
-                                            null) {
-                                          try {
-                                            await widget
-                                                .onSaveIptcBackground!();
-                                          } catch (e) {
-                                            print('Background save error: $e');
-                                          }
-                                        }
-                                        // Prefer quick navigation if provided (no extra reloads)
-                                        if (widget.onQuickNextImage != null) {
-                                          print(
-                                              'DEBUG: Using quick next navigation');
-                                          widget.onQuickNextImage!();
-                                        } else {
-                                          print(
-                                              'DEBUG: Using regular next navigation');
-                                          widget.onNextImage();
-                                        }
-                                      }
-                                    : null,
-                                icon: Icon(
-                                  Icons.chevron_right,
-                                  color: widget.currentIndex < imageCount - 1
-                                      ? Colors.black87
-                                      : Colors.grey,
-                                  size: 16,
-                                ),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 24, minHeight: 24),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final double _mainImageHeight = constraints.maxHeight -
+              56; // Reserve space for top and bottom bars (28px each)
+          return Column(
+            children: [
+              // Top bar: Filename, pixel size, date and time
+              if (_exifData != null || _isLoadingExif)
+                Container(
+                  height: 28, // Minimized height for top info bar
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
+                      topRight: Radius.circular(8),
                     ),
-            ),
-
-          // Main image area - 50% of screen height
-          SizedBox(
-            height: MediaQuery.of(context).size.height * 0.5,
-            child: Stack(
-              children: [
-                // Main image with right-click and double-click support
-                GestureDetector(
-                  onSecondaryTapDown: (details) {
-                    _showContextMenu(
-                        context, currentImagePath, details.globalPosition);
-                  },
-                  onDoubleTap: widget.onEditMetadata != null
-                      ? () => widget.onEditMetadata!()
-                      : null,
-                  child: ExtendedImage.file(
-                    File(currentImagePath),
-                    fit: BoxFit.contain,
-                    alignment: Alignment.center,
-                    width: double.infinity,
-                    height: double.infinity,
-                    loadStateChanged: (ExtendedImageState state) {
-                      switch (state.extendedImageLoadState) {
-                        case LoadState.loading:
-                          print(
-                              'DEBUG: ExtendedImage loading: $currentImagePath');
-                          return Container(
-                            color: Colors.grey.shade200,
-                            child: const Center(
-                                child: CircularProgressIndicator()),
-                          );
-                        case LoadState.completed:
-                          print(
-                              'DEBUG: ExtendedImage completed: $currentImagePath');
-                          return null; // Use default completed state
-                        case LoadState.failed:
-                          print(
-                              'DEBUG: ExtendedImage failed: $currentImagePath');
-                          return Container(
-                            color: Colors.grey.shade200,
-                            child: const Center(
-                              child: Icon(Icons.error,
-                                  color: Colors.red, size: 48),
-                            ),
-                          );
-                      }
-                    },
-                    mode: ExtendedImageMode.none, // No zoom/pan for speed
-                  ),
-                ),
-
-                // Zoom button
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Material(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(20),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => _showHighResZoom(context, currentImagePath),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Icon(Icons.zoom_in,
-                            color: Colors.white, size: 16),
-                      ),
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                     ),
                   ),
-                ),
-
-                // FTP Upload Status Overlay
-                if ((widget.uploadProgress?.containsKey(currentImagePath) ==
-                            true &&
-                        widget.uploadProgress![currentImagePath]! < 1.0) ||
-                    widget.queuedUploads?.contains(currentImagePath) == true)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.uploadProgress
-                                      ?.containsKey(currentImagePath) ==
-                                  true &&
-                              widget.uploadProgress![currentImagePath]! <
-                                  1.0) ...[
-                            // Currently uploading
-                            const Icon(Icons.rocket_launch,
-                                color: Colors.blue, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                  child: _isLoadingExif
+                      ? const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.max,
+                          children: [
+                            // Left: Filename
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    p.basename(
+                                        widget.imagePaths[widget.currentIndex]),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
-                          ] else ...[
-                            // Queued
-                            const Icon(Icons.schedule,
-                                color: Colors.orange, size: 16),
-                            const SizedBox(width: 4),
-                            const Text(
-                              'Queued',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+
+                            // Center: Pixel size
+                            if (_exifData!['ImageWidth'] != null &&
+                                _exifData!['ImageHeight'] != null)
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: Text(
+                                    '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                  ),
+                                ),
+                              ),
+
+                            // Right: Navigation buttons
+                            Expanded(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Previous button
+                                  IconButton(
+                                    onPressed: widget.currentIndex > 0
+                                        ? () async {
+                                            // Save in background without waiting
+                                            if (widget.onSaveIptcBackground !=
+                                                null) {
+                                              try {
+                                                await widget
+                                                    .onSaveIptcBackground!();
+                                              } catch (e) {
+                                                print(
+                                                    'Background save error: $e');
+                                              }
+                                            }
+                                            // Prefer quick navigation if provided (no extra reloads)
+                                            if (widget.onQuickPreviousImage !=
+                                                null) {
+                                              print(
+                                                  'DEBUG: Using quick previous navigation');
+                                              widget.onQuickPreviousImage!();
+                                            } else {
+                                              print(
+                                                  'DEBUG: Using regular previous navigation');
+                                              widget.onPreviousImage();
+                                            }
+                                          }
+                                        : null,
+                                    icon: Icon(
+                                      Icons.chevron_left,
+                                      color: widget.currentIndex > 0
+                                          ? Colors.black87
+                                          : Colors.grey,
+                                      size: 16,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 24, minHeight: 24),
+                                  ),
+
+                                  // Image counter between arrows
+                                  Flexible(
+                                    child: Text(
+                                      '${widget.currentIndex + 1}/$imageCount',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black87,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                    ),
+                                  ),
+
+                                  // Next button
+                                  IconButton(
+                                    onPressed: widget.currentIndex <
+                                            imageCount - 1
+                                        ? () async {
+                                            // Save in background without waiting
+                                            if (widget.onSaveIptcBackground !=
+                                                null) {
+                                              try {
+                                                await widget
+                                                    .onSaveIptcBackground!();
+                                              } catch (e) {
+                                                print(
+                                                    'Background save error: $e');
+                                              }
+                                            }
+                                            // Prefer quick navigation if provided (no extra reloads)
+                                            if (widget.onQuickNextImage !=
+                                                null) {
+                                              print(
+                                                  'DEBUG: Using quick next navigation');
+                                              widget.onQuickNextImage!();
+                                            } else {
+                                              print(
+                                                  'DEBUG: Using regular next navigation');
+                                              widget.onNextImage();
+                                            }
+                                          }
+                                        : null,
+                                    icon: Icon(
+                                      Icons.chevron_right,
+                                      color:
+                                          widget.currentIndex < imageCount - 1
+                                              ? Colors.black87
+                                              : Colors.grey,
+                                      size: 16,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 24, minHeight: 24),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
-                        ],
+                        ),
+                ),
+
+              // Main image area - 50% of available height
+              SizedBox(
+                height: _mainImageHeight,
+                child: Stack(
+                  children: [
+                    // Main image with right-click and double-click support
+                    GestureDetector(
+                      onSecondaryTapDown: (details) {
+                        _showContextMenu(
+                            context, currentImagePath, details.globalPosition);
+                      },
+                      onDoubleTap: widget.onEditMetadata != null
+                          ? () => widget.onEditMetadata!()
+                          : null,
+                      child: ExtendedImage.file(
+                        File(currentImagePath),
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        width: double.infinity,
+                        height: double.infinity,
+                        loadStateChanged: (ExtendedImageState state) {
+                          switch (state.extendedImageLoadState) {
+                            case LoadState.loading:
+                              print(
+                                  'DEBUG: ExtendedImage loading: $currentImagePath');
+                              return Container(
+                                color: Colors.grey.shade200,
+                                child: const Center(
+                                    child: CircularProgressIndicator()),
+                              );
+                            case LoadState.completed:
+                              print(
+                                  'DEBUG: ExtendedImage completed: $currentImagePath');
+                              return null; // Use default completed state
+                            case LoadState.failed:
+                              print(
+                                  'DEBUG: ExtendedImage failed: $currentImagePath');
+                              return Container(
+                                color: Colors.grey.shade200,
+                                child: const Center(
+                                  child: Icon(Icons.error,
+                                      color: Colors.red, size: 48),
+                                ),
+                              );
+                          }
+                        },
+                        mode: ExtendedImageMode.none, // No zoom/pan for speed
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
 
-          // Thumbnail grid directly under the picture preview
-          Expanded(
-            child: ThumbnailGridWidget(
-              imagePaths: widget.imagePaths,
-              currentIndex: widget.currentIndex,
-              onImageSelected: widget.onImageSelected,
-              uploadedImages: widget.uploadedImages ?? {},
-              queuedUploads: widget.queuedUploads ?? {},
-              currentlyUploading: widget.currentlyUploading ?? {},
-              uploadProgress: widget.uploadProgress ?? {},
-              xmpRatings: widget.xmpRatings,
-              xmpLabels: widget.xmpLabels,
-              xmpTagged: widget.xmpTagged,
-              lockedPaths: widget.lockedPaths,
-              centerRequestId: 0, // No centering needed for this view
-              onImageDeleted: widget.onImageDeleted,
-              onCopyMetadata: widget.onCopyMetadata,
-              onPasteMetadata: widget.onPasteMetadata,
-              onApplyIptcTemplate: null, // Not needed for this view
-              onFtpImage: widget.onFtpImage,
-              onImageRenamed: widget.onImageRenamed,
-              onMultiSelect: null, // Not needed for this view
-            ),
-          ),
-
-          // Bottom bar: Camera model, shutter speed, focal length, and navigation
-          if (_exifData != null || _isLoadingExif)
-            Container(
-              height: 36, // Reduced height for bottom info bar
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
-                border: Border(
-                  top: BorderSide(color: Colors.grey.shade300, width: 1),
-                ),
-              ),
-              child: _isLoadingExif
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : Row(
-                      children: [
-                        // Left: Camera model
-                        if (_exifData!['Make'] != null ||
-                            _exifData!['Model'] != null)
-                          Expanded(
-                            child: Text(
-                              '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
-                                  .trim(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade600,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                    // Zoom button
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Material(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(20),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () =>
+                              _showHighResZoom(context, currentImagePath),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                          ),
-
-                        // Center: Natural language camera settings
-                        Expanded(
-                          flex: 1,
-                          child: Center(
-                            child: Text(
-                              _buildNaturalLanguageSettings(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade600,
-                              ),
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child: const Icon(Icons.zoom_in,
+                                color: Colors.white, size: 16),
                           ),
                         ),
+                      ),
+                    ),
 
-                        // Right: Date and time
-                        if (_exifData != null &&
-                            _exifData!['DateTimeOriginal'] != null)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
+                    // FTP Upload Status Overlay
+                    if ((widget.uploadProgress?.containsKey(currentImagePath) ==
+                                true &&
+                            widget.uploadProgress![currentImagePath]! < 1.0) ||
+                        widget.queuedUploads?.contains(currentImagePath) ==
+                            true)
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.uploadProgress
+                                          ?.containsKey(currentImagePath) ==
+                                      true &&
+                                  widget.uploadProgress![currentImagePath]! <
+                                      1.0) ...[
+                                // Currently uploading
+                                const Icon(Icons.rocket_launch,
+                                    color: Colors.blue, size: 16),
+                                const SizedBox(width: 4),
                                 Text(
-                                  _formatDateTime(
-                                      _exifData!['DateTimeOriginal']),
+                                  '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ] else ...[
+                                // Queued
+                                const Icon(Icons.schedule,
+                                    color: Colors.orange, size: 16),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'Queued',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Bottom bar: Camera model, shutter speed, focal length, and navigation
+              if (_exifData != null || _isLoadingExif)
+                Container(
+                  height: 28, // Minimized height for bottom info bar
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(8),
+                      bottomRight: Radius.circular(8),
+                    ),
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade300, width: 1),
+                    ),
+                  ),
+                  child: _isLoadingExif
+                      ? const Center(
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            // Left: Camera model
+                            if (_exifData!['Make'] != null ||
+                                _exifData!['Model'] != null)
+                              Expanded(
+                                child: Text(
+                                  '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
+                                      .trim(),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     color: Colors.grey.shade600,
                                   ),
-                                  textAlign: TextAlign.right,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
+                              ),
+
+                            // Center: Natural language camera settings
+                            Expanded(
+                              flex: 1,
+                              child: Center(
+                                child: Text(
+                                  _buildNaturalLanguageSettings(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-            ),
-        ],
+
+                            // Right: Date and time
+                            if (_exifData != null &&
+                                _exifData!['DateTimeOriginal'] != null)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      _formatDateTime(
+                                          _exifData!['DateTimeOriginal']),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -891,6 +895,15 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           Icons.copy, imagePath, tapPosition),
                       _buildMenuItem('paste_metadata', 'Paste Metadata',
                           Icons.paste, imagePath, tapPosition),
+                      _buildMenuItem(
+                          'apply_iptc_template',
+                          'Apply IPTC Template',
+                          Icons.description,
+                          imagePath,
+                          tapPosition),
+                      if (widget.onEditMetadata != null)
+                        _buildMenuItem('edit_iptc', 'Edit IPTC', Icons.edit,
+                            imagePath, tapPosition),
                       const Divider(height: 1),
                       if (widget.uploadedImages?.contains(imagePath) ?? false)
                         _buildMenuItem('remove_ftp', 'Remove FTP Status',
@@ -956,6 +969,14 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   void _handleContextMenuAction(
       String action, String imagePath, Offset tapPosition) {
     switch (action) {
+      case 'edit_iptc':
+        // Open metadata editor for current image (already selected)
+        Future.microtask(() => widget.onEditMetadata?.call());
+        break;
+      case 'apply_iptc_template':
+        // Apply IPTC template to this image
+        widget.onApplyIptcTemplate?.call(imagePath);
+        break;
       case 'open':
         // Open in Finder
         Process.run('open', ['-R', imagePath]);

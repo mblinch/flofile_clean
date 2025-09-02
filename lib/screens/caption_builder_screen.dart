@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
+import '../widgets/thumbnail_grid_widget.dart';
 
 import '../widgets/startup_dialog.dart';
 
@@ -2422,68 +2423,107 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // LEFT COLUMN - Picture Preview
+            // LEFT COLUMN - Picture Preview and Thumbnails
             Expanded(
               flex: 4,
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: PicturePreviewWidget(
-                  key: _picturePreviewKey2,
-                  imagePaths: imagePaths,
-                  currentIndex: currentIndex,
-                  onImageSelected: _onImageSelected,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onPreviousImage: () {
-                    if (currentIndex > 0) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex - 1);
-                    }
-                  },
-                  // Quick navigation (no thumbnail centering or extra state churn)
-                  onQuickNextImage: () {
-                    print('DEBUG: Quick next image called');
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        currentIndex = currentIndex + 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onQuickPreviousImage: () {
-                    print('DEBUG: Quick previous image called');
-                    if (currentIndex > 0) {
-                      setState(() {
-                        currentIndex = currentIndex - 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onSaveIptc: _saveIptcMetadata,
-                  onSaveIptcBackground: _saveIptcMetadataBackground,
-                  onCopyMetadata: _onCopyMetadata,
-                  onPasteMetadata: _onPasteMetadata,
-                  onFtpImage: _onFtpImage,
-                  onImageDeleted: _onImageDeleted,
-                  onImageRenamed: _onImageRenamed,
-                  uploadedImages: _uploadedImages,
-                  queuedUploads: _queuedUploads,
-                  currentlyUploading: _currentlyUploading,
-                  uploadProgress: _uploadProgress,
-                  xmpRatings: _xmpRatings,
-                  xmpLabels: _xmpLabels,
-                  xmpTagged: _xmpTagged,
-                  lockedPaths: _lockedPaths,
-                  onEditMetadata: _showMetadataPopup,
-                ),
+              child: Column(
+                children: [
+                  // Picture preview - 50% of screen height
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                    child: PicturePreviewWidget(
+                      key: _picturePreviewKey2,
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: _onImageSelected,
+                      onNextImage: () {
+                        if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
+                          _onImageSelected(currentIndex + 1);
+                        }
+                      },
+                      onPreviousImage: () {
+                        if (currentIndex > 0) {
+                          setState(() {
+                            _thumbCenterRequestId++;
+                          });
+                          _onImageSelected(currentIndex - 1);
+                        }
+                      },
+                      // Quick navigation (no thumbnail centering or extra state churn)
+                      onQuickNextImage: () {
+                        print('DEBUG: Quick next image called');
+                        if (currentIndex < imagePaths.length - 1) {
+                          setState(() {
+                            currentIndex = currentIndex + 1;
+                          });
+                          _loadMetadata();
+                        }
+                      },
+                      onQuickPreviousImage: () {
+                        print('DEBUG: Quick previous image called');
+                        if (currentIndex > 0) {
+                          setState(() {
+                            currentIndex = currentIndex - 1;
+                          });
+                          _loadMetadata();
+                        }
+                      },
+                      onSaveIptc: _saveIptcMetadata,
+                      onSaveIptcBackground: _saveIptcMetadataBackground,
+                      onCopyMetadata: _onCopyMetadata,
+                      onPasteMetadata: _onPasteMetadata,
+                      onApplyIptcTemplate: _onApplyIptcTemplate,
+                      onFtpImage: _onFtpImage,
+                      onImageDeleted: _onImageDeleted,
+                      onImageRenamed: _onImageRenamed,
+                      uploadedImages: _uploadedImages,
+                      queuedUploads: _queuedUploads,
+                      currentlyUploading: _currentlyUploading,
+                      uploadProgress: _uploadProgress,
+                      xmpRatings: _xmpRatings,
+                      xmpLabels: _xmpLabels,
+                      xmpTagged: _xmpTagged,
+                      lockedPaths: _lockedPaths,
+                      onEditMetadata: _showMetadataPopup,
+                    ),
+                  ),
+
+                  // Divider line between picture preview and thumbnails
+                  Container(
+                    height: 1,
+                    color: Colors.grey.shade300,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+
+                  // Thumbnail grid - takes remaining space
+                  Expanded(
+                    child: ThumbnailGridWidget(
+                      imagePaths: imagePaths,
+                      currentIndex: currentIndex,
+                      onImageSelected: _onImageSelected,
+                      uploadedImages: _uploadedImages,
+                      queuedUploads: _queuedUploads,
+                      currentlyUploading: _currentlyUploading,
+                      uploadProgress: _uploadProgress,
+                      xmpRatings: _xmpRatings,
+                      xmpLabels: _xmpLabels,
+                      xmpTagged: _xmpTagged,
+                      lockedPaths: _lockedPaths,
+                      centerRequestId: _thumbCenterRequestId,
+                      onImageDeleted: _onImageDeleted,
+                      onCopyMetadata: _onCopyMetadata,
+                      onPasteMetadata: _onPasteMetadata,
+                      onApplyIptcTemplate: _onApplyIptcTemplate,
+                      onFtpImage: _onFtpImage,
+                      onImageRenamed: _onImageRenamed,
+                      onMultiSelect: _onMultiSelect,
+                      onEditMetadata: _showMetadataPopup,
+                    ),
+                  ),
+                ],
               ),
             ),
 

@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
+import 'thumbnail_popup_dialog.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -37,6 +38,8 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Function(String, String)? onImageRenamed;
   // Callback for multi-selection operations
   final Function(List<String>)? onMultiSelect;
+  // Callback for editing metadata
+  final VoidCallback? onEditMetadata;
 
   const ThumbnailGridWidget({
     super.key,
@@ -62,6 +65,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.onFtpImage,
     this.onImageRenamed,
     this.onMultiSelect,
+    this.onEditMetadata,
   });
 
   @override
@@ -488,6 +492,244 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       ),
       child: Column(
         children: [
+          // Top bar with controls (moved from bottom)
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: SizedBox(
+              height: 24,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Left side - FTP Filter
+                  Expanded(
+                    flex: 1,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          child: DropdownButton<String>(
+                            value: _ftpFilterMode == null
+                                ? 'all'
+                                : _ftpFilterMode == 'hide_ftpd'
+                                    ? 'hide'
+                                    : 'show',
+                            isDense: true,
+                            underline: Container(),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.black),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'all',
+                                child: Text('Show All Images'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'hide',
+                                child: Text('Hide FTPd Images'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'show',
+                                child: Text('Show FTPd Images'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == 'all') {
+                                  _ftpFilterMode = null;
+                                } else if (value == 'hide') {
+                                  _ftpFilterMode = 'hide_ftpd';
+                                } else if (value == 'show') {
+                                  _ftpFilterMode = 'show_ftpd';
+                                }
+
+                                // Handle current image selection when hiding FTPd images
+                                if (_ftpFilterMode == 'hide_ftpd' &&
+                                    widget.currentIndex <
+                                        widget.imagePaths.length &&
+                                    widget.uploadedImages.contains(widget
+                                        .imagePaths[widget.currentIndex])) {
+                                  int nextIndex = widget.currentIndex + 1;
+                                  while (nextIndex < widget.imagePaths.length &&
+                                      widget.uploadedImages.contains(
+                                          widget.imagePaths[nextIndex])) {
+                                    nextIndex++;
+                                  }
+                                  if (nextIndex >= widget.imagePaths.length) {
+                                    nextIndex = widget.currentIndex - 1;
+                                    while (nextIndex >= 0 &&
+                                        widget.uploadedImages.contains(
+                                            widget.imagePaths[nextIndex])) {
+                                      nextIndex--;
+                                    }
+                                  }
+                                  if (nextIndex >= 0 &&
+                                      nextIndex < widget.imagePaths.length) {
+                                    widget.onImageSelected(nextIndex);
+                                  }
+                                }
+                              });
+                              _ensureVisibleAfterLayout();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Center - Thumbnail Viewer
+                  Expanded(
+                    flex: 1,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // See All Thumbnails button
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: InkWell(
+                            onTap: () {
+                              _showThumbnailPopup();
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              child: Text(
+                                'See All Thumbnails',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.black),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Right side - Size controls
+                  Expanded(
+                    flex: 1,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Thumbnail size control with plus/minus buttons
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Minus button
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    // Move to previous division (30px increments)
+                                    final currentStep =
+                                        ((_thumbSize - 80) / 30).round();
+                                    final newStep =
+                                        (currentStep - 1).clamp(0, 4);
+                                    _thumbSize = 80 + (newStep * 30);
+                                    _thumbSpacing = _thumbSize * 0.1;
+                                  });
+                                  _ensureVisibleAfterLayout();
+                                },
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.grey.shade400),
+                                  ),
+                                  child: const Icon(
+                                    Icons.remove,
+                                    size: 12,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Size text
+                              Text(
+                                '${_thumbSize.toInt()}px',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Plus button
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    // Move to next division (30px increments)
+                                    final currentStep =
+                                        ((_thumbSize - 80) / 30).round();
+                                    final newStep =
+                                        (currentStep + 1).clamp(0, 4);
+                                    _thumbSize = 80 + (newStep * 30);
+                                    _thumbSpacing = _thumbSize * 0.1;
+                                  });
+                                  _ensureVisibleAfterLayout();
+                                },
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.grey.shade400),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add,
+                                    size: 12,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // Thumbnail grid
           Expanded(
             child: GridView.builder(
@@ -773,194 +1015,6 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               },
             ),
           ),
-
-          // Bottom bar with slider
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(8),
-                bottomRight: Radius.circular(8),
-              ),
-            ),
-            child: SizedBox(
-              height: 24,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      const SizedBox(width: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        child: DropdownButton<String>(
-                          value: _ftpFilterMode == null
-                              ? 'all'
-                              : _ftpFilterMode == 'hide_ftpd'
-                                  ? 'hide'
-                                  : 'show',
-                          isDense: true,
-                          underline: Container(),
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.black),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'all',
-                              child: Text('Show All Images'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'hide',
-                              child: Text('Hide FTPd Images'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'show',
-                              child: Text('Show FTPd Images'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == 'all') {
-                                _ftpFilterMode = null;
-                              } else if (value == 'hide') {
-                                _ftpFilterMode = 'hide_ftpd';
-                              } else if (value == 'show') {
-                                _ftpFilterMode = 'show_ftpd';
-                              }
-
-                              // Handle current image selection when hiding FTPd images
-                              if (_ftpFilterMode == 'hide_ftpd' &&
-                                  widget.currentIndex <
-                                      widget.imagePaths.length &&
-                                  widget.uploadedImages.contains(
-                                      widget.imagePaths[widget.currentIndex])) {
-                                int nextIndex = widget.currentIndex + 1;
-                                while (nextIndex < widget.imagePaths.length &&
-                                    widget.uploadedImages.contains(
-                                        widget.imagePaths[nextIndex])) {
-                                  nextIndex++;
-                                }
-                                if (nextIndex >= widget.imagePaths.length) {
-                                  nextIndex = widget.currentIndex - 1;
-                                  while (nextIndex >= 0 &&
-                                      widget.uploadedImages.contains(
-                                          widget.imagePaths[nextIndex])) {
-                                    nextIndex--;
-                                  }
-                                }
-                                if (nextIndex >= 0 &&
-                                    nextIndex < widget.imagePaths.length) {
-                                  widget.onImageSelected(nextIndex);
-                                }
-                              }
-                            });
-                            _ensureVisibleAfterLayout();
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 12),
-                  // Thumbnail size control with plus/minus buttons
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Minus button
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              // Move to previous division (30px increments)
-                              final currentStep =
-                                  ((_thumbSize - 80) / 30).round();
-                              final newStep = (currentStep - 1).clamp(0, 4);
-                              _thumbSize = 80 + (newStep * 30);
-                              _thumbSpacing = _thumbSize * 0.1;
-                            });
-                            _ensureVisibleAfterLayout();
-                          },
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade400),
-                            ),
-                            child: const Icon(
-                              Icons.remove,
-                              size: 12,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Size text
-                        Text(
-                          '${_thumbSize.round()}px',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Plus button
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              // Move to next division (30px increments)
-                              final currentStep =
-                                  ((_thumbSize - 80) / 30).round();
-                              final newStep = (currentStep + 1).clamp(0, 4);
-                              _thumbSize = 80 + (newStep * 30);
-                              _thumbSpacing = _thumbSize * 0.1;
-                            });
-                            _ensureVisibleAfterLayout();
-                          },
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade400),
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              size: 12,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -1105,6 +1159,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 Icons.description,
                                 imagePath,
                                 tapPosition),
+                            if (widget.onEditMetadata != null)
+                              _buildMenuItem('edit_iptc', 'Edit IPTC',
+                                  Icons.edit, imagePath, tapPosition),
                             const Divider(height: 1),
                             if (widget.uploadedImages.contains(imagePath))
                               _buildMenuItem('remove_ftp', 'Remove FTP Status',
@@ -1167,6 +1224,15 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   void _handleContextMenuAction(
       String action, String imagePath, Offset tapPosition) {
     switch (action) {
+      case 'edit_iptc':
+        final originalIndex = widget.imagePaths.indexOf(imagePath);
+        if (originalIndex != -1) {
+          widget.onImageSelected(originalIndex);
+          Future.microtask(() => widget.onEditMetadata?.call());
+        } else {
+          widget.onEditMetadata?.call();
+        }
+        break;
       case 'select':
         final originalIndex = widget.imagePaths.indexOf(imagePath);
         if (originalIndex != -1) {
@@ -1707,5 +1773,30 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       }
       print('Error deleting file: $e');
     }
+  }
+
+  void _showThumbnailPopup() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return ThumbnailPopupDialog(
+          imagePaths: widget.imagePaths,
+          currentIndex: widget.currentIndex,
+          onImageSelected: (index) {
+            widget.onImageSelected(index);
+            Navigator.of(context).pop();
+          },
+          onEditMetadata: widget.onEditMetadata,
+          uploadedImages: widget.uploadedImages,
+          queuedUploads: widget.queuedUploads,
+          currentlyUploading: widget.currentlyUploading,
+          uploadProgress: widget.uploadProgress,
+          xmpRatings: widget.xmpRatings ?? {},
+          xmpLabels: widget.xmpLabels ?? {},
+          xmpTagged: widget.xmpTagged ?? {},
+          lockedPaths: widget.lockedPaths ?? {},
+        );
+      },
+    );
   }
 }

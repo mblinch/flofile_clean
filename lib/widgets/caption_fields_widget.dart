@@ -3995,7 +3995,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const SizedBox(width: 8),
                             // Display options to the right of switch button
                             if (!_magicBarFocusNode.hasFocus)
-                              Flexible(
+                              Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
