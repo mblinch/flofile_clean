@@ -147,6 +147,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         '-FNumber',
         '-ISO',
         '-LensID',
+        '-LensModel',
+        '-Lens',
         '-WhiteBalance',
         '-ColorTemperature',
         '-Tint',
@@ -257,9 +259,9 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
   String _buildNaturalLanguageSettings() {
     if (_exifData == null) return '';
-    
+
     List<String> parts = [];
-    
+
     // Add shutter speed
     if (_exifData!['ShutterSpeed'] != null) {
       String shutter = _formatShutterSpeed(_exifData!['ShutterSpeed']);
@@ -267,7 +269,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         parts.add('You shot this at $shutter');
       }
     }
-    
+
     // Add aperture
     if (_exifData!['FNumber'] != null) {
       String aperture = _formatAperture(_exifData!['FNumber']);
@@ -275,7 +277,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         parts.add('at $aperture');
       }
     }
-    
+
     // Add focal length
     if (_exifData!['FocalLength'] != null) {
       String focal = _formatFocalLength(_exifData!['FocalLength']);
@@ -283,16 +285,21 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         parts.add('at $focal');
       }
     }
-    
-    // Add lens info if available
-    if (_exifData!['LensModel'] != null && _exifData!['LensModel'].toString().isNotEmpty) {
+
+    // Add lens info at the end if available
+    if (_exifData!['LensModel'] != null &&
+        _exifData!['LensModel'].toString().isNotEmpty) {
       parts.add('using a ${_exifData!['LensModel']}');
-    } else if (_exifData!['Lens'] != null && _exifData!['Lens'].toString().isNotEmpty) {
+    } else if (_exifData!['Lens'] != null &&
+        _exifData!['Lens'].toString().isNotEmpty) {
       parts.add('using a ${_exifData!['Lens']}');
+    } else if (_exifData!['LensID'] != null &&
+        _exifData!['LensID'].toString().isNotEmpty) {
+      parts.add('using a ${_exifData!['LensID']}');
     }
-    
+
     if (parts.isEmpty) return '';
-    
+
     // Join all parts with spaces
     return parts.join(' ');
   }
