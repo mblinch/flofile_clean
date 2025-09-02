@@ -695,7 +695,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               _buildNaturalLanguageSettings(),
                               style: const TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 color: Colors.grey,
                               ),
                               textAlign: TextAlign.center,
@@ -717,7 +717,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                       _exifData!['DateTimeOriginal']),
                                   style: const TextStyle(
                                     fontSize: 10,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                     color: Colors.grey,
                                   ),
                                   textAlign: TextAlign.right,
