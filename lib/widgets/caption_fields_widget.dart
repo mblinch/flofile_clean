@@ -2745,11 +2745,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ],
                         ),
 
-                        const SizedBox(height: 6),
+                        // No gap between caption and firebar
 
                         // Action buttons are now beside the magic bar
                         // (Old action button container removed)
-                        const SizedBox(height: 1),
                         // Firebar container aligned to the left
                         Align(
                           alignment: Alignment.centerLeft,
@@ -2757,17 +2756,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             width: MediaQuery.of(context).size.width *
                                 0.5 *
                                 0.6, // 50% of 60% column (same as caption)
-                            height: 40, // Single line height
-                            padding: EdgeInsets.zero,
+                            height: 50, // Moderate height for better usability
+                            // No padding
                             margin: EdgeInsets.zero,
                             alignment: Alignment.centerLeft,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.grey.shade400,
-                                width: 1.0,
-                              ),
-                            ),
+                            // No border decoration
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
@@ -2788,6 +2781,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             ),
                                           ),
                                           child: TextField(
+                                            maxLines: null,
+                                            expands: true,
+                                            textAlignVertical:
+                                                TextAlignVertical.center,
                                             style:
                                                 const TextStyle(fontSize: 12),
                                             decoration: InputDecoration(
@@ -3465,7 +3462,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        const SizedBox(height: 6),
                         // Buttons row under firebar: navigation + FTP/Settings
                         Container(
                           width: double.infinity,
