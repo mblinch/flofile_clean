@@ -696,7 +696,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.grey,
+                                color: Colors.black87,
                               ),
                               textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
@@ -718,7 +718,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                   style: const TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.grey,
+                                    color: Colors.black87,
                                   ),
                                   textAlign: TextAlign.right,
                                 ),
