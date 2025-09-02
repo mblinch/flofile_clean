@@ -696,12 +696,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
-                  : Row(
-                      children: [
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         // Left: Camera model
                         if (_exifData!['Make'] != null ||
                             _exifData!['Model'] != null)
-                          Expanded(
+                          Container(
+                            width: 200,
                             child: Text(
                               '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
                                   .trim(),
@@ -715,8 +719,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           ),
 
                         // Center: Natural language camera settings
-                        Flexible(
-                          flex: 2,
+                        Container(
+                          width: 300,
                           child: Center(
                             child: Text(
                               _buildNaturalLanguageSettings(),
@@ -734,7 +738,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         // Right: Date and time
                         if (_exifData != null &&
                             _exifData!['DateTimeOriginal'] != null)
-                          Expanded(
+                          Container(
+                            width: 150,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -752,7 +757,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               ],
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
             ),
         ],
