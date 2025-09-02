@@ -696,16 +696,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                        // Left: Camera model
+                  : Row(
+                      children: [
+                        // Left: Camera model (flexible, can shrink)
                         if (_exifData!['Make'] != null ||
                             _exifData!['Model'] != null)
-                          Container(
-                            width: 200,
+                          Flexible(
+                            flex: 1,
                             child: Text(
                               '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
                                   .trim(),
@@ -715,50 +712,50 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 color: Colors.grey.shade600,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
 
-                        // Center: Natural language camera settings
-                        Container(
-                          width: 300,
-                          child: Center(
+                        // Spacing
+                        const SizedBox(width: 8),
+
+                        // Center: Natural language camera settings (flexible, priority)
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            _buildNaturalLanguageSettings(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+
+                        // Spacing
+                        const SizedBox(width: 8),
+
+                        // Right: Date and time (flexible, can shrink)
+                        if (_exifData != null &&
+                            _exifData!['DateTimeOriginal'] != null)
+                          Flexible(
+                            flex: 1,
                             child: Text(
-                              _buildNaturalLanguageSettings(),
+                              _formatDateTime(_exifData!['DateTimeOriginal']),
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.grey.shade600,
                               ),
-                              textAlign: TextAlign.center,
+                              textAlign: TextAlign.right,
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
-                        ),
-
-                        // Right: Date and time
-                        if (_exifData != null &&
-                            _exifData!['DateTimeOriginal'] != null)
-                          Container(
-                            width: 150,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _formatDateTime(
-                                      _exifData!['DateTimeOriginal']),
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  textAlign: TextAlign.right,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
             ),
         ],
