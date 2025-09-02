@@ -304,6 +304,90 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
       ),
       child: Column(
         children: [
+          // Top bar: Filename, pixel size, date and time
+          if (_exifData != null || _isLoadingExif)
+            Container(
+              height: 50, // Fixed height for top info bar
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+              ),
+              child: _isLoadingExif
+                  ? const Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        // Left: Filename
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                p.basename(
+                                    widget.imagePaths[widget.currentIndex]),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Center: Pixel size
+                        if (_exifData!['ImageWidth'] != null &&
+                            _exifData!['ImageHeight'] != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+
+                        // Right: Date and time
+                        if (_exifData != null &&
+                            _exifData!['DateTimeOriginal'] != null)
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatDateTime(
+                                      _exifData!['DateTimeOriginal']),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+
           // Main image area
           Expanded(
             child: Stack(
@@ -437,10 +521,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
             ),
           ),
 
-          // EXIF data strip along the bottom
+          // Bottom bar: Camera model, shutter speed, focal length, and navigation
           if (_exifData != null || _isLoadingExif)
             Container(
-              height: 60, // Fixed height for EXIF strip
+              height: 50, // Fixed height for bottom info bar
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
@@ -462,209 +546,145 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     )
                   : Row(
                       children: [
-                        // Left side: Camera info and settings
+                        // Left: Camera model
+                        if (_exifData!['Make'] != null ||
+                            _exifData!['Model'] != null)
+                          Expanded(
+                            child: Text(
+                              '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
+                                  .trim(),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+
+                        // Center: Shutter speed and focal length
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Camera info
-                              if (_exifData!['Make'] != null ||
-                                  _exifData!['Model'] != null)
+                              if (_exifData!['ShutterSpeed'] != null) ...[
                                 Text(
-                                  '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
-                                      .trim(),
+                                  _formatShutterSpeed(
+                                      _exifData!['ShutterSpeed']),
                                   style: const TextStyle(
                                     fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-
-                              // Settings in a horizontal layout
-                              if (_exifData!['ShutterSpeed'] != null ||
-                                  _exifData!['FNumber'] != null ||
-                                  _exifData!['ISO'] != null ||
-                                  _exifData!['FocalLength'] != null)
-                                Row(
-                                  children: [
-                                    if (_exifData!['ShutterSpeed'] != null) ...[
-                                      Text(
-                                        _formatShutterSpeed(_exifData!['ShutterSpeed']),
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                      if (_exifData!['FNumber'] != null) ...[
-                                        const Text(' @ ', style: TextStyle(fontSize: 9, color: Colors.grey)),
-                                        Text(
-                                          _formatAperture(_exifData!['FNumber']),
-                                          style: const TextStyle(
-                                            fontSize: 9,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(width: 8),
-                                    ],
-                                    if (_exifData!['ISO'] != null) ...[
-                                      Text(
-                                        'ISO ${_exifData!['ISO']}',
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    if (_exifData!['FocalLength'] != null)
-                                      Text(
-                                        _formatFocalLength(_exifData!['FocalLength']),
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                        ),
-
-                        // Center: Filename and resolution
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Filename
-                              Text(
-                                p.basename(widget.imagePaths[widget.currentIndex]),
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                              ),
-
-                              // Resolution
-                              if (_exifData!['ImageWidth'] != null &&
-                                  _exifData!['ImageHeight'] != null)
-                                Text(
-                                  '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                                  style: const TextStyle(
-                                    fontSize: 9,
                                     color: Colors.grey,
                                   ),
-                                  textAlign: TextAlign.center,
                                 ),
-
-                              // Date/time
-                              if (_exifData != null &&
-                                  _exifData!['DateTimeOriginal'] != null)
-                                Text(
-                                  _formatDateTime(_exifData!['DateTimeOriginal']),
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.grey,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                            ],
-                          ),
-                        ),
-
-                        // Right side: Navigation buttons
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // Previous button
-                                IconButton(
-                                  onPressed: widget.currentIndex > 0
-                                      ? () async {
-                                          // Save in background without waiting
-                                          if (widget.onSaveIptcBackground != null) {
-                                            try {
-                                              await widget.onSaveIptcBackground!();
-                                            } catch (e) {
-                                              print('Background save error: $e');
-                                            }
-                                          }
-                                          // Prefer quick navigation if provided (no extra reloads)
-                                          if (widget.onQuickPreviousImage != null) {
-                                            print(
-                                                'DEBUG: Using quick previous navigation');
-                                            widget.onQuickPreviousImage!();
-                                          } else {
-                                            print(
-                                                'DEBUG: Using regular previous navigation');
-                                            widget.onPreviousImage();
-                                          }
-                                        }
-                                      : null,
-                                  icon: Icon(
-                                    Icons.chevron_left,
-                                    color: widget.currentIndex > 0
-                                        ? Colors.black87
-                                        : Colors.grey,
-                                    size: 16,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 24, minHeight: 24),
-                                ),
-
-                                // Image counter between arrows
-                                Text(
-                                  '${widget.currentIndex + 1}/$imageCount',
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-
-                                // Next button
-                                IconButton(
-                                  onPressed: widget.currentIndex < imageCount - 1
-                                      ? () async {
-                                          // Save in background without waiting
-                                          if (widget.onSaveIptcBackground != null) {
-                                            try {
-                                              await widget.onSaveIptcBackground!();
-                                            } catch (e) {
-                                              print('Background save error: $e');
-                                            }
-                                          }
-                                          // Prefer quick navigation if provided (no extra reloads)
-                                          if (widget.onQuickNextImage != null) {
-                                            print(
-                                                'DEBUG: Using quick next navigation');
-                                            widget.onQuickNextImage!();
-                                          } else {
-                                            print(
-                                                'DEBUG: Using regular next navigation');
-                                            widget.onNextImage();
-                                          }
-                                        }
-                                      : null,
-                                  icon: Icon(
-                                    Icons.chevron_right,
-                                    color: widget.currentIndex < imageCount - 1
-                                        ? Colors.black87
-                                        : Colors.grey,
-                                    size: 16,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                      minWidth: 24, minHeight: 24),
-                                ),
+                                const SizedBox(width: 8),
                               ],
+                              if (_exifData!['FocalLength'] != null)
+                                Text(
+                                  _formatFocalLength(
+                                      _exifData!['FocalLength']),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        // Right: Navigation buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            // Previous button
+                            IconButton(
+                              onPressed: widget.currentIndex > 0
+                                  ? () async {
+                                      // Save in background without waiting
+                                      if (widget.onSaveIptcBackground !=
+                                          null) {
+                                        try {
+                                          await widget
+                                              .onSaveIptcBackground!();
+                                        } catch (e) {
+                                          print(
+                                              'Background save error: $e');
+                                        }
+                                      }
+                                      // Prefer quick navigation if provided (no extra reloads)
+                                      if (widget.onQuickPreviousImage !=
+                                          null) {
+                                        print(
+                                            'DEBUG: Using quick previous navigation');
+                                        widget.onQuickPreviousImage!();
+                                      } else {
+                                        print(
+                                            'DEBUG: Using regular previous navigation');
+                                        widget.onPreviousImage();
+                                      }
+                                    }
+                                  : null,
+                              icon: Icon(
+                                Icons.chevron_left,
+                                color: widget.currentIndex > 0
+                                    ? Colors.black87
+                                    : Colors.grey,
+                                size: 16,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 24, minHeight: 24),
+                            ),
+
+                            // Image counter between arrows
+                            Text(
+                              '${widget.currentIndex + 1}/$imageCount',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+
+                            // Next button
+                            IconButton(
+                              onPressed: widget.currentIndex <
+                                      imageCount - 1
+                                  ? () async {
+                                      // Save in background without waiting
+                                      if (widget.onSaveIptcBackground !=
+                                          null) {
+                                        try {
+                                          await widget
+                                              .onSaveIptcBackground!();
+                                        } catch (e) {
+                                          print(
+                                              'Background save error: $e');
+                                        }
+                                      }
+                                      // Prefer quick navigation if provided (no extra reloads)
+                                      if (widget.onQuickNextImage !=
+                                          null) {
+                                        print(
+                                            'DEBUG: Using quick next navigation');
+                                        widget.onQuickNextImage!();
+                                      } else {
+                                        print(
+                                            'DEBUG: Using regular next navigation');
+                                        widget.onNextImage();
+                                      }
+                                    }
+                                  : null,
+                              icon: Icon(
+                                Icons.chevron_right,
+                                color: widget.currentIndex <
+                                        imageCount - 1
+                                    ? Colors.black87
+                                    : Colors.grey,
+                                    size: 16,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 24, minHeight: 24),
                             ),
                           ],
                         ),
