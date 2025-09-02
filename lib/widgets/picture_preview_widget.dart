@@ -277,7 +277,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     if (_exifData!['ShutterSpeed'] != null) {
       String shutter = _formatShutterSpeed(_exifData!['ShutterSpeed']);
       if (shutter.isNotEmpty) {
-        parts.add('You shot this at $shutter');
+        parts.add(shutter);
       }
     }
 
