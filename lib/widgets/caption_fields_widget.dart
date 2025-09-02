@@ -2550,17 +2550,80 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     flex: 8,
                     child: Column(
                       children: [
-                        // Caption and Personality boxes side by side
+                        // New bar above caption and personality fields
+                        Container(
+                          width: double.infinity,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade400),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(left: 12),
+                                child: Text(
+                                  'Captioning',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: _showShortcodesDialog,
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 2),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.help_outline,
+                                      size: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Quick\nCodes',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Caption field, Personality field, and Quick Codes button row
                         Row(
                           children: [
-                            // Caption Preview (Left side) - Moderate width
-                            Expanded(
-                              flex: 5,
+                            // Caption field (50% of column width)
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width *
+                                  0.5 *
+                                  0.6, // 50% of 60% column
                               child: TextField(
                                 controller: captionController,
-                                maxLines: 3,
+                                maxLines: 4,
                                 onChanged: _onCaptionChanged,
-                                style: const TextStyle(fontSize: 11),
+                                style: const TextStyle(fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Caption',
                                   floatingLabelBehavior:
@@ -2637,53 +2700,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ],
                               ),
                             ),
-                            // Shortcodes button between caption and personality
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  TextButton(
-                                    onPressed: _showShortcodesDialog,
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 2, vertical: 1),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.help_outline,
-                                          size: 14,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          'Quick\nCodes',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            color: Colors.grey.shade600,
-                                            height: 1.1,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 9),
-                            // Personality Box (Right side) - Reduced to make room for caption
-                            Expanded(
-                              flex: 1,
+                            // Spacing between caption and personality
+                            const SizedBox(width: 8),
+                            // Personality field (25% of column width - unchanged)
+                            SizedBox(
+                              width: MediaQuery.of(context).size.width *
+                                  0.25 *
+                                  0.6, // 25% of 60% column
                               child: TextField(
                                 controller: personalityController,
-                                maxLines: 3,
-                                style: const TextStyle(fontSize: 11),
+                                maxLines: 4,
+                                style: const TextStyle(fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Personality',
                                   floatingLabelBehavior:
@@ -2723,9 +2750,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Action buttons are now beside the magic bar
                         // (Old action button container removed)
                         const SizedBox(height: 1),
-                        // New container spanning bottom left quadrant
+                        // Firebar container aligned to the left
                         Container(
-                          width: double.infinity,
+                          width: MediaQuery.of(context).size.width *
+                              0.5 *
+                              0.6, // 50% of 60% column (same as caption)
                           height: 40, // Single line height
                           padding: EdgeInsets.zero,
                           decoration: BoxDecoration(
@@ -2736,6 +2765,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                           ),
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
                             children: [
                               // First column - Magic bar with help button
                               Expanded(
@@ -3401,7 +3431,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
 
-                              // Middle column - Navigation buttons and FTP/Settings
+                              // Middle and right columns with buttons removed; firebar now stands alone in this row
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+                        // Buttons row under firebar: navigation + FTP/Settings
+                        Container(
+                          width: double.infinity,
+                          height: 40,
+                          padding: EdgeInsets.zero,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.grey.shade400,
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // Navigation buttons
                               Expanded(
                                 flex: 11,
                                 child: Container(
@@ -3409,16 +3459,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   child: _buildNavigationButtons(),
                                 ),
                               ),
-                              // Third column - FTP and Settings buttons (flex: 3)
+                              // FTP and Settings buttons
                               Expanded(
                                 flex: 3,
                                 child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: const BorderRadius.only(
-                                      topRight: Radius.circular(6),
-                                      bottomRight: Radius.circular(6),
-                                    ),
-                                  ),
+                                  decoration: BoxDecoration(),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
@@ -3499,7 +3544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        const SizedBox(height: 1),
+                        const SizedBox(height: 6),
 
                         // Player and Verb Selection Area
                         Expanded(
