@@ -730,9 +730,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     ),
             ),
 
-          // Thumbnail grid below the bottom bar
-          Container(
-            height: 120, // Fixed height for thumbnail strip
+          // Thumbnail grid below the bottom bar - spans to bottom with scroll
+          Expanded(
             child: ThumbnailGridWidget(
               imagePaths: widget.imagePaths,
               currentIndex: widget.currentIndex,
