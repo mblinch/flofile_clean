@@ -390,42 +390,43 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     )
                   : Row(
                       children: [
-                        // Left: Filename (flexible, can shrink)
-                        Flexible(
-                          flex: 2,
-                          child: Text(
-                            p.basename(widget.imagePaths[widget.currentIndex]),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                        // Left: Filename
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                p.basename(
+                                    widget.imagePaths[widget.currentIndex]),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
 
-                        // Spacing
-                        const SizedBox(width: 8),
-
-                        // Center: Pixel size (fixed content)
+                        // Center: Pixel size
                         if (_exifData!['ImageWidth'] != null &&
                             _exifData!['ImageHeight'] != null)
-                          Text(
-                            '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
                             ),
                           ),
 
-                        // Spacing
-                        const SizedBox(width: 8),
-
-                        // Right: Navigation buttons (flexible, can shrink)
-                        Flexible(
-                          flex: 1,
+                        // Right: Navigation buttons
+                        Expanded(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -434,15 +435,18 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 onPressed: widget.currentIndex > 0
                                     ? () async {
                                         // Save in background without waiting
-                                        if (widget.onSaveIptcBackground != null) {
+                                        if (widget.onSaveIptcBackground !=
+                                            null) {
                                           try {
-                                            await widget.onSaveIptcBackground!();
+                                            await widget
+                                                .onSaveIptcBackground!();
                                           } catch (e) {
                                             print('Background save error: $e');
                                           }
                                         }
                                         // Prefer quick navigation if provided (no extra reloads)
-                                        if (widget.onQuickPreviousImage != null) {
+                                        if (widget.onQuickPreviousImage !=
+                                            null) {
                                           print(
                                               'DEBUG: Using quick previous navigation');
                                           widget.onQuickPreviousImage!();
@@ -480,9 +484,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 onPressed: widget.currentIndex < imageCount - 1
                                     ? () async {
                                         // Save in background without waiting
-                                        if (widget.onSaveIptcBackground != null) {
+                                        if (widget.onSaveIptcBackground !=
+                                            null) {
                                           try {
-                                            await widget.onSaveIptcBackground!();
+                                            await widget
+                                                .onSaveIptcBackground!();
                                           } catch (e) {
                                             print('Background save error: $e');
                                           }
@@ -697,11 +703,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     )
                   : Row(
                       children: [
-                        // Left: Camera model (flexible, can shrink)
+                        // Left: Camera model
                         if (_exifData!['Make'] != null ||
                             _exifData!['Model'] != null)
-                          Flexible(
-                            flex: 1,
+                          Expanded(
                             child: Text(
                               '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
                                   .trim(),
@@ -711,47 +716,45 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 color: Colors.grey.shade600,
                               ),
                               overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
                             ),
                           ),
 
-                        // Spacing
-                        const SizedBox(width: 8),
-
-                        // Center: Natural language camera settings (flexible, priority)
-                        Flexible(
-                          flex: 2,
-                          child: Text(
-                            _buildNaturalLanguageSettings(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade600,
-                            ),
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-
-                        // Spacing
-                        const SizedBox(width: 8),
-
-                        // Right: Date and time (flexible, can shrink)
-                        if (_exifData != null &&
-                            _exifData!['DateTimeOriginal'] != null)
-                          Flexible(
-                            flex: 1,
+                        // Center: Natural language camera settings
+                        Expanded(
+                          flex: 1,
+                          child: Center(
                             child: Text(
-                              _formatDateTime(_exifData!['DateTimeOriginal']),
+                              _buildNaturalLanguageSettings(),
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.grey.shade600,
                               ),
-                              textAlign: TextAlign.right,
+                              textAlign: TextAlign.center,
                               overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+
+                        // Right: Date and time
+                        if (_exifData != null &&
+                            _exifData!['DateTimeOriginal'] != null)
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatDateTime(
+                                      _exifData!['DateTimeOriginal']),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ],
                             ),
                           ),
                       ],
