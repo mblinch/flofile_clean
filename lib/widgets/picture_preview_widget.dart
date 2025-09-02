@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import 'thumbnail_grid_widget.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -643,6 +644,32 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     ),
                   ),
               ],
+            ),
+          ),
+
+          // Thumbnail grid below the main image
+          Container(
+            height: 120, // Fixed height for thumbnail strip
+            child: ThumbnailGridWidget(
+              imagePaths: widget.imagePaths,
+              currentIndex: widget.currentIndex,
+              onImageSelected: widget.onImageSelected,
+              uploadedImages: widget.uploadedImages ?? {},
+              queuedUploads: widget.queuedUploads ?? {},
+              currentlyUploading: widget.currentlyUploading ?? {},
+              uploadProgress: widget.uploadProgress ?? {},
+              xmpRatings: widget.xmpRatings,
+              xmpLabels: widget.xmpLabels,
+              xmpTagged: widget.xmpTagged,
+              lockedPaths: widget.lockedPaths,
+              centerRequestId: 0, // No centering needed for this view
+              onImageDeleted: widget.onImageDeleted,
+              onCopyMetadata: widget.onCopyMetadata,
+              onPasteMetadata: widget.onPasteMetadata,
+              onApplyIptcTemplate: null, // Not needed for this view
+              onFtpImage: widget.onFtpImage,
+              onImageRenamed: widget.onImageRenamed,
+              onMultiSelect: null, // Not needed for this view
             ),
           ),
 
