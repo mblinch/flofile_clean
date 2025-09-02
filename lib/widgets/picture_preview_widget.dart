@@ -715,8 +715,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           ),
 
                         // Center: Natural language camera settings
-                        Expanded(
-                          flex: 1,
+                        Flexible(
+                          flex: 2,
                           child: Center(
                             child: Text(
                               _buildNaturalLanguageSettings(),
