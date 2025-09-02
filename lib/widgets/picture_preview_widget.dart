@@ -518,8 +518,9 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     ),
             ),
 
-          // Main image area
-          Expanded(
+          // Main image area - 50% of screen height
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.5,
             child: Stack(
               children: [
                 // Main image with right-click and double-click support
