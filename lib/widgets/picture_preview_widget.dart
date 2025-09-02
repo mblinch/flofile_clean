@@ -255,6 +255,48 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     return '${value}mm';
   }
 
+  String _buildNaturalLanguageSettings() {
+    if (_exifData == null) return '';
+    
+    List<String> parts = [];
+    
+    // Add shutter speed
+    if (_exifData!['ShutterSpeed'] != null) {
+      String shutter = _formatShutterSpeed(_exifData!['ShutterSpeed']);
+      if (shutter.isNotEmpty) {
+        parts.add('You shot this at $shutter');
+      }
+    }
+    
+    // Add aperture
+    if (_exifData!['FNumber'] != null) {
+      String aperture = _formatAperture(_exifData!['FNumber']);
+      if (aperture.isNotEmpty) {
+        parts.add('at $aperture');
+      }
+    }
+    
+    // Add focal length
+    if (_exifData!['FocalLength'] != null) {
+      String focal = _formatFocalLength(_exifData!['FocalLength']);
+      if (focal.isNotEmpty) {
+        parts.add('at $focal');
+      }
+    }
+    
+    // Add lens info if available
+    if (_exifData!['LensModel'] != null && _exifData!['LensModel'].toString().isNotEmpty) {
+      parts.add('using a ${_exifData!['LensModel']}');
+    } else if (_exifData!['Lens'] != null && _exifData!['Lens'].toString().isNotEmpty) {
+      parts.add('using a ${_exifData!['Lens']}');
+    }
+    
+    if (parts.isEmpty) return '';
+    
+    // Join all parts with spaces
+    return parts.join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.imagePaths.isEmpty) {
@@ -395,8 +437,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                 // Main image with right-click and double-click support
                 GestureDetector(
                   onSecondaryTapDown: (details) {
-                    _showContextMenu(context, currentImagePath,
-                        details.globalPosition);
+                    _showContextMenu(
+                        context, currentImagePath, details.globalPosition);
                   },
                   onDoubleTap: widget.onEditMetadata != null
                       ? () => widget.onEditMetadata!()
@@ -446,8 +488,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
-                      onTap: () =>
-                          _showHighResZoom(context, currentImagePath),
+                      onTap: () => _showHighResZoom(context, currentImagePath),
                       child: Container(
                         width: 32,
                         height: 32,
@@ -462,13 +503,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                 ),
 
                 // FTP Upload Status Overlay
-                if ((widget.uploadProgress
-                                ?.containsKey(currentImagePath) ==
+                if ((widget.uploadProgress?.containsKey(currentImagePath) ==
                             true &&
-                        widget.uploadProgress![currentImagePath]! <
-                            1.0) ||
-                    widget.queuedUploads?.contains(currentImagePath) ==
-                        true)
+                        widget.uploadProgress![currentImagePath]! < 1.0) ||
+                    widget.queuedUploads?.contains(currentImagePath) == true)
                   Positioned(
                     top: 8,
                     left: 8,
@@ -483,10 +521,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (widget.uploadProgress
-                                          ?.containsKey(currentImagePath) ==
-                                      true &&
-                                  widget.uploadProgress![currentImagePath]! <
-                                      1.0) ...[
+                                      ?.containsKey(currentImagePath) ==
+                                  true &&
+                              widget.uploadProgress![currentImagePath]! <
+                                  1.0) ...[
                             // Currently uploading
                             const Icon(Icons.rocket_launch,
                                 color: Colors.blue, size: 16),
@@ -562,32 +600,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                             ),
                           ),
 
-                        // Center: Shutter speed and focal length
+                        // Center: Natural language camera settings
                         Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (_exifData!['ShutterSpeed'] != null) ...[
-                                Text(
-                                  _formatShutterSpeed(
-                                      _exifData!['ShutterSpeed']),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              if (_exifData!['FocalLength'] != null)
-                                Text(
-                                  _formatFocalLength(
-                                      _exifData!['FocalLength']),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            _buildNaturalLanguageSettings(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
 
@@ -600,19 +622,15 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               onPressed: widget.currentIndex > 0
                                   ? () async {
                                       // Save in background without waiting
-                                      if (widget.onSaveIptcBackground !=
-                                          null) {
+                                      if (widget.onSaveIptcBackground != null) {
                                         try {
-                                          await widget
-                                              .onSaveIptcBackground!();
+                                          await widget.onSaveIptcBackground!();
                                         } catch (e) {
-                                          print(
-                                              'Background save error: $e');
+                                          print('Background save error: $e');
                                         }
                                       }
                                       // Prefer quick navigation if provided (no extra reloads)
-                                      if (widget.onQuickPreviousImage !=
-                                          null) {
+                                      if (widget.onQuickPreviousImage != null) {
                                         print(
                                             'DEBUG: Using quick previous navigation');
                                         widget.onQuickPreviousImage!();
@@ -647,23 +665,18 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
                             // Next button
                             IconButton(
-                              onPressed: widget.currentIndex <
-                                      imageCount - 1
+                              onPressed: widget.currentIndex < imageCount - 1
                                   ? () async {
                                       // Save in background without waiting
-                                      if (widget.onSaveIptcBackground !=
-                                          null) {
+                                      if (widget.onSaveIptcBackground != null) {
                                         try {
-                                          await widget
-                                              .onSaveIptcBackground!();
+                                          await widget.onSaveIptcBackground!();
                                         } catch (e) {
-                                          print(
-                                              'Background save error: $e');
+                                          print('Background save error: $e');
                                         }
                                       }
                                       // Prefer quick navigation if provided (no extra reloads)
-                                      if (widget.onQuickNextImage !=
-                                          null) {
+                                      if (widget.onQuickNextImage != null) {
                                         print(
                                             'DEBUG: Using quick next navigation');
                                         widget.onQuickNextImage!();
@@ -676,11 +689,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                   : null,
                               icon: Icon(
                                 Icons.chevron_right,
-                                color: widget.currentIndex <
-                                        imageCount - 1
+                                color: widget.currentIndex < imageCount - 1
                                     ? Colors.black87
                                     : Colors.grey,
-                                    size: 16,
+                                size: 16,
                               ),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(
