@@ -9,9 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
-import '../widgets/metadata_widget.dart';
+
 import '../widgets/startup_dialog.dart';
-import '../widgets/thumbnail_popup_dialog.dart';
+
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
@@ -38,8 +38,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _originalMetadata; // Track original metadata for change detection
   Map<String, dynamic>?
       _originalCaptionData; // Track original caption data for change detection
-  Map<String, String>?
-      _originalMetadataUi; // Track original metadata (UI schema) for change detection
+
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
   // XMP metadata for rating and color label
@@ -71,7 +70,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   double _playerLoadingProgress = 0.0;
 
   // Global keys for accessing widgets
-  final GlobalKey _metadataKey2 = GlobalKey();
+
   final GlobalKey _captionFieldsKey2 = GlobalKey();
   final GlobalKey _picturePreviewKey2 = GlobalKey();
 
@@ -92,26 +91,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
-
-  // Show thumbnail popup dialog
-  void _showThumbnailPopup() {
-    showDialog(
-      context: context,
-      builder: (context) => ThumbnailPopupDialog(
-        imagePaths: imagePaths,
-        currentIndex: currentIndex,
-        onImageSelected: _onImageSelected,
-        uploadedImages: _uploadedImages,
-        queuedUploads: _queuedUploads,
-        currentlyUploading: _currentlyUploading,
-        uploadProgress: _uploadProgress,
-        xmpRatings: _xmpRatings,
-        xmpLabels: _xmpLabels,
-        xmpTagged: _xmpTagged,
-        lockedPaths: _lockedPaths,
-      ),
-    );
-  }
 
   // Show metadata popup dialog
   void _showMetadataPopup() async {
@@ -177,15 +156,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Province-State',
         '-ProvinceState',
         '-XMP:State',
-        '-IPTC:CountryPrimaryLocationName',
-        '-Country',
-        '-Country-PrimaryLocationName',
-        '-XMP:Country',
-        '-IPTC:CountryPrimaryLocationCode',
-        '-CountryCode',
-        '-Country-PrimaryLocationCode',
-        '-IPTC:Urgency',
-        '-Urgency',
+
         '-IPTC:SpecialInstructions',
         '-SpecialInstructions',
         '-XMP:Instructions',
@@ -831,16 +802,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Province-State',
         '-ProvinceState',
         '-XMP:State',
-        '-IPTC:CountryPrimaryLocationName',
-        '-Country',
-        '-Country-PrimaryLocationName',
-        '-XMP:Country',
-        '-IPTC:CountryPrimaryLocationCode',
-        '-CountryCode',
-        '-Country-PrimaryLocationCode',
-        // Photo Mechanic's preferred urgency field
-        '-IPTC:Urgency',
-        '-Urgency',
+
         // Photo Mechanic's preferred instructions field
         '-IPTC:SpecialInstructions',
         '-SpecialInstructions',
@@ -909,24 +871,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               print(
                   'DEBUG: Set original caption data (from meta): $_originalCaptionData');
             });
-            // Also capture original metadata values in UI schema after widgets update
-            Future.delayed(const Duration(milliseconds: 50), () {
-              final metadataState = _metadataKey2.currentState;
-              if (metadataState != null) {
-                try {
-                  final uiValues = (metadataState as dynamic).getCurrentValues()
-                      as Map<String, String>;
-                  _originalMetadataUi = Map<String, String>.from(uiValues);
-                  print(
-                      'DEBUG: Set original metadata UI values: $_originalMetadataUi');
-                } catch (e) {
-                  print('DEBUG: Failed to read initial metadata UI values: $e');
-                  _originalMetadataUi = null;
-                }
-              } else {
-                _originalMetadataUi = null;
-              }
-            });
+
             print('Metadata loaded successfully');
           }
         } catch (e) {
@@ -960,14 +905,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Get values from both widgets
     Map<String, String> allValues = {};
 
-    // Get metadata values from the metadata widget
-    dynamic metadataState = _metadataKey2.currentState;
-    if (metadataState != null) {
-      Map<String, String> metadataValues = metadataState.getCurrentValues();
-      allValues.addAll(metadataValues);
-      print('Retrieved metadata values: $metadataValues');
-      print('DEBUG: Creator field value: "${metadataValues['Creator']}"');
-    }
+    // Note: Metadata values now come from the popup dialog, not from a main UI widget
 
     // Get caption values from the caption fields widget
     dynamic captionState = _captionFieldsKey2.currentState;
@@ -1060,12 +998,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Get values from both widgets
     Map<String, String> allValues = {};
 
-    // Get metadata values from the metadata widget
-    dynamic metadataState = _metadataKey2.currentState;
-    if (metadataState != null) {
-      Map<String, String> metadataValues = metadataState.getCurrentValues();
-      allValues.addAll(metadataValues);
-    }
+    // Note: Metadata values now come from the popup dialog, not from a main UI widget
 
     // Get caption values from the caption fields widget
     dynamic captionState = _captionFieldsKey2.currentState;
@@ -1249,31 +1182,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     bool hasMetadataChanges = false;
     bool hasCaptionChanges = false;
 
-    // Check metadata changes
-    if (_originalMetadataUi != null) {
-      final metadataState = _metadataKey2.currentState;
-      if (metadataState != null) {
-        try {
-          final uiValues = (metadataState as dynamic).getCurrentValues()
-              as Map<String, String>;
-          hasMetadataChanges = !_mapsAreEqual(
-              Map<String, dynamic>.from(_originalMetadataUi!),
-              Map<String, dynamic>.from(uiValues));
-          if (hasMetadataChanges) {
-            print('DEBUG: Metadata changes detected (UI schema)');
-            print('  Original: $_originalMetadataUi');
-            print('  Current: $uiValues');
-          }
-        } catch (e) {
-          // fallback to previous behavior if needed
-          if (_originalMetadata != null && currentMetadata != null) {
-            hasMetadataChanges =
-                !_mapsAreEqual(_originalMetadata!, currentMetadata!);
-            if (hasMetadataChanges) {
-              print('DEBUG: Metadata changes detected (fallback)');
-            }
-          }
-        }
+    // Check metadata changes (using file metadata since main UI widget was removed)
+    if (_originalMetadata != null && currentMetadata != null) {
+      hasMetadataChanges = !_mapsAreEqual(_originalMetadata!, currentMetadata!);
+      if (hasMetadataChanges) {
+        print('DEBUG: Metadata changes detected');
       }
     }
 
@@ -1706,12 +1619,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         return 'IPTC:City'; // Photo Mechanic's preferred field
       case 'Province/State':
         return 'IPTC:ProvinceState'; // Photo Mechanic's preferred field
-      case 'Country':
-        return 'IPTC:CountryPrimaryLocationName'; // Photo Mechanic's preferred field
-      case 'Country Code':
-        return 'IPTC:CountryPrimaryLocationCode'; // Photo Mechanic's preferred field
-      case 'Urgency':
-        return 'IPTC:Urgency'; // Photo Mechanic's preferred field
+
       case 'Special Instructions':
         return 'IPTC:SpecialInstructions'; // Photo Mechanic's preferred field
       case 'Personality':
@@ -2511,242 +2419,143 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(4.0, 1.0, 4.0, 4.0),
-        child: Column(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // TOP ROW - Adjusted height to accommodate filmstrip
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.35,
-              child: Row(
-                children: [
-                  // TOP LEFT BOX - Picture Preview
-                  Expanded(
-                    flex: 6,
-                    child: PicturePreviewWidget(
-                      key: _picturePreviewKey2,
-                      imagePaths: imagePaths,
-                      currentIndex: currentIndex,
-                      onImageSelected: _onImageSelected,
-                      onNextImage: () {
-                        if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex + 1);
-                        }
-                      },
-                      onPreviousImage: () {
-                        if (currentIndex > 0) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex - 1);
-                        }
-                      },
-                      // Quick navigation (no thumbnail centering or extra state churn)
-                      onQuickNextImage: () {
-                        print('DEBUG: Quick next image called');
-                        if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            currentIndex = currentIndex + 1;
-                          });
-                          _loadMetadata();
-                        }
-                      },
-                      onQuickPreviousImage: () {
-                        print('DEBUG: Quick previous image called');
-                        if (currentIndex > 0) {
-                          setState(() {
-                            currentIndex = currentIndex - 1;
-                          });
-                          _loadMetadata();
-                        }
-                      },
-                      onSaveIptc: _saveIptcMetadata,
-                      onSaveIptcBackground: _saveIptcMetadataBackground,
-                      onCopyMetadata: _onCopyMetadata,
-                      onPasteMetadata: _onPasteMetadata,
-                      onFtpImage: _onFtpImage,
-                      onImageDeleted: _onImageDeleted,
-                      onImageRenamed: _onImageRenamed,
-                      uploadedImages: _uploadedImages,
-                      queuedUploads: _queuedUploads,
-                      currentlyUploading: _currentlyUploading,
-                      uploadProgress: _uploadProgress,
-                      xmpRatings: _xmpRatings,
-                      xmpLabels: _xmpLabels,
-                      xmpTagged: _xmpTagged,
-                      lockedPaths: _lockedPaths,
-                      onShowThumbnails: _showThumbnailPopup,
-                      onEditMetadata: _showMetadataPopup,
-                    ),
-                  ),
-
-                  // TOP RIGHT BOX - Thumbnail Grid (Hidden - use filmstrip instead)
-                  Expanded(
-                    flex: 4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.photo_library,
-                              size: 48,
-                              color: Colors.grey.shade400,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'Thumbnail Grid Hidden',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Use the filmstrip below or click\n"Show All Thumbnails" for full view',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: _showThumbnailPopup,
-                              icon: const Icon(Icons.grid_view),
-                              label: const Text('Show All Thumbnails'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue.shade600,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            // LEFT COLUMN - Player picker, firebar, verbs
+            Expanded(
+              flex: 1,
+              child: CaptionFieldsWidget(
+                key: _captionFieldsKey2,
+                metadata: currentMetadata,
+                onMetadataUpdated: (metadata) {
+                  setState(() {
+                    currentMetadata = metadata;
+                  });
+                },
+                getCurrentMetadataValues: () {
+                  // Metadata values now come from popup dialog, not main UI widget
+                  return {};
+                },
+                homeTeam: selectedHomeTeam,
+                awayTeam: selectedAwayTeam,
+                onNextImage: () {
+                  if (currentIndex < imagePaths.length - 1) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex + 1);
+                  }
+                },
+                onPreviousImage: () {
+                  if (currentIndex > 0) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex - 1);
+                  }
+                },
+                onReset: _handleReset,
+                personalityOverride: _personalityOverride,
+                onImagesLoaded: (files) {
+                  print(
+                      'DEBUG: onImagesLoaded called with ${files.length} files');
+                  setState(() {
+                    imagePaths = files;
+                    currentIndex = 0;
+                  });
+                },
+                onStartFolderWatcher: _startFolderWatcher,
+                preloadedHomeRoster:
+                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                preloadedAwayRoster:
+                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                currentImagePath:
+                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                totalImages: imagePaths.length,
+                onSaveIptc: _saveIptcMetadata,
+                onImageUploaded: (imagePath) {
+                  // Queue manager handles adding to uploaded set
+                  // This callback is mainly for the main FTP button
+                  if (!_currentlyUploading.contains(imagePath)) {
+                    setState(() {
+                      _uploadedImages.add(imagePath);
+                      _uploadProgress
+                          .remove(imagePath); // Clear progress when done
+                    });
+                  }
+                },
+                onUploadProgress: (imagePath, progress) {
+                  setState(() {
+                    _uploadProgress[imagePath] = progress;
+                  });
+                },
               ),
             ),
 
-            // Filmstrip moved into PicturePreviewWidget bottom; removed here
-
-            // Divider between top and bottom quadrants
-            Container(
-              height: 1,
-              color: Colors.grey.shade400,
-              margin: const EdgeInsets.symmetric(vertical: 2),
-            ),
-
-            // BOTTOM ROW - Adjusted height for filmstrip layout
+            // RIGHT COLUMN - Picture Preview
             Expanded(
-              child: Row(
-                children: [
-                  // BOTTOM LEFT BOX - Caption Fields
-                  Expanded(
-                    flex: 6,
-                    child: CaptionFieldsWidget(
-                      key: _captionFieldsKey2,
-                      metadata: currentMetadata,
-                      onMetadataUpdated: (metadata) {
-                        setState(() {
-                          currentMetadata = metadata;
-                        });
-                      },
-                      getCurrentMetadataValues: () {
-                        // Get current values from metadata widget
-                        final metadataState = _metadataKey2.currentState;
-                        if (metadataState != null) {
-                          // Use dynamic to access the method
-                          return (metadataState as dynamic)
-                                  .getCurrentValues() ??
-                              {};
-                        }
-                        return {};
-                      },
-                      homeTeam: selectedHomeTeam,
-                      awayTeam: selectedAwayTeam,
-                      onNextImage: () {
-                        if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex + 1);
-                        }
-                      },
-                      onPreviousImage: () {
-                        if (currentIndex > 0) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex - 1);
-                        }
-                      },
-                      onReset: _handleReset,
-                      personalityOverride: _personalityOverride,
-                      onImagesLoaded: (files) {
-                        print(
-                            'DEBUG: onImagesLoaded called with ${files.length} files');
-                        setState(() {
-                          imagePaths = files;
-                          currentIndex = 0;
-                        });
-                      },
-                      onStartFolderWatcher: _startFolderWatcher,
-                      preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
-                          ? _cachedHomeRoster
-                          : null,
-                      preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
-                          ? _cachedAwayRoster
-                          : null,
-                      currentImagePath: imagePaths.isNotEmpty
-                          ? imagePaths[currentIndex]
-                          : null,
-                      currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                      totalImages: imagePaths.length,
-                      onSaveIptc: _saveIptcMetadata,
-                      onImageUploaded: (imagePath) {
-                        // Queue manager handles adding to uploaded set
-                        // This callback is mainly for the main FTP button
-                        if (!_currentlyUploading.contains(imagePath)) {
-                          setState(() {
-                            _uploadedImages.add(imagePath);
-                            _uploadProgress
-                                .remove(imagePath); // Clear progress when done
-                          });
-                        }
-                      },
-                      onUploadProgress: (imagePath, progress) {
-                        setState(() {
-                          _uploadProgress[imagePath] = progress;
-                        });
-                      },
-                    ),
-                  ),
-
-                  // BOTTOM RIGHT BOX - Metadata
-                  Expanded(
-                    flex: 4,
-                    child: MetadataWidget(
-                      key: _metadataKey2,
-                      metadata: currentMetadata,
-                      onMetadataUpdated: (metadata) {
-                        setState(() {
-                          currentMetadata = metadata;
-                        });
-                      },
-                    ),
-                  ),
-                ],
+              flex: 1,
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  // Quick navigation (no thumbnail centering or extra state churn)
+                  onQuickNextImage: () {
+                    print('DEBUG: Quick next image called');
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    print('DEBUG: Quick previous image called');
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                ),
               ),
             ),
           ],

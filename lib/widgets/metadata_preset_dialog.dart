@@ -38,9 +38,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   final TextEditingController stadiumController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
   final TextEditingController provinceController = TextEditingController();
-  final TextEditingController countryController = TextEditingController();
-  final TextEditingController countryCodeController = TextEditingController();
-  final TextEditingController urgencyController = TextEditingController();
+
   final TextEditingController specialInstructionsController =
       TextEditingController();
   final TextEditingController personalityController = TextEditingController();
@@ -54,19 +52,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
   String? selectedPreset;
   String? selectedCaptionStyle = 'getty';
   DateTime? detectedDate;
-
-  // Urgency levels for dropdown
-  final List<Map<String, String>> urgencyLevels = [
-    {'code': '1', 'name': '1 - High'},
-    {'code': '2', 'name': '2'},
-    {'code': '3', 'name': '3'},
-    {'code': '4', 'name': '4'},
-    {'code': '5', 'name': '5 - Normal'},
-    {'code': '6', 'name': '6'},
-    {'code': '7', 'name': '7'},
-    {'code': '8', 'name': '8 - Low'},
-    {'code': '0', 'name': '0 - Undefined'},
-  ];
 
   @override
   void initState() {
@@ -114,9 +99,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       stadiumController.text = widget.currentPreset!['Stadium'] ?? '';
       cityController.text = widget.currentPreset!['City'] ?? '';
       provinceController.text = widget.currentPreset!['Province/State'] ?? '';
-      countryController.text = widget.currentPreset!['Country'] ?? '';
-      countryCodeController.text = widget.currentPreset!['Country Code'] ?? '';
-      urgencyController.text = widget.currentPreset!['Urgency'] ?? '';
+
       specialInstructionsController.text =
           widget.currentPreset!['Special Instructions'] ?? '';
       personalityController.text = widget.currentPreset!['Personality'] ?? '';
@@ -148,9 +131,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           stadiumController.text = defaultTemplate['Stadium'] ?? '';
           cityController.text = defaultTemplate['City'] ?? '';
           provinceController.text = defaultTemplate['Province/State'] ?? '';
-          countryController.text = defaultTemplate['Country'] ?? '';
-          countryCodeController.text = defaultTemplate['Country Code'] ?? '';
-          urgencyController.text = defaultTemplate['Urgency'] ?? '';
+
           specialInstructionsController.text =
               defaultTemplate['Special Instructions'] ?? '';
           personalityController.text = defaultTemplate['Personality'] ?? '';
@@ -287,9 +268,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Stadium': stadiumController.text,
       'City': cityController.text,
       'Province/State': provinceController.text,
-      'Country': countryController.text,
-      'Country Code': countryCodeController.text,
-      'Urgency': urgencyController.text,
       'Special Instructions': specialInstructionsController.text,
       'Personality': personalityController.text,
       'Caption': captionController.text,
@@ -340,9 +318,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       'Stadium': stadiumController.text,
       'City': cityController.text,
       'Province/State': provinceController.text,
-      'Country': countryController.text,
-      'Country Code': countryCodeController.text,
-      'Urgency': urgencyController.text,
       'Special Instructions': specialInstructionsController.text,
       'Personality': personalityController.text,
       'Caption': captionController.text,
@@ -389,9 +364,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           stadiumController.text = presetData['Stadium'] ?? '';
           cityController.text = presetData['City'] ?? '';
           provinceController.text = presetData['Province/State'] ?? '';
-          countryController.text = presetData['Country'] ?? '';
-          countryCodeController.text = presetData['Country Code'] ?? '';
-          urgencyController.text = presetData['Urgency'] ?? '';
           specialInstructionsController.text =
               presetData['Special Instructions'] ?? '';
           personalityController.text = presetData['Personality'] ?? '';
@@ -827,20 +799,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 _buildField('Stadium', stadiumController),
                 _buildField('City', cityController),
                 _buildField('Province/State', provinceController),
-                _buildField('Country', countryController),
-                _buildField('Country Code', countryCodeController),
-                _buildDropdownField(
-                  'Urgency',
-                  urgencyController.text.isNotEmpty
-                      ? urgencyController.text
-                      : null,
-                  urgencyLevels,
-                  (value) {
-                    setState(() {
-                      urgencyController.text = value ?? '';
-                    });
-                  },
-                ),
                 _buildField(
                     'Special Instructions', specialInstructionsController,
                     maxLines: 1),
@@ -1130,21 +1088,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
         stadiumController.text = _extractString(metadata['Sub-location']);
         cityController.text = _extractString(metadata['City']);
         provinceController.text = _extractString(metadata['Province-State']);
-        countryController.text =
-            _extractString(metadata['Country-PrimaryLocationName']) ??
-                _extractString(metadata['Country']);
-        countryCodeController.text =
-            _extractString(metadata['Country-PrimaryLocationCode']) ??
-                _extractString(metadata['CountryCode']);
-        // Handle urgency - extract just the number from descriptive text
-        final urgencyValue = _extractString(metadata['Urgency']);
-        if (urgencyValue.isNotEmpty) {
-          // Extract just the number from "5 (normal urgency)" format
-          final match = RegExp(r'^(\d+)').firstMatch(urgencyValue);
-          urgencyController.text = match?.group(1) ?? '5';
-        } else {
-          urgencyController.text = '5'; // Default to 5 if no urgency found
-        }
         specialInstructionsController.text =
             _extractString(metadata['SpecialInstructions']);
 
@@ -1223,23 +1166,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     // Build caption based on IPTC metadata in Getty style
     final List<String> captionParts = [];
 
-    // Add city and country/state if available
-    if (cityController.text.isNotEmpty && countryController.text.isNotEmpty) {
-      if (countryController.text.toUpperCase() == 'UNITED STATES' ||
-          countryController.text.toUpperCase() == 'USA') {
-        // For US locations, use state instead of country
-        if (provinceController.text.isNotEmpty) {
-          captionParts.add(
-              '${cityController.text.toUpperCase()}, ${provinceController.text.toUpperCase()}');
-        } else {
-          captionParts.add(cityController.text.toUpperCase());
-        }
-      } else {
-        // For non-US locations, use country
-        captionParts.add(
-            '${cityController.text.toUpperCase()}, ${countryController.text.toUpperCase()}');
-      }
-    } else if (cityController.text.isNotEmpty) {
+    // Add city if available
+    if (cityController.text.isNotEmpty) {
       captionParts.add(cityController.text.toUpperCase());
     }
 
@@ -1278,23 +1206,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       captionParts.add('on $month $day, $year');
     }
 
-    // Add city and country/state again for location
-    if (cityController.text.isNotEmpty && countryController.text.isNotEmpty) {
-      if (countryController.text.toUpperCase() == 'UNITED STATES' ||
-          countryController.text.toUpperCase() == 'USA') {
-        // For US locations, use state instead of country
-        if (provinceController.text.isNotEmpty) {
-          captionParts
-              .add('in ${cityController.text}, ${provinceController.text}.');
-        } else {
-          captionParts.add('in ${cityController.text}.');
-        }
-      } else {
-        // For non-US locations, use country
-        captionParts
-            .add('in ${cityController.text}, ${countryController.text}.');
-      }
-    } else if (cityController.text.isNotEmpty) {
+    // Add city again for location
+    if (cityController.text.isNotEmpty) {
       captionParts.add('in ${cityController.text}.');
     }
 
@@ -1366,9 +1279,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
     stadiumController.dispose();
     cityController.dispose();
     provinceController.dispose();
-    countryController.dispose();
-    countryCodeController.dispose();
-    urgencyController.dispose();
+
     specialInstructionsController.dispose();
     personalityController.dispose();
     captionController.dispose();

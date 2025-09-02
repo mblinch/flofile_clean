@@ -29,11 +29,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   final copyrightController = TextEditingController();
   final sourceController = TextEditingController();
 
-  // IPTC metadata controllers
-  final urgencyController = TextEditingController();
-  final countryController = TextEditingController();
-  final countryCodeController = TextEditingController();
-
   // Location controllers
   final stadiumController = TextEditingController();
   final cityController = TextEditingController();
@@ -54,61 +49,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   final suppCat2Controller = TextEditingController();
   final suppCat3Controller = TextEditingController();
   final specialInstructionsController = TextEditingController();
-
-  // Country codes for dropdown
-  final List<Map<String, String>> countryCodes = [
-    {'code': 'CAN', 'name': 'Canada'},
-    {'code': 'USA', 'name': 'United States'},
-    {'code': 'MEX', 'name': 'Mexico'},
-    {'code': 'GBR', 'name': 'United Kingdom'},
-    {'code': 'FRA', 'name': 'France'},
-    {'code': 'DEU', 'name': 'Germany'},
-    {'code': 'ITA', 'name': 'Italy'},
-    {'code': 'ESP', 'name': 'Spain'},
-    {'code': 'NLD', 'name': 'Netherlands'},
-    {'code': 'BEL', 'name': 'Belgium'},
-    {'code': 'CHE', 'name': 'Switzerland'},
-    {'code': 'AUT', 'name': 'Austria'},
-    {'code': 'SWE', 'name': 'Sweden'},
-    {'code': 'NOR', 'name': 'Norway'},
-    {'code': 'DNK', 'name': 'Denmark'},
-    {'code': 'FIN', 'name': 'Finland'},
-    {'code': 'JPN', 'name': 'Japan'},
-    {'code': 'KOR', 'name': 'South Korea'},
-    {'code': 'CHN', 'name': 'China'},
-    {'code': 'AUS', 'name': 'Australia'},
-    {'code': 'NZL', 'name': 'New Zealand'},
-    {'code': 'BRA', 'name': 'Brazil'},
-    {'code': 'ARG', 'name': 'Argentina'},
-    {'code': 'ZAF', 'name': 'South Africa'},
-    {'code': 'EGY', 'name': 'Egypt'},
-    {'code': 'NGA', 'name': 'Nigeria'},
-    {'code': 'KEN', 'name': 'Kenya'},
-    {'code': 'IND', 'name': 'India'},
-    {'code': 'PAK', 'name': 'Pakistan'},
-    {'code': 'BGD', 'name': 'Bangladesh'},
-    {'code': 'THA', 'name': 'Thailand'},
-    {'code': 'VNM', 'name': 'Vietnam'},
-    {'code': 'PHL', 'name': 'Philippines'},
-    {'code': 'IDN', 'name': 'Indonesia'},
-    {'code': 'MYS', 'name': 'Malaysia'},
-    {'code': 'SGP', 'name': 'Singapore'},
-    {'code': 'HKG', 'name': 'Hong Kong'},
-    {'code': 'TWN', 'name': 'Taiwan'},
-  ];
-
-  // Urgency levels for dropdown
-  final List<Map<String, String>> urgencyLevels = [
-    {'code': '1', 'name': '1 - High'},
-    {'code': '2', 'name': '2'},
-    {'code': '3', 'name': '3'},
-    {'code': '4', 'name': '4'},
-    {'code': '5', 'name': '5 - Normal'},
-    {'code': '6', 'name': '6'},
-    {'code': '7', 'name': '7'},
-    {'code': '8', 'name': '8 - Low'},
-    {'code': '0', 'name': '0 - Undefined'},
-  ];
 
   @override
   void initState() {
@@ -131,9 +71,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     addListener(creditController);
     addListener(copyrightController);
     addListener(sourceController);
-    addListener(urgencyController);
-    addListener(countryController);
-    addListener(countryCodeController);
+
     addListener(stadiumController);
     addListener(cityController);
     addListener(provinceController);
@@ -175,9 +113,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         stadiumController.text = presetData['Stadium'] ?? '';
         cityController.text = presetData['City'] ?? '';
         provinceController.text = presetData['Province/State'] ?? '';
-        countryController.text = presetData['Country'] ?? '';
-        countryCodeController.text = presetData['Country Code'] ?? '';
-        urgencyController.text = presetData['Urgency'] ?? '';
+
         specialInstructionsController.text =
             presetData['Special Instructions'] ?? '';
 
@@ -224,14 +160,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'Copyright': copyrightController.text, // fallback
       'IPTC:Source': sourceController.text,
       'Source': sourceController.text,
-      'IPTC:Urgency': urgencyController.text,
-      'Urgency': urgencyController.text,
-      'IPTC:CountryPrimaryLocationName': countryController.text,
-      'CountryPrimaryLocationName': countryController.text,
-      'Country': countryController.text, // fallback
-      'IPTC:CountryPrimaryLocationCode': countryCodeController.text,
-      'CountryPrimaryLocationCode': countryCodeController.text,
-      'CountryCode': countryCodeController.text, // fallback
+
       'IPTC:SubLocation': stadiumController.text,
       'SubLocation': stadiumController.text,
       'Sub-location': stadiumController.text, // fallback
@@ -258,7 +187,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       'XMP:Creator': creatorController.text,
       'XMP:Rights': copyrightController.text,
       'XMP:Source': sourceController.text,
-      'XMP:Country': countryController.text,
       'XMP:State': provinceController.text,
       'XMP:City': cityController.text,
       'XMP:Location': stadiumController.text,
@@ -520,9 +448,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       creditController.clear();
       copyrightController.clear();
       sourceController.clear();
-      urgencyController.clear();
-      countryController.clear();
-      countryCodeController.clear();
+
       stadiumController.clear();
       cityController.clear();
       provinceController.clear();
@@ -577,9 +503,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           stadiumController.text = templateMetadata['Stadium'] ?? '';
           cityController.text = templateMetadata['City'] ?? '';
           provinceController.text = templateMetadata['Province/State'] ?? '';
-          countryController.text = templateMetadata['Country'] ?? '';
-          countryCodeController.text = templateMetadata['Country Code'] ?? '';
-          urgencyController.text = templateMetadata['Urgency'] ?? '';
+
           specialInstructionsController.text =
               templateMetadata['Special Instructions'] ?? '';
           // dateController.text = templateMetadata['Date'] ?? ''; // Keep original date
@@ -742,26 +666,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       sourceController.text = extractedSource;
 
       // Load IPTC metadata fields only if they exist - prefer Photo Mechanic's fields
-      // Extract urgency number from descriptive text like "5 (normal urgency)"
-      final urgencyValue =
-          (meta['IPTC:Urgency'] ?? meta['Urgency'])?.toString() ?? '';
-      if (urgencyValue.isNotEmpty) {
-        // Extract just the number from "5 (normal urgency)" format
-        final match = RegExp(r'^(\d+)').firstMatch(urgencyValue);
-        urgencyController.text = match?.group(1) ?? '';
-      } else {
-        urgencyController.text = '';
-      }
-      countryController.text = (meta['IPTC:CountryPrimaryLocationName'] ??
-                  meta['Country'] ??
-                  meta['Country-PrimaryLocationName'])
-              ?.toString() ??
-          '';
-      countryCodeController.text = (meta['IPTC:CountryPrimaryLocationCode'] ??
-                  meta['CountryCode'] ??
-                  meta['Country-PrimaryLocationCode'])
-              ?.toString() ??
-          '';
 
       // Load categorization metadata - prefer Photo Mechanic's fields
       titleObjectNameController.text =
@@ -1210,20 +1114,6 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       _buildField('Stadium', stadiumController),
                       _buildField('City', cityController),
                       _buildField('Province/State', provinceController),
-                      _buildField('Country', countryController),
-                      _buildField('Country Code', countryCodeController),
-                      _buildDropdownField(
-                        'Urgency',
-                        urgencyController.text.isNotEmpty
-                            ? urgencyController.text
-                            : null,
-                        urgencyLevels,
-                        (value) {
-                          setState(() {
-                            urgencyController.text = value ?? '';
-                          });
-                        },
-                      ),
                       _buildField(
                           'Special Instructions', specialInstructionsController,
                           maxLines: 2),
@@ -1401,9 +1291,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     creditController.dispose();
     copyrightController.dispose();
     sourceController.dispose();
-    urgencyController.dispose();
-    countryController.dispose();
-    countryCodeController.dispose();
+
     stadiumController.dispose();
     cityController.dispose();
     provinceController.dispose();

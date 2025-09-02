@@ -5,7 +5,6 @@ import 'dart:convert';
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
-import 'filmstrip_widget.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -37,7 +36,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Map<String, String>? xmpLabels;
   final Map<String, bool>? xmpTagged;
   final Set<String>? lockedPaths;
-  final VoidCallback? onShowThumbnails;
+
   final VoidCallback? onEditMetadata;
 
   const PicturePreviewWidget({
@@ -64,7 +63,6 @@ class PicturePreviewWidget extends StatefulWidget {
     this.xmpLabels,
     this.xmpTagged,
     this.lockedPaths,
-    this.onShowThumbnails,
     this.onEditMetadata,
   });
 
@@ -320,7 +318,9 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           _showContextMenu(context, currentImagePath,
                               details.globalPosition);
                         },
-                        onDoubleTap: widget.onEditMetadata != null ? () => widget.onEditMetadata!() : null,
+                        onDoubleTap: widget.onEditMetadata != null
+                            ? () => widget.onEditMetadata!()
+                            : null,
                         child: ExtendedImage.file(
                           File(currentImagePath),
                           fit: BoxFit.contain,
@@ -438,24 +438,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                           ),
                         ),
                     ],
-                  ),
-                ),
-                // Filmstrip area at the bottom of the picture preview
-                SizedBox(
-                  height: 80,
-                  child: FilmstripWidget(
-                    imagePaths: widget.imagePaths,
-                    currentIndex: widget.currentIndex,
-                    onImageSelected: widget.onImageSelected,
-                    uploadedImages: widget.uploadedImages ?? {},
-                    queuedUploads: widget.queuedUploads ?? {},
-                    currentlyUploading: widget.currentlyUploading ?? {},
-                    uploadProgress: widget.uploadProgress ?? const {},
-                    xmpRatings: widget.xmpRatings ?? const {},
-                    xmpLabels: widget.xmpLabels ?? const {},
-                    xmpTagged: widget.xmpTagged ?? const {},
-                    lockedPaths: widget.lockedPaths ?? {},
-                    onShowThumbnails: widget.onShowThumbnails,
                   ),
                 ),
               ],
