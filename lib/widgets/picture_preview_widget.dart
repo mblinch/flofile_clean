@@ -254,7 +254,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     if (focalLength == null) return '';
     // Remove any "mm" or "mmmm" suffix and add our own "mm"
     String value = focalLength.toString().replaceAll(RegExp(r'm+$'), '');
-    
+
     // Try to parse as double and remove decimal places
     try {
       double? numericValue = double.tryParse(value);
@@ -264,7 +264,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     } catch (e) {
       // If parsing fails, use original value
     }
-    
+
     return '${value}mm';
   }
 
@@ -620,7 +620,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
                         // Center: Natural language camera settings
                         Expanded(
-                          flex: 2,
+                          flex: 1,
                           child: Center(
                             child: Text(
                               _buildNaturalLanguageSettings(),
@@ -635,9 +635,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         ),
 
                         // Right: Navigation buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
                             // Previous button
                             IconButton(
                               onPressed: widget.currentIndex > 0
@@ -720,6 +721,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                   minWidth: 24, minHeight: 24),
                             ),
                           ],
+                        ),
                         ),
                       ],
                     ),
