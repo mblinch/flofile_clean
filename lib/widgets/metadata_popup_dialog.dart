@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
 
@@ -168,46 +169,158 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
   }
 
-  void _saveChanges() {
+  void _saveChanges() async {
+    print(
+        'DEBUG: Starting _saveChanges with currentMetadata: $currentMetadata');
+    print('DEBUG: Original metadata from widget: ${widget.metadata}');
+
     // Ensure controller values are reflected in the outgoing metadata
     final Map<String, dynamic> outgoing =
         Map<String, dynamic>.from(currentMetadata ?? {});
     final String cap = captionController.text.trim();
+    print('DEBUG: Caption from controller: "$cap"');
     if (cap.isNotEmpty) {
+      // Only save to the primary field to avoid duplication
       outgoing['IPTC:Description'] = cap; // Photo Mechanic's preferred field
-      outgoing['Description'] = cap; // Alternative name
-      outgoing['Caption-Abstract'] = cap;
-      outgoing['IPTC:Caption-Abstract'] = cap;
-      outgoing['ImageDescription'] = cap; // keep in sync with common field
+      // Remove duplicate fields to prevent future duplication
+      outgoing.remove('Description');
+      outgoing.remove('Caption-Abstract');
+      outgoing.remove('IPTC:Caption-Abstract');
+      outgoing.remove('ImageDescription');
+      print(
+          'DEBUG: Added caption to outgoing metadata (IPTC:Description only)');
     } else {
       outgoing.remove('IPTC:Description');
       outgoing.remove('Description');
       outgoing.remove('Caption-Abstract');
       outgoing.remove('IPTC:Caption-Abstract');
       outgoing.remove('ImageDescription');
+      print('DEBUG: Removed caption fields from outgoing metadata');
     }
 
     final String pers = personalityController.text.trim();
+    print('DEBUG: Personality from controller: "$pers"');
     if (pers.isNotEmpty) {
+      // Only save to the primary field to avoid duplication
       outgoing['XMP-getty:Personality'] = pers;
-      outgoing['Personality'] = pers;
+      // Remove any duplicate fields to prevent future duplication
+      outgoing.remove('Personality');
+      print(
+          'DEBUG: Added personality to outgoing metadata (XMP-getty:Personality only)');
     } else {
       outgoing.remove('XMP-getty:Personality');
       outgoing.remove('Personality');
+      print('DEBUG: Removed personality fields from outgoing metadata');
     }
 
-    // Also write all other fields to Photo Mechanic's preferred IPTC fields
-    currentMetadata?.forEach((key, value) {
+    // Note: We don't need to process currentMetadata again since we've already
+    // handled the caption and personality fields above, and the save method
+    // will process the outgoing metadata directly
+
+    print('DEBUG: Final outgoing metadata: $outgoing');
+
+    try {
+      // Save metadata to the image file using ExifTool
+      await _saveMetadataToFile(outgoing);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Metadata saved successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Update our local metadata to match what was saved
+      currentMetadata = Map<String, dynamic>.from(outgoing);
+
+      // Notify parent of changes
+      widget.onMetadataUpdated(outgoing);
+
+      // Close the dialog
+      Navigator.of(context).pop();
+    } catch (e) {
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving metadata: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // Save metadata to the image file using ExifTool
+  Future<void> _saveMetadataToFile(Map<String, dynamic> metadata) async {
+    if (widget.imagePath == null) return;
+
+    // Build ExifTool command arguments
+    List<String> args = [];
+
+    // Map metadata fields to ExifTool format
+    metadata.forEach((key, value) {
       if (value != null && value.toString().isNotEmpty) {
-        final photoMechanicKey = _getPhotoMechanicField(key);
-        if (photoMechanicKey != null) {
-          outgoing[photoMechanicKey] = value;
+        // Skip date/time fields as they shouldn't be modified
+        if ([
+          'Date',
+          'Time',
+          'DateTimeOriginal',
+          'CreateDate',
+          'ModifyDate',
+          'FileModifyDate'
+        ].contains(key)) {
+          print('DEBUG: Skipping date/time field: $key');
+          return;
         }
+
+        // Handle supplemental categories specially
+        if (key == 'SupplementalCategories1' ||
+            key == 'SupplementalCategories2' ||
+            key == 'SupplementalCategories3') {
+          // Skip individual fields, we'll handle them together
+          print('DEBUG: Skipping individual supp cat field: $key');
+          return;
+        }
+
+        // Use the key directly as the ExifTool field name
+        // This matches how the main screen saves metadata
+        args.add('-$key=$value');
+        print('DEBUG: Adding field: -$key=$value');
       }
     });
 
-    widget.onMetadataUpdated(outgoing);
-    Navigator.of(context).pop();
+    // Handle supplemental categories - combine them
+    List<String> suppCats = [];
+    if (metadata['SupplementalCategories1']?.toString().isNotEmpty == true) {
+      suppCats.add(metadata['SupplementalCategories1']!);
+    }
+    if (metadata['SupplementalCategories2']?.toString().isNotEmpty == true) {
+      suppCats.add(metadata['SupplementalCategories2']!);
+    }
+    if (metadata['SupplementalCategories3']?.toString().isNotEmpty == true) {
+      suppCats.add(metadata['SupplementalCategories3']!);
+    }
+
+    if (suppCats.isNotEmpty) {
+      args.add('-SupplementalCategories=${suppCats.join(',')}');
+    }
+
+    // Add overwrite flag and image path
+    args.add('-overwrite_original');
+    args.add(widget.imagePath!);
+
+    print('DEBUG: ExifTool command args: $args');
+    print('DEBUG: Image path: ${widget.imagePath}');
+    print('DEBUG: Full command would be: exiftool ${args.join(' ')}');
+
+    // Run ExifTool command
+    final proc = await ExiftoolHelper.run(args);
+
+    if (proc.exitCode != 0) {
+      throw Exception('ExifTool failed: ${proc.stderrText}');
+    }
   }
 
   void _discardChanges() {
@@ -285,6 +398,136 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       currentMetadata!['SupplementalCategories2'] = parts[1];
     if (parts.length > 2)
       currentMetadata!['SupplementalCategories3'] = parts[2];
+  }
+
+  // Copy all metadata fields except date and time
+  void _copyMetadata() {
+    if (currentMetadata == null) return;
+
+    // Create a copy of current metadata excluding date/time fields
+    final Map<String, dynamic> metadataToCopy =
+        Map<String, dynamic>.from(currentMetadata!);
+
+    // Remove date and time fields
+    metadataToCopy.remove('Date');
+    metadataToCopy.remove('Time');
+    metadataToCopy.remove('DateTimeOriginal');
+    metadataToCopy.remove('CreateDate');
+    metadataToCopy.remove('ModifyDate');
+    metadataToCopy.remove('FileModifyDate');
+
+    // Clean up duplicate fields to prevent future issues
+    // Only keep the primary fields for caption and personality
+    if (metadataToCopy.containsKey('IPTC:Description')) {
+      metadataToCopy.remove('Description');
+      metadataToCopy.remove('Caption-Abstract');
+      metadataToCopy.remove('IPTC:Caption-Abstract');
+      metadataToCopy.remove('ImageDescription');
+    }
+
+    if (metadataToCopy.containsKey('XMP-getty:Personality')) {
+      metadataToCopy.remove('Personality');
+    }
+
+    // Convert to JSON string for clipboard
+    final metadataJson = jsonEncode(metadataToCopy);
+    Clipboard.setData(ClipboardData(text: metadataJson));
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Metadata copied to clipboard (excluding date/time)'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Paste metadata from clipboard to all fields
+  void _pasteMetadata() async {
+    final clipboardData = await Clipboard.getData('text/plain');
+    if (clipboardData?.text == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No data found in clipboard'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    try {
+      final pastedMetadata =
+          jsonDecode(clipboardData!.text!) as Map<String, dynamic>;
+
+      // Clean up any duplicate fields in the pasted data
+      if (pastedMetadata.containsKey('IPTC:Description')) {
+        pastedMetadata.remove('Description');
+        pastedMetadata.remove('Caption-Abstract');
+        pastedMetadata.remove('IPTC:Caption-Abstract');
+        pastedMetadata.remove('ImageDescription');
+      }
+
+      if (pastedMetadata.containsKey('XMP-getty:Personality')) {
+        pastedMetadata.remove('Personality');
+      }
+
+      // Update current metadata with pasted data
+      setState(() {
+        currentMetadata = Map<String, dynamic>.from(currentMetadata ?? {});
+        currentMetadata!.addAll(pastedMetadata);
+      });
+
+      // Normalize UI fields
+      _normalizeMetadataForUi();
+
+      // Update controllers with new values
+      _updateControllersFromMetadata();
+
+      // Notify parent of changes
+      _handleMetadataUpdated(currentMetadata);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Metadata pasted successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      // Try to provide more helpful error messages
+      String errorMessage = 'Invalid metadata format in clipboard';
+      if (e.toString().contains('Unexpected character')) {
+        errorMessage =
+            'Clipboard contains invalid data. Try copying fresh metadata.';
+      } else if (e.toString().contains('FormatException')) {
+        errorMessage =
+            'Clipboard data is corrupted. Try copying fresh metadata.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Clear Clipboard',
+            textColor: Colors.white,
+            onPressed: () {
+              Clipboard.setData(const ClipboardData(text: ''));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Clipboard cleared'),
+                  backgroundColor: Colors.blue,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildTwoColumnMetadata() {
@@ -774,40 +1017,108 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   String? _getPhotoMechanicField(String key) {
     switch (key) {
+      // Core IPTC fields that should be written directly
+      case 'IPTC:Description':
+      case 'Description':
+      case 'Caption-Abstract':
+      case 'IPTC:Caption-Abstract':
+      case 'ImageDescription':
+        return 'IPTC:Description';
+
+      case 'IPTC:By-line':
+      case 'By-line':
       case 'Creator':
+      case 'XMP:Creator':
         return 'IPTC:By-line';
+
+      case 'IPTC:OriginalTransmissionReference':
+      case 'OriginalTransmissionReference':
       case 'TransmissionReference':
+      case 'JobID':
+      case 'MEID':
         return 'IPTC:OriginalTransmissionReference';
+
+      case 'IPTC:By-lineTitle':
+      case 'By-lineTitle':
       case 'AuthorsPosition':
         return 'IPTC:By-lineTitle';
+
+      case 'IPTC:CopyrightNotice':
+      case 'CopyrightNotice':
       case 'Copyright':
+      case 'XMP:Rights':
         return 'IPTC:CopyrightNotice';
+
+      case 'IPTC:Credit':
       case 'Credit':
         return 'IPTC:Credit';
+
+      case 'IPTC:Source':
       case 'Source':
+      case 'XMP:Source':
         return 'IPTC:Source';
+
+      case 'IPTC:Headline':
       case 'Headline':
+      case 'XMP:Title':
         return 'IPTC:Headline';
+
+      case 'IPTC:Keywords':
       case 'Keywords':
+      case 'XMP:Subject':
         return 'IPTC:Keywords';
+
+      case 'IPTC:Category':
       case 'Category':
         return 'IPTC:Category';
+
+      case 'IPTC:ObjectName':
       case 'ObjectName':
         return 'IPTC:ObjectName';
+
+      case 'IPTC:SubLocation':
       case 'Sub-location':
+      case 'SubLocation':
+      case 'XMP:Location':
         return 'IPTC:SubLocation';
+
+      case 'IPTC:City':
       case 'City':
+      case 'XMP:City':
         return 'IPTC:City';
+
+      case 'IPTC:ProvinceState':
       case 'Province-State':
+      case 'ProvinceState':
+      case 'XMP:State':
         return 'IPTC:ProvinceState';
+
+      case 'IPTC:CountryPrimaryLocationName':
+      case 'CountryPrimaryLocationName':
       case 'Country':
+      case 'XMP:Country':
         return 'IPTC:CountryPrimaryLocationName';
+
+      case 'IPTC:CountryPrimaryLocationCode':
+      case 'CountryPrimaryLocationCode':
       case 'CountryCode':
         return 'IPTC:CountryPrimaryLocationCode';
+
+      case 'IPTC:Urgency':
       case 'Urgency':
         return 'IPTC:Urgency';
+
+      case 'IPTC:SpecialInstructions':
       case 'SpecialInstructions':
+      case 'XMP:Instructions':
+      case 'XMP-photoshop:Instructions':
         return 'IPTC:SpecialInstructions';
+
+      case 'XMP-getty:Personality':
+      case 'XMP:Personality':
+      case 'Personality':
+        return 'XMP-getty:Personality';
+
       default:
         return null;
     }
@@ -1170,11 +1481,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                   children: [
                                     // Copy button
                                     GestureDetector(
-                                      onTap: () {
-                                        if (widget.onCopyMetadata != null) {
-                                          widget.onCopyMetadata!();
-                                        }
-                                      },
+                                      onTap: _copyMetadata,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 10, vertical: 7),
@@ -1206,11 +1513,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
                                     // Paste button
                                     GestureDetector(
-                                      onTap: () {
-                                        if (widget.onPasteMetadata != null) {
-                                          widget.onPasteMetadata!();
-                                        }
-                                      },
+                                      onTap: _pasteMetadata,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 10, vertical: 7),

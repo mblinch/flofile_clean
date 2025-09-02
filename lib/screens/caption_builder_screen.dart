@@ -206,6 +206,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         final List data = jsonDecode(proc.stdoutText);
         if (data.isNotEmpty) {
           freshMetadata = data.first as Map<String, dynamic>;
+
+          // Update the main screen's cached metadata with fresh data
+          // This ensures consistency between popup and main screen
+          setState(() {
+            currentMetadata = Map<String, dynamic>.from(freshMetadata);
+          });
         }
       }
     } catch (e) {
@@ -221,12 +227,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       builder: (context) => MetadataPopupDialog(
         metadata: freshMetadata,
         imagePath: imagePaths[currentIndex],
-        onMetadataUpdated: (updatedMetadata) {
+        onMetadataUpdated: (updatedMetadata) async {
           setState(() {
             currentMetadata = updatedMetadata;
           });
-          // Save the updated metadata
-          _saveCurrentMetadata();
+
+          // Force reload metadata from file to ensure cache is fresh
+          // This ensures that when the popup is reopened, it gets the updated data
+          await _loadMetadata();
         },
         onPreviousImage: () {
           if (currentIndex > 0) {
