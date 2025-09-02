@@ -173,6 +173,55 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           // Save the updated metadata
           _saveCurrentMetadata();
         },
+        onPreviousImage: () {
+          if (currentIndex > 0) {
+            setState(() {
+              currentIndex--;
+            });
+            Navigator.of(context).pop(); // Close the popup
+            _showMetadataPopup(); // Reopen with new image
+          }
+        },
+        onNextImage: () {
+          if (currentIndex < imagePaths.length - 1) {
+            setState(() {
+              currentIndex++;
+            });
+            Navigator.of(context).pop(); // Close the popup
+            _showMetadataPopup(); // Reopen with new image
+          }
+        },
+        onCopyMetadata: () {
+          // Copy current metadata to clipboard
+          final metadataText = jsonEncode(currentMetadata);
+          Clipboard.setData(ClipboardData(text: metadataText));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Metadata copied to clipboard')),
+          );
+        },
+        onPasteMetadata: () {
+          // Paste metadata from clipboard
+          Clipboard.getData('text/plain').then((data) {
+            if (data?.text != null) {
+              try {
+                final pastedMetadata = jsonDecode(data!.text!);
+                setState(() {
+                  currentMetadata = Map<String, dynamic>.from(pastedMetadata);
+                });
+                _saveCurrentMetadata();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Metadata pasted from clipboard')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Invalid metadata format in clipboard')),
+                );
+              }
+            }
+          });
+        },
       ),
     );
   }

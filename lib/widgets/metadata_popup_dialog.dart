@@ -8,12 +8,20 @@ class MetadataPopupDialog extends StatefulWidget {
   final Map<String, dynamic>? metadata;
   final Function(Map<String, dynamic>) onMetadataUpdated;
   final String? imagePath;
+  final VoidCallback? onPreviousImage;
+  final VoidCallback? onNextImage;
+  final VoidCallback? onCopyMetadata;
+  final VoidCallback? onPasteMetadata;
 
   const MetadataPopupDialog({
     super.key,
     required this.metadata,
     required this.onMetadataUpdated,
     this.imagePath,
+    this.onPreviousImage,
+    this.onNextImage,
+    this.onCopyMetadata,
+    this.onPasteMetadata,
   });
 
   @override
@@ -217,154 +225,165 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   Widget _buildTwoColumnMetadata() {
     return Container(
-      margin: const EdgeInsets.all(3.0),
+      height: double.infinity,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.0),
+        border: Border.all(color: Colors.grey.shade400, width: 1.0),
         borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
+        color: Colors.grey.shade50,
       ),
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Two-column grid layout
-            LayoutBuilder(builder: (context, constraints) {
-              const double gap = 16.0;
-
-              // First column items (Category and Supplemental Categories grouped together)
-              final List<Widget> firstColumnItems = [
-                _buildField('Category', 'Category'),
-                _buildField('Supp Cat 1', 'SupplementalCategories1'),
-                _buildField('Supp Cat 2', 'SupplementalCategories2'),
-                _buildField('Supp Cat 3', 'SupplementalCategories3'),
-                _buildField('Object Name', 'ObjectName'),
-                _buildField('Stadium', 'Sub-location'),
-                _buildField('City', 'City'),
-                _buildField('Province/State', 'Province-State'),
-                _buildField('Country', 'Country'),
-                _buildField('Country Code', 'CountryCode'),
-                _buildField('Urgency', 'Urgency'),
-                _buildField('Special Instructions', 'SpecialInstructions'),
-              ];
-
-              // Second column items
-              final List<Widget> secondColumnItems = [
-                _buildField('Photographer', 'Creator'),
-                _buildField('MEID (Job Reference)', 'TransmissionReference'),
-                _buildField('Description Writers', 'CaptionWriter'),
-                _buildField('Creator\'s Job Title', 'AuthorsPosition'),
-                _buildField('Copyright', 'Copyright'),
-                _buildField('Credit', 'Credit'),
-                _buildField('Source', 'Source'),
-                _buildField('Headline', 'Headline'),
-                _buildField('Keywords', 'Keywords'),
-              ];
-
-              return Column(
-                children: [
-                  // Caption and Personality fields at the top spanning full width
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Caption field with persistent controller
-                      Text(
-                        'Caption',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      TextField(
-                        controller: captionController,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                                color: Colors.grey.shade600, width: 1),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                        style: const TextStyle(fontSize: 13),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Personality field with persistent controller
-                      Text(
-                        'Personality',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      TextField(
-                        controller: personalityController,
-                        maxLines: 1,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                                color: Colors.grey.shade600, width: 1),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ],
+            // Caption and Personality fields at the top spanning full width
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Caption field with persistent controller
+                Text(
+                  'Caption',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
                   ),
-                  const SizedBox(height: 24),
-                  // Two-column layout
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // First column
-                      Expanded(
-                        child: Column(
-                          children: firstColumnItems
-                              .map((widget) => Padding(
-                                    padding:
-                                        const EdgeInsets.only(bottom: 16.0),
-                                    child: widget,
-                                  ))
-                              .toList(),
-                        ),
-                      ),
-                      const SizedBox(width: gap),
-                      // Second column
-                      Expanded(
-                        child: Column(
-                          children: secondColumnItems
-                              .map((widget) => Padding(
-                                    padding:
-                                        const EdgeInsets.only(bottom: 16.0),
-                                    child: widget,
-                                  ))
-                              .toList(),
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(height: 3),
+                TextField(
+                  controller: captionController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.white,
+                    focusColor: Colors.transparent,
+                    hoverColor: Colors.transparent,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade700, width: 1),
+                    ),
+                    disabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 10),
+                ),
+
+                const SizedBox(height: 5),
+
+                // Personality field with persistent controller
+                Text(
+                  'Personality',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                TextField(
+                  controller: personalityController,
+                  maxLines: 1,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.white,
+                    focusColor: Colors.transparent,
+                    hoverColor: Colors.transparent,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade700, width: 1),
+                    ),
+                    disabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade700),
+                    ),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  style: const TextStyle(fontSize: 10),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            // Two-column layout
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // First column
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildField('Category', 'Category'),
+                        _buildField('Supp Cat 1', 'SupplementalCategories1'),
+                        _buildField('Supp Cat 2', 'SupplementalCategories2'),
+                        _buildField('Supp Cat 3', 'SupplementalCategories3'),
+                        _buildField('Object Name', 'ObjectName'),
+                        _buildField('Stadium', 'Sub-location'),
+                        _buildField('City', 'City'),
+                        _buildField('Province/State', 'Province-State'),
+                        _buildField('Country', 'Country'),
+                        _buildField('Country Code', 'CountryCode'),
+                        _buildField('Urgency', 'Urgency'),
+                        _buildField(
+                            'Special Instructions', 'SpecialInstructions'),
+                      ]
+                          .map((widget) => Padding(
+                                padding: const EdgeInsets.only(bottom: 5.0),
+                                child: widget,
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Second column
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildField('Photographer', 'Creator'),
+                        _buildField(
+                            'MEID (Job Reference)', 'TransmissionReference'),
+                        _buildField('Description Writers', 'CaptionWriter'),
+                        _buildField('Creator\'s Job Title', 'AuthorsPosition'),
+                        _buildField('Copyright', 'Copyright'),
+                        _buildField('Credit', 'Credit'),
+                        _buildField('Source', 'Source'),
+                        _buildField('Headline', 'Headline'),
+                        _buildField('Keywords', 'Keywords'),
+                      ]
+                          .map((widget) => Padding(
+                                padding: const EdgeInsets.only(bottom: 5.0),
+                                child: widget,
+                              ))
+                          .toList(),
+                    ),
                   ),
                 ],
-              );
-            }),
+              ),
+            ),
           ],
         ),
       ),
@@ -385,9 +404,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 10,
             fontWeight: FontWeight.w500,
-            color: Colors.grey.shade700,
+            color: Colors.grey.shade600,
           ),
         ),
         const SizedBox(height: 3),
@@ -419,19 +438,31 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
             });
           },
           decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            focusColor: Colors.transparent,
+            hoverColor: Colors.transparent,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderSide: BorderSide(color: Colors.grey.shade700),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade700),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade600, width: 1),
+              borderSide: BorderSide(color: Colors.grey.shade700, width: 1),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(4),
+              borderSide: BorderSide(color: Colors.grey.shade700),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             isDense: true,
           ),
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: 10),
         ),
       ],
     );
@@ -520,8 +551,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                 final num = int.parse(parts[0]);
                 final den = int.parse(parts[1]);
                 // Convert to ordinal format like "1/1000th"
-                if (den == 1) {
-                  formattedShutter = '${num}s';
+                if (num == 1 && den == 1) {
+                  formattedShutter = '1 second';
+                } else if (den == 1) {
+                  formattedShutter = '${num} seconds';
                 } else if (den == 2) {
                   formattedShutter = '${num}/2nd';
                 } else if (den == 3) {
@@ -670,8 +703,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           dateTimeStr.replaceFirst(':', '-').replaceFirst(':', '-'));
       final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
       final minute = dt.minute.toString().padLeft(2, '0');
+      final second = dt.second.toString().padLeft(2, '0');
       final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minute $ampm';
+      return '$hour:$minute:$second $ampm';
     } catch (e) {
       return '';
     }
@@ -704,7 +738,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: const BorderRadius.only(
@@ -729,6 +763,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close, color: Colors.black87),
                     tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -737,83 +773,246 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
             // Image preview and metadata in a row
             Expanded(
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Left side - Image preview with EXIF data
                   if (widget.imagePath != null)
-                    Container(
-                      width: 600,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: SizedBox(
-                              width: 568,
-                              height: 400,
-                              child: ExtendedImage.file(
-                                File(widget.imagePath!),
-                                fit: BoxFit.contain,
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Container(
+                        width: 600,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border:
+                              Border.all(color: Colors.grey.shade400, width: 1),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 568,
+                                height: 400,
+                                child: ExtendedImage.file(
+                                  File(widget.imagePath!),
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          // EXIF data section
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+
+                            // Navigation and utility buttons
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                RichText(
-                                  text: TextSpan(
-                                    children: [
-                                      TextSpan(
-                                        text: widget.imagePath != null
-                                            ? widget.imagePath!.split('/').last
-                                            : 'Image',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700,
+                                // Previous button (left)
+                                GestureDetector(
+                                  onTap: () {
+                                    if (widget.onPreviousImage != null) {
+                                      widget.onPreviousImage!();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Prev',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
-                                      ),
-                                      TextSpan(
-                                        text:
-                                            ' • ${_formatDateForDisplay()} • ${_formatTimeForDisplay()}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w400,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                _buildExifRow('Settings', 'Settings'),
-                                _buildExifRow('ISO', 'ISO'),
-                                _buildExifRow('Focal Length', 'FocalLength'),
-                                _buildExifRow('Camera', 'Camera'),
-                                _buildExifRow('Lens', 'Lens'),
+
+                                // Copy and Paste buttons grouped in the middle
+                                Row(
+                                  children: [
+                                    // Copy button
+                                    GestureDetector(
+                                      onTap: () {
+                                        if (widget.onCopyMetadata != null) {
+                                          widget.onCopyMetadata!();
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 7),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              'Copy',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+
+                                    const SizedBox(width: 12),
+
+                                    // Paste button
+                                    GestureDetector(
+                                      onTap: () {
+                                        if (widget.onPasteMetadata != null) {
+                                          widget.onPasteMetadata!();
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 7),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              'Paste',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                // Next button (right)
+                                GestureDetector(
+                                  onTap: () {
+                                    if (widget.onNextImage != null) {
+                                      widget.onNextImage!();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Next',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                        ],
+
+                            const SizedBox(height: 16),
+                            // EXIF data section
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: widget.imagePath != null
+                                              ? widget.imagePath!
+                                                  .split('/')
+                                                  .last
+                                              : 'Image',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text:
+                                              ' • ${_formatDateForDisplay()} • ${_formatTimeForDisplay()}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w400,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildExifRow('Settings', 'Settings'),
+                                  _buildExifRow('ISO', 'ISO'),
+                                  _buildExifRow('Focal Length', 'FocalLength'),
+                                  _buildExifRow('Camera', 'Camera'),
+                                  _buildExifRow('Lens', 'Lens'),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 
                   // Right side - Metadata widget with custom two-column layout
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: _buildTwoColumnMetadata(),
+                      padding: const EdgeInsets.all(6),
+                      child: Container(
+                        height: double.infinity,
+                        child: _buildTwoColumnMetadata(),
+                      ),
                     ),
                   ),
                 ],
@@ -833,27 +1032,46 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: _discardChanges,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.black87,
+                  GestureDetector(
+                    onTap: _discardChanges,
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
                     ),
-                    child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _saveChanges,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade300,
-                      foregroundColor: Colors.black87,
+                  GestureDetector(
+                    onTap: _saveChanges,
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4)),
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        'Save Changes',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
                     ),
-                    child: const Text('Save Changes'),
                   ),
                 ],
               ),
