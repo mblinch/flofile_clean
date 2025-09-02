@@ -648,6 +648,31 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
             ),
           ),
 
+          // Thumbnail grid directly under the picture preview
+          Expanded(
+            child: ThumbnailGridWidget(
+              imagePaths: widget.imagePaths,
+              currentIndex: widget.currentIndex,
+              onImageSelected: widget.onImageSelected,
+              uploadedImages: widget.uploadedImages ?? {},
+              queuedUploads: widget.queuedUploads ?? {},
+              currentlyUploading: widget.currentlyUploading ?? {},
+              uploadProgress: widget.uploadProgress ?? {},
+              xmpRatings: widget.xmpRatings,
+              xmpLabels: widget.xmpLabels,
+              xmpTagged: widget.xmpTagged,
+              lockedPaths: widget.lockedPaths,
+              centerRequestId: 0, // No centering needed for this view
+              onImageDeleted: widget.onImageDeleted,
+              onCopyMetadata: widget.onCopyMetadata,
+              onPasteMetadata: widget.onPasteMetadata,
+              onApplyIptcTemplate: null, // Not needed for this view
+              onFtpImage: widget.onFtpImage,
+              onImageRenamed: widget.onImageRenamed,
+              onMultiSelect: null, // Not needed for this view
+            ),
+          ),
+
           // Bottom bar: Camera model, shutter speed, focal length, and navigation
           if (_exifData != null || _isLoadingExif)
             Container(
@@ -730,31 +755,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       ],
                     ),
             ),
-
-          // Thumbnail grid below the bottom bar - spans to bottom with scroll
-          Expanded(
-            child: ThumbnailGridWidget(
-              imagePaths: widget.imagePaths,
-              currentIndex: widget.currentIndex,
-              onImageSelected: widget.onImageSelected,
-              uploadedImages: widget.uploadedImages ?? {},
-              queuedUploads: widget.queuedUploads ?? {},
-              currentlyUploading: widget.currentlyUploading ?? {},
-              uploadProgress: widget.uploadProgress ?? {},
-              xmpRatings: widget.xmpRatings,
-              xmpLabels: widget.xmpLabels,
-              xmpTagged: widget.xmpTagged,
-              lockedPaths: widget.lockedPaths,
-              centerRequestId: 0, // No centering needed for this view
-              onImageDeleted: widget.onImageDeleted,
-              onCopyMetadata: widget.onCopyMetadata,
-              onPasteMetadata: widget.onPasteMetadata,
-              onApplyIptcTemplate: null, // Not needed for this view
-              onFtpImage: widget.onFtpImage,
-              onImageRenamed: widget.onImageRenamed,
-              onMultiSelect: null, // Not needed for this view
-            ),
-          ),
         ],
       ),
     );
