@@ -114,57 +114,112 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   // Show metadata popup dialog
-  void _showMetadataPopup() {
+  void _showMetadataPopup() async {
     if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
 
-    // Merge current metadata with current caption values for complete data
-    final Map<String, dynamic> mergedMetadata =
-        Map<String, dynamic>.from(currentMetadata ?? {});
+    // Load fresh metadata directly from the file for the popup
+    // This ensures we get the actual file data, not processed widget data
+    final imagePath = imagePaths[currentIndex];
+    print('DEBUG: Loading fresh metadata for popup from: $imagePath');
 
-    // Get current caption values from the caption fields widget
-    final captionState = _captionFieldsKey2.currentState;
-    if (captionState != null) {
-      try {
-        final currentCaptionData = (captionState as dynamic)
-            .getCurrentCaptionValues() as Map<String, String>;
-        // Merge caption data into metadata
-        currentCaptionData.forEach((key, value) {
-          if (value.isNotEmpty) {
-            mergedMetadata[key] = value;
-          }
-        });
-        print(
-            'DEBUG: Merged caption data into metadata for popup: $currentCaptionData');
-      } catch (e) {
-        print('DEBUG: Error getting caption values for popup: $e');
+    Map<String, dynamic> freshMetadata = {};
+
+    try {
+      // Use the same ExifTool command as _loadMetadata() to get fresh data
+      final proc = await ExiftoolHelper.run([
+        '-a', // allow duplicate tags
+        '-j', // JSON output
+        '-IPTC:Description',
+        '-Description',
+        '-Caption-Abstract',
+        '-ImageDescription',
+        '-IPTC:Caption-Abstract',
+        '-IPTC:By-line',
+        '-By-line',
+        '-Creator',
+        '-XMP:Creator',
+        '-IPTC:OriginalTransmissionReference',
+        '-OriginalTransmissionReference',
+        '-TransmissionReference',
+        '-JobID',
+        '-MEID',
+        '-IPTC:By-lineTitle',
+        '-By-lineTitle',
+        '-AuthorsPosition',
+        '-IPTC:CopyrightNotice',
+        '-CopyrightNotice',
+        '-Copyright',
+        '-XMP:Rights',
+        '-IPTC:Credit',
+        '-Credit',
+        '-IPTC:Source',
+        '-Source',
+        '-XMP:Source',
+        '-IPTC:Headline',
+        '-Headline',
+        '-XMP:Title',
+        '-IPTC:Keywords',
+        '-Keywords',
+        '-XMP:Subject',
+        '-IPTC:Category',
+        '-Category',
+        '-SupplementalCategories',
+        '-IPTC:ObjectName',
+        '-ObjectName',
+        '-IPTC:SubLocation',
+        '-Sub-location',
+        '-SubLocation',
+        '-XMP:Location',
+        '-IPTC:City',
+        '-City',
+        '-XMP:City',
+        '-IPTC:ProvinceState',
+        '-Province-State',
+        '-ProvinceState',
+        '-XMP:State',
+        '-IPTC:CountryPrimaryLocationName',
+        '-Country',
+        '-Country-PrimaryLocationName',
+        '-XMP:Country',
+        '-IPTC:CountryPrimaryLocationCode',
+        '-CountryCode',
+        '-Country-PrimaryLocationCode',
+        '-IPTC:Urgency',
+        '-Urgency',
+        '-IPTC:SpecialInstructions',
+        '-SpecialInstructions',
+        '-XMP:Instructions',
+        '-XMP-photoshop:Instructions',
+        '-XMP-getty:Personality',
+        '-XMP:Personality',
+        '-Personality',
+        '-CaptionWriter',
+        '-TimeDate',
+        '-DateTimeOriginal',
+        '-CreateDate',
+        '-ModifyDate',
+        '-FileModifyDate',
+        imagePath,
+      ]);
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdoutText);
+        if (data.isNotEmpty) {
+          freshMetadata = data.first as Map<String, dynamic>;
+        }
       }
+    } catch (e) {
+      print('DEBUG: Error loading fresh metadata for popup: $e');
+      // Fallback to current metadata if fresh load fails
+      freshMetadata = Map<String, dynamic>.from(currentMetadata ?? {});
     }
 
-    // Get current metadata values from the metadata widget
-    final metadataState = _metadataKey2.currentState;
-    if (metadataState != null) {
-      try {
-        final currentMetadataValues = (metadataState as dynamic)
-            .getCurrentValues() as Map<String, String>;
-        // Merge metadata values
-        currentMetadataValues.forEach((key, value) {
-          if (value.isNotEmpty) {
-            mergedMetadata[key] = value;
-          }
-        });
-        print(
-            'DEBUG: Merged metadata values into popup data: $currentMetadataValues');
-      } catch (e) {
-        print('DEBUG: Error getting metadata values for popup: $e');
-      }
-    }
-
-    print('DEBUG: Final merged metadata for popup: $mergedMetadata');
+    print('DEBUG: Fresh metadata for popup: $freshMetadata');
 
     showDialog(
       context: context,
       builder: (context) => MetadataPopupDialog(
-        metadata: mergedMetadata,
+        metadata: freshMetadata,
         imagePath: imagePaths[currentIndex],
         onMetadataUpdated: (updatedMetadata) {
           setState(() {
@@ -803,6 +858,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           final List data = jsonDecode(proc.stdoutText);
           if (data.isNotEmpty) {
             final loadedMetadata = data.first as Map<String, dynamic>;
+            print('DEBUG: Caption fields found:');
+            print('  IPTC:Description: ${loadedMetadata['IPTC:Description']}');
+            print('  Description: ${loadedMetadata['Description']}');
+            print('  Caption-Abstract: ${loadedMetadata['Caption-Abstract']}');
+            print(
+                '  IPTC:Caption-Abstract: ${loadedMetadata['IPTC:Caption-Abstract']}');
+            print('  ImageDescription: ${loadedMetadata['ImageDescription']}');
+            print('DEBUG: Personality fields found:');
+            print(
+                '  XMP-getty:Personality: ${loadedMetadata['XMP-getty:Personality']}');
+            print('  Personality: ${loadedMetadata['Personality']}');
             print(
                 'DEBUG: Raw parsed SupplementalCategories: ${loadedMetadata['SupplementalCategories']} (${loadedMetadata['SupplementalCategories'].runtimeType})');
             print(

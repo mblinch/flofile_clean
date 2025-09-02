@@ -12,6 +12,9 @@ class MetadataPopupDialog extends StatefulWidget {
   final VoidCallback? onNextImage;
   final VoidCallback? onCopyMetadata;
   final VoidCallback? onPasteMetadata;
+  // Optional: request parent to change image without closing dialog.
+  // Should return a map containing 'path' (String) and 'metadata' (Map<String,dynamic>).
+  final Future<Map<String, dynamic>> Function(int delta)? onRequestImageChange;
 
   const MetadataPopupDialog({
     super.key,
@@ -22,6 +25,7 @@ class MetadataPopupDialog extends StatefulWidget {
     this.onNextImage,
     this.onCopyMetadata,
     this.onPasteMetadata,
+    this.onRequestImageChange,
   });
 
   @override
@@ -31,6 +35,9 @@ class MetadataPopupDialog extends StatefulWidget {
 class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   Map<String, dynamic>? currentMetadata;
   Map<String, dynamic>? exifData;
+  // Track whether we've ever successfully loaded EXIF in this dialog session
+  bool _hasEverLoadedExif = false;
+  String? _currentImagePath;
 
   // Controllers for caption and personality fields
   late TextEditingController captionController;
@@ -40,10 +47,20 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   void initState() {
     super.initState();
     currentMetadata = Map<String, dynamic>.from(widget.metadata ?? {});
+    _currentImagePath = widget.imagePath;
+    _normalizeMetadataForUi();
 
     // Debug: Print what metadata we received
     print('DEBUG: Metadata popup received metadata: $currentMetadata');
     print('DEBUG: Available keys: ${currentMetadata?.keys.toList()}');
+    print(
+        'DEBUG: Caption fields: IPTC:Description=${currentMetadata?['IPTC:Description']}, Description=${currentMetadata?['Description']}, Caption-Abstract=${currentMetadata?['Caption-Abstract']}');
+    print(
+        'DEBUG: Personality: XMP-getty:Personality=${currentMetadata?['XMP-getty:Personality']}, Personality=${currentMetadata?['Personality']}');
+    print(
+        'DEBUG: SupplementalCategories: ${currentMetadata?['SupplementalCategories']} (${currentMetadata?['SupplementalCategories'].runtimeType})');
+    print(
+        'DEBUG: After normalization - SupplementalCategories1=${currentMetadata?['SupplementalCategories1']}, SupplementalCategories2=${currentMetadata?['SupplementalCategories2']}, SupplementalCategories3=${currentMetadata?['SupplementalCategories3']}');
 
     // Initialize controllers with current values (fallback across common keys, prioritizing Photo Mechanic's field)
     final String initialCaption =
@@ -55,6 +72,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                 currentMetadata?['XMP:Description']?.toString() ??
                 '')
             .toString();
+
+    print('DEBUG: Initializing controllers - Caption: "$initialCaption"');
     captionController = TextEditingController(text: initialCaption);
 
     final String initialPersonality =
@@ -62,6 +81,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                 currentMetadata?['Personality']?.toString() ??
                 '')
             .toString();
+
+    print(
+        'DEBUG: Initializing controllers - Personality: "$initialPersonality"');
     personalityController = TextEditingController(text: initialPersonality);
 
     // Load EXIF data for the image
@@ -69,8 +91,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   }
 
   // Load EXIF data from the image file
-  Future<void> _loadExifData() async {
-    if (widget.imagePath == null) return;
+  Future<void> _loadExifData({String? path}) async {
+    final String? targetPath = path ?? _currentImagePath ?? widget.imagePath;
+    if (targetPath == null) return;
 
     try {
       // Import ExifToolHelper
@@ -87,7 +110,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
         '-LensModel',
         '-DateTimeOriginal',
         '-SerialNumber',
-        widget.imagePath!,
+        targetPath,
       ]);
 
       if (exiftool.exitCode == 0) {
@@ -97,8 +120,12 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           print('DEBUG: EXIF data loaded: $exifDataMap');
           setState(() {
             exifData = exifDataMap;
+            _hasEverLoadedExif = true;
           });
         }
+      } else {
+        print('ExifTool failed with exit code: ${exiftool.exitCode}');
+        // Don't clear exifData on failure - keep previous data
       }
     } catch (e) {
       print('Error loading EXIF data: $e');
@@ -109,6 +136,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     if (metadata != null) {
       setState(() {
         currentMetadata = metadata;
+        _normalizeMetadataForUi();
       });
       // Update controllers with new metadata
       _updateControllersFromMetadata();
@@ -196,8 +224,18 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   @override
   void didUpdateWidget(covariant MetadataPopupDialog oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Check if the image path changed (indicating a new image)
+    if (oldWidget.imagePath != widget.imagePath) {
+      // Only reload EXIF data when the image actually changes
+      // Don't clear exifData first - let it keep showing until new data loads
+      _currentImagePath = widget.imagePath;
+      _loadExifData(path: _currentImagePath);
+    }
+
     if (oldWidget.metadata != widget.metadata) {
       currentMetadata = Map<String, dynamic>.from(widget.metadata ?? {});
+      _normalizeMetadataForUi();
       // Rehydrate controllers from the possibly new metadata (prioritizing Photo Mechanic's field)
       final String updatedCaption =
           (currentMetadata?['IPTC:Description']?.toString() ??
@@ -223,6 +261,32 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
   }
 
+  // Ensure UI-only fields like SupplementalCategories1/2/3 are populated
+  void _normalizeMetadataForUi() {
+    if (currentMetadata == null) return;
+
+    final dynamic supp = currentMetadata!['SupplementalCategories'] ??
+        currentMetadata!['IPTC:SupplementalCategories'];
+    List<String> parts = [];
+    if (supp is List) {
+      parts = supp.map((e) => e.toString()).toList();
+    } else if (supp is String) {
+      // Split by comma or semicolon; trim spaces
+      parts = supp.split(',').map((s) => s.trim()).toList();
+      if (parts.length == 1 && supp.contains(';')) {
+        parts = supp.split(';').map((s) => s.trim()).toList();
+      }
+    }
+
+    // Assign to UI keys
+    if (parts.isNotEmpty)
+      currentMetadata!['SupplementalCategories1'] = parts[0];
+    if (parts.length > 1)
+      currentMetadata!['SupplementalCategories2'] = parts[1];
+    if (parts.length > 2)
+      currentMetadata!['SupplementalCategories3'] = parts[2];
+  }
+
   Widget _buildTwoColumnMetadata() {
     return Container(
       height: double.infinity,
@@ -245,7 +309,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                   'Caption',
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                     color: Colors.grey.shade600,
                   ),
                 ),
@@ -260,26 +324,26 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                     hoverColor: Colors.transparent,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
                       borderSide:
-                          BorderSide(color: Colors.grey.shade700, width: 1),
+                          BorderSide(color: Colors.grey.shade500, width: 1),
                     ),
                     disabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                     isDense: true,
                   ),
-                  style: const TextStyle(fontSize: 10),
+                  style: const TextStyle(fontSize: 11),
                 ),
 
                 const SizedBox(height: 5),
@@ -289,7 +353,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                   'Personality',
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w700,
                     color: Colors.grey.shade600,
                   ),
                 ),
@@ -304,26 +368,26 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                     hoverColor: Colors.transparent,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
                       borderSide:
-                          BorderSide(color: Colors.grey.shade700, width: 1),
+                          BorderSide(color: Colors.grey.shade500, width: 1),
                     ),
                     disabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade700),
+                      borderSide: BorderSide(color: Colors.grey.shade500),
                     ),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     isDense: true,
                   ),
-                  style: const TextStyle(fontSize: 10),
+                  style: const TextStyle(fontSize: 11),
                 ),
               ],
             ),
@@ -347,7 +411,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         _buildField('Province/State', 'Province-State'),
                         _buildField('Country', 'Country'),
                         _buildField('Country Code', 'CountryCode'),
-                        _buildField('Urgency', 'Urgency'),
                         _buildField(
                             'Special Instructions', 'SpecialInstructions'),
                       ]
@@ -373,6 +436,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         _buildField('Source', 'Source'),
                         _buildField('Headline', 'Headline'),
                         _buildField('Keywords', 'Keywords'),
+                        _buildField('Urgency', 'Urgency'),
                       ]
                           .map((widget) => Padding(
                                 padding: const EdgeInsets.only(bottom: 5.0),
@@ -393,9 +457,223 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   Widget _buildField(String label, String key, {int? maxLines}) {
     // Prioritize Photo Mechanic's preferred IPTC field, then fallback to original key
     final photoMechanicKey = _getPhotoMechanicField(key);
-    final value = currentMetadata?[photoMechanicKey]?.toString() ??
+    String value = currentMetadata?[photoMechanicKey]?.toString() ??
         currentMetadata?[key]?.toString() ??
         '';
+
+    // Special handling for Urgency field - use popup menu
+    if (key == 'Urgency') {
+      // Extract just the number from "5 (normal urgency)" format if needed
+      if (value.isNotEmpty) {
+        final match = RegExp(r'^(\d+)').firstMatch(value);
+        if (match != null) {
+          value = match.group(1)!;
+        }
+      }
+
+      // Default to '5' (Normal) if no urgency is defined or invalid value
+      if (value.isEmpty ||
+          !['0', '1', '2', '3', '4', '5', '6', '7', '8'].contains(value)) {
+        value = '5';
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          PopupMenuButton<String>(
+            initialValue:
+                value, // value is already validated and defaulted to '5' above
+            onSelected: (newValue) {
+              setState(() {
+                currentMetadata =
+                    Map<String, dynamic>.from(currentMetadata ?? {});
+                if (newValue != null && newValue.isNotEmpty) {
+                  currentMetadata![key] = newValue;
+                  final photoMechanicKey = _getPhotoMechanicField(key);
+                  if (photoMechanicKey != null) {
+                    currentMetadata![photoMechanicKey] = newValue;
+                  }
+                } else {
+                  currentMetadata!.remove(key);
+                  final photoMechanicKey = _getPhotoMechanicField(key);
+                  if (photoMechanicKey != null) {
+                    currentMetadata!.remove(photoMechanicKey);
+                  }
+                }
+              });
+            },
+            constraints: const BoxConstraints(maxHeight: 300),
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: '',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  'Select urgency',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '0',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '0 - Undefined',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '1',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '1 - High',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '2',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '2',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '3',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '3',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '4',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '4',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '5',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '5 - Normal',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '6',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '6',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '7',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '7',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: '8',
+                height: 28,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  '8 - Low',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade500),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _getUrgencyDisplayText(
+                          value), // value is already validated above
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors
+                            .black, // Always black since value is always valid
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Regular text field for other fields
     final controller = TextEditingController(text: value);
 
     return Column(
@@ -405,7 +683,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           label,
           style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w700,
             color: Colors.grey.shade600,
           ),
         ),
@@ -444,31 +722,56 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
             hoverColor: Colors.transparent,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade700),
+              borderSide: BorderSide(color: Colors.grey.shade500),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade700),
+              borderSide: BorderSide(color: Colors.grey.shade500),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade700, width: 1),
+              borderSide: BorderSide(color: Colors.grey.shade500, width: 1),
             ),
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade700),
+              borderSide: BorderSide(color: Colors.grey.shade500),
             ),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             isDense: true,
           ),
-          style: const TextStyle(fontSize: 10),
+          style: const TextStyle(fontSize: 11),
         ),
       ],
     );
   }
 
   // Get Photo Mechanic's preferred IPTC field for a given key
+  String _getUrgencyDisplayText(String value) {
+    switch (value) {
+      case '0':
+        return '0 - Undefined';
+      case '1':
+        return '1 - High';
+      case '2':
+        return '2';
+      case '3':
+        return '3';
+      case '4':
+        return '4';
+      case '5':
+        return '5 - Normal';
+      case '6':
+        return '6';
+      case '7':
+        return '7';
+      case '8':
+        return '8 - Low';
+      default:
+        return value;
+    }
+  }
+
   String? _getPhotoMechanicField(String key) {
     switch (key) {
       case 'Creator':
@@ -511,8 +814,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   }
 
   Widget _buildExifRow(String label, String exifKey) {
-    // Get the actual EXIF value from the loaded data
-    String value = 'N/A';
+    // Get the actual EXIF value from the loaded data. Avoid flicker by not
+    // showing 'N/A' while switching images if we have previous EXIF.
+    String value = _hasEverLoadedExif ? 'N/A' : '';
 
     if (exifData != null) {
       // Handle special composite fields
@@ -631,6 +935,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       }
     }
 
+    // If we never had EXIF yet and value would be N/A, render empty to avoid flicker
+    if (!_hasEverLoadedExif && (value == 'N/A' || value.isEmpty)) {
+      return const SizedBox.shrink();
+    }
     return _buildExifRowDisplay(label, value);
   }
 
@@ -805,14 +1113,29 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                             ),
 
                             // Navigation and utility buttons
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 // Previous button (left)
                                 GestureDetector(
-                                  onTap: () {
-                                    if (widget.onPreviousImage != null) {
+                                  onTap: () async {
+                                    if (widget.onRequestImageChange != null) {
+                                      // Ask parent to move -1 and return new path/metadata
+                                      try {
+                                        final result = await widget
+                                            .onRequestImageChange!(-1);
+                                        setState(() {
+                                          _currentImagePath =
+                                              (result['path'] as String?);
+                                          currentMetadata =
+                                              Map<String, dynamic>.from(
+                                                  (result['metadata'] ?? {})
+                                                      as Map);
+                                        });
+                                        _loadExifData(path: _currentImagePath);
+                                      } catch (_) {}
+                                    } else if (widget.onPreviousImage != null) {
                                       widget.onPreviousImage!();
                                     }
                                   },
@@ -919,8 +1242,22 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
                                 // Next button (right)
                                 GestureDetector(
-                                  onTap: () {
-                                    if (widget.onNextImage != null) {
+                                  onTap: () async {
+                                    if (widget.onRequestImageChange != null) {
+                                      try {
+                                        final result = await widget
+                                            .onRequestImageChange!(1);
+                                        setState(() {
+                                          _currentImagePath =
+                                              (result['path'] as String?);
+                                          currentMetadata =
+                                              Map<String, dynamic>.from(
+                                                  (result['metadata'] ?? {})
+                                                      as Map);
+                                        });
+                                        _loadExifData(path: _currentImagePath);
+                                      } catch (_) {}
+                                    } else if (widget.onNextImage != null) {
                                       widget.onNextImage!();
                                     }
                                   },
@@ -952,13 +1289,21 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                               ],
                             ),
 
+                            // Divider under buttons
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 1,
+                              width: double.infinity,
+                              color: Colors.grey.shade300,
+                            ),
+
                             const SizedBox(height: 16),
                             // EXIF data section
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Column(
@@ -1042,13 +1387,18 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1063,13 +1413,18 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: Text(
-                        'Save Changes',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Save Changes',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
