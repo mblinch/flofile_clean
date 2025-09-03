@@ -1181,6 +1181,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   },
                   child: const Text('Save', style: TextStyle(fontSize: 11)),
                 ),
+                const SizedBox(width: 8, height: 26),
+                // Reset button (to the right of FTP Settings)
+                CustomButton(
+                  onTap: _fullReset,
+                  child: Container(
+                    height: 26,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.refresh,
+                            size: 12, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text('Reset',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -2655,8 +2683,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   labelText: 'Caption',
                                   floatingLabelBehavior:
                                       FloatingLabelBehavior.always,
-                                  hintText:
-                                      'Generated caption will appear here...',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(6),
                                     borderSide:
@@ -2742,7 +2768,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   labelText: 'Personality',
                                   floatingLabelBehavior:
                                       FloatingLabelBehavior.always,
-                                  hintText: 'Personality tags...',
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(6),
                                     borderSide:
@@ -3793,68 +3818,115 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // FTP buttons row
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Last button
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: CustomButton(
+                  onTap: _pasteLastCaption,
+                  child: Container(
+                    width: 412,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.history,
+                            size: 14, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Paste Caption from Previous Frame',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
               // FTP button
               CustomButton(
                 onTap: _disableFtp ? null : _onFtpPressed,
-                child: Container(
-                  width: 140, // 20px wider than before
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _disableFtp
-                        ? Colors.grey.shade300
-                        : const Color(0xFF0052CC),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
+                child: Transform.translate(
+                  offset: const Offset(0, -32),
+                  child: Container(
+                    width: 140,
+                    height: 58,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _disableFtp
+                          ? Colors.grey.shade300
+                          : const Color(0xFF0052CC),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
                         color: _disableFtp
                             ? Colors.grey.shade300
-                            : const Color(0xFF0052CC)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.rocket_launch,
+                            : const Color(0xFF0052CC),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.rocket_launch,
                           size: 14,
-                          color: _disableFtp
-                              ? Colors.grey.shade600
-                              : Colors.white),
-                      const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
+                          color:
+                              _disableFtp ? Colors.grey.shade600 : Colors.white,
+                        ),
+                        const SizedBox(width: 2),
+                        Flexible(
+                          child: Text(
                             _disableFtp
                                 ? 'FTP OFF'
                                 : (_currentFtpProfile != null
                                     ? 'FTP: $_currentFtpProfile'
                                     : 'FTP'),
                             style: TextStyle(
-                                fontSize: 10,
-                                color: _disableFtp
-                                    ? Colors.grey.shade600
-                                    : Colors.white,
-                                fontWeight: FontWeight.w500),
+                              fontSize: 10,
+                              color: _disableFtp
+                                  ? Colors.grey.shade600
+                                  : Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
                             overflow: TextOverflow.ellipsis,
-                            maxLines: 1),
-                      ),
-                    ],
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
-              // Settings button
+              const SizedBox(width: 4, height: 26),
+              // FTP Settings button
               CustomButton(
                 onTap: _showFtpSettings,
-                child: Container(
-                  width: 80, // 30px wider than default
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4A90E2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF4A90E2)),
+                child: Transform.translate(
+                  offset: const Offset(0, -32),
+                  child: Container(
+                    width: 80,
+                    height: 58,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4A90E2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF4A90E2)),
+                    ),
+                    child: const Icon(Icons.settings,
+                        size: 14, color: Colors.white),
                   ),
-                  child:
-                      const Icon(Icons.settings, size: 14, color: Colors.white),
                 ),
               ),
             ],
@@ -6820,7 +6892,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'takesfield':
           action = 'Takes the Field';
           break;
-        case 'comesofffield':
+        case 'comesoffield':
         case 'offfield':
           action = 'Comes Off the Field';
           break;
@@ -7467,7 +7539,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'takesfield':
           action = 'Takes the Field';
           break;
-        case 'comesofffield':
+        case 'comesoffield':
         case 'offfield':
           action = 'Comes Off the Field';
           break;
@@ -7769,7 +7841,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'takesfield':
           action = 'Takes the Field';
           break;
-        case 'comesofffield':
+        case 'comesoffield':
         case 'offfield':
           action = 'Comes Off the Field';
           break;
@@ -9747,7 +9819,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _updatePersonalityField();
   }
 
-  void _fullReset() {
+  void _fullReset() async {
     setState(() {
       captionController.clear();
       personalityController.clear();
@@ -9830,6 +9902,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Update the UI
     _updateCaption();
     _updatePersonalityField();
+
+    // After reset, apply caption from saved IPTC template (if available)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final defaultTemplateJson = prefs.getString('default_metadata_template');
+      if (defaultTemplateJson != null) {
+        final Map<String, dynamic> template = jsonDecode(defaultTemplateJson);
+        final String? templateCaption =
+            (template['Caption'] as String?)?.trim();
+        if (templateCaption != null && templateCaption.isNotEmpty) {
+          setState(() {
+            captionController.text = templateCaption;
+          });
+          // Do not call _updateCaption() here; teams may be unset and would clear the caption
+        }
+      }
+    } catch (_) {
+      // Ignore template errors on reset
+    }
 
     if (widget.onReset != null) widget.onReset!();
 
@@ -12937,366 +13028,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Magic bar (always visible) - COMMENTED OUT for Home Run to hide magic bar
-        /* Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            children: [
-              // Text field
-              TextField(
-                // Magic bar removed
-                controller: TextEditingController(),
-                enabled:
-                    !_waitingForHomeVisitorChoice, // Disable when waiting for choice
-                cursorWidth: 1.5,
-                cursorHeight: 16,
-                style: const TextStyle(fontSize: 12, height: 2.3),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  isDense: true,
-                ),
-                onChanged: (value) {
-                  // Debug output
-                          // print('DEBUG: Magic bar onChanged: "$value"');
-        // print('DEBUG: _isMagicInput: ${_isMagicInput(value)}');
-                  print(
-                      'DEBUG: _waitingForHomeVisitorChoice: $_waitingForHomeVisitorChoice');
-
-                  // If magic bar is completely cleared, don't reset
-                  // This preserves player selections during multi-player input
-                  if (value.isEmpty) {
-                    return;
-                  }
-
-                  // If we're waiting for home/visitor choice, ignore all input
-                  // The dialog will handle the choice selection
-                  if (_waitingForHomeVisitorChoice) {
-                    print(
-                        'DEBUG: Ignoring input while waiting for dialog choice: "$value"');
-                    // Restore the original text if it was changed
-                    final expectedText =
-                        '${_magicInputMatchingPlayers.first.jerseyNumber} ${_magicInputActionText}';
-                    if (value != expectedText) {
-                      // print('DEBUG: Restoring original text: "$expectedText"');
-                      Future.microtask(() {
-                        customBetweenPlayersController.text = expectedText;
-                        customBetweenPlayersController.selection =
-                            TextSelection.fromPosition(
-                          TextPosition(offset: expectedText.length),
-                        );
-                      });
-                    }
-                    return;
-                  }
-
-                  // Check for magic input format (e.g., "27 hr 1")
-                  if (_isMagicInput(value)) {
-                    // print('DEBUG: Processing magic input: "$value"');
-                    _parseMagicInput(value);
-                    return; // Return to prevent additional setState calls
-                  }
-
-                  setState(() {
-                    if (_isPlayerSearchMode && _isNumeric(value)) {
-                      _filterPlayersByNumber(value);
-                    } else if (_isPlayerSearchMode && value.isEmpty) {
-                      _filteredPlayers.clear();
-                    } else if (!_isPlayerSearchMode) {
-                      print('FUCK: In custom verb mode, typing: "$value"');
-                      // When in custom verb mode, update caption with custom verb
-                      if (value.isNotEmpty) {
-                        print('FUCK: value.isNotEmpty = true, value = "$value"');
-                        String currentCaption = captionController.text;
-                        List<String> allSelectedPlayers = [];
-                        allSelectedPlayers.addAll(selectedHomePlayers);
-                        allSelectedPlayers.addAll(selectedAwayPlayers);
-                        
-                        print('FUCK: currentCaption = "$currentCaption"');
-                        print('FUCK: allSelectedPlayers = $allSelectedPlayers');
-                        
-                        if (allSelectedPlayers.isNotEmpty) {
-                          String playerName = allSelectedPlayers.first;
-                          print('FUCK: playerName = "$playerName"');
-                          
-                          // Find the player in the caption and insert custom verb after team
-                          if (currentCaption.contains(playerName)) {
-                            int playerIndex = currentCaption.indexOf(playerName);
-                            if (playerIndex != -1) {
-                              String beforePlayer = currentCaption.substring(0, playerIndex);
-                              String afterPlayer = currentCaption.substring(playerIndex + playerName.length);
-                              
-                              // Find "against" to insert before it
-                              int againstIndex = afterPlayer.indexOf(' against ');
-                              if (againstIndex != -1) {
-                                String beforeAgainst = afterPlayer.substring(0, againstIndex);
-                                String afterAgainst = afterPlayer.substring(againstIndex);
-                                captionController.text = '$beforePlayer$playerName$beforeAgainst $value$afterAgainst';
-                              } else {
-                                // Fallback
-                                captionController.text = '$beforePlayer$playerName $value';
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  });
-                },
-                onEditingComplete: () {
-                  // Update caption when editing is complete
-                   if (!_isPlayerSearchMode) {
-                     String customText = '';
-                    String currentCaption = captionController.text;
-                    
-                    // Find the selected player name
-                    List<String> allSelectedPlayers = [];
-                    allSelectedPlayers.addAll(selectedHomePlayers);
-                    allSelectedPlayers.addAll(selectedAwayPlayers);
-                    
-                    if (allSelectedPlayers.isNotEmpty) {
-                      String playerName = allSelectedPlayers.first;
-                      
-                      // Find where the player name is in the caption
-                      if (currentCaption.contains(playerName)) {
-                        int playerIndex = currentCaption.indexOf(playerName);
-                        if (playerIndex != -1) {
-                          String beforePlayer = currentCaption.substring(0, playerIndex);
-                          String afterPlayer = currentCaption.substring(playerIndex + playerName.length);
-                          
-                          // Find where the team name ends
-                          int ofTheIndex = afterPlayer.indexOf(' of the ');
-                          if (ofTheIndex != -1) {
-                            int againstIndex = afterPlayer.indexOf(' against ');
-                            if (againstIndex != -1) {
-                              String beforeTeam = afterPlayer.substring(0, againstIndex);
-                              String afterTeam = afterPlayer.substring(againstIndex);
-                              captionController.text = '$beforePlayer$playerName$beforeTeam $customText$afterTeam';
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                },
-              ),
-
-              // Magic input player selection overlay
-              if (_showMagicInputPlayerOptions)
-                Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors
-                          .yellow.shade100, // Bright background for debugging
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.blue.shade300, width: 2),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          child: Row(
-                            children: [
-                              Icon(Icons.help_outline,
-                                  size: 16, color: Colors.blue.shade600),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Multiple players found - select one:',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ..._magicInputMatchingPlayers.map(
-                          (player) => GestureDetector(
-                            onTap: () => _selectMagicInputPlayer(player),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    '#${player.jerseyNumber}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 10),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    _getTeamAbbreviation(_isHomePlayer(player)
-                                            ? selectedHomeTeam ?? ''
-                                            : selectedAwayTeam ?? '') ??
-                                        '',
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: Colors.grey.shade600),
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Icon(
-                                    _isHomePlayer(player)
-                                        ? Icons.home
-                                        : Icons.flight,
-                                    size: 10,
-                                    color: _isHomePlayer(player)
-                                        ? Colors.blue.shade600
-                                        : Colors.red.shade600,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Expanded(
-                                    child: Text(
-                                      _removeJerseyNumberFromName(
-                                          player.displayName ?? 'Unknown'),
-                                      style: const TextStyle(fontSize: 10),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              // Player selection overlay
-              if (_filteredPlayers.isNotEmpty || _noPlayersFound)
-                Material(
-                  elevation: 8,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_noPlayersFound)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 8),
-                            child: Row(
-                              children: [
-                                Icon(Icons.info_outline,
-                                    size: 16, color: Colors.orange.shade600),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'No player with number ${_playerSearchText}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.orange.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        else ...[
-                          ..._filteredPlayers.map(
-                            (player) => GestureDetector(
-                              onTap: () => _selectPlayer(player),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      '#${player.jerseyNumber}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      _getTeamAbbreviation(_isHomePlayer(player)
-                                              ? selectedHomeTeam ?? ''
-                                              : selectedAwayTeam ?? '') ??
-                                          '',
-                                      style: TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey.shade600),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Icon(
-                                      _isHomePlayer(player)
-                                          ? Icons.home
-                                          : Icons.flight,
-                                      size: 10,
-                                      color: _isHomePlayer(player)
-                                          ? Colors.blue.shade600
-                                          : Colors.red.shade600,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Expanded(
-                                      child: Text(
-                                        _removeJerseyNumberFromName(
-                                            player.displayName ?? 'Unknown'),
-                                        style: const TextStyle(fontSize: 10),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (_selectedPlayerNumbers.isNotEmpty)
-                          GestureDetector(
-                            onTap: _finishPlayerSelection,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                border: Border(
-                                    top: BorderSide(
-                                        color: Colors.grey.shade200)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.check,
-                                      size: 16, color: Colors.blue.shade700),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Done selecting players (${_selectedPlayerNumbers.length})',
-                                    style: TextStyle(
-                                        color: Colors.blue.shade700,
-                                        fontWeight: FontWeight.w500),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              // Inning selector
-              if (_showCustomTextInningSelector)
-
-            ],
-          ),
-        ), */
-
-        // const SizedBox(height: 4), // Commented out with magic bar
-
         // Selected home run type indicator
         Container(
           width: double.infinity,
@@ -14825,7 +14556,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildNavigationButtons() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(5, 6, 5, 6),
       child: IntrinsicHeight(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -15004,10 +14735,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             // Last button row
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Last button
                 Padding(
@@ -15015,7 +14747,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   child: CustomButton(
                     onTap: _pasteLastCaption,
                     child: Container(
-                      width: 280,
+                      width: 412,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 5),
                       decoration: BoxDecoration(
@@ -15042,72 +14774,156 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 12),
                 // FTP button
-                CustomButton(
-                  onTap: _disableFtp ? null : _onFtpPressed,
-                  child: Container(
+                SizedOverflowBox(
+                  size: const Size(140, 26),
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
                     width: 140,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _disableFtp
-                          ? Colors.grey.shade300
-                          : const Color(0xFF0052CC),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _disableFtp
-                            ? Colors.grey.shade300
-                            : const Color(0xFF0052CC),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.rocket_launch,
-                          size: 14,
-                          color:
-                              _disableFtp ? Colors.grey.shade600 : Colors.white,
-                        ),
-                        const SizedBox(width: 2),
-                        Flexible(
-                          child: Text(
-                            _disableFtp
-                                ? 'FTP OFF'
-                                : (_currentFtpProfile != null
-                                    ? 'FTP: $_currentFtpProfile'
-                                    : 'FTP'),
-                            style: TextStyle(
-                              fontSize: 10,
+                    child: CustomButton(
+                      onTap: _disableFtp ? null : _onFtpPressed,
+                      child: Transform.translate(
+                        offset: const Offset(0, -32),
+                        child: Container(
+                          width: 140,
+                          height: 58,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _disableFtp
+                                ? Colors.grey.shade300
+                                : const Color(0xFF0052CC),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
                               color: _disableFtp
-                                  ? Colors.grey.shade600
-                                  : Colors.white,
-                              fontWeight: FontWeight.w500,
+                                  ? Colors.grey.shade300
+                                  : const Color(0xFF0052CC),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.rocket_launch,
+                                    size: 14,
+                                    color: _disableFtp
+                                        ? Colors.grey.shade600
+                                        : Colors.white,
+                                  ),
+                                  const SizedBox(width: 1),
+                                  Text(
+                                    _disableFtp ? 'FTP OFF' : 'FTP',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: _disableFtp
+                                          ? Colors.grey.shade600
+                                          : Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (!_disableFtp && _currentFtpProfile != null)
+                                Text(
+                                  _currentFtpProfile!,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 4, height: 26),
+                const SizedBox(width: 8, height: 26),
                 // FTP Settings button
-                CustomButton(
-                  onTap: _showFtpSettings,
-                  child: Container(
-                    width: 80,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4A90E2),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFF4A90E2)),
+                SizedOverflowBox(
+                  size: const Size(100, 26),
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: 100,
+                    child: CustomButton(
+                      onTap: _showFtpSettings,
+                      child: Transform.translate(
+                        offset: const Offset(0, -32),
+                        child: Container(
+                          width: 100,
+                          height: 58,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4A90E2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF4A90E2)),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.settings,
+                                  size: 14, color: Colors.white),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'FTP Settings',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    child: const Icon(Icons.settings,
-                        size: 14, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 8, height: 26),
+                // Reset button (to the right of FTP Settings)
+                SizedOverflowBox(
+                  size: const Size(100, 26),
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: 100,
+                    child: CustomButton(
+                      onTap: _fullReset,
+                      child: Transform.translate(
+                        offset: const Offset(0, -32),
+                        child: Container(
+                          width: 100,
+                          height: 58,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.refresh,
+                                  size: 14, color: Colors.grey.shade700),
+                              const SizedBox(height: 2),
+                              Text('Reset',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -15724,11 +15540,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       controller: customCelebrationController,
                       style: const TextStyle(fontSize: 12),
                       decoration: InputDecoration(
-                        hintText: 'e.g., celebrates a walk-off hit',
-                        hintStyle: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
+                        // hint removed
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
                           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -15869,11 +15681,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       controller: customDejectionController,
                       style: const TextStyle(fontSize: 12),
                       decoration: InputDecoration(
-                        hintText: 'e.g., reacts to a bad call',
-                        hintStyle: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
+                        // hint removed
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
                           borderSide: BorderSide(color: Colors.grey.shade300),
