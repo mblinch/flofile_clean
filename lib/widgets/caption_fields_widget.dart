@@ -340,6 +340,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // FTP Profile Management
   Map<String, Map<String, dynamic>> _ftpProfiles = {};
   String? _currentFtpProfile;
+
+  // Store the last saved metadata for the "Last" button functionality
+  Map<String, dynamic>? _lastSavedMetadata;
+
+  // Store current metadata for the "Last" button
+  void _storeCurrentMetadata() {
+    if (captionController.text.isNotEmpty ||
+        personalityController.text.isNotEmpty ||
+        stadiumController.text.isNotEmpty ||
+        cityController.text.isNotEmpty ||
+        provinceController.text.isNotEmpty) {
+      _lastSavedMetadata = {
+        'IPTC:Description': captionController.text, // Photo Mechanic's field
+        'Caption-Abstract': captionController.text,
+        'XMP-getty:Personality': personalityController.text,
+        'Sub-location': stadiumController.text,
+        'City': cityController.text,
+        'Province-State': provinceController.text,
+      };
+      print('DEBUG: Stored metadata for Last button: $_lastSavedMetadata');
+    }
+  }
+
   String? _selectedFieldingAction;
   String? _selectedBaseRunningAction;
   String? _selectedStealBase;
@@ -587,10 +610,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Add a flag to track if the user has manually reset the fields.
   bool _hasBeenReset = false;
-
   // Track team positioning (true = home on left, false = home on right)
   bool _homeOnLeft = true;
-
   // Build team dropdown widget
   Widget _buildTeamDropdown({
     required bool isHome,
@@ -1563,6 +1584,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   @override
   void dispose() {
+    // Store current metadata before disposing
+    _storeCurrentMetadata();
+
     _homeSearchController.dispose();
     _awaySearchController.dispose();
     _magicBarController.dispose();
@@ -1738,6 +1762,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.text = widget.personalityOverride!;
     }
     if (widget.metadata != oldWidget.metadata) {
+      // Store current metadata before loading new image
+      _storeCurrentMetadata();
+
       // Reset selections when metadata changes (new image loaded)
       resetCaptionSelections();
       _loadMetadata();
@@ -2744,9 +2771,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                           ],
                         ),
-
                         // No gap between caption and firebar
-
                         // Action buttons are now beside the magic bar
                         // (Old action button container removed)
                         // Firebar container aligned to the left
@@ -2757,7 +2782,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 0.5 *
                                 0.6, // 50% of 60% column (same as caption)
                             height: 50, // Moderate height for better usability
-                            // No padding
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8), // Add top and bottom padding
                             margin: EdgeInsets.zero,
                             alignment: Alignment.centerLeft,
                             // No border decoration
@@ -3382,7 +3408,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               final bool hasBareInningToken =
                                                   raw.contains(' ') &&
                                                       bareNums.isNotEmpty;
-
                                               bool anyChanged = false;
                                               setState(() {
                                                 // If HR shortcut removed, clear Home Run selections
@@ -3465,7 +3490,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Buttons row under firebar: navigation + FTP/Settings
                         Container(
                           width: double.infinity,
-                          height: 40,
+                          height: 76,
                           padding: EdgeInsets.zero,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
@@ -3484,87 +3509,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   child: _buildNavigationButtons(),
                                 ),
                               ),
-                              // FTP and Settings buttons
-                              Expanded(
-                                flex: 3,
-                                child: Container(
-                                  decoration: BoxDecoration(),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      // FTP button
-                                      CustomButton(
-                                        onTap:
-                                            _disableFtp ? null : _onFtpPressed,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: _disableFtp
-                                                ? Colors.grey.shade300
-                                                : const Color(0xFF0052CC),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            border: Border.all(
-                                                color: _disableFtp
-                                                    ? Colors.grey.shade300
-                                                    : const Color(0xFF0052CC)),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.rocket_launch,
-                                                  size: 14,
-                                                  color: _disableFtp
-                                                      ? Colors.grey.shade600
-                                                      : Colors.white),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                  _disableFtp
-                                                      ? 'FTP OFF'
-                                                      : (_currentFtpProfile !=
-                                                              null
-                                                          ? 'FTP: $_currentFtpProfile'
-                                                          : 'FTP'),
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: _disableFtp
-                                                          ? Colors.grey.shade600
-                                                          : Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.w500)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      // Settings button
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 4),
-                                        child: CustomButton(
-                                          onTap: _showFtpSettings,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 5),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF4A90E2),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                  color:
-                                                      const Color(0xFF4A90E2)),
-                                            ),
-                                            child: const Icon(Icons.settings,
-                                                size: 14, color: Colors.white),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              // FTP and Settings buttons removed - moved to action buttons area
                             ],
                           ),
                         ),
@@ -3844,6 +3789,76 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               children: [],
             ),
           ],
+          const SizedBox(height: 8),
+          // FTP buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // FTP button
+              CustomButton(
+                onTap: _disableFtp ? null : _onFtpPressed,
+                child: Container(
+                  width: 140, // 20px wider than before
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _disableFtp
+                        ? Colors.grey.shade300
+                        : const Color(0xFF0052CC),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                        color: _disableFtp
+                            ? Colors.grey.shade300
+                            : const Color(0xFF0052CC)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.rocket_launch,
+                          size: 14,
+                          color: _disableFtp
+                              ? Colors.grey.shade600
+                              : Colors.white),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                            _disableFtp
+                                ? 'FTP OFF'
+                                : (_currentFtpProfile != null
+                                    ? 'FTP: $_currentFtpProfile'
+                                    : 'FTP'),
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: _disableFtp
+                                    ? Colors.grey.shade600
+                                    : Colors.white,
+                                fontWeight: FontWeight.w500),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Settings button
+              CustomButton(
+                onTap: _showFtpSettings,
+                child: Container(
+                  width: 80, // 30px wider than default
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4A90E2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF4A90E2)),
+                  ),
+                  child:
+                      const Icon(Icons.settings, size: 14, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -8442,6 +8457,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Future<void> _onFtpPressed() async {
+    // Store current metadata before saving for the "Last" button
+    _storeCurrentMetadata();
     // Save IPTC metadata before uploading
     if (widget.onSaveIptc != null) {
       await widget.onSaveIptc!();
@@ -9498,8 +9515,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
 
           // Caption and personality fields
-          if (metadataMap['Caption-Abstract'] != null) {
+          // Use Photo Mechanic's preferred field first
+          if (metadataMap['IPTC:Description'] != null) {
+            final captionValue = metadataMap['IPTC:Description'].toString();
+            updatedMetadata['IPTC:Description'] = captionValue;
+            updatedMetadata['Caption-Abstract'] = captionValue;
+            // Update the caption controller directly
+            captionController.text = captionValue;
+          } else if (metadataMap['Caption-Abstract'] != null) {
             final captionValue = metadataMap['Caption-Abstract'].toString();
+            updatedMetadata['IPTC:Description'] = captionValue;
             updatedMetadata['Caption-Abstract'] = captionValue;
             // Update the caption controller directly
             captionController.text = captionValue;
@@ -9544,6 +9569,95 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error pasting metadata: $e'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  // Paste last saved IPTC metadata to current picture
+  Future<void> _pasteLastCaption() async {
+    try {
+      print(
+          'DEBUG: _pasteLastCaption called, _lastSavedMetadata: $_lastSavedMetadata');
+
+      if (_lastSavedMetadata != null) {
+        // Update the metadata in the parent widget - EXACTLY like the regular paste function
+        if (widget.onMetadataUpdated != null) {
+          final updatedMetadata =
+              Map<String, dynamic>.from(widget.metadata ?? {});
+
+          // Update each field exactly like the regular paste function
+          // Use Photo Mechanic's preferred field first
+          if (_lastSavedMetadata!['IPTC:Description'] != null) {
+            final captionValue =
+                _lastSavedMetadata!['IPTC:Description'].toString();
+            updatedMetadata['IPTC:Description'] = captionValue;
+            updatedMetadata['Caption-Abstract'] = captionValue;
+            // Update the caption controller directly
+            captionController.text = captionValue;
+          } else if (_lastSavedMetadata!['Caption-Abstract'] != null) {
+            final captionValue =
+                _lastSavedMetadata!['Caption-Abstract'].toString();
+            updatedMetadata['IPTC:Description'] = captionValue;
+            updatedMetadata['Caption-Abstract'] = captionValue;
+            // Update the caption controller directly
+            captionController.text = captionValue;
+          }
+
+          if (_lastSavedMetadata!['XMP-getty:Personality'] != null) {
+            final personalityValue =
+                _lastSavedMetadata!['XMP-getty:Personality'].toString();
+            updatedMetadata['XMP-getty:Personality'] = personalityValue;
+            // Update the personality controller directly
+            personalityController.text = personalityValue;
+          }
+
+          if (_lastSavedMetadata!['Sub-location'] != null) {
+            final stadiumValue = _lastSavedMetadata!['Sub-location'].toString();
+            updatedMetadata['Sub-location'] = stadiumValue;
+            // Update the stadium controller directly
+            stadiumController.text = stadiumValue;
+          }
+
+          if (_lastSavedMetadata!['City'] != null) {
+            final cityValue = _lastSavedMetadata!['City'].toString();
+            updatedMetadata['City'] = cityValue;
+            // Update the city controller directly
+            cityController.text = cityValue;
+          }
+
+          if (_lastSavedMetadata!['Province-State'] != null) {
+            final provinceValue =
+                _lastSavedMetadata!['Province-State'].toString();
+            updatedMetadata['Province-State'] = provinceValue;
+            // Update the province controller directly
+            provinceController.text = provinceValue;
+          }
+
+          // Call the metadata updated callback - EXACTLY like regular paste
+          widget.onMetadataUpdated!(updatedMetadata);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Last saved IPTC metadata applied!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No previous metadata available'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('DEBUG: Error pasting last IPTC metadata: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error applying last metadata: $e'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -14712,157 +14826,286 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildNavigationButtons() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Prev
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: CustomButton(
-              onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
-                  ? () async {
-                      if (widget.onSaveIptc != null) {
-                        widget.onSaveIptc!();
-                      }
-                      widget.onPreviousImage?.call();
-                    }
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color:
+          // Navigation buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Prev
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: CustomButton(
+                  onTap:
                       (widget.currentIndex != null && widget.currentIndex! > 0)
-                          ? Colors.grey.shade100
-                          : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
+                          ? () async {
+                              // Store current metadata before saving
+                              _storeCurrentMetadata();
+                              if (widget.onSaveIptc != null) {
+                                widget.onSaveIptc!();
+                              }
+                              widget.onPreviousImage?.call();
+                            }
+                          : null,
+                  child: Container(
+                    width: 100,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
                       color: (widget.currentIndex != null &&
                               widget.currentIndex! > 0)
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade400),
-                ),
-                child: Text(
-                  'Prev',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
+                          ? Colors.grey.shade100
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: (widget.currentIndex != null &&
+                                widget.currentIndex! > 0)
+                            ? Colors.grey.shade300
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_back,
+                            size: 14, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Prev',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // Copy
-          CustomButton(
-            onTap: _copyMetadataFromCaptionWidget,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Text(
-                'Copy',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.blue.shade700,
+              const SizedBox(width: 4),
+              // Copy
+              CustomButton(
+                onTap: _copyMetadataFromCaptionWidget,
+                child: Container(
+                  width: 100,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.copy, size: 14, color: Colors.grey.shade700),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Copy',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // Paste
-          CustomButton(
-            onTap: _pasteMetadataToCaptionWidget,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.green.shade200),
-              ),
-              child: Text(
-                'Paste',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.green.shade700,
+              const SizedBox(width: 4),
+              // Paste
+              CustomButton(
+                onTap: _pasteMetadataToCaptionWidget,
+                child: Container(
+                  width: 100,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.content_paste,
+                          size: 14, color: Colors.grey.shade700),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Paste',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // Next
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: CustomButton(
-              onTap: (widget.currentIndex != null &&
-                      widget.totalImages != null &&
-                      widget.currentIndex! < widget.totalImages! - 1)
-                  ? () async {
-                      if (widget.onSaveIptc != null) {
-                        widget.onSaveIptc!();
-                      }
-                      widget.onNextImage?.call();
-                    }
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: (widget.currentIndex != null &&
+              const SizedBox(width: 4),
+              // Paste Last Caption
+              CustomButton(
+                onTap: _pasteLastCaption,
+                child: Container(
+                  width: 100,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.history,
+                          size: 14, color: Colors.grey.shade700),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Last',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Next
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: CustomButton(
+                  onTap: (widget.currentIndex != null &&
                           widget.totalImages != null &&
                           widget.currentIndex! < widget.totalImages! - 1)
-                      ? Colors.grey.shade100
-                      : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
+                      ? () async {
+                          // Store current metadata before saving
+                          _storeCurrentMetadata();
+                          if (widget.onSaveIptc != null) {
+                            widget.onSaveIptc!();
+                          }
+                          widget.onNextImage?.call();
+                        }
+                      : null,
+                  child: Container(
+                    width: 100,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
                       color: (widget.currentIndex != null &&
                               widget.totalImages != null &&
                               widget.currentIndex! < widget.totalImages! - 1)
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade400),
-                ),
-                child: Text(
-                  'Next',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
+                          ? Colors.grey.shade100
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: (widget.currentIndex != null &&
+                                widget.totalImages != null &&
+                                widget.currentIndex! < widget.totalImages! - 1)
+                            ? Colors.grey.shade300
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_forward,
+                            size: 14, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Next',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(width: 4),
-          // Reset button
-          Padding(
-            padding: const EdgeInsets.only(left: 30),
-            child: CustomButton(
-              onTap: _fullReset,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.refresh, size: 14, color: Colors.grey.shade700),
-                    const SizedBox(width: 2),
-                    Text('Reset',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500)),
-                  ],
+          const SizedBox(height: 8),
+          // FTP buttons row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // FTP button
+              CustomButton(
+                onTap: _disableFtp ? null : _onFtpPressed,
+                child: Container(
+                  width: 140,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _disableFtp
+                        ? Colors.grey.shade300
+                        : const Color(0xFF0052CC),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: _disableFtp
+                          ? Colors.grey.shade300
+                          : const Color(0xFF0052CC),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.rocket_launch,
+                        size: 14,
+                        color:
+                            _disableFtp ? Colors.grey.shade600 : Colors.white,
+                      ),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          _disableFtp
+                              ? 'FTP OFF'
+                              : (_currentFtpProfile != null
+                                  ? 'FTP: $_currentFtpProfile'
+                                  : 'FTP'),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _disableFtp
+                                ? Colors.grey.shade600
+                                : Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 4),
+              // Settings button
+              CustomButton(
+                onTap: _showFtpSettings,
+                child: Container(
+                  width: 80,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4A90E2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF4A90E2)),
+                  ),
+                  child:
+                      const Icon(Icons.settings, size: 14, color: Colors.white),
+                ),
+              ),
+            ],
           ),
         ],
       ),
