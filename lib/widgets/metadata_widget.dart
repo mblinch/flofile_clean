@@ -20,6 +20,7 @@ class MetadataWidget extends StatefulWidget {
 class _MetadataWidgetState extends State<MetadataWidget> {
   // Getty Images metadata controllers
   final jobIdController = TextEditingController();
+<<<<<<< Updated upstream
   final descriptionWritersController = TextEditingController();
   final headlineController = TextEditingController();
   final keywordsController = TextEditingController();
@@ -28,12 +29,29 @@ class _MetadataWidgetState extends State<MetadataWidget> {
   final creditController = TextEditingController();
   final copyrightController = TextEditingController();
   final sourceController = TextEditingController();
+=======
+  final descriptionWritersController = TextEditingController(text: 'MB');
+  final headlineController = TextEditingController();
+  final keywordsController = TextEditingController();
+  final creatorController = TextEditingController(text: 'Mark Blinch');
+  final creatorJobTitleController = TextEditingController(text: 'Contributor');
+  final creditController = TextEditingController(text: 'Getty Images');
+  final copyrightController = TextEditingController(text: '2025 Mark Blinch');
+  final sourceController =
+      TextEditingController(text: 'Getty Images North America');
+
+  // IPTC metadata controllers
+  final urgencyController = TextEditingController(text: '5');
+  final countryController = TextEditingController(text: 'Canada');
+  final countryCodeController = TextEditingController(text: 'CAN');
+>>>>>>> Stashed changes
 
   // Location controllers
   final stadiumController = TextEditingController();
   final cityController = TextEditingController();
   final provinceController = TextEditingController();
 
+<<<<<<< Updated upstream
   // Date and time controllers
   final dateController = TextEditingController();
   final timeController = TextEditingController();
@@ -126,6 +144,70 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       }
     }
   }
+=======
+  // Location and categorization controllers
+  final titleObjectNameController = TextEditingController();
+  final categoryController = TextEditingController(text: 'S');
+  final suppCat1Controller = TextEditingController(text: 'SPO');
+  final suppCat2Controller = TextEditingController(text: 'BBN');
+  final suppCat3Controller = TextEditingController(text: 'BBA');
+  final specialInstructionsController = TextEditingController();
+
+  // Country codes for dropdown
+  final List<Map<String, String>> countryCodes = [
+    {'code': 'CAN', 'name': 'Canada'},
+    {'code': 'USA', 'name': 'United States'},
+    {'code': 'MEX', 'name': 'Mexico'},
+    {'code': 'GBR', 'name': 'United Kingdom'},
+    {'code': 'FRA', 'name': 'France'},
+    {'code': 'DEU', 'name': 'Germany'},
+    {'code': 'ITA', 'name': 'Italy'},
+    {'code': 'ESP', 'name': 'Spain'},
+    {'code': 'NLD', 'name': 'Netherlands'},
+    {'code': 'BEL', 'name': 'Belgium'},
+    {'code': 'CHE', 'name': 'Switzerland'},
+    {'code': 'AUT', 'name': 'Austria'},
+    {'code': 'SWE', 'name': 'Sweden'},
+    {'code': 'NOR', 'name': 'Norway'},
+    {'code': 'DNK', 'name': 'Denmark'},
+    {'code': 'FIN', 'name': 'Finland'},
+    {'code': 'JPN', 'name': 'Japan'},
+    {'code': 'KOR', 'name': 'South Korea'},
+    {'code': 'CHN', 'name': 'China'},
+    {'code': 'AUS', 'name': 'Australia'},
+    {'code': 'NZL', 'name': 'New Zealand'},
+    {'code': 'BRA', 'name': 'Brazil'},
+    {'code': 'ARG', 'name': 'Argentina'},
+    {'code': 'ZAF', 'name': 'South Africa'},
+    {'code': 'EGY', 'name': 'Egypt'},
+    {'code': 'NGA', 'name': 'Nigeria'},
+    {'code': 'KEN', 'name': 'Kenya'},
+    {'code': 'IND', 'name': 'India'},
+    {'code': 'PAK', 'name': 'Pakistan'},
+    {'code': 'BGD', 'name': 'Bangladesh'},
+    {'code': 'THA', 'name': 'Thailand'},
+    {'code': 'VNM', 'name': 'Vietnam'},
+    {'code': 'PHL', 'name': 'Philippines'},
+    {'code': 'IDN', 'name': 'Indonesia'},
+    {'code': 'MYS', 'name': 'Malaysia'},
+    {'code': 'SGP', 'name': 'Singapore'},
+    {'code': 'HKG', 'name': 'Hong Kong'},
+    {'code': 'TWN', 'name': 'Taiwan'},
+  ];
+
+  // Urgency levels for dropdown
+  final List<Map<String, String>> urgencyLevels = [
+    {'code': '1', 'name': '1 - High'},
+    {'code': '2', 'name': '2'},
+    {'code': '3', 'name': '3'},
+    {'code': '4', 'name': '4'},
+    {'code': '5', 'name': '5 - Normal'},
+    {'code': '6', 'name': '6'},
+    {'code': '7', 'name': '7'},
+    {'code': '8', 'name': '8 - Low'},
+    {'code': '0', 'name': '0 - Undefined'},
+  ];
+>>>>>>> Stashed changes
 
   @override
   void didUpdateWidget(MetadataWidget oldWidget) {
@@ -135,6 +217,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     }
   }
 
+<<<<<<< Updated upstream
   // Method to get current values from all controllers - using Photo Mechanic's preferred fields
   Map<String, String> getCurrentValues() {
     final values = {
@@ -594,12 +677,15 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     }
   }
 
+=======
+>>>>>>> Stashed changes
   void _loadMetadata() {
     if (widget.metadata == null) return;
 
     final meta = widget.metadata!;
 
     setState(() {
+<<<<<<< Updated upstream
       // Load Getty metadata fields - prefer Photo Mechanic's IPTC fields
       jobIdController.text = (meta['IPTC:OriginalTransmissionReference'] ??
                   meta['OriginalTransmissionReference'] ??
@@ -820,6 +906,111 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         } catch (e) {
           print('Error parsing date/time: $e');
         }
+=======
+      // Load Getty metadata fields
+      jobIdController.text = meta['TransmissionReference']?.toString() ?? '';
+
+      final extractedDescriptionWriter =
+          meta['DescriptionWriter']?.toString() ?? '';
+      if (extractedDescriptionWriter.isNotEmpty) {
+        descriptionWritersController.text = extractedDescriptionWriter;
+      }
+
+      headlineController.text = meta['Headline']?.toString() ?? '';
+      keywordsController.text = meta['Keywords']?.toString() ?? '';
+
+      final extractedCreator = meta['Creator']?.toString() ?? '';
+      if (extractedCreator.isNotEmpty) {
+        creatorController.text = extractedCreator;
+      }
+
+      final extractedJobTitle = meta['CreatorJobTitle']?.toString() ?? '';
+      if (extractedJobTitle.isNotEmpty) {
+        creatorJobTitleController.text = extractedJobTitle;
+      }
+
+      final extractedCredit = meta['Credit']?.toString() ?? '';
+      if (extractedCredit.isNotEmpty) {
+        creditController.text = extractedCredit;
+      }
+
+      final extractedCopyright = meta['Copyright']?.toString() ?? '';
+      if (extractedCopyright.isNotEmpty) {
+        copyrightController.text = extractedCopyright;
+      }
+
+      final extractedSource = meta['Source']?.toString() ?? '';
+      if (extractedSource.isNotEmpty) {
+        sourceController.text = extractedSource;
+      }
+
+      // Load IPTC metadata fields
+      final extractedUrgency = meta['Urgency']?.toString() ?? '';
+      if (extractedUrgency.isNotEmpty) {
+        urgencyController.text = extractedUrgency;
+      }
+
+      final extractedCountry = meta['Country']?.toString() ?? '';
+      if (extractedCountry.isNotEmpty) {
+        countryController.text = extractedCountry;
+      }
+
+      final extractedCountryCode = meta['CountryCode']?.toString() ?? '';
+      if (extractedCountryCode.isNotEmpty) {
+        countryCodeController.text = extractedCountryCode;
+      }
+
+      // Load categorization metadata
+      titleObjectNameController.text = meta['ObjectName']?.toString() ?? '';
+
+      final extractedCategory = meta['Category']?.toString() ?? '';
+      if (extractedCategory.isNotEmpty) {
+        categoryController.text = extractedCategory;
+      }
+
+      // Handle supplemental categories (could be a single string or array)
+      final suppCats = meta['SupplementalCategories'];
+      if (suppCats != null) {
+        if (suppCats is List) {
+          if (suppCats.isNotEmpty) {
+            suppCat1Controller.text = suppCats[0].toString();
+          }
+          if (suppCats.length > 1) {
+            suppCat2Controller.text = suppCats[1].toString();
+          }
+          if (suppCats.length > 2) {
+            suppCat3Controller.text = suppCats[2].toString();
+          }
+        } else {
+          // Single string, put in first field
+          suppCat1Controller.text = suppCats.toString();
+        }
+      }
+
+      // Load special instructions - try IPTC field first, then XMP field
+      final specialInstructions = meta['SpecialInstructions']?.toString() ??
+          meta['Instructions']?.toString() ??
+          meta['XMP-photoshop:Instructions']?.toString() ??
+          '';
+      if (specialInstructions.isNotEmpty) {
+        specialInstructionsController.text = specialInstructions;
+      }
+
+      // Load location fields from JPEG metadata
+      final extractedStadium = meta['Sub-location']?.toString() ?? '';
+      if (extractedStadium.isNotEmpty) {
+        stadiumController.text = extractedStadium;
+      }
+
+      final extractedCity = meta['City']?.toString() ?? '';
+      if (extractedCity.isNotEmpty) {
+        cityController.text = extractedCity;
+      }
+
+      final extractedProvince = meta['Province-State']?.toString() ?? '';
+      if (extractedProvince.isNotEmpty) {
+        provinceController.text = extractedProvince;
+>>>>>>> Stashed changes
       }
     });
   }
@@ -830,6 +1021,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     int? maxLines = 1,
     bool expands = false,
   }) {
+<<<<<<< Updated upstream
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -875,6 +1067,38 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           ),
         ),
       ],
+=======
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      expands: expands,
+      style: const TextStyle(fontSize: 12),
+      decoration: InputDecoration(
+        labelText: label,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        hintText: 'Enter $label...',
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade400),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.grey.shade400),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
+        ),
+        contentPadding: const EdgeInsets.all(8),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        labelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.black87,
+        ),
+      ),
+>>>>>>> Stashed changes
     );
   }
 
@@ -884,6 +1108,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     List<Map<String, String>> items,
     ValueChanged<String?> onChanged,
   ) {
+<<<<<<< Updated upstream
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -903,6 +1128,31 @@ class _MetadataWidgetState extends State<MetadataWidget> {
         const SizedBox(width: 8),
         Expanded(
           child: PopupMenuButton<String>(
+=======
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade400),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Floating label
+          Padding(
+            padding: const EdgeInsets.only(left: 8, top: 4),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          // Dropdown content
+          PopupMenuButton<String>(
+>>>>>>> Stashed changes
             initialValue: value,
             onSelected: onChanged,
             constraints: const BoxConstraints(maxHeight: 300),
@@ -910,6 +1160,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                 .map(
                   (item) => PopupMenuItem<String>(
                     value: item['code'],
+<<<<<<< Updated upstream
                     height: 28,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -917,6 +1168,15 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       item['name']!,
                       style: const TextStyle(
                         fontSize: 10,
+=======
+                    height: 32,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      item['name']!,
+                      style: const TextStyle(
+                        fontSize: 12,
+>>>>>>> Stashed changes
                         color: Colors.black,
                         fontWeight: FontWeight.normal,
                       ),
@@ -925,19 +1185,33 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                 )
                 .toList(),
             child: Container(
+<<<<<<< Updated upstream
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
                 color: Colors.white,
               ),
+=======
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+>>>>>>> Stashed changes
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
+<<<<<<< Updated upstream
                       value ?? 'Select $label',
                       textAlign: TextAlign.left,
                       style: TextStyle(
                         fontSize: 10,
+=======
+                      value != null
+                          ? items.firstWhere((item) => item['code'] == value,
+                              orElse: () => {'name': 'Select'})['name']!
+                          : 'Select $label',
+                      style: TextStyle(
+                        fontSize: 12,
+>>>>>>> Stashed changes
                         color:
                             value != null ? Colors.black : Colors.grey.shade600,
                       ),
@@ -949,6 +1223,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
               ),
             ),
           ),
+<<<<<<< Updated upstream
         ),
       ],
     );
@@ -1065,13 +1340,21 @@ class _MetadataWidgetState extends State<MetadataWidget> {
           ),
         ),
       ],
+=======
+        ],
+      ),
+>>>>>>> Stashed changes
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
+<<<<<<< Updated upstream
       margin: const EdgeInsets.all(3.0),
+=======
+      margin: const EdgeInsets.all(8.0),
+>>>>>>> Stashed changes
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.circular(8),
@@ -1079,6 +1362,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       ),
       child: Column(
         children: [
+<<<<<<< Updated upstream
           // Main content
           Expanded(
             child: SingleChildScrollView(
@@ -1271,6 +1555,161 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       ],
                     );
                   }),
+=======
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: Colors.black87),
+                const SizedBox(width: 8),
+                const Text(
+                  'Metadata',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Main content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Getty Images metadata fields
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _buildField('Creator', creatorController)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildField('MEID', jobIdController)),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                          width: 120,
+                          child: _buildField('Description Writers',
+                              descriptionWritersController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField(
+                              'Job Title', creatorJobTitleController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Copyright', copyrightController)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: _buildField('Credit', creditController)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _buildField('Source', sourceController)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _buildField('Headline', headlineController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Keywords', keywordsController)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _buildField(
+                              'Object Name', titleObjectNameController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Category', categoryController)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: _buildField('Supp Cat 1', suppCat1Controller)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Supp Cat 2', suppCat2Controller)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Supp Cat 3', suppCat3Controller)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildField(
+                      'Special Instructions', specialInstructionsController,
+                      maxLines: 2),
+                  const SizedBox(height: 8),
+
+                  // IPTC metadata fields
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildDropdownField(
+                          'Urgency',
+                          urgencyController.text.isNotEmpty
+                              ? urgencyController.text
+                              : null,
+                          urgencyLevels,
+                          (value) {
+                            setState(() {
+                              urgencyController.text = value ?? '';
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField('Country', countryController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildDropdownField(
+                          'Country Code',
+                          countryCodeController.text.isNotEmpty
+                              ? countryCodeController.text
+                              : null,
+                          countryCodes,
+                          (value) {
+                            setState(() {
+                              countryCodeController.text = value ?? '';
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Location fields
+                  Row(
+                    children: [
+                      Expanded(child: _buildField('City', cityController)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: _buildField(
+                              'Province/State', provinceController)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildField('Stadium', stadiumController),
+>>>>>>> Stashed changes
                 ],
               ),
             ),
@@ -1291,12 +1730,21 @@ class _MetadataWidgetState extends State<MetadataWidget> {
     creditController.dispose();
     copyrightController.dispose();
     sourceController.dispose();
+<<<<<<< Updated upstream
 
     stadiumController.dispose();
     cityController.dispose();
     provinceController.dispose();
     dateController.dispose();
     timeController.dispose();
+=======
+    urgencyController.dispose();
+    countryController.dispose();
+    countryCodeController.dispose();
+    stadiumController.dispose();
+    cityController.dispose();
+    provinceController.dispose();
+>>>>>>> Stashed changes
     titleObjectNameController.dispose();
     categoryController.dispose();
     suppCat1Controller.dispose();
