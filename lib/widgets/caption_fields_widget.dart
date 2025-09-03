@@ -14946,37 +14946,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
               ),
               const SizedBox(width: 4),
-              // Paste Last Caption
-              CustomButton(
-                onTap: _pasteLastCaption,
-                child: Container(
-                  width: 100,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.history,
-                          size: 14, color: Colors.grey.shade700),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Last',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
               // Next
               Padding(
                 padding: const EdgeInsets.only(right: 4),
@@ -15031,13 +15000,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // FTP buttons row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
+              const SizedBox(width: 4),
               // FTP button
               CustomButton(
                 onTap: _disableFtp ? null : _onFtpPressed,
@@ -15103,6 +15066,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child:
                       const Icon(Icons.settings, size: 14, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Last button row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Last button
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: CustomButton(
+                  onTap: _pasteLastCaption,
+                  child: Container(
+                    width: 280,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.history,
+                            size: 14, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Paste Caption from Previous Frame',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
