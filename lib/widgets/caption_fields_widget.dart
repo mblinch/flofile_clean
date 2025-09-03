@@ -2636,7 +2636,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
 
                         // Caption field, Personality field, and Quick Codes button row
                         Row(
@@ -3490,7 +3490,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         // Buttons row under firebar: navigation + FTP/Settings
                         Container(
                           width: double.infinity,
-                          height: 76,
+                          constraints: const BoxConstraints(minHeight: 76),
                           padding: EdgeInsets.zero,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
@@ -3514,7 +3514,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
 
                         // Player and Verb Selection Area
                         Expanded(
@@ -14825,263 +14825,72 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildNavigationButtons() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Navigation buttons row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              // Prev
-              Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: CustomButton(
-                  onTap:
-                      (widget.currentIndex != null && widget.currentIndex! > 0)
-                          ? () async {
-                              // Store current metadata before saving
-                              _storeCurrentMetadata();
-                              if (widget.onSaveIptc != null) {
-                                widget.onSaveIptc!();
-                              }
-                              widget.onPreviousImage?.call();
+      margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+      child: IntrinsicHeight(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Navigation buttons row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                // Prev
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: CustomButton(
+                    onTap: (widget.currentIndex != null &&
+                            widget.currentIndex! > 0)
+                        ? () async {
+                            // Store current metadata before saving
+                            _storeCurrentMetadata();
+                            if (widget.onSaveIptc != null) {
+                              widget.onSaveIptc!();
                             }
-                          : null,
-                  child: Container(
-                    width: 100,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: (widget.currentIndex != null &&
-                              widget.currentIndex! > 0)
-                          ? Colors.grey.shade100
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
+                            widget.onPreviousImage?.call();
+                          }
+                        : null,
+                    child: Container(
+                      width: 100,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
                         color: (widget.currentIndex != null &&
                                 widget.currentIndex! > 0)
-                            ? Colors.grey.shade300
-                            : Colors.grey.shade400,
+                            ? Colors.grey.shade100
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: (widget.currentIndex != null &&
+                                  widget.currentIndex! > 0)
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade400,
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.arrow_back,
-                            size: 14, color: Colors.grey.shade700),
-                        const SizedBox(width: 2),
-                        Text(
-                          'Prev',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.arrow_back,
+                              size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Prev',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              // Copy
-              CustomButton(
-                onTap: _copyMetadataFromCaptionWidget,
-                child: Container(
-                  width: 100,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.copy, size: 14, color: Colors.grey.shade700),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Copy',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Paste
-              CustomButton(
-                onTap: _pasteMetadataToCaptionWidget,
-                child: Container(
-                  width: 100,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.content_paste,
-                          size: 14, color: Colors.grey.shade700),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Paste',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Next
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: CustomButton(
-                  onTap: (widget.currentIndex != null &&
-                          widget.totalImages != null &&
-                          widget.currentIndex! < widget.totalImages! - 1)
-                      ? () async {
-                          // Store current metadata before saving
-                          _storeCurrentMetadata();
-                          if (widget.onSaveIptc != null) {
-                            widget.onSaveIptc!();
-                          }
-                          widget.onNextImage?.call();
-                        }
-                      : null,
+                const SizedBox(width: 4, height: 26),
+                // Copy
+                CustomButton(
+                  onTap: _copyMetadataFromCaptionWidget,
                   child: Container(
                     width: 100,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: (widget.currentIndex != null &&
-                              widget.totalImages != null &&
-                              widget.currentIndex! < widget.totalImages! - 1)
-                          ? Colors.grey.shade100
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: (widget.currentIndex != null &&
-                                widget.totalImages != null &&
-                                widget.currentIndex! < widget.totalImages! - 1)
-                            ? Colors.grey.shade300
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.arrow_forward,
-                            size: 14, color: Colors.grey.shade700),
-                        const SizedBox(width: 2),
-                        Text(
-                          'Next',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // FTP button
-              CustomButton(
-                onTap: _disableFtp ? null : _onFtpPressed,
-                child: Container(
-                  width: 140,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _disableFtp
-                        ? Colors.grey.shade300
-                        : const Color(0xFF0052CC),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: _disableFtp
-                          ? Colors.grey.shade300
-                          : const Color(0xFF0052CC),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.rocket_launch,
-                        size: 14,
-                        color:
-                            _disableFtp ? Colors.grey.shade600 : Colors.white,
-                      ),
-                      const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
-                          _disableFtp
-                              ? 'FTP OFF'
-                              : (_currentFtpProfile != null
-                                  ? 'FTP: $_currentFtpProfile'
-                                  : 'FTP'),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: _disableFtp
-                                ? Colors.grey.shade600
-                                : Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Settings button
-              CustomButton(
-                onTap: _showFtpSettings,
-                child: Container(
-                  width: 80,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF4A90E2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF4A90E2)),
-                  ),
-                  child:
-                      const Icon(Icons.settings, size: 14, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Last button row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              // Last button
-              Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: CustomButton(
-                  onTap: _pasteLastCaption,
-                  child: Container(
-                    width: 280,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
@@ -15092,11 +14901,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.history,
-                            size: 14, color: Colors.grey.shade700),
+                        Icon(Icons.copy, size: 14, color: Colors.grey.shade700),
                         const SizedBox(width: 2),
                         Text(
-                          'Paste Caption from Previous Frame',
+                          'Copy',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -15107,10 +14915,205 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 4, height: 26),
+                // Paste
+                CustomButton(
+                  onTap: _pasteMetadataToCaptionWidget,
+                  child: Container(
+                    width: 100,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.content_paste,
+                            size: 14, color: Colors.grey.shade700),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Paste',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4, height: 26),
+                // Next
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: CustomButton(
+                    onTap: (widget.currentIndex != null &&
+                            widget.totalImages != null &&
+                            widget.currentIndex! < widget.totalImages! - 1)
+                        ? () async {
+                            // Store current metadata before saving
+                            _storeCurrentMetadata();
+                            if (widget.onSaveIptc != null) {
+                              widget.onSaveIptc!();
+                            }
+                            widget.onNextImage?.call();
+                          }
+                        : null,
+                    child: Container(
+                      width: 100,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: (widget.currentIndex != null &&
+                                widget.totalImages != null &&
+                                widget.currentIndex! < widget.totalImages! - 1)
+                            ? Colors.grey.shade100
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: (widget.currentIndex != null &&
+                                  widget.totalImages != null &&
+                                  widget.currentIndex! <
+                                      widget.totalImages! - 1)
+                              ? Colors.grey.shade300
+                              : Colors.grey.shade400,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.arrow_forward,
+                              size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Next',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Last button row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                // Last button
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: CustomButton(
+                    onTap: _pasteLastCaption,
+                    child: Container(
+                      width: 280,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.history,
+                              size: 14, color: Colors.grey.shade700),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Paste Caption from Previous Frame',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // FTP button
+                CustomButton(
+                  onTap: _disableFtp ? null : _onFtpPressed,
+                  child: Container(
+                    width: 140,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _disableFtp
+                          ? Colors.grey.shade300
+                          : const Color(0xFF0052CC),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: _disableFtp
+                            ? Colors.grey.shade300
+                            : const Color(0xFF0052CC),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.rocket_launch,
+                          size: 14,
+                          color:
+                              _disableFtp ? Colors.grey.shade600 : Colors.white,
+                        ),
+                        const SizedBox(width: 2),
+                        Flexible(
+                          child: Text(
+                            _disableFtp
+                                ? 'FTP OFF'
+                                : (_currentFtpProfile != null
+                                    ? 'FTP: $_currentFtpProfile'
+                                    : 'FTP'),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _disableFtp
+                                  ? Colors.grey.shade600
+                                  : Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4, height: 26),
+                // FTP Settings button
+                CustomButton(
+                  onTap: _showFtpSettings,
+                  child: Container(
+                    width: 80,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4A90E2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF4A90E2)),
+                    ),
+                    child: const Icon(Icons.settings,
+                        size: 14, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
