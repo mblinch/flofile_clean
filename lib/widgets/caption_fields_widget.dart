@@ -77,22 +77,25 @@ class HighlightingTextEditingController extends TextEditingController {
       final int start = r.start.clamp(0, fullText.length);
       final int end = r.end.clamp(0, fullText.length);
       if (start > cursor) {
-        children.add(TextSpan(
-            style: baseStyle, text: fullText.substring(cursor, start)));
+        children.add(
+          TextSpan(style: baseStyle, text: fullText.substring(cursor, start)),
+        );
       }
       if (end > start) {
         // Determine if this range is valid or invalid
         bool isValid = _highlightedRanges.contains(r);
         final TextStyle highlightStyle =
             isValid ? validHighlightStyle : invalidHighlightStyle;
-        children.add(TextSpan(
-            style: highlightStyle, text: fullText.substring(start, end)));
+        children.add(
+          TextSpan(style: highlightStyle, text: fullText.substring(start, end)),
+        );
       }
       cursor = end;
     }
     if (cursor < fullText.length) {
-      children
-          .add(TextSpan(style: baseStyle, text: fullText.substring(cursor)));
+      children.add(
+        TextSpan(style: baseStyle, text: fullText.substring(cursor)),
+      );
     }
 
     return TextSpan(style: baseStyle, children: children);
@@ -266,6 +269,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController personalityController = TextEditingController();
   final TextEditingController _homeSearchController = TextEditingController();
   final TextEditingController _awaySearchController = TextEditingController();
+  final TextEditingController _unifiedSearchController =
+      TextEditingController();
   final TextEditingController cityController = TextEditingController();
   final TextEditingController provinceController = TextEditingController();
   final TextEditingController stadiumController = TextEditingController();
@@ -280,6 +285,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController _managerNameController = TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
+  String _unifiedSearchText = '';
   String _managerName = '';
 
   // Prevent recursive onChanged updates for caption shortcuts
@@ -454,6 +460,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Player display mode - list or grid
   bool _homePlayerGridMode = true; // false = list, true = grid
   bool _awayPlayerGridMode = true;
+  String _homePlayerSortBy = 'number'; // 'lastname', 'firstname', or 'number'
+  String _awayPlayerSortBy = 'number'; // 'lastname', 'firstname', or 'number'
+  bool _homePlayerSortAscending = true; // true = ascending, false = descending
+  bool _awayPlayerSortAscending = true; // true = ascending, false = descending
 
   String? selectedCaptionVerb;
 
@@ -529,7 +539,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'At Bat',
       'Swings',
       'Bunts',
-      'Hit by Pitch'
+      'Hit by Pitch',
     ],
     'Defense': [
       'Pitching',
@@ -540,7 +550,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Fielding Position',
       'Double Play',
       'Triple Play',
-      ''
+      '',
     ],
     'Running': ['Steals', 'Slides', 'Runs', 'Rounds', '', '', '', '', ''],
     'Reactions': [
@@ -552,7 +562,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       '',
       '',
       '',
-      ''
+      '',
     ],
     'Non Game-Action': [
       'Looks On',
@@ -563,7 +573,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'National Anthem',
       'Stretching',
       'Warm Ups',
-      'Pitching Change'
+      'Pitching Change',
     ],
   };
 
@@ -642,8 +652,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 (item) => PopupMenuItem<String>(
                   value: item,
                   height: 14,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3,
+                    vertical: 1,
+                  ),
                   child: Container(
                     height: 14,
                     padding: const EdgeInsets.symmetric(horizontal: 5),
@@ -651,11 +663,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       children: [
                         // Home/Away symbol
                         if (isHome)
-                          Icon(Icons.home,
-                              size: 12, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.home,
+                            size: 12,
+                            color: Colors.grey.shade700,
+                          ),
                         if (!isHome)
-                          Icon(Icons.flight,
-                              size: 12, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.flight,
+                            size: 12,
+                            color: Colors.grey.shade700,
+                          ),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
@@ -801,8 +819,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // - Edit player jersey numbers and names
   Future<void> _showTeamEditorDialog({required bool isHome}) async {
     String? tempSelectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
-    List<Player> tempRoster =
-        List<Player>.from(isHome ? _homeRoster : _awayRoster);
+    List<Player> tempRoster = List<Player>.from(
+      isHome ? _homeRoster : _awayRoster,
+    );
     bool isLoading = false;
 
     // Sort roster by jersey number
@@ -824,10 +843,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             return AlertDialog(
               titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              title: Text(
-                'Edit Teams',
-                style: const TextStyle(fontSize: 14),
-              ),
+              title: Text('Edit Teams', style: const TextStyle(fontSize: 14)),
               content: SizedBox(
                 width: 520,
                 child: Column(
@@ -846,8 +862,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               isLoading = true;
                             });
                             try {
-                              final fetched = await _apiManager
-                                  .fetchTeamRoster(selectedHomeTeam!);
+                              final fetched = await _apiManager.fetchTeamRoster(
+                                selectedHomeTeam!,
+                              );
                               setDialogState(() {
                                 tempRoster = List<Player>.from(fetched);
                                 // Sort roster by jersey number
@@ -900,7 +917,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   const SizedBox(width: 2),
                                   Text(
                                     _getTeamAbbreviation(
-                                        selectedHomeTeam ?? 'Home'),
+                                      selectedHomeTeam ?? 'Home',
+                                    ),
                                     style: TextStyle(
                                       fontSize: 10,
                                       color:
@@ -923,8 +941,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               isLoading = true;
                             });
                             try {
-                              final fetched = await _apiManager
-                                  .fetchTeamRoster(selectedAwayTeam!);
+                              final fetched = await _apiManager.fetchTeamRoster(
+                                selectedAwayTeam!,
+                              );
                               setDialogState(() {
                                 tempRoster = List<Player>.from(fetched);
                                 // Sort roster by jersey number
@@ -977,7 +996,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   const SizedBox(width: 2),
                                   Text(
                                     _getTeamAbbreviation(
-                                        selectedAwayTeam ?? 'Away'),
+                                      selectedAwayTeam ?? 'Away',
+                                    ),
                                     style: TextStyle(
                                       fontSize: 10,
                                       color:
@@ -1045,7 +1065,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   Text(
                                     'Loading roster...',
                                     style: TextStyle(
-                                        fontSize: 12, color: Colors.grey),
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1069,29 +1091,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         width: 64,
                                         child: TextField(
                                           controller: TextEditingController(
-                                              text: currentNumber)
-                                            ..selection =
+                                            text: currentNumber,
+                                          )..selection =
                                                 TextSelection.collapsed(
-                                                    offset:
-                                                        currentNumber.length),
+                                              offset: currentNumber.length,
+                                            ),
                                           style: const TextStyle(fontSize: 12),
                                           decoration: InputDecoration(
                                             isDense: true,
                                             border: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
+                                                color: Colors.grey.shade300,
+                                              ),
                                             ),
                                             enabledBorder: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
+                                                color: Colors.grey.shade300,
+                                              ),
                                             ),
                                             focusedBorder: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade400),
+                                                color: Colors.grey.shade400,
+                                              ),
                                             ),
                                             contentPadding:
                                                 const EdgeInsets.symmetric(
-                                                    horizontal: 8, vertical: 6),
+                                              horizontal: 8,
+                                              vertical: 6,
+                                            ),
                                           ),
                                           onChanged: (v) => setDialogState(() {
                                             indexToEditedNumber[index] = v;
@@ -1102,28 +1129,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Expanded(
                                         child: TextField(
                                           controller: TextEditingController(
-                                              text: currentName)
-                                            ..selection =
+                                            text: currentName,
+                                          )..selection =
                                                 TextSelection.collapsed(
-                                                    offset: currentName.length),
+                                              offset: currentName.length,
+                                            ),
                                           style: const TextStyle(fontSize: 12),
                                           decoration: InputDecoration(
                                             isDense: true,
                                             border: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
+                                                color: Colors.grey.shade300,
+                                              ),
                                             ),
                                             enabledBorder: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
+                                                color: Colors.grey.shade300,
+                                              ),
                                             ),
                                             focusedBorder: OutlineInputBorder(
                                               borderSide: BorderSide(
-                                                  color: Colors.grey.shade400),
+                                                color: Colors.grey.shade400,
+                                              ),
                                             ),
                                             contentPadding:
                                                 const EdgeInsets.symmetric(
-                                                    horizontal: 8, vertical: 6),
+                                              horizontal: 8,
+                                              vertical: 6,
+                                            ),
                                           ),
                                           onChanged: (v) => setDialogState(() {
                                             indexToEditedName[index] = v;
@@ -1141,9 +1174,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
               actions: [
                 TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child:
-                        const Text('Cancel', style: TextStyle(fontSize: 11))),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(fontSize: 11)),
+                ),
                 TextButton(
                   onPressed: () {
                     final List<Player> updated = [];
@@ -1159,12 +1192,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       final displayName = jerseyNumber != null
                           ? '$editedName #$jerseyNumber'
                           : editedName;
-                      updated.add(Player(
-                        fullName: editedName,
-                        firstName: editedName.split(' ').first,
-                        jerseyNumber: jerseyNumber,
-                        displayName: displayName,
-                      ));
+                      updated.add(
+                        Player(
+                          fullName: editedName,
+                          firstName: editedName.split(' ').first,
+                          jerseyNumber: jerseyNumber,
+                          displayName: displayName,
+                        ),
+                      );
                     }
 
                     setState(() {
@@ -1187,8 +1222,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   onTap: _fullReset,
                   child: Container(
                     height: 26,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(4),
@@ -1197,14 +1234,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.refresh,
-                            size: 12, color: Colors.grey.shade700),
+                        Icon(
+                          Icons.refresh,
+                          size: 12,
+                          color: Colors.grey.shade700,
+                        ),
                         const SizedBox(width: 2),
-                        Text('Reset',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500)),
+                        Text(
+                          'Reset',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1261,47 +1304,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildShortcodeSection(
-                          'Player Codes',
-                          [
-                            'h27 → Home team player #27',
-                            'v15 → Away team player #15',
-                            '27h → Home team player #27',
-                            '15v → Away team player #15',
-                            'hh27 → Home team player #27 (no team name)',
-                            'vv15 → Away team player #15 (no team name)',
-                          ],
-                        ),
-                        _buildShortcodeSection(
-                          'Team Codes',
-                          [
-                            'h → Home team name',
-                            'v → Away team name',
-                            'ht → Home team name',
-                            'vt → Away/visiting team name',
-                          ],
-                        ),
-                        _buildShortcodeSection(
-                          'Inning Codes',
-                          [
-                            '1i → first inning',
-                            'i1 → first inning',
-                            '9i → ninth inning',
-                            'i9 → ninth inning',
-                            'd1i → during the first inning',
-                            'di1 → during the first inning',
-                            'd9i → during the ninth inning',
-                            'di9 → during the ninth inning',
-                          ],
-                        ),
-                        _buildShortcodeSection(
-                          'Against Codes',
-                          [
-                            'ag → against the [opposite team]',
-                            'ah → against the home team',
-                            'av → against the away team',
-                          ],
-                        ),
+                        _buildShortcodeSection('Player Codes', [
+                          'h27 → Home team player #27',
+                          'v15 → Away team player #15',
+                          '27h → Home team player #27',
+                          '15v → Away team player #15',
+                          'hh27 → Home team player #27 (no team name)',
+                          'vv15 → Away team player #15 (no team name)',
+                        ]),
+                        _buildShortcodeSection('Team Codes', [
+                          'h → Home team name',
+                          'v → Away team name',
+                          'ht → Home team name',
+                          'vt → Away/visiting team name',
+                        ]),
+                        _buildShortcodeSection('Inning Codes', [
+                          '1i → first inning',
+                          'i1 → first inning',
+                          '9i → ninth inning',
+                          'i9 → ninth inning',
+                          'd1i → during the first inning',
+                          'di1 → during the first inning',
+                          'd9i → during the ninth inning',
+                          'di9 → during the ninth inning',
+                        ]),
+                        _buildShortcodeSection('Against Codes', [
+                          'ag → against the [opposite team]',
+                          'ah → against the home team',
+                          'av → against the away team',
+                        ]),
                       ],
                     ),
                   ),
@@ -1336,16 +1367,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         const SizedBox(height: 8),
-        ...codes.map((code) => Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 4),
-              child: Text(
-                code,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            )),
+        ...codes.map(
+          (code) => Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 4),
+            child: Text(
+              code,
+              style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
       ],
     );
@@ -1369,8 +1399,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.auto_fix_high,
-                            color: Colors.orange, size: 24),
+                        const Icon(
+                          Icons.auto_fix_high,
+                          color: Colors.orange,
+                          size: 24,
+                        ),
                         const SizedBox(width: 8),
                         const Text(
                           '🔥 Firebar Guide',
@@ -1390,10 +1423,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(height: 20),
                 Text(
                   'The Firebar is your quick caption generator! Type player numbers and actions to instantly create captions.',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 20),
                 Expanded(
@@ -1472,17 +1502,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             'nationalanthem, anthem → National Anthem',
                           ],
                         ),
-                        _buildFirebarSection(
-                          '💡 Pro Tips',
-                          'Advanced usage:',
-                          [
-                            '• Add RBI count: "27 hr3 1" = 3-run home run',
-                            '• Multiple players: "27 15 hr 1" = both players',
-                            '• Team disambiguation: Type "h" or "v" when prompted',
-                            '• Press SPACE after each code to activate',
-                            '• Use the Quick Codes button for more shortcuts',
-                          ],
-                        ),
+                        _buildFirebarSection('💡 Pro Tips', 'Advanced usage:', [
+                          '• Add RBI count: "27 hr3 1" = 3-run home run',
+                          '• Multiple players: "27 15 hr 1" = both players',
+                          '• Team disambiguation: Type "h" or "v" when prompted',
+                          '• Press SPACE after each code to activate',
+                          '• Use the Quick Codes button for more shortcuts',
+                        ]),
                       ],
                     ),
                   ),
@@ -1497,8 +1523,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.lightbulb,
-                          color: Colors.blue.shade700, size: 20),
+                      Icon(
+                        Icons.lightbulb,
+                        color: Colors.blue.shade700,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1522,7 +1551,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildFirebarSection(
-      String title, String subtitle, List<String> examples) {
+    String title,
+    String subtitle,
+    List<String> examples,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1544,16 +1576,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         const SizedBox(height: 8),
-        ...examples.map((example) => Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 4),
-              child: Text(
-                example,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            )),
+        ...examples.map(
+          (example) => Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 4),
+            child: Text(
+              example,
+              style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+            ),
+          ),
+        ),
         const SizedBox(height: 16),
       ],
     );
@@ -1583,7 +1614,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Rebuild when magic bar focus changes to toggle verb bolding and switch to list mode
     _magicBarFocusNode.addListener(() {
       print(
-          'DEBUG: Magic bar focus changed. Has focus: ${_magicBarFocusNode.hasFocus}');
+        'DEBUG: Magic bar focus changed. Has focus: ${_magicBarFocusNode.hasFocus}',
+      );
       setState(() {
         // Switch to list mode when magic bar is focused for easier player selection
         if (_magicBarFocusNode.hasFocus) {
@@ -1603,6 +1635,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _awaySearchText = _awaySearchController.text;
       });
     });
+    _unifiedSearchController.addListener(() {
+      setState(() {
+        _unifiedSearchText = _unifiedSearchController.text;
+      });
+    });
     _initializeSampleData();
     if (widget.personalityOverride != null) {
       personalityController.text = widget.personalityOverride!;
@@ -1617,6 +1654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     _homeSearchController.dispose();
     _awaySearchController.dispose();
+    _unifiedSearchController.dispose();
     _magicBarController.dispose();
     _magicBarFocusNode.dispose();
     super.dispose();
@@ -1660,7 +1698,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               final day = int.parse(dateComponents[2]);
               gameDate = DateTime(year, month, day);
               print(
-                  'DEBUG: Venue fetch - Parsed game date: ${gameDate.toIso8601String().split('T')[0]}');
+                'DEBUG: Venue fetch - Parsed game date: ${gameDate.toIso8601String().split('T')[0]}',
+              );
             }
           }
         } catch (e) {
@@ -1669,13 +1708,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       } else {
         print(
-            'DEBUG: Venue fetch - No date string found in metadata, using current date');
+          'DEBUG: Venue fetch - No date string found in metadata, using current date',
+        );
       }
     } else {}
 
     try {
       final venue = await _apiManager.fetchVenueForGame(
-          selectedHomeTeam!, selectedAwayTeam!, gameDate);
+        selectedHomeTeam!,
+        selectedAwayTeam!,
+        gameDate,
+      );
       // Removed auto-population of stadium and city/state from venue data
       // Only load values from EXIF metadata, not from API
     } catch (e) {
@@ -1702,7 +1745,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _firstTeamSelected = null; // Reset first team selection
         _firstPlayerSelected = null; // Reset first player selection
         print(
-            'DEBUG: Using preloaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players');
+          'DEBUG: Using preloaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players',
+        );
       });
 
       // Fetch venue information for the specific game and update stadium field
@@ -1724,14 +1768,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final futures = await Future.wait([
         _apiManager.fetchTeamRoster(selectedHomeTeam!),
         _apiManager.fetchTeamRoster(selectedAwayTeam!),
-        _apiManager.fetchTeams().then((teams) => teams.firstWhere(
-              (team) => team.name == selectedHomeTeam,
-              orElse: () => throw Exception('Team not found'),
-            )),
-        _apiManager.fetchTeams().then((teams) => teams.firstWhere(
-              (team) => team.name == selectedAwayTeam,
-              orElse: () => throw Exception('Team not found'),
-            )),
+        _apiManager.fetchTeams().then(
+              (teams) => teams.firstWhere(
+                (team) => team.name == selectedHomeTeam,
+                orElse: () => throw Exception('Team not found'),
+              ),
+            ),
+        _apiManager.fetchTeams().then(
+              (teams) => teams.firstWhere(
+                (team) => team.name == selectedAwayTeam,
+                orElse: () => throw Exception('Team not found'),
+              ),
+            ),
       ]);
 
       setState(() {
@@ -1761,7 +1809,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       });
 
       print(
-          'Successfully loaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players');
+        'Successfully loaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players',
+      );
       print('Home team stadium: $homeTeamStadium');
       print('Away team stadium: $awayTeamStadium');
     } catch (e) {
@@ -1919,8 +1968,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Clear search bars
       _homeSearchController.clear();
       _awaySearchController.clear();
+      _unifiedSearchController.clear();
+      _unifiedSearchController.clear();
       _homeSearchText = '';
       _awaySearchText = '';
+      _unifiedSearchText = '';
 
       // Reset hasBeenReset flag to allow metadata loading
       _hasBeenReset = false;
@@ -1936,8 +1988,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _processAllValidCodesOnSpacebar(String value) {
     // Find all valid codes that end with a space and process them
     final codeMatches = RegExp(
-            r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}|\d{1,2}[i]|[d][i]\d{1,3}|[d]\d{1,2}[i]) ')
-        .allMatches(value);
+      r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}|\d{1,2}[i]|[d][i]\d{1,3}|[d]\d{1,2}[i]) ',
+    ).allMatches(value);
 
     for (final match in codeMatches) {
       final code = match.group(0)!.trim();
@@ -2113,7 +2165,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Process against visiting team code (av)
   void _processAgainstVisitingCode(
-      String value, RegExpMatch match, String code) {
+    String value,
+    RegExpMatch match,
+    String code,
+  ) {
     final replacement = selectedAwayTeam != null && selectedAwayTeam!.isNotEmpty
         ? 'against the $selectedAwayTeam '
         : 'against the visiting team ';
@@ -2183,7 +2238,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Process player token found in caption box
   void _processCaptionPlayerToken(
-      String value, RegExpMatch match, Player player, bool isHome) {
+    String value,
+    RegExpMatch match,
+    Player player,
+    bool isHome,
+  ) {
     _isProcessingCaptionShortcut = true;
 
     // Replace the token with the player name
@@ -2201,10 +2260,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     setState(() {
       _highlightedRanges.clear();
-      _highlightedRanges.add(TextRange(
-        start: replacementStart,
-        end: replacementEnd,
-      ));
+      _highlightedRanges.add(
+        TextRange(start: replacementStart, end: replacementEnd),
+      );
     });
 
     // Position cursor at the end of the highlighted text
@@ -2250,12 +2308,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Check if there's a space just before the cursor position
         if (cursorPos > 0 && value[cursorPos - 1] == ' ') {
           print(
-              'DEBUG: Space detected at cursor position $cursorPos in: "$value"');
+            'DEBUG: Space detected at cursor position $cursorPos in: "$value"',
+          );
 
           // Look for codes that end just before the cursor (just before the space)
           final codeMatches = RegExp(
-                  r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}) ')
-              .allMatches(value);
+            r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[ag]|[ah]|[av]|[i]\d{1,3}) ',
+          ).allMatches(value);
           print('DEBUG: Found ${codeMatches.length} potential codes');
 
           // Find the code that ends right at the cursor position
@@ -2263,7 +2322,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           for (final match in codeMatches) {
             print(
-                'DEBUG: Code at ${match.start}-${match.end} (${match.group(0)?.trim()}), ends at: ${match.end}, cursor at: $cursorPos');
+              'DEBUG: Code at ${match.start}-${match.end} (${match.group(0)?.trim()}), ends at: ${match.end}, cursor at: $cursorPos',
+            );
             if (match.end == cursorPos) {
               // Code ends exactly where cursor is
               bestMatch = match;
@@ -2324,7 +2384,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Forward tokens: h, hh, v, vv, i, di, ht, vt, ag, ah, av + optional number (for player/inning)
     final forward = RegExp(
-        r'(?:^|\s)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[dD][iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a)|[aA][hH]|[aA][vV])(\d{0,3})');
+      r'(?:^|\s)((?:[hH]{1,2})|(?:[vV]{1,2})|[iI]|[dD][iI]|[hH][tT]|[vV][tT]|(?<!a)[aA][gG](?!a)|[aA][hH]|[aA][vV])(\d{0,3})',
+    );
     for (final m in forward.allMatches(value)) {
       final prefix = m.group(1)!.toLowerCase();
       final number = m.group(2) ?? '';
@@ -2429,10 +2490,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Progressive auto-selection: when a valid trailing player token is being typed,
     // select that player in the visual pickers below in real time.
     try {
-      final trailingForward =
-          RegExp(r'(?:^|\s)((?:h{1,2})|(?:v{1,2}))(\d{1,3})\s*$');
-      final trailingReverse =
-          RegExp(r'(?:^|\s)(\d{1,3})((?:h{1,2})|(?:v{1,2}))\s*$');
+      final trailingForward = RegExp(
+        r'(?:^|\s)((?:h{1,2})|(?:v{1,2}))(\d{1,3})\s*$',
+      );
+      final trailingReverse = RegExp(
+        r'(?:^|\s)(\d{1,3})((?:h{1,2})|(?:v{1,2}))\s*$',
+      );
       String? teamToken;
       String? jersey;
       final m1 = trailingForward.firstMatch(value.toLowerCase());
@@ -2532,7 +2595,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         .firstWhere(
           (p) => p.jerseyNumber == jerseyNumber,
           orElse: () => Player(
-              fullName: '', firstName: '', displayName: '', jerseyNumber: ''),
+            fullName: '',
+            firstName: '',
+            displayName: '',
+            jerseyNumber: '',
+          ),
         )
         .displayName;
     if (name.isEmpty) return;
@@ -2566,7 +2633,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         .firstWhere(
           (p) => p.jerseyNumber == jerseyNumber,
           orElse: () => Player(
-              fullName: '', firstName: '', displayName: '', jerseyNumber: ''),
+            fullName: '',
+            firstName: '',
+            displayName: '',
+            jerseyNumber: '',
+          ),
         )
         .displayName;
     if (name.isEmpty) return;
@@ -2610,7 +2681,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           width: double.infinity,
                           height: 28,
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: Colors.grey.shade100,
                             border: Border(
                               bottom: BorderSide(color: Colors.grey.shade400),
                             ),
@@ -2618,7 +2689,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             children: [
                               const Padding(
-                                padding: EdgeInsets.only(left: 12),
+                                padding: EdgeInsets.only(left: 8),
                                 child: Text(
                                   'Captioning',
                                   style: TextStyle(
@@ -2629,42 +2700,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                               const Spacer(),
-                              TextButton(
-                                onPressed: _showShortcodesDialog,
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 2),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.help_outline,
-                                      size: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      'Quick\nCodes',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        color: Colors.grey.shade600,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.1,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 12),
 
                         // Caption field, Personality field, and Quick Codes button row
                         Row(
@@ -2674,81 +2714,142 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               width: MediaQuery.of(context).size.width *
                                   0.5 *
                                   0.6, // 50% of 60% column
-                              child: TextField(
-                                controller: captionController,
-                                maxLines: 4,
-                                onChanged: _onCaptionChanged,
-                                style: const TextStyle(fontSize: 12),
-                                decoration: InputDecoration(
-                                  labelText: 'Caption',
-                                  floatingLabelBehavior:
-                                      FloatingLabelBehavior.always,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade400),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Caption title and Quick Codes button on same line
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 4,
+                                      bottom: 2,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Text(
+                                          'CAPTION',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        TextButton(
+                                          onPressed: _showShortcodesDialog,
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 4,
+                                              vertical: 2,
+                                            ),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize
+                                                .shrinkWrap,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.help_outline,
+                                                size: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 2),
+                                              Text(
+                                                'Quick Codes',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  color: Colors.grey.shade600,
+                                                  fontWeight: FontWeight.w500,
+                                                  height: 1.1,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade400),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: BorderSide(
-                                        color: Colors.blue.shade400, width: 2),
-                                  ),
-                                  contentPadding: const EdgeInsets.all(8),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  labelStyle: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                inputFormatters: [
-                                  HighlightedTokenDeletionFormatter(
-                                    getRanges: () => _highlightedRanges,
-                                    onTokenDeleted: (deletedRange, tokenText) {
-                                      // Update personality if this was a player expansion
-                                      final playerName =
-                                          _tokenToPlayerName[tokenText.trim()];
-                                      if (playerName != null) {
-                                        _removePlayerFromPersonality(
-                                            playerName);
-                                        // Remove mapping for this exact token text
-                                        _tokenToPlayerName
-                                            .remove(tokenText.trim());
-                                      }
+                                  TextField(
+                                    controller: captionController,
+                                    maxLines: 4,
+                                    onChanged: _onCaptionChanged,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.blue.shade400,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      contentPadding: const EdgeInsets.all(8),
+                                      filled: true,
+                                      fillColor: Colors.grey.shade50,
+                                    ),
+                                    inputFormatters: [
+                                      HighlightedTokenDeletionFormatter(
+                                        getRanges: () => _highlightedRanges,
+                                        onTokenDeleted:
+                                            (deletedRange, tokenText) {
+                                          // Update personality if this was a player expansion
+                                          final playerName = _tokenToPlayerName[
+                                              tokenText.trim()];
+                                          if (playerName != null) {
+                                            _removePlayerFromPersonality(
+                                              playerName,
+                                            );
+                                            // Remove mapping for this exact token text
+                                            _tokenToPlayerName.remove(
+                                              tokenText.trim(),
+                                            );
+                                          }
 
-                                      // Rebuild highlight ranges after deletion
-                                      final int removedLen =
-                                          deletedRange.end - deletedRange.start;
-                                      final List<TextRange> updated = [];
-                                      for (final r in _highlightedRanges) {
-                                        // Skip the deleted range itself
-                                        if (r.start >= deletedRange.start &&
-                                            r.end <= deletedRange.end) {
-                                          continue;
-                                        }
-                                        if (r.start >= deletedRange.end) {
-                                          updated.add(TextRange(
-                                              start: r.start - removedLen,
-                                              end: r.end - removedLen));
-                                        } else {
-                                          updated.add(r);
-                                        }
-                                      }
-                                      _highlightedRanges = updated;
-                                      (captionController
-                                              as HighlightingTextEditingController)
-                                          .highlightedRanges = updated;
-                                      (captionController
-                                              as HighlightingTextEditingController)
-                                          .invalidRanges = [];
-                                      setState(() {});
-                                    },
+                                          // Rebuild highlight ranges after deletion
+                                          final int removedLen =
+                                              deletedRange.end -
+                                                  deletedRange.start;
+                                          final List<TextRange> updated = [];
+                                          for (final r in _highlightedRanges) {
+                                            // Skip the deleted range itself
+                                            if (r.start >= deletedRange.start &&
+                                                r.end <= deletedRange.end) {
+                                              continue;
+                                            }
+                                            if (r.start >= deletedRange.end) {
+                                              updated.add(
+                                                TextRange(
+                                                  start: r.start - removedLen,
+                                                  end: r.end - removedLen,
+                                                ),
+                                              );
+                                            } else {
+                                              updated.add(r);
+                                            }
+                                          }
+                                          _highlightedRanges = updated;
+                                          (captionController
+                                                  as HighlightingTextEditingController)
+                                              .highlightedRanges = updated;
+                                          (captionController
+                                                  as HighlightingTextEditingController)
+                                              .invalidRanges = [];
+                                          setState(() {});
+                                        },
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -2760,38 +2861,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               width: MediaQuery.of(context).size.width *
                                   0.25 *
                                   0.6, // 25% of 60% column
-                              child: TextField(
-                                controller: personalityController,
-                                maxLines: 4,
-                                style: const TextStyle(fontSize: 12),
-                                decoration: InputDecoration(
-                                  labelText: 'Personality',
-                                  floatingLabelBehavior:
-                                      FloatingLabelBehavior.always,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade400),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(
+                                      left: 4,
+                                      bottom: 2,
+                                    ),
+                                    child: Text(
+                                      'PERSONALITY',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey.shade400),
+                                  TextField(
+                                    controller: personalityController,
+                                    maxLines: 4,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.blue.shade400,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      contentPadding: const EdgeInsets.all(8),
+                                      filled: true,
+                                      fillColor: Colors.grey.shade50,
+                                    ),
                                   ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: BorderSide(
-                                        color: Colors.blue.shade400, width: 2),
-                                  ),
-                                  contentPadding: const EdgeInsets.all(8),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                  labelStyle: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
-                                  ),
-                                ),
+                                ],
                               ),
                             ),
                           ],
@@ -2808,7 +2924,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 0.6, // 50% of 60% column (same as caption)
                             height: 50, // Moderate height for better usability
                             padding: const EdgeInsets.symmetric(
-                                vertical: 8), // Add top and bottom padding
+                              vertical: 8,
+                            ), // Add top and bottom padding
                             margin: EdgeInsets.zero,
                             alignment: Alignment.centerLeft,
                             // No border decoration
@@ -2823,12 +2940,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       Expanded(
                                         child: Container(
                                           padding: const EdgeInsets.only(
-                                              left: 0, right: 8),
+                                            left: 0,
+                                            right: 8,
+                                          ),
                                           decoration: BoxDecoration(
                                             borderRadius:
                                                 const BorderRadius.only(
                                               topLeft: Radius.circular(6),
-                                              bottomLeft: Radius.circular(6),
+                                              bottomLeft: Radius.circular(
+                                                6,
+                                              ),
                                             ),
                                           ),
                                           child: TextField(
@@ -2836,34 +2957,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             expands: true,
                                             textAlignVertical:
                                                 TextAlignVertical.center,
-                                            style:
-                                                const TextStyle(fontSize: 12),
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                            ),
                                             decoration: InputDecoration(
                                               border: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                                 borderSide: BorderSide(
-                                                    color:
-                                                        Colors.grey.shade300),
+                                                  color: Colors.grey.shade300,
+                                                ),
                                               ),
                                               enabledBorder: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                                 borderSide: BorderSide(
-                                                    color:
-                                                        Colors.grey.shade300),
+                                                  color: Colors.grey.shade300,
+                                                ),
                                               ),
                                               focusedBorder: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                                 borderSide: BorderSide(
-                                                    color:
-                                                        Colors.blue.shade400),
+                                                  color: Colors.blue.shade400,
+                                                ),
                                               ),
                                               contentPadding:
                                                   const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 8),
+                                                horizontal: 8,
+                                                vertical: 8,
+                                              ),
                                               isDense: true,
                                               hintText: _waitingForHomeVisitorChoice
                                                   ? 'Press H for Home or V for Away'
@@ -2888,7 +3011,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             focusNode: _magicBarFocusNode,
                                             onTap: () {
                                               print(
-                                                  'DEBUG: Magic bar tapped, switching to list mode');
+                                                'DEBUG: Magic bar tapped, switching to list mode',
+                                              );
                                               setState(() {
                                                 _homePlayerGridMode = false;
                                                 _awayPlayerGridMode = false;
@@ -2898,42 +3022,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               // Handle H/V input when waiting for home/visitor choice
                                               if (_waitingForHomeVisitorChoice) {
                                                 print(
-                                                    'DEBUG: In choice mode, value: "$value"');
+                                                  'DEBUG: In choice mode, value: "$value"',
+                                                );
                                                 // Check if user typed 'h' or 'v' anywhere in the text
                                                 final lowerValue =
                                                     value.toLowerCase();
                                                 print(
-                                                    'DEBUG: Checking for h or v in: "$lowerValue"');
+                                                  'DEBUG: Checking for h or v in: "$lowerValue"',
+                                                );
 
                                                 // Look for 'h' or 'v' at the end of the input (user's choice)
-                                                final hMatch = RegExp(r'h$')
-                                                    .firstMatch(lowerValue);
-                                                final vMatch = RegExp(r'v$')
-                                                    .firstMatch(lowerValue);
+                                                final hMatch = RegExp(
+                                                  r'h$',
+                                                ).firstMatch(lowerValue);
+                                                final vMatch = RegExp(
+                                                  r'v$',
+                                                ).firstMatch(lowerValue);
 
                                                 if (hMatch != null) {
                                                   print(
-                                                      'DEBUG: Found H, calling _processHomeVisitorChoice');
+                                                    'DEBUG: Found H, calling _processHomeVisitorChoice',
+                                                  );
                                                   _processHomeVisitorChoice(
-                                                      'h');
+                                                    'h',
+                                                  );
                                                   return;
                                                 } else if (vMatch != null) {
                                                   print(
-                                                      'DEBUG: Found V, calling _processHomeVisitorChoice');
+                                                    'DEBUG: Found V, calling _processHomeVisitorChoice',
+                                                  );
                                                   _processHomeVisitorChoice(
-                                                      'v');
+                                                    'v',
+                                                  );
                                                   return;
                                                 }
                                                 print(
-                                                    'DEBUG: No H or V found, restoring prompt if needed');
+                                                  'DEBUG: No H or V found, restoring prompt if needed',
+                                                );
                                                 // Restore the prompt text if user tries to edit it
                                                 if (!value.contains(
-                                                    'Press H for Home or V for Away')) {
+                                                  'Press H for Home or V for Away',
+                                                )) {
                                                   final numberPart =
                                                       _magicInputMatchingPlayers
                                                           .first.jerseyNumber;
                                                   print(
-                                                      'DEBUG: Restoring prompt text');
+                                                    'DEBUG: Restoring prompt text',
+                                                  );
 
                                                   // Create player choice text with last names and numbers
                                                   final homePlayer =
@@ -2971,9 +3106,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       TextSelection
                                                           .fromPosition(
                                                     TextPosition(
-                                                        offset:
-                                                            _magicBarController
-                                                                .text.length),
+                                                      offset:
+                                                          _magicBarController
+                                                              .text.length,
+                                                    ),
                                                   );
                                                 }
                                                 return;
@@ -2990,7 +3126,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 // Don't reset caption when magic bar is empty
                                                 // This preserves player selections during multi-player input
                                                 setState(
-                                                    () {}); // refresh highlighting
+                                                  () {},
+                                                ); // refresh highlighting
                                                 return;
                                               }
                                               // If user is typing a single player token (no space yet),
@@ -2998,8 +3135,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               final raw = value;
                                               final token =
                                                   raw.trim().toLowerCase();
-                                              final hasSpace =
-                                                  raw.contains(' ');
+                                              final hasSpace = raw.contains(
+                                                ' ',
+                                              );
                                               final String lastToken =
                                                   raw.trimRight().isEmpty
                                                       ? ''
@@ -3018,24 +3156,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     .where((t) => t.isNotEmpty)
                                                     .toList();
                                                 final bool hasHrToken =
-                                                    tokens.any((t) =>
-                                                        RegExp(r'^hr([1-4])$',
-                                                                caseSensitive:
-                                                                    false)
-                                                            .hasMatch(t) ||
-                                                        t == 'gs');
+                                                    tokens.any(
+                                                  (t) =>
+                                                      RegExp(
+                                                        r'^hr([1-4])$',
+                                                        caseSensitive: false,
+                                                      ).hasMatch(t) ||
+                                                      t == 'gs',
+                                                );
                                                 final bool hasRbiToken = RegExp(
-                                                        r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                                    .hasMatch(raw.trim());
+                                                  r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)',
+                                                ).hasMatch(raw.trim());
                                                 final bool
                                                     hasExplicitInningToken =
-                                                    RegExp(r'(?:^|\b)[iI]\d+')
-                                                        .hasMatch(raw);
+                                                    RegExp(
+                                                  r'(?:^|\b)[iI]\d+',
+                                                ).hasMatch(raw);
                                                 final List<String> bareNums =
                                                     tokens
-                                                        .where((t) =>
-                                                            RegExp(r'^\d{1,2}$')
-                                                                .hasMatch(t))
+                                                        .where(
+                                                          (t) => RegExp(
+                                                            r'^\d{1,2}$',
+                                                          ).hasMatch(t),
+                                                        )
                                                         .toList();
                                                 final bool hasBareInningToken =
                                                     raw.contains(' ') &&
@@ -3081,12 +3224,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               if (lastToken.isNotEmpty &&
                                                   _selectedVerb == null) {
                                                 final hrNum = RegExp(
-                                                        r'^hr([1-4])$',
-                                                        caseSensitive: false)
-                                                    .firstMatch(lastToken);
+                                                  r'^hr([1-4])$',
+                                                  caseSensitive: false,
+                                                ).firstMatch(lastToken);
                                                 if (hrNum != null) {
                                                   final n = int.tryParse(
-                                                      hrNum.group(1)!);
+                                                    hrNum.group(1)!,
+                                                  );
                                                   String? hrType;
                                                   switch (n) {
                                                     case 1:
@@ -3135,11 +3279,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               // Only trigger when there is at least one space (to avoid conflicting with first player token)
                                               // Only work when NOT in a submenu (to avoid conflicts)
                                               if (hasSpace &&
-                                                  RegExp(r'^\d{1,2}$')
-                                                      .hasMatch(lastToken) &&
+                                                  RegExp(
+                                                    r'^\d{1,2}$',
+                                                  ).hasMatch(lastToken) &&
                                                   _selectedVerb == null) {
-                                                final int inningNum =
-                                                    int.parse(lastToken);
+                                                final int inningNum = int.parse(
+                                                  lastToken,
+                                                );
                                                 if (inningNum > 0 &&
                                                     inningNum <= 20) {
                                                   setState(() {
@@ -3152,20 +3298,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               }
 
                                               final singlePlayerRegex = RegExp(
-                                                  r'^(h{1,2}|v{1,2})?\d+$');
+                                                r'^(h{1,2}|v{1,2})?\d+$',
+                                              );
                                               // Exclude hr patterns from single player regex
-                                              final hrPattern =
-                                                  RegExp(r'^hr\d+$');
+                                              final hrPattern = RegExp(
+                                                r'^hr\d+$',
+                                              );
                                               if (_typingFirstMagicToken &&
                                                   !hasSpace &&
-                                                  singlePlayerRegex
-                                                      .hasMatch(token) &&
+                                                  singlePlayerRegex.hasMatch(
+                                                    token,
+                                                  ) &&
                                                   !hrPattern.hasMatch(token)) {
                                                 String numberPart =
                                                     token.replaceAll(
-                                                        RegExp(
-                                                            r'^(h{1,2}|v{1,2})'),
-                                                        '');
+                                                  RegExp(
+                                                    r'^(h{1,2}|v{1,2})',
+                                                  ),
+                                                  '',
+                                                );
                                                 bool isHomeHint =
                                                     token.startsWith('h');
 
@@ -3175,15 +3326,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     !token.startsWith('v')) {
                                                   final homeMatches =
                                                       _homeRoster
-                                                          .where((p) =>
-                                                              p.jerseyNumber ==
-                                                              numberPart)
+                                                          .where(
+                                                            (p) =>
+                                                                p.jerseyNumber ==
+                                                                numberPart,
+                                                          )
                                                           .toList();
                                                   final awayMatches =
                                                       _awayRoster
-                                                          .where((p) =>
-                                                              p.jerseyNumber ==
-                                                              numberPart)
+                                                          .where(
+                                                            (p) =>
+                                                                p.jerseyNumber ==
+                                                                numberPart,
+                                                          )
                                                           .toList();
                                                   if (homeMatches.isNotEmpty &&
                                                       awayMatches.isNotEmpty) {
@@ -3195,7 +3350,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       _magicInputMatchingPlayers =
                                                           [
                                                         ...homeMatches,
-                                                        ...awayMatches
+                                                        ...awayMatches,
                                                       ];
                                                       _magicInputActionText =
                                                           '';
@@ -3215,8 +3370,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     final awayPlayer =
                                                         _magicInputMatchingPlayers
                                                             .firstWhere(
-                                                      (p) => !_homeRoster
-                                                          .contains(p),
+                                                      (p) =>
+                                                          !_homeRoster.contains(
+                                                        p,
+                                                      ),
                                                       orElse: () =>
                                                           _magicInputMatchingPlayers
                                                               .first,
@@ -3238,9 +3395,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         TextSelection
                                                             .fromPosition(
                                                       TextPosition(
-                                                          offset:
-                                                              _magicBarController
-                                                                  .text.length),
+                                                        offset:
+                                                            _magicBarController
+                                                                .text.length,
+                                                      ),
                                                     );
                                                     return;
                                                   }
@@ -3289,9 +3447,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                               // Home Run sub-menu: special letters shortcut "gs" -> Grand Slam
                                               final RegExpMatch?
-                                                  hrLettersMatch0 =
-                                                  RegExp(r'([a-zA-Z]+)$')
-                                                      .firstMatch(value);
+                                                  hrLettersMatch0 = RegExp(
+                                                r'([a-zA-Z]+)$',
+                                              ).firstMatch(value);
                                               final String hrLetters0 =
                                                   hrLettersMatch0
                                                           ?.group(1)
@@ -3311,9 +3469,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               // Only work when NOT in a submenu (to avoid conflicts)
                                               if (_selectedVerb == null) {
                                                 final RegExpMatch?
-                                                    lettersMatch =
-                                                    RegExp(r'([a-zA-Z]+)$')
-                                                        .firstMatch(value);
+                                                    lettersMatch = RegExp(
+                                                  r'([a-zA-Z]+)$',
+                                                ).firstMatch(value);
                                                 final String typedLetters =
                                                     lettersMatch
                                                             ?.group(1)
@@ -3322,7 +3480,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 if (typedLetters.length >= 2) {
                                                   final matchedVerb =
                                                       _matchVerbToken(
-                                                          typedLetters);
+                                                    typedLetters,
+                                                  );
                                                   if (matchedVerb != null) {
                                                     setState(() {
                                                       _selectedVerb =
@@ -3339,11 +3498,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                               // Parse RBI shortcuts (e.g., "3r", "3rb", "3rbi") in sub-menus
                                               final RegExpMatch? statMatch =
-                                                  RegExp(r'(\d{1,2})\s*([rR][bB]?[iI]?)$')
-                                                      .firstMatch(value.trim());
+                                                  RegExp(
+                                                r'(\d{1,2})\s*([rR][bB]?[iI]?)$',
+                                              ).firstMatch(value.trim());
                                               if (statMatch != null) {
                                                 final int number = int.tryParse(
-                                                        statMatch.group(1)!) ??
+                                                      statMatch.group(1)!,
+                                                    ) ??
                                                     0;
                                                 final String suffix =
                                                     (statMatch.group(2) ?? '')
@@ -3384,12 +3545,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               // Parse inning numbers in sub-menus (e.g., "5" for 5th inning)
                                               if (_selectedVerb != null) {
                                                 final RegExpMatch? inningMatch =
-                                                    RegExp(r'^(\d{1,2})$')
-                                                        .firstMatch(lastToken);
+                                                    RegExp(
+                                                  r'^(\d{1,2})$',
+                                                ).firstMatch(lastToken);
                                                 if (inningMatch != null) {
                                                   final int inningNum =
-                                                      int.tryParse(inningMatch
-                                                              .group(1)!) ??
+                                                      int.tryParse(
+                                                            inningMatch
+                                                                .group(1)!,
+                                                          ) ??
                                                           0;
                                                   if (inningNum > 0 &&
                                                       inningNum <= 20) {
@@ -3411,24 +3575,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   .where((t) => t.isNotEmpty)
                                                   .toList();
                                               final bool hasHrToken =
-                                                  tokens.any((t) =>
-                                                      RegExp(r'^hr([1-4])$',
-                                                              caseSensitive:
-                                                                  false)
-                                                          .hasMatch(t) ||
-                                                      t == 'gs');
+                                                  tokens.any(
+                                                (t) =>
+                                                    RegExp(
+                                                      r'^hr([1-4])$',
+                                                      caseSensitive: false,
+                                                    ).hasMatch(t) ||
+                                                    t == 'gs',
+                                              );
                                               final bool hasRbiToken = RegExp(
-                                                      r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)')
-                                                  .hasMatch(raw.trim());
+                                                r'(?:^|\s)(\d{1,2})\s*[rR][bB]?[iI]?(?:\s|$)',
+                                              ).hasMatch(raw.trim());
                                               final bool
                                                   hasExplicitInningToken =
-                                                  RegExp(r'(?:^|\b)[iI]\d+')
-                                                      .hasMatch(raw);
+                                                  RegExp(
+                                                r'(?:^|\b)[iI]\d+',
+                                              ).hasMatch(raw);
                                               final List<String> bareNums =
                                                   tokens
-                                                      .where((t) =>
-                                                          RegExp(r'^\d{1,2}$')
-                                                              .hasMatch(t))
+                                                      .where(
+                                                        (t) => RegExp(
+                                                          r'^\d{1,2}$',
+                                                        ).hasMatch(t),
+                                                      )
                                                       .toList();
                                               final bool hasBareInningToken =
                                                   raw.contains(' ') &&
@@ -3467,10 +3636,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               }
 
                                               print(
-                                                  'DEBUG: About to check _isMagicInput for: "$value"');
+                                                'DEBUG: About to check _isMagicInput for: "$value"',
+                                              );
                                               if (_isMagicInput(value)) {
                                                 print(
-                                                    'DEBUG: _isMagicInput returned true, calling _parseMagicInput');
+                                                  'DEBUG: _isMagicInput returned true, calling _parseMagicInput',
+                                                );
                                                 _parseMagicInput(value);
                                                 return;
                                               }
@@ -3478,7 +3649,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               // Handle multiple player numbers (e.g., "27 23")
                                               _handleMultiplePlayerInput(value);
                                               setState(
-                                                  () {}); // refresh highlighting while typing
+                                                () {},
+                                              ); // refresh highlighting while typing
                                             },
                                           ),
                                         ),
@@ -3539,12 +3711,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        const SizedBox(height: 4),
+                        // (Removed misplaced search bar outside player picker container)
 
                         // Player and Verb Selection Area
-                        Expanded(
-                          child: _buildCaptionBuildingSection(),
-                        ),
+                        Expanded(child: _buildCaptionBuildingSection()),
                       ],
                     ),
                   ),
@@ -3577,10 +3747,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           const SizedBox(width: 4),
 
           // Verbs (Center) - 70% of space
-          Expanded(
-            flex: 7,
-            child: _buildCompactVerbColumn(),
-          ),
+          Expanded(flex: 7, child: _buildCompactVerbColumn()),
         ],
       ),
     );
@@ -3596,7 +3763,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             border: Border.all(
-                color: isHome ? Colors.grey.shade700 : Colors.grey.shade400),
+              color: isHome ? Colors.grey.shade700 : Colors.grey.shade400,
+            ),
             borderRadius: BorderRadius.circular(6),
             color: isHome ? Colors.grey.shade700 : Colors.white,
           ),
@@ -3662,7 +3830,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       onTap: () => _showPlayerSelectionDialog(isHome),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(4),
@@ -3700,11 +3870,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
-                        children: _sortPlayersByNumber(isHome
-                                ? selectedHomePlayers
-                                : selectedAwayPlayers)
-                            .map((playerName) =>
-                                _buildPlayerChip(playerName, isHome))
+                        children: _sortPlayersByNumber(
+                          isHome ? selectedHomePlayers : selectedAwayPlayers,
+                        )
+                            .map(
+                              (playerName) =>
+                                  _buildPlayerChip(playerName, isHome),
+                            )
                             .toList(),
                       ),
                     ],
@@ -3809,16 +3981,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
           if (captionController.text.isNotEmpty) ...[
             const SizedBox(height: 8),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [],
-            ),
+            const Row(mainAxisAlignment: MainAxisAlignment.end, children: []),
           ],
           const SizedBox(height: 8),
           // FTP buttons row
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Last button
               Padding(
@@ -3827,8 +3996,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   onTap: _pasteLastCaption,
                   child: Container(
                     width: 412,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    height: 58,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
@@ -3837,8 +4009,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.history,
-                            size: 14, color: Colors.grey.shade700),
+                        Icon(
+                          Icons.history,
+                          size: 14,
+                          color: Colors.grey.shade700,
+                        ),
                         const SizedBox(width: 2),
                         Text(
                           'Paste Caption from Previous Frame',
@@ -3857,54 +4032,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // FTP button
               CustomButton(
                 onTap: _disableFtp ? null : _onFtpPressed,
-                child: Transform.translate(
-                  offset: const Offset(0, -32),
-                  child: Container(
-                    width: 140,
-                    height: 58,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
+                child: Container(
+                  width: 140,
+                  height: 58,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _disableFtp
+                        ? Colors.grey.shade300
+                        : const Color(0xFF0052CC),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
                       color: _disableFtp
                           ? Colors.grey.shade300
                           : const Color(0xFF0052CC),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _disableFtp
-                            ? Colors.grey.shade300
-                            : const Color(0xFF0052CC),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.rocket_launch,
+                        size: 14,
+                        color:
+                            _disableFtp ? Colors.grey.shade600 : Colors.white,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.rocket_launch,
-                          size: 14,
-                          color:
-                              _disableFtp ? Colors.grey.shade600 : Colors.white,
-                        ),
-                        const SizedBox(width: 2),
-                        Flexible(
-                          child: Text(
-                            _disableFtp
-                                ? 'FTP OFF'
-                                : (_currentFtpProfile != null
-                                    ? 'FTP: $_currentFtpProfile'
-                                    : 'FTP'),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: _disableFtp
-                                  ? Colors.grey.shade600
-                                  : Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          _disableFtp
+                              ? 'FTP OFF'
+                              : (_currentFtpProfile != null
+                                  ? 'FTP: $_currentFtpProfile'
+                                  : 'FTP'),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _disableFtp
+                                ? Colors.grey.shade600
+                                : Colors.white,
+                            fontWeight: FontWeight.w500,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -3912,20 +4086,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // FTP Settings button
               CustomButton(
                 onTap: _showFtpSettings,
-                child: Transform.translate(
-                  offset: const Offset(0, -32),
-                  child: Container(
-                    width: 80,
-                    height: 58,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4A90E2),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFF4A90E2)),
-                    ),
-                    child: const Icon(Icons.settings,
-                        size: 14, color: Colors.white),
+                child: Container(
+                  width: 80,
+                  height: 58,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4A90E2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF4A90E2)),
+                  ),
+                  child: const Icon(
+                    Icons.settings,
+                    size: 14,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -3937,26 +4113,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildCompactTeamColumn(bool isHome) {
+    final searchController = _unifiedSearchController;
+    final searchText = _unifiedSearchText;
+
+    // Do not switch view in compact mode; filter only the visible team
+
+    // Otherwise, show single team as before
     final roster = isHome ? _homeRoster : _awayRoster;
     final selectedPlayers = isHome ? selectedHomePlayers : selectedAwayPlayers;
-    final searchController =
-        isHome ? _homeSearchController : _awaySearchController;
-    final searchText = isHome ? _homeSearchText : _awaySearchText;
 
     // Filtered roster
     final filteredRosterUnsorted = searchText.isEmpty
         ? roster
         : roster
-            .where((player) => player.displayName
-                .toLowerCase()
-                .contains(searchText.toLowerCase()))
+            .where(
+              (player) => player.displayName.toLowerCase().contains(
+                    searchText.toLowerCase(),
+                  ),
+            )
             .toList();
 
     // Sort the filtered roster by current sort option
     final sortOption = isHome ? _homeSortOption : _awaySortOption;
     final ascending = isHome ? _homeSortAscending : _awaySortAscending;
-    final filteredRoster =
-        _sortPlayerObjects(filteredRosterUnsorted, sortOption, ascending);
+    final filteredRoster = _sortPlayerObjects(
+      filteredRosterUnsorted,
+      sortOption,
+      ascending,
+    );
 
     // Debug output
     // print(
@@ -4016,405 +4200,401 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Team name row
+                        // Team name row (header of player picker container)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              child: GestureDetector(
-                                onTap: () =>
-                                    _showTeamEditorDialog(isHome: _homeOnLeft),
-                                child: SizedBox(
-                                  height: 0,
-                                  width: 0,
-                                  child: Center(
-                                    child: SizedBox.shrink(),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 0),
-                            // Team tabs
-                            if (!_magicBarFocusNode.hasFocus)
-                              Row(
-                                children: [
-                                  // Home team tab
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _homeOnLeft = true;
-                                      });
-                                      _updateCaption();
-                                    },
-                                    child: Container(
-                                      height: 22,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
-                                      decoration: BoxDecoration(
-                                        color: _homeOnLeft
-                                            ? Colors.grey.shade300
-                                            : Colors.grey.shade100,
-                                        borderRadius: const BorderRadius.only(
-                                          topLeft: Radius.circular(4),
-                                          bottomLeft: Radius.circular(4),
-                                        ),
-                                        border: Border.all(
-                                          color: _homeOnLeft
-                                              ? Colors.grey.shade500
-                                              : Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.home,
-                                              size: 10,
-                                              color: _homeOnLeft
-                                                  ? Colors.black87
-                                                  : Colors.grey.shade500,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              _getTeamAbbreviation(
-                                                  selectedHomeTeam ?? 'Home'),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: _homeOnLeft
-                                                    ? Colors.black87
-                                                    : Colors.grey.shade500,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  // Away team tab
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _homeOnLeft = false;
-                                      });
-                                      _updateCaption();
-                                    },
-                                    child: Container(
-                                      height: 22,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
-                                      decoration: BoxDecoration(
-                                        color: !_homeOnLeft
-                                            ? Colors.grey.shade300
-                                            : Colors.grey.shade100,
-                                        borderRadius: const BorderRadius.only(
-                                          topRight: Radius.circular(4),
-                                          bottomRight: Radius.circular(4),
-                                        ),
-                                        border: Border.all(
-                                          color: !_homeOnLeft
-                                              ? Colors.grey.shade500
-                                              : Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.flight,
-                                              size: 10,
-                                              color: !_homeOnLeft
-                                                  ? Colors.black87
-                                                  : Colors.grey.shade500,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              _getTeamAbbreviation(
-                                                  selectedAwayTeam ?? 'Away'),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: !_homeOnLeft
-                                                    ? Colors.black87
-                                                    : Colors.grey.shade500,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            const SizedBox(width: 8),
-                            // Display options to the right of switch button
+                            // View mode toggle buttons and search bar
                             if (!_magicBarFocusNode.hasFocus)
                               Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade200,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Display title
-                                      Text(
-                                        'Display:',
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        // Left side: Grid/List buttons
+                                        Row(
+                                          children: [
+                                            // Grid view button (left, default)
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  if (_homeOnLeft) {
+                                                    _homePlayerGridMode = true;
+                                                  } else {
+                                                    _awayPlayerGridMode = true;
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                height: 22,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: (_homeOnLeft
+                                                          ? _homePlayerGridMode
+                                                          : _awayPlayerGridMode)
+                                                      ? Colors.blue.shade600
+                                                      : Colors.grey.shade100,
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                    topLeft: Radius.circular(4),
+                                                    bottomLeft:
+                                                        Radius.circular(4),
+                                                  ),
+                                                  border: Border.all(
+                                                    color: (_homeOnLeft
+                                                            ? _homePlayerGridMode
+                                                            : _awayPlayerGridMode)
+                                                        ? Colors.blue.shade600
+                                                        : Colors.grey.shade300,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.grid_view,
+                                                        size: 10,
+                                                        color: (_homeOnLeft
+                                                                ? _homePlayerGridMode
+                                                                : _awayPlayerGridMode)
+                                                            ? Colors.white
+                                                            : Colors
+                                                                .grey.shade500,
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        'Grid',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: (_homeOnLeft
+                                                                  ? _homePlayerGridMode
+                                                                  : _awayPlayerGridMode)
+                                                              ? Colors.white
+                                                              : Colors.grey
+                                                                  .shade500,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // List view button (right)
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  if (_homeOnLeft) {
+                                                    _homePlayerGridMode = false;
+                                                  } else {
+                                                    _awayPlayerGridMode = false;
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                height: 22,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: (_homeOnLeft
+                                                          ? !_homePlayerGridMode
+                                                          : !_awayPlayerGridMode)
+                                                      ? Colors.blue.shade600
+                                                      : Colors.grey.shade100,
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                    topRight:
+                                                        Radius.circular(4),
+                                                    bottomRight:
+                                                        Radius.circular(4),
+                                                  ),
+                                                  border: Border.all(
+                                                    color: (_homeOnLeft
+                                                            ? !_homePlayerGridMode
+                                                            : !_awayPlayerGridMode)
+                                                        ? Colors.blue.shade600
+                                                        : Colors.grey.shade300,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.list,
+                                                        size: 10,
+                                                        color: (_homeOnLeft
+                                                                ? !_homePlayerGridMode
+                                                                : !_awayPlayerGridMode)
+                                                            ? Colors.white
+                                                            : Colors
+                                                                .grey.shade500,
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        'List',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: (_homeOnLeft
+                                                                  ? !_homePlayerGridMode
+                                                                  : !_awayPlayerGridMode)
+                                                              ? Colors.white
+                                                              : Colors.grey
+                                                                  .shade500,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        // Right side: Sorting options (only show in list mode)
+                                        if (!(_homeOnLeft
+                                            ? _homePlayerGridMode
+                                            : _awayPlayerGridMode))
+                                          Row(
+                                            children: [
+                                              // Sort By label
+                                              Text(
+                                                'Sort By:',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  color: Colors.grey.shade600,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              // Sort option button (cycles through lastname, firstname, number)
+                                              GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    // Cycle sort for BOTH teams in sync
+                                                    String current =
+                                                        _homePlayerSortBy;
+                                                    String next;
+                                                    if (current == 'number') {
+                                                      next = 'lastname';
+                                                    } else if (current ==
+                                                        'lastname') {
+                                                      next = 'firstname';
+                                                    } else {
+                                                      next = 'number';
+                                                    }
+
+                                                    _homePlayerSortBy = next;
+                                                    _awayPlayerSortBy = next;
+
+                                                    // Keep grid/list underlying options in sync as well
+                                                    String mappedOption;
+                                                    if (next == 'number') {
+                                                      mappedOption = 'number';
+                                                    } else if (next ==
+                                                        'lastname') {
+                                                      mappedOption = 'lastName';
+                                                    } else {
+                                                      mappedOption =
+                                                          'firstName';
+                                                    }
+                                                    _homeSortOption =
+                                                        mappedOption;
+                                                    _awaySortOption =
+                                                        mappedOption;
+                                                  });
+                                                },
+                                                child: Container(
+                                                  height: 22,
+                                                  width: 80,
+                                                  padding: const EdgeInsets
+                                                      .symmetric(horizontal: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey.shade100,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade300),
+                                                  ),
+                                                  child: Center(
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          _homeOnLeft
+                                                              ? (_homePlayerSortBy ==
+                                                                      'number'
+                                                                  ? 'Number'
+                                                                  : _homePlayerSortBy ==
+                                                                          'lastname'
+                                                                      ? 'Last Name'
+                                                                      : 'First Name')
+                                                              : (_awayPlayerSortBy ==
+                                                                      'number'
+                                                                  ? 'Number'
+                                                                  : _awayPlayerSortBy ==
+                                                                          'lastname'
+                                                                      ? 'Last Name'
+                                                                      : 'First Name'),
+                                                          style: TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors
+                                                                .grey.shade500,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              // Ascending/Descending toggle button
+                                              GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    // Toggle ascending/descending for BOTH teams in sync
+                                                    _homePlayerSortAscending =
+                                                        !_homePlayerSortAscending;
+                                                    _awayPlayerSortAscending =
+                                                        _homePlayerSortAscending;
+
+                                                    // Keep grid/list underlying options in sync as well
+                                                    _homeSortAscending =
+                                                        _homePlayerSortAscending;
+                                                    _awaySortAscending =
+                                                        _homePlayerSortAscending;
+                                                  });
+                                                },
+                                                child: Container(
+                                                  height: 22,
+                                                  padding: const EdgeInsets
+                                                      .symmetric(horizontal: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.grey.shade100,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                    border: Border.all(
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                    ),
+                                                  ),
+                                                  child: Center(
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          (_homeOnLeft
+                                                                  ? _homePlayerSortAscending
+                                                                  : _awayPlayerSortAscending)
+                                                              ? Icons
+                                                                  .keyboard_arrow_up
+                                                              : Icons
+                                                                  .keyboard_arrow_down,
+                                                          size: 10,
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Search bar under Grid/List and Edit Teams (inside container)
+                                    SizedBox(
+                                      height: 24,
+                                      child: TextField(
+                                        controller: _unifiedSearchController,
+                                        cursorWidth: 1.5,
+                                        cursorHeight: 20,
                                         style: const TextStyle(
                                           fontSize: 11,
-                                          color: Colors.black87,
-                                          fontWeight: FontWeight.w500,
+                                          height: 1.1,
                                         ),
-                                      ),
-                                      const SizedBox(width: 1),
-                                      // Type button
-                                      MouseRegion(
-                                        cursor: SystemMouseCursors.click,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              if (_homeOnLeft) {
-                                                _homePlayerGridMode =
-                                                    !_homePlayerGridMode;
-                                                // Reset sort order when switching to grid mode
-                                                if (_homePlayerGridMode) {
-                                                  _homeSortOption = 'number';
-                                                  _homeSortAscending = true;
-                                                }
-                                              } else {
-                                                _awayPlayerGridMode =
-                                                    !_awayPlayerGridMode;
-                                                // Reset sort order when switching to grid mode
-                                                if (_awayPlayerGridMode) {
-                                                  _awaySortOption = 'number';
-                                                  _awaySortAscending = true;
-                                                }
-                                              }
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 4, vertical: 2),
-                                            child: Text(
-                                              _homeOnLeft
-                                                  ? (_homePlayerGridMode
-                                                      ? 'Grid'
-                                                      : 'List')
-                                                  : (_awayPlayerGridMode
-                                                      ? 'Grid'
-                                                      : 'List'),
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500),
+                                        onChanged: (value) {
+                                          setState(() {
+                                            _unifiedSearchText = value;
+                                          });
+                                        },
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.only(
+                                            left: 6,
+                                            right: 6,
+                                            top: 2,
+                                            bottom: 2,
+                                          ),
+                                          prefixIcon: const Icon(
+                                            Icons.search,
+                                            size: 14,
+                                            color: Colors.grey,
+                                          ),
+                                          prefixIconConstraints:
+                                              const BoxConstraints(
+                                            minWidth: 28,
+                                            minHeight: 24,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade400,
                                             ),
                                           ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-
-                                      // Sort by options (only show when in List mode)
-                                      if (!(_homeOnLeft
-                                          ? _homePlayerGridMode
-                                          : _awayPlayerGridMode)) ...[
-                                        Text(
-                                          'Sort:',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.black87,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        MouseRegion(
-                                          cursor: SystemMouseCursors.click,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                if (_homeOnLeft) {
-                                                  if (_homeSortOption ==
-                                                      'number') {
-                                                    _homeSortOption =
-                                                        'lastName';
-                                                  } else if (_homeSortOption ==
-                                                      'lastName') {
-                                                    _homeSortOption =
-                                                        'firstName';
-                                                  } else {
-                                                    _homeSortOption = 'number';
-                                                  }
-                                                } else {
-                                                  if (_awaySortOption ==
-                                                      'number') {
-                                                    _awaySortOption =
-                                                        'lastName';
-                                                  } else if (_awaySortOption ==
-                                                      'lastName') {
-                                                    _awaySortOption =
-                                                        'firstName';
-                                                  } else {
-                                                    _awaySortOption = 'number';
-                                                  }
-                                                }
-                                              });
-                                            },
-                                            child: Text(
-                                              _homeOnLeft
-                                                  ? (_homeSortOption == 'number'
-                                                      ? 'Player Numbers'
-                                                      : _homeSortOption ==
-                                                              'lastName'
-                                                          ? 'Last Name'
-                                                          : 'First Name')
-                                                  : (_awaySortOption == 'number'
-                                                      ? 'Player Numbers'
-                                                      : _awaySortOption ==
-                                                              'lastName'
-                                                          ? 'Last Name'
-                                                          : 'First Name'),
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            borderSide: BorderSide(
+                                              color: Colors.grey.shade400,
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                      ],
-                                      // Ascending/Descending button
-                                      MouseRegion(
-                                        cursor: SystemMouseCursors.click,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              if (_homeOnLeft) {
-                                                _homeSortAscending =
-                                                    !_homeSortAscending;
-                                              } else {
-                                                _awaySortAscending =
-                                                    !_awaySortAscending;
-                                              }
-                                            });
-                                          },
-                                          child: Text(
-                                            _homeOnLeft
-                                                ? (_homeSortAscending
-                                                    ? '↑'
-                                                    : '↓')
-                                                : (_awaySortAscending
-                                                    ? '↑'
-                                                    : '↓'),
-                                            style: const TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.black87,
-                                                fontWeight: FontWeight.bold),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            borderSide: BorderSide(
+                                              color: Colors.blue.shade400,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          hintText: 'Search all players...',
+                                          hintStyle: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey,
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ),
+                            // Edit Teams button and other items can go here if needed
                           ],
                         ),
                         const SizedBox(height: 0),
-                        // small spacer above the player search bar
-                        const SizedBox(height: 4),
-                        // Search bar and Edit Teams button row
-                        if (!_magicBarFocusNode.hasFocus)
-                          Row(
-                            children: [
-                              // Search bar
-                              Expanded(
-                                child: SizedBox(
-                                  height: 24,
-                                  child: TextField(
-                                    controller: searchController,
-                                    cursorWidth: 1.5,
-                                    cursorHeight: 20,
-                                    style: const TextStyle(
-                                        fontSize: 11, height: 1.1),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        if (_homeOnLeft) {
-                                          _homeSearchText = value;
-                                        } else {
-                                          _awaySearchText = value;
-                                        }
-                                      });
-                                    },
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.only(
-                                          left: 6, right: 6, top: 2, bottom: 2),
-                                      prefixIcon: const Icon(Icons.search,
-                                          size: 14, color: Colors.grey),
-                                      prefixIconConstraints:
-                                          const BoxConstraints(
-                                              minWidth: 28, minHeight: 24),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade400),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.grey.shade400),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                        borderSide: BorderSide(
-                                            color: Colors.blue.shade400,
-                                            width: 1),
-                                      ),
-                                      hintText: 'Search players...',
-                                      hintStyle: const TextStyle(
-                                          fontSize: 10, color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              // Edit Teams button
-                              MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    _showTeamEditorDialog(isHome: _homeOnLeft);
-                                  },
-                                  child: Container(
-                                    height: 24,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        'Edit Teams',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          color: Colors.grey,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                       ],
                     ),
                   ),
@@ -4446,131 +4626,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                       )
                     : (_homeOnLeft ? _homePlayerGridMode : _awayPlayerGridMode)
-                        ? _buildPlayerGrid(
-                            filteredRoster, selectedPlayers, _homeOnLeft)
+                        ? _buildBothTeamsGrid()
                         : _magicBarFocusNode.hasFocus
                             ? _buildBothTeamsList()
-                            : Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  itemCount: filteredRoster.length,
-                                  itemBuilder: (context, index) {
-                                    final player = filteredRoster[index];
-                                    final isSelected = selectedPlayers
-                                        .contains(player.displayName);
-                                    final isHomePlayer = _homeOnLeft
-                                        ? selectedHomePlayers
-                                            .contains(player.displayName)
-                                        : selectedAwayPlayers
-                                            .contains(player.displayName);
-
-                                    return GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          if (isSelected) {
-                                            if (isHome) {
-                                              selectedHomePlayers
-                                                  .remove(player.displayName);
-                                            } else {
-                                              selectedAwayPlayers
-                                                  .remove(player.displayName);
-                                            }
-                                          } else {
-                                            // Track which team was selected first
-                                            if (_firstTeamSelected == null) {
-                                              _firstTeamSelected = isHome;
-                                              _firstPlayerSelected =
-                                                  _removeJerseyNumberFromName(
-                                                      player.displayName);
-                                            } else {}
-                                            if (isHome) {
-                                              selectedHomePlayers
-                                                  .add(player.displayName);
-                                            } else {
-                                              selectedAwayPlayers
-                                                  .add(player.displayName);
-                                            }
-
-                                            // Switch to custom verb mode when a player is selected
-                                            _isPlayerSearchMode = false;
-                                            print(
-                                                'FUCK: Player selected from list: ${player.displayName}, switching to custom verb mode');
-                                          }
-                                        });
-                                        _updateCaption();
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? (isHomePlayer
-                                                  ? Colors.grey.shade700
-                                                  : Colors.white)
-                                              : Colors.grey.shade100,
-                                          border: Border(
-                                            bottom: BorderSide(
-                                                color: isSelected
-                                                    ? (isHomePlayer
-                                                        ? Colors.grey.shade700
-                                                        : Colors.grey.shade400)
-                                                    : Colors.grey.shade200,
-                                                width: 0.5),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            // Red star for first selected player
-                                            if (isSelected &&
-                                                _isFirstSelectedPlayer(
-                                                    player.displayName))
-                                              Container(
-                                                margin: const EdgeInsets.only(
-                                                    right: 4),
-                                                padding:
-                                                    const EdgeInsets.all(1),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.red,
-                                                  borderRadius:
-                                                      BorderRadius.circular(2),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.star,
-                                                  size: 8,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            Expanded(
-                                              child: Text(
-                                                _getFormattedPlayerName(
-                                                    player.displayName,
-                                                    isHome
-                                                        ? _homeSortOption
-                                                        : _awaySortOption),
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: isSelected
-                                                      ? FontWeight.w600
-                                                      : FontWeight.normal,
-                                                  color: isSelected
-                                                      ? (isHomePlayer
-                                                          ? Colors.white
-                                                          : Colors
-                                                              .grey.shade800)
-                                                      : Colors.black87,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
+                            : _buildBothTeamsListView(),
           ),
         ],
       ),
@@ -4578,7 +4637,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildPlayerGrid(
-      List<Player> roster, Set<String> selectedPlayers, bool isHome) {
+    List<Player> roster,
+    Set<String> selectedPlayers,
+    bool isHome,
+  ) {
     // Create a map to track which numbers have players
     Map<int, Player> playersByNumber = {};
     for (Player player in roster) {
@@ -4675,8 +4737,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     // Track which team was selected first; set first player if not set
                     if (_firstTeamSelected == null) {
                       _firstTeamSelected = isHome;
-                      _firstPlayerSelected =
-                          _removeJerseyNumberFromName(player.displayName);
+                      _firstPlayerSelected = _removeJerseyNumberFromName(
+                        player.displayName,
+                      );
                     }
                     if (isHome) {
                       selectedHomePlayers.add(player.displayName);
@@ -4814,8 +4877,1130 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     return Padding(
       padding: const EdgeInsets.all(4),
-      child: Column(
-        children: rows,
+      child: Column(children: rows),
+    );
+  }
+
+  List<Player> _getFilteredRoster(bool isHome) {
+    final roster = isHome ? _homeRoster : _awayRoster;
+    final sortOption = isHome ? _homeSortOption : _awaySortOption;
+    final ascending = isHome ? _homeSortAscending : _awaySortAscending;
+
+    // Use unified search if it has text, otherwise use team-specific search
+    final searchText = _unifiedSearchText.isNotEmpty
+        ? _unifiedSearchText
+        : (isHome ? _homeSearchText : _awaySearchText);
+
+    // Filtered roster
+    final filteredRosterUnsorted = searchText.isEmpty
+        ? roster
+        : roster
+            .where(
+              (player) => player.displayName.toLowerCase().contains(
+                    searchText.toLowerCase(),
+                  ),
+            )
+            .toList();
+
+    // Sort the filtered roster by current sort option
+    return _sortPlayerObjects(filteredRosterUnsorted, sortOption, ascending);
+  }
+
+  Widget _buildBothTeamsGrid() {
+    // Get home and away rosters
+    List<Player> homeRoster = _getFilteredRoster(true);
+    List<Player> awayRoster = _getFilteredRoster(false);
+
+    // Do not switch view; search should filter within the existing two grids
+
+    return Column(
+      children: [
+        // Home team section
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Home team grid
+        _buildSingleTeamGrid(homeRoster, selectedHomePlayers, true),
+
+        const SizedBox(height: 8),
+
+        // Away team section
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Away team grid
+        _buildSingleTeamGrid(awayRoster, selectedAwayPlayers, false),
+      ],
+    );
+  }
+
+  // Deprecated: filter within the existing visible grids/lists
+  Widget _buildUnifiedSearchGrid(
+      List<Player> homeRoster, List<Player> awayRoster) {
+    // Combine both rosters and sort by jersey number
+    List<Player> allPlayers = [...homeRoster, ...awayRoster];
+    allPlayers.sort((a, b) {
+      int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+      int bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+      return aNum.compareTo(bNum);
+    });
+
+    if (allPlayers.isEmpty) {
+      return Container(
+        height: 60,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade200, width: 0.5),
+        ),
+        child: Center(
+          child: Text(
+            'No players found',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Create a map to track which numbers have players
+    Map<int, Player> playersByNumber = {};
+    for (Player player in allPlayers) {
+      int jerseyNum = int.tryParse(player.jerseyNumber ?? '0') ?? 0;
+      playersByNumber[jerseyNum] = player;
+    }
+
+    // Build a dynamic grid based on actual jersey numbers
+    final List<int> jerseyNumbers = playersByNumber.keys.toList()..sort();
+    const int columns = 6;
+    final int total = jerseyNumbers.length;
+    final int numRows = (total + columns - 1) ~/ columns;
+
+    // Create grid rows
+    List<Widget> rows = [];
+    for (int row = 0; row < numRows; row++) {
+      List<Widget> rowChildren = [];
+      for (int col = 0; col < columns; col++) {
+        final int index = row * columns + col;
+        Player? player =
+            index < total ? playersByNumber[jerseyNumbers[index]] : null;
+
+        if (player != null) {
+          bool isSelected = selectedHomePlayers.contains(player.displayName) ||
+              selectedAwayPlayers.contains(player.displayName);
+          bool isHome =
+              _homeRoster.any((p) => p.displayName == player.displayName);
+
+          rowChildren.add(
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isHome) {
+                    if (selectedHomePlayers.contains(player.displayName)) {
+                      selectedHomePlayers.remove(player.displayName);
+                    } else {
+                      selectedHomePlayers.add(player.displayName);
+                    }
+                  } else {
+                    if (selectedAwayPlayers.contains(player.displayName)) {
+                      selectedAwayPlayers.remove(player.displayName);
+                    } else {
+                      selectedAwayPlayers.add(player.displayName);
+                    }
+                  }
+                });
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                margin: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? (isHome ? Colors.blue.shade100 : Colors.red.shade100)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSelected
+                        ? (isHome ? Colors.blue.shade400 : Colors.red.shade400)
+                        : Colors.grey.shade300,
+                    width: isSelected ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      player.jerseyNumber ?? '0',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700)
+                            : Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      _getLastNameFromDisplayName(player.displayName),
+                      style: TextStyle(
+                        fontSize: 6,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade600
+                                : Colors.red.shade600)
+                            : Colors.grey.shade600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else {
+          rowChildren.add(
+            Container(
+              width: 40,
+              height: 40,
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade200, width: 0.5),
+              ),
+            ),
+          );
+        }
+      }
+      rows.add(Row(children: rowChildren));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _buildSingleTeamGrid(
+    List<Player> roster,
+    Set<String> selectedPlayers,
+    bool isHome,
+  ) {
+    if (roster.isEmpty) {
+      return Container(
+        height: 60,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade200, width: 0.5),
+        ),
+        child: Center(
+          child: Text(
+            'No players available',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Create a map to track which numbers have players
+    Map<int, Player> playersByNumber = {};
+    for (Player player in roster) {
+      int jerseyNum = int.tryParse(player.jerseyNumber ?? '0') ?? 0;
+      playersByNumber[jerseyNum] = player;
+    }
+
+    // Get sorted list based on current sort option
+    List<int> jerseyNumbers;
+    final sortOption = isHome ? _homeSortOption : _awaySortOption;
+    final ascending = isHome ? _homeSortAscending : _awaySortAscending;
+
+    if (sortOption == 'number') {
+      // Sort by jersey number
+      jerseyNumbers = playersByNumber.keys.toList();
+      if (ascending) {
+        jerseyNumbers.sort();
+      } else {
+        jerseyNumbers.sort((a, b) => b.compareTo(a));
+      }
+    } else {
+      // For lastName and firstName, sort the roster first, then get jersey numbers in that order
+      List<Player> sortedRoster = List.from(roster);
+      if (sortOption == 'lastName') {
+        sortedRoster.sort((a, b) {
+          String lastNameA = a.fullName.split(' ').skip(1).join(' ');
+          String lastNameB = b.fullName.split(' ').skip(1).join(' ');
+          return ascending
+              ? lastNameA.compareTo(lastNameB)
+              : lastNameB.compareTo(lastNameA);
+        });
+      } else if (sortOption == 'firstName') {
+        sortedRoster.sort((a, b) {
+          String firstNameA = a.fullName.split(' ').first;
+          String firstNameB = b.fullName.split(' ').first;
+          return ascending
+              ? firstNameA.compareTo(firstNameB)
+              : firstNameB.compareTo(firstNameA);
+        });
+      }
+
+      // Get jersey numbers in the sorted order
+      jerseyNumbers = sortedRoster.map((player) {
+        return int.tryParse(player.jerseyNumber ?? '0') ?? 0;
+      }).toList();
+    }
+
+    // Group players by jersey number ranges (0-9, 10-19, 20-29, etc.)
+    Map<int, List<int>> playersByRange = {};
+    for (int jerseyNum in jerseyNumbers) {
+      int range = (jerseyNum ~/ 10) * 10; // 0, 10, 20, 30, etc.
+      playersByRange.putIfAbsent(range, () => []).add(jerseyNum);
+    }
+
+    // Sort jersey numbers within each range by number (not by name)
+    for (int range in playersByRange.keys) {
+      playersByRange[range]!.sort();
+    }
+
+    // Create rows with dynamic number of columns, grouped by ranges
+    List<Widget> rows = [];
+    List<int> sortedRanges = playersByRange.keys.toList()..sort();
+    // Determine max players in any range to set consistent columns per row
+    int columnsPerRow = playersByRange.values.isNotEmpty
+        ? playersByRange.values
+            .map((list) => list.length)
+            .reduce((a, b) => a > b ? a : b)
+        : 1;
+    if (columnsPerRow < 1) columnsPerRow = 1;
+
+    for (int range in sortedRanges) {
+      List<int> rangeJerseyNumbers = playersByRange[range]!;
+      List<Widget> allPlayersInRange = [];
+
+      // First, create all player widgets for this range
+      for (int jerseyNum in rangeJerseyNumbers) {
+        Player player = playersByNumber[jerseyNum]!;
+        bool isSelected = selectedPlayers.contains(player.displayName);
+
+        allPlayersInRange.add(
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    if (isHome) {
+                      selectedHomePlayers.remove(player.displayName);
+                    } else {
+                      selectedAwayPlayers.remove(player.displayName);
+                    }
+                  } else {
+                    // Track which team was selected first; set first player if not set
+                    if (_firstTeamSelected == null) {
+                      _firstTeamSelected = isHome;
+                      _firstPlayerSelected = _removeJerseyNumberFromName(
+                        player.displayName,
+                      );
+                    }
+                    if (isHome) {
+                      selectedHomePlayers.add(player.displayName);
+                    } else {
+                      selectedAwayPlayers.add(player.displayName);
+                    }
+
+                    // Switch to custom verb mode when a player is selected
+                    _isPlayerSearchMode = false;
+                  }
+                });
+                _updateCaption();
+
+                // Store the original caption AFTER it's been updated (for grid selection)
+                _originalCaptionBeforeCustomVerb = captionController.text;
+              },
+              child: Container(
+                margin: const EdgeInsets.all(1),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? (isHome ? Colors.grey.shade700 : Colors.white)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isSelected
+                        ? (isHome ? Colors.grey.shade700 : Colors.grey.shade400)
+                        : Colors.grey.shade400,
+                    width: 0.5,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            jerseyNum.toString(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? (isHome ? Colors.white : Colors.black87)
+                                  : Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            player.fullName.split(' ').skip(1).join(' '),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? (isHome ? Colors.white : Colors.black87)
+                                  : Colors.black54,
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Red star for first selected player
+                    if (isSelected &&
+                        _isFirstSelectedPlayer(player.displayName))
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(1),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                          child: const Icon(
+                            Icons.star,
+                            size: 8,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Now create rows from all players in this range
+      for (int i = 0; i < allPlayersInRange.length; i += columnsPerRow) {
+        List<Widget> currentRow = [];
+
+        // Add players for this row
+        for (int j = 0;
+            j < columnsPerRow && i + j < allPlayersInRange.length;
+            j++) {
+          currentRow.add(allPlayersInRange[i + j]);
+        }
+
+        // Fill remaining slots with placeholder squares
+        while (currentRow.length < columnsPerRow) {
+          currentRow.add(
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.all(1),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.grey.shade200, width: 0.5),
+                ),
+                child: Container(), // Empty placeholder square
+              ),
+            ),
+          );
+        }
+
+        rows.add(Row(children: currentRow));
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _buildBothTeamsListView() {
+    // Get home and away rosters
+    List<Player> homeRoster = _getFilteredRoster(true);
+    List<Player> awayRoster = _getFilteredRoster(false);
+
+    // Sort rosters based on current sort setting
+    homeRoster.sort((a, b) {
+      int comparison = 0;
+      if (_homePlayerSortBy == 'lastname') {
+        comparison = _getLastNameFromDisplayName(a.displayName)
+            .compareTo(_getLastNameFromDisplayName(b.displayName));
+      } else if (_homePlayerSortBy == 'firstname') {
+        comparison = _getFirstNameFromDisplayName(a.displayName)
+            .compareTo(_getFirstNameFromDisplayName(b.displayName));
+      } else {
+        // number
+        int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+        int bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+        comparison = aNum.compareTo(bNum);
+      }
+      return _homePlayerSortAscending ? comparison : -comparison;
+    });
+
+    awayRoster.sort((a, b) {
+      int comparison = 0;
+      if (_awayPlayerSortBy == 'lastname') {
+        comparison = _getLastNameFromDisplayName(a.displayName)
+            .compareTo(_getLastNameFromDisplayName(b.displayName));
+      } else if (_awayPlayerSortBy == 'firstname') {
+        comparison = _getFirstNameFromDisplayName(a.displayName)
+            .compareTo(_getFirstNameFromDisplayName(b.displayName));
+      } else {
+        // number
+        int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+        int bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+        comparison = aNum.compareTo(bNum);
+      }
+      return _awayPlayerSortAscending ? comparison : -comparison;
+    });
+
+    // Do not switch view; search should filter within the existing two lists
+
+    return Row(
+      children: [
+        // Home team column (left)
+        Expanded(
+          child: Column(
+            children: [
+              // Home team header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Home team players list
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: homeRoster.length,
+                  itemBuilder: (context, index) {
+                    final player = homeRoster[index];
+                    final isSelected = selectedHomePlayers.contains(
+                      player.displayName,
+                    );
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            selectedHomePlayers.remove(player.displayName);
+                          } else {
+                            // Track which team was selected first
+                            if (_firstTeamSelected == null) {
+                              _firstTeamSelected = true;
+                              _firstPlayerSelected =
+                                  _removeJerseyNumberFromName(
+                                player.displayName,
+                              );
+                            }
+                            selectedHomePlayers.add(player.displayName);
+                            // Switch to custom verb mode when a player is selected
+                            _isPlayerSearchMode = false;
+                          }
+                        });
+                        _updateCaption();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.grey.shade700
+                              : Colors.grey.shade100,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: isSelected
+                                  ? Colors.grey.shade700
+                                  : Colors.grey.shade200,
+                              width: 0.5,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            // Red star for first selected player
+                            if (isSelected &&
+                                _isFirstSelectedPlayer(player.displayName))
+                              Container(
+                                margin: const EdgeInsets.only(right: 4),
+                                padding: const EdgeInsets.all(1),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                                child: const Icon(
+                                  Icons.star,
+                                  size: 8,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                _getFormattedPlayerName(
+                                  player.displayName,
+                                  _homeSortOption,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Divider between teams
+        Container(
+          width: 1,
+          color: Colors.grey.shade300,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+
+        // Away team column (right)
+        Expanded(
+          child: Column(
+            children: [
+              // Away team header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Away team players list
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: awayRoster.length,
+                  itemBuilder: (context, index) {
+                    final player = awayRoster[index];
+                    final isSelected = selectedAwayPlayers.contains(
+                      player.displayName,
+                    );
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            selectedAwayPlayers.remove(player.displayName);
+                          } else {
+                            // Track which team was selected first
+                            if (_firstTeamSelected == null) {
+                              _firstTeamSelected = false;
+                              _firstPlayerSelected =
+                                  _removeJerseyNumberFromName(
+                                player.displayName,
+                              );
+                            }
+                            selectedAwayPlayers.add(player.displayName);
+                            // Switch to custom verb mode when a player is selected
+                            _isPlayerSearchMode = false;
+                          }
+                        });
+                        _updateCaption();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isSelected ? Colors.white : Colors.grey.shade100,
+                          border: Border(
+                            bottom: BorderSide(
+                              color: isSelected
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade200,
+                              width: 0.5,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            // Red star for first selected player
+                            if (isSelected &&
+                                _isFirstSelectedPlayer(player.displayName))
+                              Container(
+                                margin: const EdgeInsets.only(right: 4),
+                                padding: const EdgeInsets.all(1),
+                                child: Container(
+                                  padding: const EdgeInsets.all(1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                  child: const Icon(
+                                    Icons.star,
+                                    size: 8,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                _getFormattedPlayerName(
+                                  player.displayName,
+                                  _awaySortOption,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.black87
+                                      : Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Deprecated: filter within the existing visible grids/lists
+  Widget _buildUnifiedSearchListView(
+      List<Player> homeRoster, List<Player> awayRoster) {
+    // Combine both rosters and sort by jersey number
+    List<Player> allPlayers = [...homeRoster, ...awayRoster];
+    allPlayers.sort((a, b) {
+      int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+      int bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+      return aNum.compareTo(bNum);
+    });
+
+    if (allPlayers.isEmpty) {
+      return Container(
+        height: 200,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade200, width: 0.5),
+        ),
+        child: Center(
+          child: Text(
+            'No players found',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: ListView.builder(
+        itemCount: allPlayers.length,
+        itemBuilder: (context, index) {
+          final player = allPlayers[index];
+          bool isSelected = selectedHomePlayers.contains(player.displayName) ||
+              selectedAwayPlayers.contains(player.displayName);
+          bool isHome =
+              _homeRoster.any((p) => p.displayName == player.displayName);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isHome) {
+                  if (selectedHomePlayers.contains(player.displayName)) {
+                    selectedHomePlayers.remove(player.displayName);
+                  } else {
+                    selectedHomePlayers.add(player.displayName);
+                  }
+                } else {
+                  if (selectedAwayPlayers.contains(player.displayName)) {
+                    selectedAwayPlayers.remove(player.displayName);
+                  } else {
+                    selectedAwayPlayers.add(player.displayName);
+                  }
+                }
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isHome ? Colors.blue.shade100 : Colors.red.shade100)
+                    : Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Jersey number
+                  Container(
+                    width: 30,
+                    child: Text(
+                      player.jerseyNumber ?? '0',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700)
+                            : Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Team indicator
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color:
+                          isHome ? Colors.blue.shade200 : Colors.red.shade200,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        isHome ? 'H' : 'A',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: isHome
+                              ? Colors.blue.shade800
+                              : Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Player name
+                  Expanded(
+                    child: Text(
+                      _getFormattedPlayerName(
+                          player.displayName, _homeSortOption),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade800
+                                : Colors.red.shade800)
+                            : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Deprecated: filter within the existing visible grids/lists
+  Widget _buildUnifiedSearchCompactView() {
+    // Get filtered rosters from both teams
+    List<Player> homeRoster = _getFilteredRoster(true);
+    List<Player> awayRoster = _getFilteredRoster(false);
+
+    // Combine both rosters and sort by jersey number
+    List<Player> allPlayers = [...homeRoster, ...awayRoster];
+    allPlayers.sort((a, b) {
+      int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+      int bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+      return aNum.compareTo(bNum);
+    });
+
+    if (allPlayers.isEmpty) {
+      return Container(
+        height: 200,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade200, width: 0.5),
+        ),
+        child: Center(
+          child: Text(
+            'No players found',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: ListView.builder(
+        itemCount: allPlayers.length,
+        itemBuilder: (context, index) {
+          final player = allPlayers[index];
+          bool isSelected = selectedHomePlayers.contains(player.displayName) ||
+              selectedAwayPlayers.contains(player.displayName);
+          bool isHome =
+              _homeRoster.any((p) => p.displayName == player.displayName);
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isHome) {
+                  if (selectedHomePlayers.contains(player.displayName)) {
+                    selectedHomePlayers.remove(player.displayName);
+                  } else {
+                    selectedHomePlayers.add(player.displayName);
+                  }
+                } else {
+                  if (selectedAwayPlayers.contains(player.displayName)) {
+                    selectedAwayPlayers.remove(player.displayName);
+                  } else {
+                    selectedAwayPlayers.add(player.displayName);
+                  }
+                }
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (isHome ? Colors.blue.shade100 : Colors.red.shade100)
+                    : Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Jersey number
+                  Container(
+                    width: 30,
+                    child: Text(
+                      player.jerseyNumber ?? '0',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700)
+                            : Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Team indicator
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color:
+                          isHome ? Colors.blue.shade200 : Colors.red.shade200,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        isHome ? 'H' : 'A',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: isHome
+                              ? Colors.blue.shade800
+                              : Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Player name
+                  Expanded(
+                    child: Text(
+                      _getFormattedPlayerName(
+                          player.displayName, _homeSortOption),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected
+                            ? (isHome
+                                ? Colors.blue.shade800
+                                : Colors.red.shade800)
+                            : Colors.black87,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -4965,10 +6150,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                 children: [
                                                                                   if (_noPlayersFound)
                                                                                     Container(
-                                                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                                                      padding: const EdgeInsets.symmetric(
+                                                                                        horizontal: 8,
+                                                                                        vertical: 8,
+                                                                                      ),
                                                                                       child: Row(
                                                                                         children: [
-                                                                                          Icon(Icons.info_outline, size: 16, color: Colors.orange.shade600),
+                                                                                          Icon(
+                                                                                            Icons.info_outline,
+                                                                                            size: 16,
+                                                                                            color: Colors.orange.shade600,
+                                                                                          ),
                                                                                           const SizedBox(width: 8),
                                                                                           Text(
                                                                                             'No player with number $_playerSearchText',
@@ -4986,17 +6178,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       (player) => GestureDetector(
                                                                                         onTap: () => _selectPlayer(player),
                                                                                         child: Container(
-                                                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                          padding: const EdgeInsets.symmetric(
+                                                                                            horizontal: 8,
+                                                                                            vertical: 4,
+                                                                                          ),
                                                                                           child: Row(
                                                                                             children: [
                                                                                               Text(
                                                                                                 '#${player.jerseyNumber}',
-                                                                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                                                                                                style: const TextStyle(
+                                                                                                  fontWeight: FontWeight.bold,
+                                                                                                  fontSize: 10,
+                                                                                                ),
                                                                                               ),
                                                                                               const SizedBox(width: 2),
                                                                                               Text(
-                                                                                                _getTeamAbbreviation(_isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '') ?? '',
-                                                                                                style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                                                                                                _getTeamAbbreviation(
+                                                                                                      _isHomePlayer(player) ? selectedHomeTeam ?? '' : selectedAwayTeam ?? '',
+                                                                                                    ) ??
+                                                                                                    '',
+                                                                                                style: TextStyle(
+                                                                                                  fontSize: 9,
+                                                                                                  color: Colors.grey.shade600,
+                                                                                                ),
                                                                                               ),
                                                                                               const SizedBox(width: 2),
                                                                                               Icon(
@@ -5007,8 +6211,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               const SizedBox(width: 2),
                                                                                               Expanded(
                                                                                                 child: Text(
-                                                                                                  _removeJerseyNumberFromName(player.displayName ?? 'Unknown'),
-                                                                                                  style: const TextStyle(fontSize: 10),
+                                                                                                  _removeJerseyNumberFromName(
+                                                                                                    player.displayName ?? 'Unknown',
+                                                                                                  ),
+                                                                                                  style: const TextStyle(
+                                                                                                    fontSize: 10,
+                                                                                                  ),
                                                                                                   overflow: TextOverflow.ellipsis,
                                                                                                 ),
                                                                                               ),
@@ -5022,18 +6230,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                     GestureDetector(
                                                                                       onTap: _finishPlayerSelection,
                                                                                       child: Container(
-                                                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                                        padding: const EdgeInsets.symmetric(
+                                                                                          horizontal: 8,
+                                                                                          vertical: 4,
+                                                                                        ),
                                                                                         decoration: BoxDecoration(
                                                                                           color: Colors.blue.shade50,
-                                                                                          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                                                                                          border: Border(
+                                                                                            top: BorderSide(
+                                                                                              color: Colors.grey.shade200,
+                                                                                            ),
+                                                                                          ),
                                                                                         ),
                                                                                         child: Row(
                                                                                           children: [
-                                                                                            Icon(Icons.check, size: 16, color: Colors.blue.shade700),
+                                                                                            Icon(
+                                                                                              Icons.check,
+                                                                                              size: 16,
+                                                                                              color: Colors.blue.shade700,
+                                                                                            ),
                                                                                             const SizedBox(width: 8),
                                                                                             Text(
                                                                                               'Done selecting players (${_selectedPlayerNumbers.length})',
-                                                                                              style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500),
+                                                                                              style: TextStyle(
+                                                                                                color: Colors.blue.shade700,
+                                                                                                fontWeight: FontWeight.w500,
+                                                                                              ),
                                                                                             ),
                                                                                           ],
                                                                                         ),
@@ -5066,7 +6288,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             child:
                                                                                 SingleChildScrollView(
                                                                               child: Padding(
-                                                                                padding: const EdgeInsets.only(left: 0, right: 0, bottom: 0, top: 0),
+                                                                                padding: const EdgeInsets.only(
+                                                                                  left: 0,
+                                                                                  right: 0,
+                                                                                  bottom: 0,
+                                                                                  top: 0,
+                                                                                ),
                                                                                 child: LayoutBuilder(
                                                                                   builder: (context, constraints) {
                                                                                     // Calculate width for exactly 3 columns
@@ -5089,7 +6316,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               'Swings',
                                                                                               'Bunts',
                                                                                               'Walks',
-                                                                                              'Hit by Pitch'
+                                                                                              'Hit by Pitch',
                                                                                             ]),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
@@ -5105,7 +6332,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               '',
                                                                                               '',
                                                                                               '',
-                                                                                              ''
+                                                                                              '',
                                                                                             ]),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
@@ -5121,40 +6348,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               'Fielding Position',
                                                                                               'Double Play',
                                                                                               'Triple Play',
-                                                                                              ''
+                                                                                              '',
                                                                                             ]),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
                                                                                           // Reactions column
                                                                                           Expanded(
-                                                                                            child: _buildVerbCategory('Reactions', [
-                                                                                              'Celebrates',
-                                                                                              'Dejection',
-                                                                                              'Post Game Win',
-                                                                                              'Post Game Loss',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              ''
-                                                                                            ]),
+                                                                                            child: _buildVerbCategory(
+                                                                                              'Reactions',
+                                                                                              [
+                                                                                                'Celebrates',
+                                                                                                'Dejection',
+                                                                                                'Post Game Win',
+                                                                                                'Post Game Loss',
+                                                                                                '',
+                                                                                                '',
+                                                                                                '',
+                                                                                                '',
+                                                                                                '',
+                                                                                                '',
+                                                                                              ],
+                                                                                            ),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
                                                                                           // Non Game-Action column
                                                                                           Expanded(
-                                                                                            child: _buildVerbCategory('Non Game-Action', [
-                                                                                              'Looks On',
-                                                                                              'Batting Practice',
-                                                                                              'Fielding Practice',
-                                                                                              'Takes the Field',
-                                                                                              'Comes Off the Field',
-                                                                                              'National Anthem',
-                                                                                              'Stretching',
-                                                                                              'Warm Ups',
-                                                                                              '',
-                                                                                              ''
-                                                                                            ]),
+                                                                                            child: _buildVerbCategory(
+                                                                                              'Non Game-Action',
+                                                                                              [
+                                                                                                'Looks On',
+                                                                                                'Batting Practice',
+                                                                                                'Fielding Practice',
+                                                                                                'Takes the Field',
+                                                                                                'Comes Off the Field',
+                                                                                                'National Anthem',
+                                                                                                'Stretching',
+                                                                                                'Warm Ups',
+                                                                                                '',
+                                                                                                '',
+                                                                                              ],
+                                                                                            ),
                                                                                           ),
                                                                                           const SizedBox(width: 2),
                                                                                         ],
@@ -5194,7 +6427,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         'Solo',
                                                                                         'Two-Run',
                                                                                         'Three-Run',
-                                                                                        'Grand Slam'
+                                                                                        'Grand Slam',
                                                                                       ]),
 
                                                                                     // Inning only (when simple verbs are selected)
@@ -5202,14 +6435,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       const SizedBox(height: 1),
                                                                                       Container(
                                                                                         decoration: BoxDecoration(
-                                                                                          border: Border.all(color: Colors.grey.shade400),
-                                                                                          borderRadius: BorderRadius.circular(2),
+                                                                                          border: Border.all(
+                                                                                            color: Colors.grey.shade400,
+                                                                                          ),
+                                                                                          borderRadius: BorderRadius.circular(
+                                                                                            2,
+                                                                                          ),
                                                                                         ),
                                                                                         child: Column(
                                                                                           crossAxisAlignment: CrossAxisAlignment.start,
                                                                                           children: [
                                                                                             Container(
-                                                                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                              padding: const EdgeInsets.symmetric(
+                                                                                                horizontal: 4,
+                                                                                                vertical: 1,
+                                                                                              ),
                                                                                               child: const Text(
                                                                                                 'INN',
                                                                                                 style: TextStyle(
@@ -5222,10 +6462,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                             GestureDetector(
                                                                                               onTap: _showCompactInningSelector,
                                                                                               child: Container(
-                                                                                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                                padding: const EdgeInsets.symmetric(
+                                                                                                  horizontal: 2,
+                                                                                                  vertical: 1,
+                                                                                                ),
                                                                                                 child: Text(
-                                                                                                  _selectedRbiInning != null ? _getOrdinalSuffix(_selectedRbiInning!) : '',
-                                                                                                  style: const TextStyle(fontSize: 8),
+                                                                                                  _selectedRbiInning != null
+                                                                                                      ? _getOrdinalSuffix(
+                                                                                                          _selectedRbiInning!,
+                                                                                                        )
+                                                                                                      : '',
+                                                                                                  style: const TextStyle(
+                                                                                                    fontSize: 8,
+                                                                                                  ),
                                                                                                   textAlign: TextAlign.center,
                                                                                                 ),
                                                                                               ),
@@ -5243,14 +6492,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                           Expanded(
                                                                                             child: Container(
                                                                                               decoration: BoxDecoration(
-                                                                                                border: Border.all(color: Colors.grey.shade400),
+                                                                                                border: Border.all(
+                                                                                                  color: Colors.grey.shade400,
+                                                                                                ),
                                                                                                 borderRadius: BorderRadius.circular(2),
                                                                                               ),
                                                                                               child: Column(
                                                                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                                                                 children: [
                                                                                                   Container(
-                                                                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                                      horizontal: 4,
+                                                                                                      vertical: 1,
+                                                                                                    ),
                                                                                                     child: const Text(
                                                                                                       'RBI',
                                                                                                       style: TextStyle(
@@ -5264,14 +6518,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                     value: _rbiCount,
                                                                                                     decoration: const InputDecoration(
                                                                                                       isDense: true,
-                                                                                                      contentPadding: EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                                      contentPadding: EdgeInsets.symmetric(
+                                                                                                        horizontal: 2,
+                                                                                                        vertical: 1,
+                                                                                                      ),
                                                                                                       border: InputBorder.none,
                                                                                                       labelText: null,
                                                                                                     ),
-                                                                                                    items: [0, 1, 2, 3, 4].map((rbi) {
+                                                                                                    items: [0, 1, 2, 3, 4].map((
+                                                                                                      rbi,
+                                                                                                    ) {
                                                                                                       return DropdownMenuItem(
                                                                                                         value: rbi,
-                                                                                                        child: Text(rbi == 0 ? '0' : '$rbi', style: const TextStyle(fontSize: 8)),
+                                                                                                        child: Text(
+                                                                                                          rbi == 0 ? '0' : '$rbi',
+                                                                                                          style: const TextStyle(
+                                                                                                            fontSize: 8,
+                                                                                                          ),
+                                                                                                        ),
                                                                                                       );
                                                                                                     }).toList(),
                                                                                                     onChanged: (value) {
@@ -5289,14 +6553,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                           Expanded(
                                                                                             child: Container(
                                                                                               decoration: BoxDecoration(
-                                                                                                border: Border.all(color: Colors.grey.shade400),
+                                                                                                border: Border.all(
+                                                                                                  color: Colors.grey.shade400,
+                                                                                                ),
                                                                                                 borderRadius: BorderRadius.circular(2),
                                                                                               ),
                                                                                               child: Column(
                                                                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                                                                 children: [
                                                                                                   Container(
-                                                                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                                      horizontal: 4,
+                                                                                                      vertical: 1,
+                                                                                                    ),
                                                                                                     child: const Text(
                                                                                                       'INN',
                                                                                                       style: TextStyle(
@@ -5309,10 +6578,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                   GestureDetector(
                                                                                                     onTap: _showCompactInningSelector,
                                                                                                     child: Container(
-                                                                                                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+                                                                                                      padding: const EdgeInsets.symmetric(
+                                                                                                        horizontal: 2,
+                                                                                                        vertical: 1,
+                                                                                                      ),
                                                                                                       child: Text(
-                                                                                                        _selectedRbiInning != null ? _getOrdinalSuffix(_selectedRbiInning!) : '',
-                                                                                                        style: const TextStyle(fontSize: 8),
+                                                                                                        _selectedRbiInning != null
+                                                                                                            ? _getOrdinalSuffix(
+                                                                                                                _selectedRbiInning!,
+                                                                                                              )
+                                                                                                            : '',
+                                                                                                        style: const TextStyle(
+                                                                                                          fontSize: 8,
+                                                                                                        ),
                                                                                                         textAlign: TextAlign.center,
                                                                                                       ),
                                                                                                     ),
@@ -5400,10 +6678,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
           borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: Colors.grey.shade200,
-            width: 0.5,
-          ),
+          border: Border.all(color: Colors.grey.shade200, width: 0.5),
         ),
         child: const Center(
           child: Text(
@@ -5471,176 +6746,186 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         child: Center(
-          child: Builder(builder: (context) {
-            String typed = _magicBarVerbInput;
-            // Only use trailing letters for verb matching (ignore digits like in "h27")
-            final RegExpMatch? lettersMatch =
-                RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
-            final String typedLetters =
-                lettersMatch?.group(1)?.toLowerCase() ?? '';
+          child: Builder(
+            builder: (context) {
+              String typed = _magicBarVerbInput;
+              // Only use trailing letters for verb matching (ignore digits like in "h27")
+              final RegExpMatch? lettersMatch = RegExp(
+                r'([a-zA-Z]+)$',
+              ).firstMatch(typed);
+              final String typedLetters =
+                  lettersMatch?.group(1)?.toLowerCase() ?? '';
 
-            // Debug output
-            // print(
-            //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
+              // Debug output
+              // print(
+              //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
 
-            // Calculate the shortcut letters for this verb
-            String shortcutLetters = '';
-            final words = verb.split(' ');
-            final filtered = words
-                .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
-                .toList();
+              // Calculate the shortcut letters for this verb
+              String shortcutLetters = '';
+              final words = verb.split(' ');
+              final filtered = words
+                  .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
+                  .toList();
 
-            if (filtered.isEmpty) {
-              // Fallback if no valid words found
-              shortcutLetters = verb.length >= 3
-                  ? verb.substring(0, 3).toLowerCase()
-                  : verb.toLowerCase();
-            } else if (filtered.length > 1) {
-              // Multi-word verb: use acronym
-              shortcutLetters = filtered.map((w) => w[0].toLowerCase()).join();
-            } else {
-              // Single word verb: use first 2-3 letters
-              final first = filtered.first.toLowerCase();
-              shortcutLetters =
-                  first.length >= 3 ? first.substring(0, 3) : first;
-            }
-
-            // Determine what to highlight based on what's typed
-            String displayPrefix;
-            List<int> firstLetterPositions = [];
-
-            if (filtered.length > 1) {
-              // Multi-word verb: find positions of first letters to highlight
-              int currentPos = 0;
-
-              for (int i = 0; i < words.length; i++) {
-                String word = words[i].trim();
-                if (word.isNotEmpty && word.toLowerCase() != 'the') {
-                  // Find the position of the first letter in this word
-                  int wordStart = currentPos +
-                      (i > 0 ? 1 : 0); // Account for space before word
-                  int firstLetterPos = wordStart + word.indexOf(word[0]);
-                  firstLetterPositions.add(firstLetterPos);
-                }
-                currentPos +=
-                    word.length + (i > 0 ? 1 : 0); // Add word length + space
+              if (filtered.isEmpty) {
+                // Fallback if no valid words found
+                shortcutLetters = verb.length >= 3
+                    ? verb.substring(0, 3).toLowerCase()
+                    : verb.toLowerCase();
+              } else if (filtered.length > 1) {
+                // Multi-word verb: use acronym
+                shortcutLetters =
+                    filtered.map((w) => w[0].toLowerCase()).join();
+              } else {
+                // Single word verb: use first 2-3 letters
+                final first = filtered.first.toLowerCase();
+                shortcutLetters =
+                    first.length >= 3 ? first.substring(0, 3) : first;
               }
 
-              if (typedLetters.isNotEmpty &&
-                  shortcutLetters.startsWith(typedLetters)) {
-                // User is typing the shortcut - highlight the first letters they've typed
-                int lettersToHighlight = typedLetters.length;
-                if (lettersToHighlight <= firstLetterPositions.length) {
-                  displayPrefix = verb.substring(
-                      0, firstLetterPositions[lettersToHighlight - 1] + 1);
+              // Determine what to highlight based on what's typed
+              String displayPrefix;
+              List<int> firstLetterPositions = [];
+
+              if (filtered.length > 1) {
+                // Multi-word verb: find positions of first letters to highlight
+                int currentPos = 0;
+
+                for (int i = 0; i < words.length; i++) {
+                  String word = words[i].trim();
+                  if (word.isNotEmpty && word.toLowerCase() != 'the') {
+                    // Find the position of the first letter in this word
+                    int wordStart = currentPos +
+                        (i > 0 ? 1 : 0); // Account for space before word
+                    int firstLetterPos = wordStart + word.indexOf(word[0]);
+                    firstLetterPositions.add(firstLetterPos);
+                  }
+                  currentPos +=
+                      word.length + (i > 0 ? 1 : 0); // Add word length + space
+                }
+
+                if (typedLetters.isNotEmpty &&
+                    shortcutLetters.startsWith(typedLetters)) {
+                  // User is typing the shortcut - highlight the first letters they've typed
+                  int lettersToHighlight = typedLetters.length;
+                  if (lettersToHighlight <= firstLetterPositions.length) {
+                    displayPrefix = verb.substring(
+                      0,
+                      firstLetterPositions[lettersToHighlight - 1] + 1,
+                    );
+                  } else {
+                    displayPrefix = verb.substring(
+                      0,
+                      firstLetterPositions.last + 1,
+                    );
+                  }
                 } else {
-                  displayPrefix =
-                      verb.substring(0, firstLetterPositions.last + 1);
+                  // Show all first letters
+                  displayPrefix = verb.substring(
+                    0,
+                    firstLetterPositions.last + 1,
+                  );
                 }
               } else {
-                // Show all first letters
-                displayPrefix =
-                    verb.substring(0, firstLetterPositions.last + 1);
+                // Single word verb: use first 2-3 letters
+                if (typedLetters.isNotEmpty &&
+                    shortcutLetters.startsWith(typedLetters)) {
+                  // User is typing the shortcut - highlight what they've typed
+                  final int len = typedLetters.length < verb.length
+                      ? typedLetters.length
+                      : verb.length;
+                  displayPrefix = verb.substring(0, len);
+                } else if (typedLetters.isEmpty) {
+                  // No typing - show the shortcut letters
+                  displayPrefix = verb.substring(0, shortcutLetters.length);
+                } else {
+                  // User typed something else - show shortcut letters
+                  displayPrefix = verb.substring(0, shortcutLetters.length);
+                }
               }
-            } else {
-              // Single word verb: use first 2-3 letters
-              if (typedLetters.isNotEmpty &&
-                  shortcutLetters.startsWith(typedLetters)) {
-                // User is typing the shortcut - highlight what they've typed
-                final int len = typedLetters.length < verb.length
-                    ? typedLetters.length
-                    : verb.length;
-                displayPrefix = verb.substring(0, len);
-              } else if (typedLetters.isEmpty) {
-                // No typing - show the shortcut letters
-                displayPrefix = verb.substring(0, shortcutLetters.length);
-              } else {
-                // User typed something else - show shortcut letters
-                displayPrefix = verb.substring(0, shortcutLetters.length);
-              }
-            }
 
-            if (filtered.length > 1) {
-              // Multi-word verb: show fire emoji with shortcut after word
-              if (_magicBarFocusNode.hasFocus) {
-                return RichText(
-                  maxLines: 2,
-                  overflow: TextOverflow.visible,
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: verb,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.grey.shade700,
+              if (filtered.length > 1) {
+                // Multi-word verb: show fire emoji with shortcut after word
+                if (_magicBarFocusNode.hasFocus) {
+                  return RichText(
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: verb,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                      ),
-                      TextSpan(
-                        text: ' 🔥$shortcutLetters',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
+                        TextSpan(
+                          text: ' 🔥$shortcutLetters',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
+                      ],
+                    ),
+                  );
+                } else {
+                  return Text(
+                    verb,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey.shade700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                  );
+                }
               } else {
-                return Text(
-                  verb,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.grey.shade700,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.visible,
-                );
-              }
-            } else {
-              // Single word verb: show fire emoji with shortcut after word
-              if (_magicBarFocusNode.hasFocus) {
-                return RichText(
-                  maxLines: 2,
-                  overflow: TextOverflow.visible,
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: verb,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.grey.shade700,
+                // Single word verb: show fire emoji with shortcut after word
+                if (_magicBarFocusNode.hasFocus) {
+                  return RichText(
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: verb,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                      ),
-                      TextSpan(
-                        text: ' 🔥$shortcutLetters',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
+                        TextSpan(
+                          text: ' 🔥$shortcutLetters',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              } else {
-                // Firebar inactive – normal styling
-                return Text(
-                  verb,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.grey.shade700,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.visible,
-                );
+                      ],
+                    ),
+                  );
+                } else {
+                  // Firebar inactive – normal styling
+                  return Text(
+                    verb,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.grey.shade700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                  );
+                }
               }
-            }
-          }),
+            },
+          ),
         ),
       ),
     );
@@ -6042,14 +7327,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     value: _rbiCount,
                     decoration: const InputDecoration(
                       isDense: true,
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                     ),
                     items: [0, 1, 2, 3, 4].map((rbi) {
                       return DropdownMenuItem(
                         value: rbi,
-                        child: Text(rbi == 0 ? 'No RBI' : '$rbi RBI',
-                            style: const TextStyle(fontSize: 10)),
+                        child: Text(
+                          rbi == 0 ? 'No RBI' : '$rbi RBI',
+                          style: const TextStyle(fontSize: 10),
+                        ),
                       );
                     }).toList(),
                     onChanged: (value) {
@@ -6074,7 +7363,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     onTap: _showInningSelector,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(4),
@@ -6347,7 +7638,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (_isNumeric(token)) return true;
       final teamPrefixMatch = RegExp(r'^(h{1,2}|v{1,2})\d+$').hasMatch(token);
       print(
-          'DEBUG: _isMagicInput checking token "$token", teamPrefixMatch: $teamPrefixMatch');
+        'DEBUG: _isMagicInput checking token "$token", teamPrefixMatch: $teamPrefixMatch',
+      );
       if (teamPrefixMatch) return true;
       return false;
     }
@@ -6442,7 +7734,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'fp',
       'takesthefield',
       'takesfield',
-      'comesofffield',
+      'comesoffield',
       'offfield',
       'nationalanthem',
       'anthem',
@@ -6457,7 +7749,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'runsoffield',
       'runsoff',
       'sacrificefly',
-      'sf'
+      'sf',
     ];
 
     for (int i = 1; i < parts.length; i++) {
@@ -6510,7 +7802,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'threerun',
         'grand',
         'grandslam',
-        'gs'
+        'gs',
       }.contains(token)) {
         setState(() {
           _selectedVerb = 'Home Run';
@@ -6605,8 +7897,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (match != null) {
         playerNumber = match.group(2)!; // Extract the number part
         final teamPrefix = match.group(1)!;
-        isHomeHint =
-            teamPrefix.startsWith('h'); // h or hh = home, v or vv = away
+        isHomeHint = teamPrefix.startsWith(
+          'h',
+        ); // h or hh = home, v or vv = away
       } else {
         print('DEBUG: Invalid format, returning');
         return;
@@ -6618,7 +7911,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Find players with this number
     List<Player> matchingPlayers = [];
     print(
-        'DEBUG: Home roster size: ${_homeRoster.length}, Away roster size: ${_awayRoster.length}');
+      'DEBUG: Home roster size: ${_homeRoster.length}, Away roster size: ${_awayRoster.length}',
+    );
 
     if (isHomeHint != null) {
       // Team hint provided, search only in the specified team
@@ -6645,7 +7939,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     print('DEBUG: Found ${matchingPlayers.length} matching players');
     for (final player in matchingPlayers) {
       print(
-          'DEBUG: Matching player: ${player.displayName} (${player.jerseyNumber}) - ${_homeRoster.contains(player) ? 'Home' : 'Away'}');
+        'DEBUG: Matching player: ${player.displayName} (${player.jerseyNumber}) - ${_homeRoster.contains(player) ? 'Home' : 'Away'}',
+      );
     }
     if (matchingPlayers.isEmpty) {
       print('DEBUG: No matching players found, returning');
@@ -6969,7 +8264,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       });
     }
-
     // Update caption
     _updateCaption();
 
@@ -6978,7 +8272,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _showMagicInputPlayerSelectionDialog(
-      List<Player> players, String actionText) {
+    List<Player> players,
+    String actionText,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -7047,7 +8343,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               return; // Prevent the key from reaching other listeners
             } else if (key.keyLabel.toLowerCase() == 'v') {
               print(
-                  'DEBUG: V key detected, closing dialog and selecting visitor');
+                'DEBUG: V key detected, closing dialog and selecting visitor',
+              );
               Navigator.of(context).pop();
               _processHomeVisitorChoiceAndRestore('v', originalText);
               return; // Prevent the key from reaching other listeners
@@ -7074,11 +8371,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          '${homePlayer.fullName} #${homePlayer.jerseyNumber}'),
+                        '${homePlayer.fullName} #${homePlayer.jerseyNumber}',
+                      ),
                       Text(
                         'Home Team',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.blue.shade100),
+                          fontSize: 12,
+                          color: Colors.blue.shade100,
+                        ),
                       ),
                     ],
                   ),
@@ -7104,11 +8404,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          '${visitorPlayer.fullName} #${visitorPlayer.jerseyNumber}'),
+                        '${visitorPlayer.fullName} #${visitorPlayer.jerseyNumber}',
+                      ),
                       Text(
                         'Visitor Team',
                         style: TextStyle(
-                            fontSize: 12, color: Colors.orange.shade100),
+                          fontSize: 12,
+                          color: Colors.orange.shade100,
+                        ),
                       ),
                     ],
                   ),
@@ -7131,8 +8434,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   children: [
                     Text(
                       'Keyboard shortcuts:',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       'Press H for Home, V for Visitor',
@@ -7164,7 +8469,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _processHomeVisitorChoice(String choice) {
     print('DEBUG: Processing home/visitor choice: $choice');
     print(
-        'DEBUG: Available players: ${_magicInputMatchingPlayers.map((p) => '${p.fullName} (${_homeRoster.contains(p) ? 'Home' : 'Away'})').join(', ')}');
+      'DEBUG: Available players: ${_magicInputMatchingPlayers.map((p) => '${p.fullName} (${_homeRoster.contains(p) ? 'Home' : 'Away'})').join(', ')}',
+    );
 
     // Find the appropriate player based on choice
     Player? selectedPlayer;
@@ -7225,9 +8531,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   void _processHomeVisitorChoiceAndRestore(String choice, String originalText) {
     print(
-        'DEBUG: Processing home/visitor choice: $choice with original text: "$originalText"');
+      'DEBUG: Processing home/visitor choice: $choice with original text: "$originalText"',
+    );
     print(
-        'DEBUG: Available players: ${_magicInputMatchingPlayers.map((p) => '${p.fullName} (${_homeRoster.contains(p) ? 'Home' : 'Away'})').join(', ')}');
+      'DEBUG: Available players: ${_magicInputMatchingPlayers.map((p) => '${p.fullName} (${_homeRoster.contains(p) ? 'Home' : 'Away'})').join(', ')}',
+    );
 
     // Find the appropriate player based on choice
     Player? selectedPlayer;
@@ -7341,12 +8649,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Check for RBI abbreviations first (sin3, dou2, tri4, hr5)
       final rbiMatch = RegExp(r'^(sin|dou|tri|hr)(\d+)$').firstMatch(part);
       print(
-          'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch');
+        'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch',
+      );
       if (rbiMatch != null) {
         final actionType = rbiMatch.group(1)!;
         final rbiCount = int.parse(rbiMatch.group(2)!);
         print(
-            'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount');
+          'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount',
+        );
 
         // Set the action based on the abbreviation
         switch (actionType) {
@@ -7605,7 +8915,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _processMagicInputWithPlayerKeepBar(
-      Player selectedPlayer, String actionText) {
+    Player selectedPlayer,
+    String actionText,
+  ) {
     // Reset only action-related state; keep players and first selection intact
     setState(() {
       _selectedVerb = null;
@@ -7643,12 +8955,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Check for RBI abbreviations first (sin3, dou2, tri4, hr5)
       final rbiMatch = RegExp(r'^(sin|dou|tri|hr)(\d+)$').firstMatch(part);
       print(
-          'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch');
+        'DEBUG: Checking part "$part" for RBI abbreviation, match: $rbiMatch',
+      );
       if (rbiMatch != null) {
         final actionType = rbiMatch.group(1)!;
         final rbiCount = int.parse(rbiMatch.group(2)!);
         print(
-            'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount');
+          'DEBUG: Found RBI abbreviation - actionType: $actionType, rbiCount: $rbiCount',
+        );
 
         // Set the action based on the abbreviation
         switch (actionType) {
@@ -8361,8 +9675,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       // For other actions, include specific players if selected
       if (opponentPlayers.isNotEmpty) {
-        final opponentNames =
-            _combinePlayersWithSingleTeam(opponentPlayers.toList());
+        final opponentNames = _combinePlayersWithSingleTeam(
+          opponentPlayers.toList(),
+        );
         opponentPart = ' against $opponentNames';
       } else if (opponentTeamName != null) {
         opponentPart = ' against the $opponentTeamName';
@@ -8397,13 +9712,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       creatorValue = currentValues['Creator'];
       creditValue = currentValues['Credit'];
       print(
-          'DEBUG: Using current metadata values - Creator: "$creatorValue", Credit: "$creditValue"');
+        'DEBUG: Using current metadata values - Creator: "$creatorValue", Credit: "$creditValue"',
+      );
     } else {
       // Fall back to original metadata
       creatorValue = widget.metadata?['Creator']?.toString();
       creditValue = widget.metadata?['Credit']?.toString();
       print(
-          'DEBUG: Using original metadata - Creator: "$creatorValue", Credit: "$creditValue"');
+        'DEBUG: Using original metadata - Creator: "$creatorValue", Credit: "$creditValue"',
+      );
     }
 
     // Debug logging
@@ -8551,9 +9868,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Check if an image is selected
     print('DEBUG: FTP Upload - currentImagePath: "${widget.currentImagePath}"');
     print(
-        'DEBUG: FTP Upload - currentImagePath is null: ${widget.currentImagePath == null}');
+      'DEBUG: FTP Upload - currentImagePath is null: ${widget.currentImagePath == null}',
+    );
     print(
-        'DEBUG: FTP Upload - currentImagePath is empty: ${widget.currentImagePath?.isEmpty}');
+      'DEBUG: FTP Upload - currentImagePath is empty: ${widget.currentImagePath?.isEmpty}',
+    );
 
     if (widget.currentImagePath == null || widget.currentImagePath!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -8709,7 +10028,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         '.JPEG',
         '.PNG',
         '.TIFF',
-        '.BMP'
+        '.BMP',
       ];
 
       final imageFiles = files
@@ -8763,7 +10082,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               try {
                 // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
                 dateTime = DateTime.parse(
-                    dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                  dateStr.replaceFirst(':', '-').replaceFirst(':', '-'),
+                );
               } catch (e) {
                 print('Error parsing date for $filePath: $e');
               }
@@ -8782,17 +10102,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         }
 
-        filesWithDates.add({
-          'path': filePath,
-          'date': dateTime,
-        });
+        filesWithDates.add({'path': filePath, 'date': dateTime});
       } catch (e) {
         print('Error processing $filePath: $e');
         // Add file with current date as fallback
-        filesWithDates.add({
-          'path': filePath,
-          'date': DateTime.now(),
-        });
+        filesWithDates.add({'path': filePath, 'date': DateTime.now()});
       }
     }
 
@@ -8993,15 +10307,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           width: double.maxFinite,
           height: 400,
           child: roster.isEmpty
-              ? const Center(
-                  child: Text('No players available'),
-                )
+              ? const Center(child: Text('No players available'))
               : ListView.builder(
                   itemCount: roster.length,
                   itemBuilder: (context, index) {
                     final player = roster[index];
-                    final isSelected =
-                        selectedPlayers.contains(player.displayName);
+                    final isSelected = selectedPlayers.contains(
+                      player.displayName,
+                    );
 
                     return CheckboxListTile(
                       title: Text(
@@ -9011,7 +10324,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       subtitle: Text(
                         'Position: Unknown', // Could add position data later
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade600),
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                       value: isSelected,
                       onChanged: (bool? value) {
@@ -9022,7 +10337,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               _firstTeamSelected = isHome;
                               _firstPlayerSelected =
                                   _removeJerseyNumberFromName(
-                                      player.displayName);
+                                player.displayName,
+                              );
                               // print(
                               //     'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
                               // print(
@@ -9091,10 +10407,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           runSpacing: 4,
           children: verbCategories.entries.map((category) {
             return FilterChip(
-              label: Text(
-                category.key,
-                style: const TextStyle(fontSize: 9),
-              ),
+              label: Text(category.key, style: const TextStyle(fontSize: 9)),
               selected: _selectedVerb != null &&
                   category.value.contains(_selectedVerb),
               onSelected: (_) => _showVerbPicker(category.key),
@@ -9164,8 +10477,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 widget.onPreviousImage?.call();
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -9193,8 +10508,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _copyMetadataFromCaptionWidget();
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -9220,8 +10537,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             CustomButton(
               onTap: _pasteMetadataToCaptionWidget,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -9254,8 +10573,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 widget.onNextImage?.call();
               },
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(4),
@@ -9299,8 +10620,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               child: ElevatedButton.icon(
                 onPressed: _showFtpSettings,
                 icon: const Icon(Icons.settings, size: 18),
-                label:
-                    const Text('FTP Settings', style: TextStyle(fontSize: 10)),
+                label: const Text(
+                  'FTP Settings',
+                  style: TextStyle(fontSize: 10),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade600,
                   foregroundColor: Colors.white,
@@ -9459,13 +10782,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     allMetadata['Province-State'] = provinceController.text;
 
     print(
-        'DEBUG: personalityController.text = "${personalityController.text}"');
+      'DEBUG: personalityController.text = "${personalityController.text}"',
+    );
     print(
-        'DEBUG: allMetadata["XMP-getty:Personality"] = "${allMetadata['XMP-getty:Personality']}"');
+      'DEBUG: allMetadata["XMP-getty:Personality"] = "${allMetadata['XMP-getty:Personality']}"',
+    );
     print(
-        'DEBUG: personalityController.text length: ${personalityController.text.length}');
+      'DEBUG: personalityController.text length: ${personalityController.text.length}',
+    );
     print(
-        'DEBUG: personalityController.text isEmpty: ${personalityController.text.isEmpty}');
+      'DEBUG: personalityController.text isEmpty: ${personalityController.text.isEmpty}',
+    );
 
     print('DEBUG: All metadata before filtering: $allMetadata');
 
@@ -9497,13 +10824,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
 
       if (clipboardData != null && clipboardData.text != null) {
-        final Map<String, dynamic> metadataMap =
-            jsonDecode(clipboardData.text!);
+        final Map<String, dynamic> metadataMap = jsonDecode(
+          clipboardData.text!,
+        );
 
         // Update the metadata in the parent widget
         if (widget.onMetadataUpdated != null) {
-          final updatedMetadata =
-              Map<String, dynamic>.from(widget.metadata ?? {});
+          final updatedMetadata = Map<String, dynamic>.from(
+            widget.metadata ?? {},
+          );
 
           // Apply all fields except date and time
           if (metadataMap['TransmissionReference'] != null) {
@@ -9617,11 +10946,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             personalityController.text = personalityValue;
             print('DEBUG: Pasting personality value: "$personalityValue"');
             print(
-                'DEBUG: Updated personalityController.text to: "${personalityController.text}"');
+              'DEBUG: Updated personalityController.text to: "${personalityController.text}"',
+            );
           } else {
             print('DEBUG: No XMP-getty:Personality found in metadataMap');
             print(
-                'DEBUG: Available keys in metadataMap: ${metadataMap.keys.toList()}');
+              'DEBUG: Available keys in metadataMap: ${metadataMap.keys.toList()}',
+            );
           }
 
           // Date and time are intentionally NOT pasted
@@ -9651,13 +10982,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Future<void> _pasteLastCaption() async {
     try {
       print(
-          'DEBUG: _pasteLastCaption called, _lastSavedMetadata: $_lastSavedMetadata');
+        'DEBUG: _pasteLastCaption called, _lastSavedMetadata: $_lastSavedMetadata',
+      );
 
       if (_lastSavedMetadata != null) {
         // Update the metadata in the parent widget - EXACTLY like the regular paste function
         if (widget.onMetadataUpdated != null) {
-          final updatedMetadata =
-              Map<String, dynamic>.from(widget.metadata ?? {});
+          final updatedMetadata = Map<String, dynamic>.from(
+            widget.metadata ?? {},
+          );
 
           // Update each field exactly like the regular paste function
           // Use Photo Mechanic's preferred field first
@@ -9744,6 +11077,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Magic bar removed
       _homeSearchController.clear();
       _awaySearchController.clear();
+      _unifiedSearchController.clear();
       _showCustomTextInningSelector = false;
 
       // Reset all verb-related state
@@ -9827,6 +11161,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Magic bar removed
       _homeSearchController.clear();
       _awaySearchController.clear();
+      _unifiedSearchController.clear();
       _showCustomTextInningSelector = false;
 
       // Reset all verb-related state
@@ -10105,8 +11440,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     : ListView.builder(
                         itemCount: _ftpProfiles.length,
                         itemBuilder: (context, index) {
-                          final profileName =
-                              _ftpProfiles.keys.elementAt(index);
+                          final profileName = _ftpProfiles.keys.elementAt(
+                            index,
+                          );
                           final profile = _ftpProfiles[profileName]!;
                           final isCurrent = _currentFtpProfile == profileName;
 
@@ -10127,8 +11463,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       : FontWeight.normal,
                                 ),
                               ),
-                              subtitle:
-                                  Text('${profile['host']}:${profile['port']}'),
+                              subtitle: Text(
+                                '${profile['host']}:${profile['port']}',
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -10264,14 +11601,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (profile == null) return;
 
     final hostController = TextEditingController(text: profile['host'] ?? '');
-    final usernameController =
-        TextEditingController(text: profile['username'] ?? '');
-    final passwordController =
-        TextEditingController(text: profile['password'] ?? '');
-    final portController =
-        TextEditingController(text: (profile['port'] ?? 21).toString());
-    final remotePathController =
-        TextEditingController(text: profile['remotePath'] ?? '');
+    final usernameController = TextEditingController(
+      text: profile['username'] ?? '',
+    );
+    final passwordController = TextEditingController(
+      text: profile['password'] ?? '',
+    );
+    final portController = TextEditingController(
+      text: (profile['port'] ?? 21).toString(),
+    );
+    final remotePathController = TextEditingController(
+      text: profile['remotePath'] ?? '',
+    );
 
     showDialog(
       context: context,
@@ -10336,7 +11677,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         decoration: InputDecoration(
                           hintText: 'ftp.example.com',
                           hintStyle: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11),
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(2),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -10348,16 +11691,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(2),
                             borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
+                              color: Colors.grey.shade400,
+                              width: 1.5,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           isDense: true,
                           labelText: 'FTP Host',
                           labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.auto,
                         ),
                       ),
@@ -10374,30 +11723,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               decoration: InputDecoration(
                                 hintText: 'username',
                                 hintStyle: TextStyle(
-                                    color: Colors.grey.shade500, fontSize: 11),
+                                  color: Colors.grey.shade500,
+                                  fontSize: 11,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
                                   borderSide: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.5),
+                                    color: Colors.grey.shade400,
+                                    width: 1.5,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                                 isDense: true,
                                 labelText: 'Username',
                                 labelStyle: TextStyle(
-                                    fontSize: 10, color: Colors.grey.shade600),
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
+                                ),
                                 floatingLabelBehavior:
                                     FloatingLabelBehavior.auto,
                               ),
@@ -10412,30 +11771,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               decoration: InputDecoration(
                                 hintText: '21',
                                 hintStyle: TextStyle(
-                                    color: Colors.grey.shade500, fontSize: 11),
+                                  color: Colors.grey.shade500,
+                                  fontSize: 11,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade300,
+                                  ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(2),
                                   borderSide: BorderSide(
-                                      color: Colors.grey.shade400, width: 1.5),
+                                    color: Colors.grey.shade400,
+                                    width: 1.5,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.white,
                                 contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
                                 isDense: true,
                                 labelText: 'Port',
                                 labelStyle: TextStyle(
-                                    fontSize: 10, color: Colors.grey.shade600),
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
+                                ),
                                 floatingLabelBehavior:
                                     FloatingLabelBehavior.auto,
                               ),
@@ -10462,16 +11831,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(2),
                             borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
+                              color: Colors.grey.shade400,
+                              width: 1.5,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           isDense: true,
                           labelText: 'Password',
                           labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
@@ -10484,7 +11859,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         decoration: InputDecoration(
                           hintText: 'Leave blank for root directory',
                           hintStyle: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 11),
+                            color: Colors.grey.shade500,
+                            fontSize: 11,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(2),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -10496,16 +11873,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(2),
                             borderSide: BorderSide(
-                                color: Colors.grey.shade400, width: 1.5),
+                              color: Colors.grey.shade400,
+                              width: 1.5,
+                            ),
                           ),
                           filled: true,
                           fillColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           isDense: true,
                           labelText: 'Remote Path (optional)',
                           labelStyle: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade600),
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                       ),
@@ -10560,7 +11943,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(2),
@@ -10591,11 +11976,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         Navigator.pop(context); // Close edit dialog
                         // Reopen FTP settings dialog with success message
                         _showFtpSettingsWithSuccess(
-                            'Profile "$profileName" updated successfully!');
+                          'Profile "$profileName" updated successfully!',
+                        );
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(2),
@@ -10653,8 +12041,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Header
                 Row(
                   children: [
-                    Icon(showProfileManager ? Icons.folder : Icons.settings,
-                        size: 16, color: Colors.grey.shade600),
+                    Icon(
+                      showProfileManager ? Icons.folder : Icons.settings,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       showProfileManager
@@ -10674,7 +12065,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           onTap: _showCreateNewProfileDialog,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(2),
@@ -10683,8 +12076,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.add,
-                                    size: 12, color: Colors.grey.shade600),
+                                Icon(
+                                  Icons.add,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Create New Profile',
@@ -10707,7 +12103,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(2),
@@ -10717,11 +12115,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                    showProfileManager
-                                        ? Icons.settings
-                                        : Icons.folder,
-                                    size: 12,
-                                    color: Colors.grey.shade600),
+                                  showProfileManager
+                                      ? Icons.settings
+                                      : Icons.folder,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   showProfileManager
@@ -10754,8 +12153,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle,
-                            size: 16, color: Colors.green.shade600),
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: Colors.green.shade600,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -10773,8 +12175,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               successMessage = null;
                             });
                           },
-                          child: Icon(Icons.close,
-                              size: 14, color: Colors.green.shade600),
+                          child: Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.green.shade600,
+                          ),
                         ),
                       ],
                     ),
@@ -10805,8 +12210,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       value: _currentFtpProfile,
                       decoration: const InputDecoration(
                         border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
                         isDense: false,
                       ),
                       items: [
@@ -10815,39 +12222,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             'No Profile Selected',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade500),
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                            ),
                           ),
                         ),
                         ..._ftpProfiles.keys
-                            .map((profileName) => DropdownMenuItem<String>(
-                                  value: profileName,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          profileName,
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey.shade700),
-                                          overflow: TextOverflow.ellipsis,
+                            .map(
+                              (profileName) => DropdownMenuItem<String>(
+                                value: profileName,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        profileName,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade700,
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          _showEditProfileDialog(profileName);
-                                        },
-                                        child: Icon(
-                                          Icons.settings,
-                                          size: 14,
-                                          color: Colors.grey.shade600,
-                                        ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _showEditProfileDialog(profileName);
+                                      },
+                                      child: Icon(
+                                        Icons.settings,
+                                        size: 14,
+                                        color: Colors.grey.shade600,
                                       ),
-                                    ],
-                                  ),
-                                ))
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
                             .toList(),
                       ],
                       onChanged: (String? newValue) {
@@ -10865,11 +12277,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                       },
-                      icon: Icon(Icons.arrow_drop_down,
-                          size: 16, color: Colors.grey.shade600),
+                      icon: Icon(
+                        Icons.arrow_drop_down,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
                       dropdownColor: Colors.white,
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -10901,30 +12318,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           decoration: InputDecoration(
                             hintText: 'Enter custom filename (optional)',
                             hintStyle: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11),
+                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
                               borderSide: BorderSide(
-                                  color: Colors.grey.shade400, width: 1.5),
+                                color: Colors.grey.shade400,
+                                width: 1.5,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.white,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade600),
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                           ),
                         ),
@@ -10937,31 +12364,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             hintText:
                                 'Enter folder path for duplicate (optional)',
                             hintStyle: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11),
+                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
                               borderSide: BorderSide(
-                                  color: Colors.grey.shade400, width: 1.5),
+                                color: Colors.grey.shade400,
+                                width: 1.5,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.white,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
                             isDense: true,
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade600),
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                           ),
                         ),
@@ -11036,8 +12473,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             padding: const EdgeInsets.all(8),
                             itemCount: _ftpProfiles.length,
                             itemBuilder: (context, index) {
-                              final profileName =
-                                  _ftpProfiles.keys.elementAt(index);
+                              final profileName = _ftpProfiles.keys.elementAt(
+                                index,
+                              );
                               final profile = _ftpProfiles[profileName]!;
                               final isCurrent =
                                   _currentFtpProfile == profileName;
@@ -11074,8 +12512,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     children: [
                                       if (!isCurrent)
                                         IconButton(
-                                          icon: const Icon(Icons.play_arrow,
-                                              size: 16),
+                                          icon: const Icon(
+                                            Icons.play_arrow,
+                                            size: 16,
+                                          ),
                                           onPressed: () {
                                             setDialogState(() {
                                               _loadFtpProfile(profileName);
@@ -11094,8 +12534,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           tooltip: 'Load Profile',
                                         ),
                                       IconButton(
-                                        icon:
-                                            const Icon(Icons.delete, size: 16),
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          size: 16,
+                                        ),
                                         onPressed: () {
                                           setDialogState(() {
                                             _deleteFtpProfile(profileName);
@@ -11124,7 +12566,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(2),
@@ -11160,7 +12604,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade400,
                           borderRadius: BorderRadius.circular(2),
@@ -11217,8 +12663,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Header
                 Row(
                   children: [
-                    Icon(showProfileManager ? Icons.folder : Icons.settings,
-                        size: 16, color: Colors.grey.shade600),
+                    Icon(
+                      showProfileManager ? Icons.folder : Icons.settings,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       showProfileManager
@@ -11238,7 +12687,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           onTap: _showCreateNewProfileDialog,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(2),
@@ -11247,8 +12698,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.add,
-                                    size: 12, color: Colors.grey.shade600),
+                                Icon(
+                                  Icons.add,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Create New Profile',
@@ -11271,7 +12725,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(2),
@@ -11281,11 +12737,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                    showProfileManager
-                                        ? Icons.settings
-                                        : Icons.folder,
-                                    size: 12,
-                                    color: Colors.grey.shade600),
+                                  showProfileManager
+                                      ? Icons.settings
+                                      : Icons.folder,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   showProfileManager
@@ -11318,8 +12775,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle,
-                            size: 16, color: Colors.green.shade600),
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: Colors.green.shade600,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -11337,8 +12797,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               successMessage = null;
                             });
                           },
-                          child: Icon(Icons.close,
-                              size: 14, color: Colors.green.shade600),
+                          child: Icon(
+                            Icons.close,
+                            size: 14,
+                            color: Colors.green.shade600,
+                          ),
                         ),
                       ],
                     ),
@@ -11369,8 +12832,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       value: _currentFtpProfile,
                       decoration: const InputDecoration(
                         border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
                         isDense: false,
                       ),
                       items: [
@@ -11379,39 +12844,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             'No Profile Selected',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade500),
+                              fontSize: 11,
+                              color: Colors.grey.shade500,
+                            ),
                           ),
                         ),
                         ..._ftpProfiles.keys
-                            .map((profileName) => DropdownMenuItem<String>(
-                                  value: profileName,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          profileName,
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey.shade700),
-                                          overflow: TextOverflow.ellipsis,
+                            .map(
+                              (profileName) => DropdownMenuItem<String>(
+                                value: profileName,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        profileName,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade700,
                                         ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          _showEditProfileDialog(profileName);
-                                        },
-                                        child: Icon(
-                                          Icons.settings,
-                                          size: 14,
-                                          color: Colors.grey.shade600,
-                                        ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _showEditProfileDialog(profileName);
+                                      },
+                                      child: Icon(
+                                        Icons.settings,
+                                        size: 14,
+                                        color: Colors.grey.shade600,
                                       ),
-                                    ],
-                                  ),
-                                ))
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
                             .toList(),
                       ],
                       onChanged: (String? newValue) {
@@ -11429,11 +12899,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                       },
-                      icon: Icon(Icons.arrow_drop_down,
-                          size: 16, color: Colors.grey.shade600),
+                      icon: Icon(
+                        Icons.arrow_drop_down,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
                       dropdownColor: Colors.white,
-                      style:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -11465,30 +12940,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           decoration: InputDecoration(
                             hintText: 'Enter custom filename (optional)',
                             hintStyle: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11),
+                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
                               borderSide: BorderSide(
-                                  color: Colors.grey.shade400, width: 1.5),
+                                color: Colors.grey.shade400,
+                                width: 1.5,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.white,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade600),
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                           ),
                         ),
@@ -11501,31 +12986,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             hintText:
                                 'Enter folder path for duplicate (optional)',
                             hintStyle: TextStyle(
-                                color: Colors.grey.shade500, fontSize: 11),
+                              color: Colors.grey.shade500,
+                              fontSize: 11,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(2),
                               borderSide: BorderSide(
-                                  color: Colors.grey.shade400, width: 1.5),
+                                color: Colors.grey.shade400,
+                                width: 1.5,
+                              ),
                             ),
                             filled: true,
                             fillColor: Colors.white,
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
                             isDense: true,
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade600),
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
                           ),
                         ),
@@ -11602,8 +13097,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             padding: const EdgeInsets.all(8),
                             itemCount: _ftpProfiles.length,
                             itemBuilder: (context, index) {
-                              final profileName =
-                                  _ftpProfiles.keys.elementAt(index);
+                              final profileName = _ftpProfiles.keys.elementAt(
+                                index,
+                              );
                               final profile = _ftpProfiles[profileName]!;
                               final isCurrent =
                                   _currentFtpProfile == profileName;
@@ -11640,8 +13136,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     children: [
                                       if (!isCurrent)
                                         IconButton(
-                                          icon: const Icon(Icons.play_arrow,
-                                              size: 16),
+                                          icon: const Icon(
+                                            Icons.play_arrow,
+                                            size: 16,
+                                          ),
                                           onPressed: () {
                                             setDialogState(() {
                                               _loadFtpProfile(profileName);
@@ -11660,8 +13158,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           tooltip: 'Load Profile',
                                         ),
                                       IconButton(
-                                        icon:
-                                            const Icon(Icons.delete, size: 16),
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          size: 16,
+                                        ),
                                         onPressed: () {
                                           setDialogState(() {
                                             _deleteFtpProfile(profileName);
@@ -11687,7 +13187,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       onTap: () => Navigator.pop(context),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(2),
@@ -11723,7 +13225,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(2),
@@ -11763,13 +13267,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'September',
       'October',
       'November',
-      'December'
+      'December',
     ];
     return months[month - 1];
   }
 
   String _formatDateline(
-      String city, String stateOrProvince, String monthUpper, int day) {
+    String city,
+    String stateOrProvince,
+    String monthUpper,
+    int day,
+  ) {
     if (_isGameInUnitedStates()) {
       // US format: CITY, STATE - DATE
       return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
@@ -11781,7 +13289,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _formatLocationSuffix(
-      String city, String stateOrProvince, String formattedDate) {
+    String city,
+    String stateOrProvince,
+    String formattedDate,
+  ) {
     if (_isGameInUnitedStates()) {
       // US format: in City, State (no country needed)
       // Special case for Washington DC - keep DC capitalized
@@ -11809,7 +13320,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Newfoundland and Labrador',
       'Northwest Territories',
       'Nunavut',
-      'Yukon'
+      'Yukon',
     };
 
     return !canadianProvinces.contains(provinceController.text);
@@ -11975,8 +13486,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
       case 'Stretching':
         // Check if multiple players are selected
-        final activePlayersStretching =
-            selectedHomePlayers.union(selectedAwayPlayers);
+        final activePlayersStretching = selectedHomePlayers.union(
+          selectedAwayPlayers,
+        );
         final isMultiplePlayersStretching = activePlayersStretching.length > 1;
 
         final actionStretching =
@@ -11984,8 +13496,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
       case 'Warm Ups':
         // Check if multiple players are selected
-        final activePlayersWarmUps =
-            selectedHomePlayers.union(selectedAwayPlayers);
+        final activePlayersWarmUps = selectedHomePlayers.union(
+          selectedAwayPlayers,
+        );
         final isMultiplePlayersWarmUps = activePlayersWarmUps.length > 1;
 
         final actionWarmUps = isMultiplePlayersWarmUps
@@ -12624,15 +14137,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (_firstPlayerSelected == null) return [];
 
     // Determine which team the main player is from using normalized comparison
-    final isMainPlayerHome = selectedHomePlayers.any((player) =>
-        _removeJerseyNumberFromName(player) == _firstPlayerSelected);
+    final isMainPlayerHome = selectedHomePlayers.any(
+      (player) => _removeJerseyNumberFromName(player) == _firstPlayerSelected,
+    );
 
     // Get all players from the same team, excluding the main player (normalized)
     final Iterable<String> source =
         isMainPlayerHome ? selectedHomePlayers : selectedAwayPlayers;
     final teammates = source
-        .where((player) =>
-            _removeJerseyNumberFromName(player) != _firstPlayerSelected)
+        .where(
+          (player) =>
+              _removeJerseyNumberFromName(player) != _firstPlayerSelected,
+        )
         .toList();
 
     return teammates;
@@ -12658,11 +14174,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return selectedHomeTeam;
       } else if (_firstTeamSelected == true) {
         print(
-            'DEBUG: Using selectedAwayTeam as fallback (firstTeamSelected): $selectedAwayTeam');
+          'DEBUG: Using selectedAwayTeam as fallback (firstTeamSelected): $selectedAwayTeam',
+        );
         return selectedAwayTeam;
       } else if (_firstTeamSelected == false) {
         print(
-            'DEBUG: Using selectedHomeTeam as fallback (firstTeamSelected): $selectedHomeTeam');
+          'DEBUG: Using selectedHomeTeam as fallback (firstTeamSelected): $selectedHomeTeam',
+        );
         return selectedHomeTeam;
       }
       print('DEBUG: Using final fallback selectedAwayTeam: $selectedAwayTeam');
@@ -12671,8 +14189,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Determine which team the main player is from
     // Check if any home player contains the first player's name
-    final isMainPlayerHome = selectedHomePlayers.any((player) =>
-        _removeJerseyNumberFromName(player) == _firstPlayerSelected);
+    final isMainPlayerHome = selectedHomePlayers.any(
+      (player) => _removeJerseyNumberFromName(player) == _firstPlayerSelected,
+    );
     print('DEBUG: isMainPlayerHome: $isMainPlayerHome');
 
     // Return the opposing team name
@@ -12808,14 +14327,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             runSpacing: 2,
             alignment: _homeOnLeft ? WrapAlignment.start : WrapAlignment.end,
             children: _sortPlayersByNumber(
-                    _homeOnLeft ? selectedHomePlayers : selectedAwayPlayers)
-                .map((playerName) {
+              _homeOnLeft ? selectedHomePlayers : selectedAwayPlayers,
+            ).map((playerName) {
               final isFirstSelected = _isFirstSelectedPlayer(playerName);
               final isHomePlayer = selectedHomePlayers.contains(playerName);
 
               return Container(
                 height: 20,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1,
+                ),
                 decoration: BoxDecoration(
                   color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
                   borderRadius: BorderRadius.circular(2),
@@ -12867,8 +14389,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       onTap: () {
                         setState(() {
                           // Check if this is the first selected player (main player)
-                          final isMainPlayer =
-                              _isFirstSelectedPlayer(playerName);
+                          final isMainPlayer = _isFirstSelectedPlayer(
+                            playerName,
+                          );
 
                           if (isHomePlayer) {
                             selectedHomePlayers.remove(playerName);
@@ -12916,14 +14439,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             runSpacing: 2,
             alignment: _homeOnLeft ? WrapAlignment.end : WrapAlignment.start,
             children: _sortPlayersByNumber(
-                    _homeOnLeft ? selectedAwayPlayers : selectedHomePlayers)
-                .map((playerName) {
+              _homeOnLeft ? selectedAwayPlayers : selectedHomePlayers,
+            ).map((playerName) {
               final isFirstSelected = _isFirstSelectedPlayer(playerName);
               final isHomePlayer = selectedHomePlayers.contains(playerName);
 
               return Container(
                 height: 20,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1,
+                ),
                 decoration: BoxDecoration(
                   color: isHomePlayer ? Colors.grey.shade700 : Colors.white,
                   borderRadius: BorderRadius.circular(2),
@@ -12975,8 +14501,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       onTap: () {
                         setState(() {
                           // Check if this is the first selected player (main player)
-                          final isMainPlayer =
-                              _isFirstSelectedPlayer(playerName);
+                          final isMainPlayer = _isFirstSelectedPlayer(
+                            playerName,
+                          );
 
                           if (isHomePlayer) {
                             selectedHomePlayers.remove(playerName);
@@ -13074,8 +14601,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Wrap(
                       spacing: 2,
                       runSpacing: 2,
-                      children: ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam']
-                          .map((hrType) {
+                      children:
+                          ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'].map((
+                        hrType,
+                      ) {
                         final isSelected = _selectedHomeRunType == hrType;
                         return GestureDetector(
                           onTap: () {
@@ -13089,7 +14618,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 5),
+                              horizontal: 8,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? Colors.grey.shade300
@@ -13100,65 +14631,73 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 width: 0.5,
                               ),
                             ),
-                            child: Builder(builder: (context) {
-                              final String typed = _magicBarVerbInput;
-                              final RegExpMatch? lettersMatch =
-                                  RegExp(r'([a-zA-Z]+)$').firstMatch(typed);
-                              final String typedLetters =
-                                  lettersMatch?.group(1)?.toLowerCase() ?? '';
+                            child: Builder(
+                              builder: (context) {
+                                final String typed = _magicBarVerbInput;
+                                final RegExpMatch? lettersMatch = RegExp(
+                                  r'([a-zA-Z]+)$',
+                                ).firstMatch(typed);
+                                final String typedLetters =
+                                    lettersMatch?.group(1)?.toLowerCase() ?? '';
 
-                              // Build shortcut: multi-word -> acronym, single-word -> first 2-3
-                              List<String> words = RegExp(r'[A-Za-z]+')
-                                  .allMatches(hrType)
-                                  .map((m) => m.group(0)!)
-                                  .toList();
-                              String shortcut;
-                              if (words.length > 1) {
-                                shortcut =
-                                    words.map((w) => w[0].toLowerCase()).join();
-                              } else {
-                                final w = words.first.toLowerCase();
-                                shortcut =
-                                    w.length >= 2 ? w.substring(0, 2) : w;
-                              }
+                                // Build shortcut: multi-word -> acronym, single-word -> first 2-3
+                                List<String> words = RegExp(r'[A-Za-z]+')
+                                    .allMatches(hrType)
+                                    .map((m) => m.group(0)!)
+                                    .toList();
+                                String shortcut;
+                                if (words.length > 1) {
+                                  shortcut = words
+                                      .map((w) => w[0].toLowerCase())
+                                      .join();
+                                } else {
+                                  final w = words.first.toLowerCase();
+                                  shortcut =
+                                      w.length >= 2 ? w.substring(0, 2) : w;
+                                }
 
-                              String boldPart = '';
-                              if (_magicBarFocusNode.hasFocus &&
-                                  typedLetters.isNotEmpty &&
-                                  shortcut.startsWith(typedLetters)) {
-                                boldPart = hrType.substring(
+                                String boldPart = '';
+                                if (_magicBarFocusNode.hasFocus &&
+                                    typedLetters.isNotEmpty &&
+                                    shortcut.startsWith(typedLetters)) {
+                                  boldPart = hrType.substring(
                                     0,
-                                    typedLetters.length
-                                        .clamp(0, hrType.length));
-                              } else if (_magicBarFocusNode.hasFocus) {
-                                boldPart = hrType.substring(
-                                    0, shortcut.length.clamp(0, hrType.length));
-                              }
+                                    typedLetters.length.clamp(0, hrType.length),
+                                  );
+                                } else if (_magicBarFocusNode.hasFocus) {
+                                  boldPart = hrType.substring(
+                                    0,
+                                    shortcut.length.clamp(0, hrType.length),
+                                  );
+                                }
 
-                              return RichText(
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                text: TextSpan(children: [
-                                  if (boldPart.isNotEmpty)
-                                    TextSpan(
-                                      text: boldPart,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.grey.shade800,
+                                return RichText(
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  text: TextSpan(
+                                    children: [
+                                      if (boldPart.isNotEmpty)
+                                        TextSpan(
+                                          text: boldPart,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                      TextSpan(
+                                        text: hrType.substring(boldPart.length),
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.grey.shade700,
+                                        ),
                                       ),
-                                    ),
-                                  TextSpan(
-                                    text: hrType.substring(boldPart.length),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade700,
-                                    ),
+                                    ],
                                   ),
-                                ]),
-                              );
-                            }),
+                                );
+                              },
+                            ),
                           ),
                         );
                       }).toList(),
@@ -13190,7 +14729,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                   // Celebrates in dugout option
                   _buildSubOption(
-                      'Celebrates in Dugout', 'celebrates_in_dugout'),
+                    'Celebrates in Dugout',
+                    'celebrates_in_dugout',
+                  ),
 
                   // Trots the bases option
                   _buildSubOption('Trots the Bases', 'trots_the_bases'),
@@ -13432,8 +14973,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 1st Base options
-                      _buildTagOptionWithChevron(
-                          '1st Base', ['Pickoff', 'Stealing']),
+                      _buildTagOptionWithChevron('1st Base', [
+                        'Pickoff',
+                        'Stealing',
+                      ]),
 
                       // 2nd Base options
                       _buildTagOptionWithChevron('2nd Base', [
@@ -13441,7 +14984,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         'Stealing',
                         'Attempting to Stretch a Single',
                         'Attempting to Tag Up',
-                        'Attempting to Advance'
+                        'Attempting to Advance',
                       ]),
 
                       // 3rd Base options
@@ -13450,7 +14993,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         'Stealing',
                         'Attempting to Stretch a Double',
                         'Attempting to Tag Up',
-                        'Attempting to Advance'
+                        'Attempting to Advance',
                       ]),
 
                       // Home Base options
@@ -13458,7 +15001,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         'Stealing',
                         'Attempting to Stretch a Triple',
                         'Attempting to Tag Up',
-                        'Attempting to Score'
+                        'Attempting to Score',
                       ]),
 
                       // On the Base Path (direct selection)
@@ -13477,7 +15020,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           margin: const EdgeInsets.only(bottom: 2),
                           decoration: BoxDecoration(
                             color: _selectedTagsAction ==
@@ -13542,7 +15087,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         baseName.replaceAll(' Base', '').replaceAll(' Plate', '');
     final hasSelection = _selectedTagsAction != null &&
         _selectedTagsAction!.startsWith(
-            'Tags Runner Out at: ${baseName.replaceAll(' Base', '').replaceAll(' Plate', '')}');
+          'Tags Runner Out at: ${baseName.replaceAll(' Base', '').replaceAll(' Plate', '')}',
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -13570,10 +15116,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ? Colors.grey.shade300
                   : Colors.grey.shade50,
               borderRadius: BorderRadius.circular(3),
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 0.5,
-              ),
+              border: Border.all(color: Colors.grey.shade300, width: 0.5),
             ),
             child: Row(
               children: [
@@ -13618,8 +15161,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     margin: const EdgeInsets.only(bottom: 1),
                     decoration: BoxDecoration(
                       color: isSelected
@@ -13664,7 +15209,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Stealing',
           'Attempting to Stretch a Single',
           'Attempting to Tag Up',
-          'Attempting to Advance'
+          'Attempting to Advance',
         ];
         break;
       case '3rd':
@@ -13673,7 +15218,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Stealing',
           'Attempting to Stretch a Double',
           'Attempting to Tag Up',
-          'Attempting to Advance'
+          'Attempting to Advance',
         ];
         break;
       case 'Home':
@@ -13681,7 +15226,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Stealing',
           'Attempting to Stretch a Triple',
           'Attempting to Tag Up',
-          'Attempting to Score'
+          'Attempting to Score',
         ];
         break;
       case 'On the Base Path':
@@ -13721,16 +15266,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   _updateCaption();
                 },
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color:
                         isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: Colors.grey.shade300, width: 0.5),
                   ),
                   child: Text(
                     option,
@@ -13774,7 +15318,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Swings',
                           '',
                           '',
-                          ''
+                          '',
                         ]),
                       ),
                     ),
@@ -13793,7 +15337,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Fielding Position',
                           '',
                           '',
-                          ''
+                          '',
                         ]),
                       ),
                     ),
@@ -13812,7 +15356,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                          ''
+                          '',
                         ]),
                       ),
                     ),
@@ -13841,7 +15385,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                          ''
+                          '',
                         ]),
                       ),
                     ),
@@ -13860,7 +15404,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'National Anthem',
                           'Stretching',
                           'Warm Ups',
-                          'Pitching Change'
+                          'Pitching Change',
                         ]),
                       ),
                     ),
@@ -13883,9 +15427,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _selectedRbiInning = null;
               });
             },
-            child: Container(
-              color: Colors.transparent,
-            ),
+            child: Container(color: Colors.transparent),
           ),
         ),
 
@@ -14159,10 +15701,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color:
                       isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: Colors.grey.shade300,
-                    width: 0.5,
-                  ),
+                  border: Border.all(color: Colors.grey.shade300, width: 0.5),
                 ),
                 child: Text(
                   label,
@@ -14241,7 +15780,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Sort Player objects by different criteria
   List<Player> _sortPlayerObjects(
-      List<Player> players, String sortOption, bool ascending) {
+    List<Player> players,
+    String sortOption,
+    bool ascending,
+  ) {
     if (players.isEmpty) return [];
 
     final sortedPlayers = List<Player>.from(players);
@@ -14305,11 +15847,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _getSortIconWidget(String sortOption) {
     switch (sortOption) {
       case 'number':
-        return Icon(
-          Icons.numbers,
-          size: 12,
-          color: Colors.grey.shade600,
-        );
+        return Icon(Icons.numbers, size: 12, color: Colors.grey.shade600);
       case 'lastName':
         return Text(
           'ZA',
@@ -14329,11 +15867,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         );
       default:
-        return Icon(
-          Icons.sort,
-          size: 12,
-          color: Colors.grey.shade600,
-        );
+        return Icon(Icons.sort, size: 12, color: Colors.grey.shade600);
     }
   }
 
@@ -14352,6 +15886,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   // Format player name based on current sort option
+  String _getLastNameFromDisplayName(String displayName) {
+    final parts = displayName.split(' ');
+    final nameParts = parts.where((part) => !part.startsWith('#')).toList();
+    return nameParts.length >= 2
+        ? nameParts.last
+        : nameParts.isNotEmpty
+            ? nameParts.first
+            : '';
+  }
+
+  String _getFirstNameFromDisplayName(String displayName) {
+    final parts = displayName.split(' ');
+    final nameParts = parts.where((part) => !part.startsWith('#')).toList();
+    return nameParts.isNotEmpty ? nameParts.first : '';
+  }
+
   String _getFormattedPlayerName(String displayName, String sortOption) {
     final parts = displayName.split(' ');
     final jerseyNumber = parts.last.startsWith('#') ? parts.last : '';
@@ -14416,14 +15966,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (player.jerseyNumber == number) {
           _filteredPlayers.add(player);
           print(
-              'DEBUG: Found player in home roster: ${player.fullName} #${player.jerseyNumber}');
+            'DEBUG: Found player in home roster: ${player.fullName} #${player.jerseyNumber}',
+          );
         }
       }
       for (Player player in _awayRoster) {
         if (player.jerseyNumber == number) {
           _filteredPlayers.add(player);
           print(
-              'DEBUG: Found player in away roster: ${player.fullName} #${player.jerseyNumber}');
+            'DEBUG: Found player in away roster: ${player.fullName} #${player.jerseyNumber}',
+          );
         }
       }
 
@@ -14445,7 +15997,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       } else {
         print(
-            'DEBUG: Found ${_filteredPlayers.length} players with number $number');
+          'DEBUG: Found ${_filteredPlayers.length} players with number $number',
+        );
       }
     });
   }
@@ -14461,13 +16014,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final cleanedPlayerName = _removeJerseyNumberFromName(playerName);
 
       if (_isHomePlayer(player)) {
-        selectedHomePlayers
-            .add(playerName); // Use original display name for side lists
+        selectedHomePlayers.add(
+          playerName,
+        ); // Use original display name for side lists
         // Set as first player selected if none selected yet
         _firstPlayerSelected ??= cleanedPlayerName;
       } else {
-        selectedAwayPlayers
-            .add(playerName); // Use original display name for side lists
+        selectedAwayPlayers.add(
+          playerName,
+        ); // Use original display name for side lists
         // Set as first player selected if none selected yet
         _firstPlayerSelected ??= cleanedPlayerName;
       }
@@ -14583,7 +16138,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Container(
                       width: 100,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: (widget.currentIndex != null &&
                                 widget.currentIndex! > 0)
@@ -14600,8 +16157,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.arrow_back,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.arrow_back,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Prev',
@@ -14622,8 +16182,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   onTap: _copyMetadataFromCaptionWidget,
                   child: Container(
                     width: 100,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
@@ -14652,8 +16214,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   onTap: _pasteMetadataToCaptionWidget,
                   child: Container(
                     width: 100,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
@@ -14662,8 +16226,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.content_paste,
-                            size: 14, color: Colors.grey.shade700),
+                        Icon(
+                          Icons.content_paste,
+                          size: 14,
+                          color: Colors.grey.shade700,
+                        ),
                         const SizedBox(width: 2),
                         Text(
                           'Paste',
@@ -14697,7 +16264,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Container(
                       width: 100,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: (widget.currentIndex != null &&
                                 widget.totalImages != null &&
@@ -14717,8 +16286,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.arrow_forward,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.arrow_forward,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Next',
@@ -14749,7 +16321,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Container(
                       width: 412,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(4),
@@ -14758,8 +16332,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.history,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.history,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Paste Caption from Previous Frame',
@@ -14778,68 +16355,73 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // FTP button
                 SizedOverflowBox(
                   size: const Size(140, 26),
-                  alignment: Alignment.topCenter,
+                  alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
                     width: 140,
                     child: CustomButton(
                       onTap: _disableFtp ? null : _onFtpPressed,
-                      child: Transform.translate(
-                        offset: const Offset(0, -32),
-                        child: Container(
-                          width: 140,
-                          height: 58,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
+                      child: Container(
+                        width: 140,
+                        height: 60,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _disableFtp
+                              ? Colors.grey.shade300
+                              : const Color(0xFF0052CC),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
                             color: _disableFtp
                                 ? Colors.grey.shade300
                                 : const Color(0xFF0052CC),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: _disableFtp
-                                  ? Colors.grey.shade300
-                                  : const Color(0xFF0052CC),
-                            ),
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Row(
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.rocket_launch,
+                              size: 14,
+                              color: _disableFtp
+                                  ? Colors.grey.shade600
+                                  : Colors.white,
+                            ),
+                            const SizedBox(width: 2),
+                            Flexible(
+                              child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Icon(
-                                    Icons.rocket_launch,
-                                    size: 14,
-                                    color: _disableFtp
-                                        ? Colors.grey.shade600
-                                        : Colors.white,
-                                  ),
-                                  const SizedBox(width: 1),
                                   Text(
                                     _disableFtp ? 'FTP OFF' : 'FTP',
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       color: _disableFtp
                                           ? Colors.grey.shade600
                                           : Colors.white,
                                       fontWeight: FontWeight.bold,
+                                      letterSpacing: -0.5,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
+                                  if (!_disableFtp &&
+                                      _currentFtpProfile != null)
+                                    Text(
+                                      _currentFtpProfile!,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: -0.5,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
                                 ],
                               ),
-                              if (!_disableFtp && _currentFtpProfile != null)
-                                Text(
-                                  _currentFtpProfile!,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -14848,40 +16430,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 8, height: 26),
                 // FTP Settings button
                 SizedOverflowBox(
-                  size: const Size(100, 26),
-                  alignment: Alignment.topCenter,
+                  size: const Size(120, 26),
+                  alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
-                    width: 100,
+                    width: 120,
                     child: CustomButton(
                       onTap: _showFtpSettings,
-                      child: Transform.translate(
-                        offset: const Offset(0, -32),
-                        child: Container(
-                          width: 100,
-                          height: 58,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4A90E2),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0xFF4A90E2)),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.settings,
-                                  size: 14, color: Colors.white),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'FTP Settings',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                      child: Container(
+                        width: 120,
+                        height: 60,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4A90E2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF4A90E2)),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.settings,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'FTP\nSettings',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
                               ),
-                            ],
-                          ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -14891,36 +16477,42 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Reset button (to the right of FTP Settings)
                 SizedOverflowBox(
                   size: const Size(100, 26),
-                  alignment: Alignment.topCenter,
+                  alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
                     width: 100,
                     child: CustomButton(
                       onTap: _fullReset,
-                      child: Transform.translate(
-                        offset: const Offset(0, -32),
-                        child: Container(
-                          width: 100,
-                          height: 58,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.refresh,
-                                  size: 14, color: Colors.grey.shade700),
-                              const SizedBox(height: 2),
-                              Text('Reset',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
+                      child: Container(
+                        width: 100,
+                        height: 60,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.refresh,
+                              size: 14,
+                              color: Colors.grey.shade700,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Reset',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -14955,11 +16547,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 children: [
                   Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
                   const SizedBox(width: 2),
-                  Text('Reset',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500)),
+                  Text(
+                    'Reset',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -14970,8 +16565,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBackButton({VoidCallback? onPressed}) {
-    return _buildBackButtonWithWidth(MediaQuery.of(context).size.width * 0.5,
-        onPressed: onPressed);
+    return _buildBackButtonWithWidth(
+      MediaQuery.of(context).size.width * 0.5,
+      onPressed: onPressed,
+    );
   }
 
   Widget _buildBackButtonWithWidth(double width, {VoidCallback? onPressed}) {
@@ -14983,7 +16580,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Container(
             width: width, // Use passed width parameter
             margin: const EdgeInsets.symmetric(
-                horizontal: 5), // 5px padding from left and right
+              horizontal: 5,
+            ), // 5px padding from left and right
             child: CustomButton(
               onTap: onPressed ??
                   () {
@@ -15031,7 +16629,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     const SizedBox(
-                        width: 15), // 15px padding from the left edge
+                      width: 15,
+                    ), // 15px padding from the left edge
                     Icon(
                       Icons.arrow_back,
                       size: 14,
@@ -15059,8 +16658,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildVerbOptionsBackButton({VoidCallback? onPressed}) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return _buildBackButtonWithWidth(constraints.maxWidth * 0.5,
-            onPressed: onPressed);
+        return _buildBackButtonWithWidth(
+          constraints.maxWidth * 0.5,
+          onPressed: onPressed,
+        );
       },
     );
   }
@@ -15562,8 +17163,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           customCelebrationController.selection =
                               TextSelection.fromPosition(
                             TextPosition(
-                                offset:
-                                    customCelebrationController.text.length),
+                              offset: customCelebrationController.text.length,
+                            ),
                           );
                           setState(() {
                             // Clear selected celebration chips when custom text is entered
@@ -15655,7 +17256,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   children: [
                     _buildDejectionChip('Strikeout', 'Strikeout'),
                     _buildDejectionChip(
-                        'Pitcher Taken Out', 'Pitcher Taken Out'),
+                      'Pitcher Taken Out',
+                      'Pitcher Taken Out',
+                    ),
                   ],
                 ),
               ),
@@ -15703,7 +17306,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           customDejectionController.selection =
                               TextSelection.fromPosition(
                             TextPosition(
-                                offset: customDejectionController.text.length),
+                              offset: customDejectionController.text.length,
+                            ),
                           );
                           setState(() {
                             // Clear selected dejection chips when custom text is entered
@@ -15957,8 +17561,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 4.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -15983,7 +17589,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(6),
                             borderSide: BorderSide(
-                                color: Colors.blue.shade400, width: 2),
+                              color: Colors.blue.shade400,
+                              width: 2,
+                            ),
                           ),
                           contentPadding: const EdgeInsets.all(8),
                           filled: true,
@@ -16003,10 +17611,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    SizedBox(
-                      height: 80,
-                      child: _buildReusableInningSelector(),
-                    ),
+                    SizedBox(height: 80, child: _buildReusableInningSelector()),
                     const SizedBox(height: 2),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -16153,8 +17758,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _isDivingCatch
                           ? Colors.grey.shade300
@@ -16252,8 +17859,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   },
                   child: Container(
                     width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _isDivingCatch
                           ? Colors.grey.shade300
@@ -16296,18 +17905,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBothTeamsList() {
-    // Sort rosters by jersey number
-    final sortedHomeRoster = List<Player>.from(_homeRoster)
+    // Use filtered rosters (respects unified and team-specific search)
+    final sortedHomeRoster = List<Player>.from(_getFilteredRoster(true))
       ..sort((a, b) {
-        final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
-        final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
-        return aNum.compareTo(bNum);
+        int comparison = 0;
+        if (_homePlayerSortBy == 'lastname') {
+          comparison = _getLastNameFromDisplayName(a.displayName)
+              .compareTo(_getLastNameFromDisplayName(b.displayName));
+        } else if (_homePlayerSortBy == 'firstname') {
+          comparison = _getFirstNameFromDisplayName(a.displayName)
+              .compareTo(_getFirstNameFromDisplayName(b.displayName));
+        } else {
+          // number
+          final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+          final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+          comparison = aNum.compareTo(bNum);
+        }
+        return _homePlayerSortAscending ? comparison : -comparison;
       });
-    final sortedAwayRoster = List<Player>.from(_awayRoster)
+    final sortedAwayRoster = List<Player>.from(_getFilteredRoster(false))
       ..sort((a, b) {
-        final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
-        final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
-        return aNum.compareTo(bNum);
+        int comparison = 0;
+        if (_awayPlayerSortBy == 'lastname') {
+          comparison = _getLastNameFromDisplayName(a.displayName)
+              .compareTo(_getLastNameFromDisplayName(b.displayName));
+        } else if (_awayPlayerSortBy == 'firstname') {
+          comparison = _getFirstNameFromDisplayName(a.displayName)
+              .compareTo(_getFirstNameFromDisplayName(b.displayName));
+        } else {
+          // number
+          final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
+          final bNum = int.tryParse(b.jerseyNumber ?? '0') ?? 0;
+          comparison = aNum.compareTo(bNum);
+        }
+        return _awayPlayerSortAscending ? comparison : -comparison;
       });
 
     return Padding(
@@ -16321,8 +17952,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Home team header
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     border: Border(
@@ -16354,8 +17987,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     itemCount: sortedHomeRoster.length,
                     itemBuilder: (context, index) {
                       final player = sortedHomeRoster[index];
-                      final isSelected =
-                          selectedHomePlayers.contains(player.displayName);
+                      final isSelected = selectedHomePlayers.contains(
+                        player.displayName,
+                      );
 
                       return GestureDetector(
                         onTap: () {
@@ -16367,7 +18001,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 _firstTeamSelected = true;
                                 _firstPlayerSelected =
                                     _removeJerseyNumberFromName(
-                                        player.displayName);
+                                  player.displayName,
+                                );
                               }
                               selectedHomePlayers.add(player.displayName);
                               _isPlayerSearchMode = false;
@@ -16377,7 +18012,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? Colors.blue.shade600
@@ -16422,7 +18059,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Expanded(
                                 child: Text(
                                   _removeJerseyNumberFromName(
-                                      player.displayName),
+                                    player.displayName,
+                                  ),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: isSelected
@@ -16458,8 +18096,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Away team header
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     border: Border(
@@ -16491,8 +18131,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     itemCount: sortedAwayRoster.length,
                     itemBuilder: (context, index) {
                       final player = sortedAwayRoster[index];
-                      final isSelected =
-                          selectedAwayPlayers.contains(player.displayName);
+                      final isSelected = selectedAwayPlayers.contains(
+                        player.displayName,
+                      );
 
                       return GestureDetector(
                         onTap: () {
@@ -16504,7 +18145,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 _firstTeamSelected = false;
                                 _firstPlayerSelected =
                                     _removeJerseyNumberFromName(
-                                        player.displayName);
+                                  player.displayName,
+                                );
                               }
                               selectedAwayPlayers.add(player.displayName);
                               _isPlayerSearchMode = false;
@@ -16514,7 +18156,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? Colors.blue.shade600
@@ -16559,7 +18203,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Expanded(
                                 child: Text(
                                   _removeJerseyNumberFromName(
-                                      player.displayName),
+                                    player.displayName,
+                                  ),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: isSelected
