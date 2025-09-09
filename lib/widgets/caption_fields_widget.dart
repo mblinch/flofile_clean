@@ -376,6 +376,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isSoloCelebration = false;
   Set<String> celebrateWith = {};
   Set<String> celebrateAgainst = {};
+  Set<String> _favoriteVerbs = {};
   String? _selectedCelebrationType;
   String? _selectedDejectionType;
   bool _isCelebratingScoring = false;
@@ -3684,37 +3685,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
 
-                        // Buttons row under firebar: navigation + FTP/Settings
-                        Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(minHeight: 76),
-                          padding: EdgeInsets.zero,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: Colors.grey.shade400,
-                              width: 1.0,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              // Navigation buttons
-                              Expanded(
-                                flex: 11,
-                                child: Container(
-                                  decoration: BoxDecoration(),
-                                  child: _buildNavigationButtons(),
-                                ),
-                              ),
-                              // FTP and Settings buttons removed - moved to action buttons area
-                            ],
-                          ),
-                        ),
-
-                        // (Removed misplaced search bar outside player picker container)
-
-                        // Player and Verb Selection Area
-                        Expanded(child: _buildCaptionBuildingSection()),
+                        // Player and Verb Selection Area - with navigation buttons integrated
+                        Expanded(child: _buildCaptionBuildingSectionWithNav()),
                       ],
                     ),
                   ),
@@ -3722,6 +3694,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   // Right side removed - personality box is now beside caption box
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCaptionBuildingSectionWithNav() {
+    return Container(
+      padding: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+      ),
+      child: Row(
+        children: [
+          // Left Team (Home or Away depending on _homeOnLeft)
+          Expanded(
+            flex: 3,
+            child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Verbs with Navigation buttons at top
+          Expanded(
+            flex: 7,
+            child: Column(
+              children: [
+                // Navigation buttons at top of verb section
+                Container(
+                  constraints: const BoxConstraints(minHeight: 76),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: _buildNavigationButtons(),
+                ),
+                // Verb section below navigation
+                Expanded(child: _buildCompactVerbColumn()),
+              ],
             ),
           ),
         ],
@@ -4229,10 +4239,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 });
                                               },
                                               child: Container(
-                                                height: 22,
+                                                height: 18,
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 8,
+                                                  horizontal: 4,
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
@@ -4261,7 +4271,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     children: [
                                                       Icon(
                                                         Icons.grid_view,
-                                                        size: 10,
+                                                        size: 9,
                                                         color: (_homeOnLeft
                                                                 ? _homePlayerGridMode
                                                                 : _awayPlayerGridMode)
@@ -4273,7 +4283,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       Text(
                                                         'Grid',
                                                         style: TextStyle(
-                                                          fontSize: 12,
+                                                          fontSize: 10,
                                                           color: (_homeOnLeft
                                                                   ? _homePlayerGridMode
                                                                   : _awayPlayerGridMode)
@@ -4301,10 +4311,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 });
                                               },
                                               child: Container(
-                                                height: 22,
+                                                height: 18,
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 8,
+                                                  horizontal: 4,
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
@@ -4334,7 +4344,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     children: [
                                                       Icon(
                                                         Icons.list,
-                                                        size: 10,
+                                                        size: 9,
                                                         color: (_homeOnLeft
                                                                 ? !_homePlayerGridMode
                                                                 : !_awayPlayerGridMode)
@@ -4346,7 +4356,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       Text(
                                                         'List',
                                                         style: TextStyle(
-                                                          fontSize: 12,
+                                                          fontSize: 10,
                                                           color: (_homeOnLeft
                                                                   ? !_homePlayerGridMode
                                                                   : !_awayPlayerGridMode)
@@ -4757,8 +4767,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _originalCaptionBeforeCustomVerb = captionController.text;
               },
               child: Container(
-                margin: const EdgeInsets.all(1),
-                height: 40,
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 1, vertical: 0.5),
+                height: 28,
                 decoration: BoxDecoration(
                   color: isSelected
                       ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
@@ -5132,7 +5143,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(2),
       child: Column(children: rows),
     );
   }
@@ -5302,7 +5313,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             jerseyNum.toString(),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 9,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.w500,
@@ -5311,11 +5322,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   : Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 0),
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 9,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -6359,7 +6370,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                             ],
                                                                                           ),
                                                                                           const SizedBox(height: 2),
-                                                                                          // Second row: Reactions, Non Game-Action, empty
+                                                                                          // Second row: Reactions, Non Game-Action, Favorites
                                                                                           Row(
                                                                                             crossAxisAlignment: CrossAxisAlignment.start,
                                                                                             children: [
@@ -6401,9 +6412,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                 ),
                                                                                               ),
                                                                                               const SizedBox(width: 2),
-                                                                                              // Empty space to maintain 3-column layout
+                                                                                              // Favorites column
                                                                                               Expanded(
-                                                                                                child: Container(),
+                                                                                                child: _buildFavoritesCategory(),
                                                                                               ),
                                                                                             ],
                                                                                           ),
@@ -6664,6 +6675,38 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  Widget _buildFavoritesCategory() {
+    return Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title with background span
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade200,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              'Favorites',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          // Favorite verb options
+          ..._favoriteVerbs.map((verb) => _buildVerbOption(verb)).toList(),
+          // Add empty chips to fill remaining space
+          ...List.generate(
+              10 - _favoriteVerbs.length, (index) => _buildVerbOption('')),
+        ],
+      ),
+    );
+  }
+
   // Function to find the shortest unique prefix for a verb
   String _getShortestUniquePrefix(String verb, List<String> allVerbs) {
     for (int i = 1; i <= verb.length; i++) {
@@ -6748,6 +6791,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         });
         _updateCaption();
+      },
+      onLongPress: () {
+        setState(() {
+          if (_favoriteVerbs.contains(verb)) {
+            _favoriteVerbs.remove(verb);
+          } else {
+            _favoriteVerbs.add(verb);
+          }
+        });
       },
       child: Container(
         width: double.infinity, // Dynamic width to fit container
@@ -6885,16 +6937,38 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             color: Colors.black87,
                           ),
                         ),
+                        if (_favoriteVerbs.contains(verb))
+                          TextSpan(
+                            text: ' ⭐',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
                       ],
                     ),
                   );
                 } else {
-                  return Text(
-                    verb,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade700,
+                  return RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: verb,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        if (_favoriteVerbs.contains(verb))
+                          TextSpan(
+                            text: ' ⭐',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
+                      ],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.visible,
@@ -6924,17 +6998,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             color: Colors.black87,
                           ),
                         ),
+                        if (_favoriteVerbs.contains(verb))
+                          TextSpan(
+                            text: ' ⭐',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
                       ],
                     ),
                   );
                 } else {
                   // Firebar inactive – normal styling
-                  return Text(
-                    verb,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade700,
+                  return RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: verb,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        if (_favoriteVerbs.contains(verb))
+                          TextSpan(
+                            text: ' ⭐',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
+                      ],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.visible,
@@ -16428,17 +16524,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 12),
                 // FTP button
                 SizedOverflowBox(
-                  size: const Size(140, 26),
+                  size: const Size(110, 26),
                   alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
-                    width: 140,
+                    width: 110,
                     child: CustomButton(
                       onTap: _disableFtp ? null : _onFtpPressed,
                       child: Container(
-                        width: 140,
+                        width: 110,
                         height: 60,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 6,
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
@@ -16471,7 +16567,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   Text(
                                     _disableFtp ? 'FTP OFF' : 'FTP',
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 13,
                                       color: _disableFtp
                                           ? Colors.grey.shade600
                                           : Colors.white,
@@ -16485,7 +16581,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     Text(
                                       _currentFtpProfile!,
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 10,
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: -0.5,
@@ -16504,17 +16600,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 8, height: 26),
                 // FTP Settings button
                 SizedOverflowBox(
-                  size: const Size(120, 26),
+                  size: const Size(100, 26),
                   alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
-                    width: 120,
+                    width: 100,
                     child: CustomButton(
                       onTap: _showFtpSettings,
                       child: Container(
-                        width: 120,
+                        width: 100,
                         height: 60,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 6,
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
@@ -16534,7 +16630,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const Text(
                               'FTP\nSettings',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.5,
@@ -16550,17 +16646,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(width: 8, height: 26),
                 // Reset button (to the right of FTP Settings)
                 SizedOverflowBox(
-                  size: const Size(100, 26),
+                  size: const Size(80, 26),
                   alignment: Alignment(-0.5, 1.0),
                   child: SizedBox(
-                    width: 100,
+                    width: 80,
                     child: CustomButton(
                       onTap: _fullReset,
                       child: Container(
-                        width: 100,
+                        width: 80,
                         height: 60,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
+                          horizontal: 4,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
@@ -16580,7 +16676,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             Text(
                               'Reset',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.5,

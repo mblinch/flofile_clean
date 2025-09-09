@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:adaptive_navigation/adaptive_navigation.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
@@ -32,6 +33,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   // API Manager
   final ApiManager _apiManager = ApiManager();
 
+  // Platform channel for window operations
+  static const MethodChannel _windowChannel = MethodChannel('window_control');
+
   // State variables for team selection
   String? selectedAwayTeam;
   String? selectedHomeTeam;
@@ -57,6 +61,43 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       print('Error testing API connection: $e');
       return false;
     }
+  }
+
+  // Show current window size and resize instructions
+  void _showResizeInstructions() {
+    final screenSize = MediaQuery.of(context).size;
+    final currentWidth = screenSize.width.round();
+    final currentHeight = screenSize.height.round();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Test at 1200x800'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Current window size: ${currentWidth}x${currentHeight}'),
+            const SizedBox(height: 16),
+            const Text('To test at 1200x800:'),
+            const SizedBox(height: 8),
+            const Text('1. Grab the bottom-right corner of this window'),
+            const Text('2. Drag it to make the window smaller'),
+            const Text('3. The window will stop at 1200x800 (minimum size)'),
+            const SizedBox(height: 8),
+            const Text('This simulates MacBook 13-inch screen size!',
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it!'),
+          ),
+        ],
+      ),
+    );
   }
 
   // Teams list
@@ -122,6 +163,57 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
               ),
             ),
             const Spacer(),
+            // Live resolution indicator
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.grey.shade300, width: 1),
+              ),
+              child: Builder(
+                builder: (context) {
+                  final screenSize = MediaQuery.of(context).size;
+                  final currentWidth = screenSize.width.round();
+                  final currentHeight = screenSize.height.round();
+                  final isTargetSize =
+                      currentWidth == 1200 && currentHeight == 800;
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.aspect_ratio,
+                        size: 12,
+                        color: isTargetSize
+                            ? Colors.green.shade600
+                            : Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${currentWidth}x${currentHeight}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: isTargetSize
+                              ? Colors.green.shade700
+                              : Colors.grey.shade700,
+                        ),
+                      ),
+                      if (isTargetSize) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.check_circle,
+                          size: 12,
+                          color: Colors.green.shade600,
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ),
             // Connectivity indicator
             FutureBuilder<bool>(
               future: _testApiConnection(),
