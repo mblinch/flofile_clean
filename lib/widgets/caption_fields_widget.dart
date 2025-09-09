@@ -4242,7 +4242,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 height: 18,
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 4,
+                                                  horizontal: 6,
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
@@ -4314,7 +4314,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 height: 18,
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 4,
+                                                  horizontal: 6,
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
@@ -4374,11 +4374,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             ),
                                           ],
                                         ),
-                                        // Right side: Sorting options (only show in list mode)
-                                        if (!(_homeOnLeft
-                                            ? _homePlayerGridMode
-                                            : _awayPlayerGridMode))
-                                          Row(
+                                        // Right side: Sorting options (always take space, invisible in grid mode)
+                                        Opacity(
+                                          opacity: (_homeOnLeft
+                                                  ? _homePlayerGridMode
+                                                  : _awayPlayerGridMode)
+                                              ? 0.0
+                                              : 1.0,
+                                          child: Row(
                                             children: [
                                               // Sort By label
                                               Text(
@@ -4531,6 +4534,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               ),
                                             ],
                                           ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
@@ -4869,8 +4873,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           currentRow.add(
             Expanded(
               child: Container(
-                margin: const EdgeInsets.all(1),
-                height: 40,
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(4),
@@ -5289,8 +5294,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _originalCaptionBeforeCustomVerb = captionController.text;
               },
               child: Container(
-                margin: const EdgeInsets.all(1),
-                height: 40,
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                height: 33,
                 decoration: BoxDecoration(
                   color: isSelected
                       ? (isHome ? Colors.grey.shade700 : Colors.white)
@@ -5384,8 +5390,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           currentRow.add(
             Expanded(
               child: Container(
-                margin: const EdgeInsets.all(1),
-                height: 40,
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(4),
@@ -6662,7 +6669,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Text(
               title,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
@@ -6691,7 +6698,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Text(
               'Favorites',
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
@@ -15932,7 +15939,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final screenHeight = screenSize.height;
 
     // Base font size and padding
-    double baseFontSize = 11.0;
+    double baseFontSize = 8.0;
     double baseVerticalPadding = 2.0;
 
     // Scale based on screen size (minimum 800x600, maximum 2560x1440)
@@ -16895,7 +16902,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         width: 36,
-                        height: 36,
+                        height: 33,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: isSelected
@@ -16939,7 +16946,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         : null,
                     child: Container(
                       width: 36,
-                      height: 36,
+                      height: 33,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage > 0
@@ -16977,7 +16984,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         : null,
                     child: Container(
                       width: 36,
-                      height: 36,
+                      height: 33,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage < 2
