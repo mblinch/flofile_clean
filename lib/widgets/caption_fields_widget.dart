@@ -529,6 +529,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Caption state
   final String _lastCaption = '';
 
+  // Verb categories order (for drag and drop)
+  List<String> _categoryOrder = [
+    'Offense',
+    'Defense',
+    'Running',
+    'Reactions',
+    'Non Game-Action',
+    'Favorites'
+  ];
+
   // Verb categories
   final Map<String, List<String>> verbCategories = {
     'Offense': [
@@ -6319,115 +6329,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                     // Calculate width for exactly 3 columns
                                                                                     final columnWidth = (constraints.maxWidth - 8) / 3; // Subtract spacing between columns (4px * 2 gaps)
 
-                                                                                    return Container(
-                                                                                      // 3 columns in 2 rows
-                                                                                      child: Column(
-                                                                                        children: [
-                                                                                          // First row: Offense, Defense, Running
-                                                                                          Row(
-                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                            children: [
-                                                                                              // Offense column
-                                                                                              Expanded(
-                                                                                                child: _buildVerbCategory('Offense', [
-                                                                                                  'Single',
-                                                                                                  'Double',
-                                                                                                  'Triple',
-                                                                                                  'Home Run',
-                                                                                                  'Sacrifice Fly',
-                                                                                                  'At Bat',
-                                                                                                  'Swings',
-                                                                                                  'Bunts',
-                                                                                                  'Walks',
-                                                                                                  'Hit by Pitch',
-                                                                                                ]),
-                                                                                              ),
-                                                                                              const SizedBox(width: 2),
-                                                                                              // Defense column
-                                                                                              Expanded(
-                                                                                                child: _buildVerbCategory('Defense', [
-                                                                                                  'Pitching',
-                                                                                                  'Pitching Change',
-                                                                                                  'Catches',
-                                                                                                  'Throws',
-                                                                                                  'Tags',
-                                                                                                  'Groundball',
-                                                                                                  'Fielding Position',
-                                                                                                  'Double Play',
-                                                                                                  'Triple Play',
-                                                                                                  '',
-                                                                                                ]),
-                                                                                              ),
-                                                                                              const SizedBox(width: 2),
-                                                                                              // Running column
-                                                                                              Expanded(
-                                                                                                child: _buildVerbCategory('Running', [
-                                                                                                  'Steals',
-                                                                                                  'Slides',
-                                                                                                  'Runs',
-                                                                                                  'Rounds',
-                                                                                                  '',
-                                                                                                  '',
-                                                                                                  '',
-                                                                                                  '',
-                                                                                                  '',
-                                                                                                  '',
-                                                                                                ]),
-                                                                                              ),
-                                                                                            ],
-                                                                                          ),
-                                                                                          const SizedBox(height: 2),
-                                                                                          // Second row: Reactions, Non Game-Action, Favorites
-                                                                                          Row(
-                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                                                            children: [
-                                                                                              // Reactions column
-                                                                                              Expanded(
-                                                                                                child: _buildVerbCategory(
-                                                                                                  'Reactions',
-                                                                                                  [
-                                                                                                    'Celebrates',
-                                                                                                    'Dejection',
-                                                                                                    'Post Game Win',
-                                                                                                    'Post Game Loss',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                  ],
-                                                                                                ),
-                                                                                              ),
-                                                                                              const SizedBox(width: 2),
-                                                                                              // Non Game-Action column
-                                                                                              Expanded(
-                                                                                                child: _buildVerbCategory(
-                                                                                                  'Non Game-Action',
-                                                                                                  [
-                                                                                                    'Looks On',
-                                                                                                    'Batting Practice',
-                                                                                                    'Fielding Practice',
-                                                                                                    'Takes the Field',
-                                                                                                    'Comes Off the Field',
-                                                                                                    'National Anthem',
-                                                                                                    'Stretching',
-                                                                                                    'Warm Ups',
-                                                                                                    '',
-                                                                                                    '',
-                                                                                                  ],
-                                                                                                ),
-                                                                                              ),
-                                                                                              const SizedBox(width: 2),
-                                                                                              // Favorites column
-                                                                                              Expanded(
-                                                                                                child: _buildFavoritesCategory(),
-                                                                                              ),
-                                                                                            ],
-                                                                                          ),
-                                                                                        ],
-                                                                                      ),
-                                                                                    ); // Close Container for Wrap
+                                                                                    return _buildDraggableCategories();
                                                                                   },
                                                                                 ),
                                                                               ),
@@ -6652,6 +6554,99 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  Widget _buildDraggableCategories() {
+    // Split categories into two rows of 3 columns each
+    List<String> firstRow = _categoryOrder.take(3).toList();
+    List<String> secondRow = _categoryOrder.skip(3).toList();
+
+    return Column(
+      children: [
+        // First row: 3 columns
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: firstRow.map((categoryName) {
+            return Expanded(
+              child: _buildDraggableCategoryCard(categoryName),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 2),
+        // Second row: 3 columns
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: secondRow.map((categoryName) {
+            return Expanded(
+              child: _buildDraggableCategoryCard(categoryName),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDraggableCategoryCard(String categoryName) {
+    return DragTarget<String>(
+      onAccept: (draggedCategory) {
+        setState(() {
+          final draggedIndex = _categoryOrder.indexOf(draggedCategory);
+          final targetIndex = _categoryOrder.indexOf(categoryName);
+
+          if (draggedIndex != -1 &&
+              targetIndex != -1 &&
+              draggedIndex != targetIndex) {
+            // Swap the categories
+            _categoryOrder[draggedIndex] = categoryName;
+            _categoryOrder[targetIndex] = draggedCategory;
+          }
+        });
+      },
+      builder: (context, candidateData, rejectedData) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return Draggable<String>(
+              data: categoryName,
+              feedback: Material(
+                elevation: 4,
+                child: Container(
+                  width: constraints.maxWidth,
+                  child: categoryName == 'Favorites'
+                      ? _buildFavoritesCategory()
+                      : _buildVerbCategory(
+                          categoryName, verbCategories[categoryName] ?? []),
+                ),
+              ),
+              childWhenDragging: Container(
+                width: double.infinity,
+                height: 200,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: Colors.grey.shade300, width: 1),
+                ),
+                child: Center(
+                  child: Text(
+                    'Drop here',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              child: Container(
+                margin: const EdgeInsets.only(right: 2),
+                child: categoryName == 'Favorites'
+                    ? _buildFavoritesCategory()
+                    : _buildVerbCategory(
+                        categoryName, verbCategories[categoryName] ?? []),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildVerbCategory(String title, List<String> verbs) {
     return Container(
       // Removed debug background for cleaner appearance
@@ -6695,12 +6690,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               color: Colors.amber.shade200,
               borderRadius: BorderRadius.circular(3),
             ),
-            child: Text(
-              'Favorites',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
+            child: RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Favorites',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' (Long press any verb to add)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.normal,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
