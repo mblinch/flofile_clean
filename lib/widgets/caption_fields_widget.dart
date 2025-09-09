@@ -921,7 +921,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       selectedHomeTeam ?? 'Home',
                                     ),
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       color:
                                           tempSelectedTeam == selectedHomeTeam
                                               ? Colors.black87
@@ -1000,7 +1000,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       selectedAwayTeam ?? 'Away',
                                     ),
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       color:
                                           tempSelectedTeam == selectedAwayTeam
                                               ? Colors.black87
@@ -1026,7 +1026,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               'Number',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -1037,7 +1037,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               'Name',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -1066,7 +1066,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   Text(
                                     'Loading roster...',
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       color: Colors.grey,
                                     ),
                                   ),
@@ -1534,7 +1534,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Text(
                           'The Firebar automatically selects players and builds captions as you type. Just press SPACE to complete each part!',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: Colors.blue.shade700,
                             fontStyle: FontStyle.italic,
                           ),
@@ -2694,7 +2694,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: Text(
                                   'Captioning',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.black87,
                                   ),
@@ -2729,7 +2729,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         const Text(
                                           'CAPTION',
                                           style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 11,
                                             fontWeight: FontWeight.w500,
                                             color: Colors.black87,
                                           ),
@@ -2873,7 +2873,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     child: Text(
                                       'PERSONALITY',
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                         color: Colors.black87,
                                       ),
@@ -2959,7 +2959,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             textAlignVertical:
                                                 TextAlignVertical.center,
                                             style: const TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 11,
                                             ),
                                             decoration: InputDecoration(
                                               border: OutlineInputBorder(
@@ -3862,7 +3862,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             Text(
                               'Add Players',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: isHome
                                     ? Colors.blue.shade700
                                     : Colors.orange.shade700,
@@ -4078,7 +4078,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ? 'FTP: $_currentFtpProfile'
                                   : 'FTP'),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: _disableFtp
                                 ? Colors.grey.shade600
                                 : Colors.white,
@@ -4596,7 +4596,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                           hintText: 'Search all players...',
                                           hintStyle: const TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 11,
                                             color: Colors.grey,
                                           ),
                                         ),
@@ -4798,7 +4798,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             jerseyNum.toString(),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.w500,
@@ -4813,7 +4813,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -6188,7 +6188,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                           Text(
                                                                                             'No player with number $_playerSearchText',
                                                                                             style: TextStyle(
-                                                                                              fontSize: 12,
+                                                                                              fontSize: 11,
                                                                                               color: Colors.orange.shade700,
                                                                                               fontWeight: FontWeight.w500,
                                                                                             ),
@@ -6211,7 +6211,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                 '#${player.jerseyNumber}',
                                                                                                 style: const TextStyle(
                                                                                                   fontWeight: FontWeight.bold,
-                                                                                                  fontSize: 12,
+                                                                                                  fontSize: 11,
                                                                                                 ),
                                                                                               ),
                                                                                               const SizedBox(width: 2),
@@ -6238,7 +6238,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                     player.displayName ?? 'Unknown',
                                                                                                   ),
                                                                                                   style: const TextStyle(
-                                                                                                    fontSize: 12,
+                                                                                                    fontSize: 11,
                                                                                                   ),
                                                                                                   overflow: TextOverflow.ellipsis,
                                                                                                 ),
@@ -6931,7 +6931,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -6939,7 +6939,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: ' 🔥$shortcutLetters',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: Colors.black87,
                           ),
@@ -6948,7 +6948,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           TextSpan(
                             text: ' ⭐',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.amber.shade600,
                             ),
                           ),
@@ -6962,7 +6962,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -6971,7 +6971,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           TextSpan(
                             text: ' ⭐',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.amber.shade600,
                             ),
                           ),
@@ -6992,7 +6992,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -7000,7 +7000,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: ' 🔥$shortcutLetters',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: Colors.black87,
                           ),
@@ -7009,7 +7009,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           TextSpan(
                             text: ' ⭐',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.amber.shade600,
                             ),
                           ),
@@ -7024,7 +7024,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -7033,7 +7033,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           TextSpan(
                             text: ' ⭐',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.amber.shade600,
                             ),
                           ),
@@ -11858,7 +11858,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'FTP Host',
                           labelStyle: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -11908,7 +11908,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 isDense: true,
                                 labelText: 'Username',
                                 labelStyle: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   color: Colors.grey.shade600,
                                 ),
                                 floatingLabelBehavior:
@@ -11956,7 +11956,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 isDense: true,
                                 labelText: 'Port',
                                 labelStyle: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   color: Colors.grey.shade600,
                                 ),
                                 floatingLabelBehavior:
@@ -11998,7 +11998,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'Password',
                           labelStyle: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -12040,7 +12040,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'Remote Path (optional)',
                           labelStyle: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -12239,7 +12239,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Create New Profile',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12281,7 +12281,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? 'Back to Settings'
                                       : 'Manage Profiles',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12392,7 +12392,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: Text(
                                         profileName,
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: 11,
                                           color: Colors.grey.shade700,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -12503,7 +12503,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -12550,7 +12550,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -12654,7 +12654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       fontWeight: isCurrent
                                           ? FontWeight.bold
                                           : FontWeight.normal,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                     ),
                                   ),
                                   subtitle: Text(
@@ -12861,7 +12861,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Create New Profile',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12903,7 +12903,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? 'Back to Settings'
                                       : 'Manage Profiles',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -13014,7 +13014,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: Text(
                                         profileName,
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: 11,
                                           color: Colors.grey.shade700,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -13125,7 +13125,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -13172,7 +13172,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                              fontSize: 12,
+                              fontSize: 11,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -13278,7 +13278,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       fontWeight: isCurrent
                                           ? FontWeight.bold
                                           : FontWeight.normal,
-                                      fontSize: 12,
+                                      fontSize: 11,
                                     ),
                                   ),
                                   subtitle: Text(
@@ -14834,7 +14834,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         TextSpan(
                                           text: boldPart,
                                           style: TextStyle(
-                                            fontSize: 14,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w700,
                                             color: Colors.grey.shade800,
                                           ),
@@ -14842,7 +14842,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       TextSpan(
                                         text: hrType.substring(boldPart.length),
                                         style: TextStyle(
-                                          fontSize: 14,
+                                          fontSize: 13,
                                           fontWeight: FontWeight.w500,
                                           color: Colors.grey.shade700,
                                         ),
@@ -15195,7 +15195,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: Text(
                                   'On the Base Path',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                     color: Colors.grey.shade700,
                                   ),
@@ -17774,7 +17774,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           filled: true,
                           fillColor: Colors.grey.shade50,
                           labelStyle: const TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: Colors.black87,
                           ),
@@ -17798,7 +17798,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             TextSpan(
                               text: 'Protip: ',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade600,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -17807,7 +17807,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               text:
                                   'Select other players that are on the mound',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade600,
                               ),
                             ),
@@ -18231,7 +18231,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥H${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
@@ -18376,7 +18376,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥V${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
