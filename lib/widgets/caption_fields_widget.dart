@@ -920,7 +920,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       selectedHomeTeam ?? 'Home',
                                     ),
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 12,
                                       color:
                                           tempSelectedTeam == selectedHomeTeam
                                               ? Colors.black87
@@ -999,7 +999,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       selectedAwayTeam ?? 'Away',
                                     ),
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 12,
                                       color:
                                           tempSelectedTeam == selectedAwayTeam
                                               ? Colors.black87
@@ -2728,7 +2728,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         const Text(
                                           'CAPTION',
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: 12,
                                             fontWeight: FontWeight.w500,
                                             color: Colors.black87,
                                           ),
@@ -2872,7 +2872,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     child: Text(
                                       'PERSONALITY',
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w500,
                                         color: Colors.black87,
                                       ),
@@ -3852,7 +3852,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             Text(
                               'Add Players',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 color: isHome
                                     ? Colors.blue.shade700
                                     : Colors.orange.shade700,
@@ -4068,7 +4068,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ? 'FTP: $_currentFtpProfile'
                                   : 'FTP'),
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: _disableFtp
                                 ? Colors.grey.shade600
                                 : Colors.white,
@@ -4273,7 +4273,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       Text(
                                                         'Grid',
                                                         style: TextStyle(
-                                                          fontSize: 10,
+                                                          fontSize: 12,
                                                           color: (_homeOnLeft
                                                                   ? _homePlayerGridMode
                                                                   : _awayPlayerGridMode)
@@ -4346,7 +4346,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       Text(
                                                         'List',
                                                         style: TextStyle(
-                                                          fontSize: 10,
+                                                          fontSize: 12,
                                                           color: (_homeOnLeft
                                                                   ? !_homePlayerGridMode
                                                                   : !_awayPlayerGridMode)
@@ -4582,7 +4582,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                           hintText: 'Search all players...',
                                           hintStyle: const TextStyle(
-                                            fontSize: 10,
+                                            fontSize: 12,
                                             color: Colors.grey,
                                           ),
                                         ),
@@ -4798,7 +4798,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -5315,7 +5315,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -5397,6 +5397,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBothTeamsListView() {
+    // Get dynamic sizing based on screen dimensions
+    final sizing = _getDynamicSizing();
+    final dynamicFontSize = sizing['fontSize']!;
+    final dynamicVerticalPadding = sizing['verticalPadding']!;
+
     // Get home and away rosters
     List<Player> homeRoster = _getFilteredRoster(true);
     List<Player> awayRoster = _getFilteredRoster(false);
@@ -5506,9 +5511,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         _updateCaption();
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 6,
-                          vertical: 2,
+                          vertical: dynamicVerticalPadding,
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
@@ -5548,7 +5553,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   _homeSortOption,
                                 ),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: dynamicFontSize,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.normal,
@@ -5643,9 +5648,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         _updateCaption();
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 6,
-                          vertical: 2,
+                          vertical: dynamicVerticalPadding,
                         ),
                         decoration: BoxDecoration(
                           color:
@@ -5687,7 +5692,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   _awaySortOption,
                                 ),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: dynamicFontSize,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.normal,
@@ -6188,7 +6193,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                 '#${player.jerseyNumber}',
                                                                                                 style: const TextStyle(
                                                                                                   fontWeight: FontWeight.bold,
-                                                                                                  fontSize: 10,
+                                                                                                  fontSize: 12,
                                                                                                 ),
                                                                                               ),
                                                                                               const SizedBox(width: 2),
@@ -6215,7 +6220,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                     player.displayName ?? 'Unknown',
                                                                                                   ),
                                                                                                   style: const TextStyle(
-                                                                                                    fontSize: 10,
+                                                                                                    fontSize: 12,
                                                                                                   ),
                                                                                                   overflow: TextOverflow.ellipsis,
                                                                                                 ),
@@ -6281,10 +6286,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                                                         // Verb categories (always visible now that magic bar is removed)
                                                                         if (!_showCustomTextInningSelector) ...[
-                                                                          SizedBox(
-                                                                            height:
-                                                                                500, // Increased height for verb area
-                                                                            // Removed debug background for cleaner appearance
+                                                                          Expanded(
                                                                             child:
                                                                                 SingleChildScrollView(
                                                                               child: Padding(
@@ -6300,96 +6302,111 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                     final columnWidth = (constraints.maxWidth - 8) / 3; // Subtract spacing between columns (4px * 2 gaps)
 
                                                                                     return Container(
-                                                                                      // 6 columns in one row
-                                                                                      child: Row(
-                                                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                      // 3 columns in 2 rows
+                                                                                      child: Column(
                                                                                         children: [
-                                                                                          // Offense column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory('Offense', [
-                                                                                              'Single',
-                                                                                              'Double',
-                                                                                              'Triple',
-                                                                                              'Home Run',
-                                                                                              'Sacrifice Fly',
-                                                                                              'At Bat',
-                                                                                              'Swings',
-                                                                                              'Bunts',
-                                                                                              'Walks',
-                                                                                              'Hit by Pitch',
-                                                                                            ]),
+                                                                                          // First row: Offense, Defense, Running
+                                                                                          Row(
+                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                            children: [
+                                                                                              // Offense column
+                                                                                              Expanded(
+                                                                                                child: _buildVerbCategory('Offense', [
+                                                                                                  'Single',
+                                                                                                  'Double',
+                                                                                                  'Triple',
+                                                                                                  'Home Run',
+                                                                                                  'Sacrifice Fly',
+                                                                                                  'At Bat',
+                                                                                                  'Swings',
+                                                                                                  'Bunts',
+                                                                                                  'Walks',
+                                                                                                  'Hit by Pitch',
+                                                                                                ]),
+                                                                                              ),
+                                                                                              const SizedBox(width: 2),
+                                                                                              // Defense column
+                                                                                              Expanded(
+                                                                                                child: _buildVerbCategory('Defense', [
+                                                                                                  'Pitching',
+                                                                                                  'Pitching Change',
+                                                                                                  'Catches',
+                                                                                                  'Throws',
+                                                                                                  'Tags',
+                                                                                                  'Groundball',
+                                                                                                  'Fielding Position',
+                                                                                                  'Double Play',
+                                                                                                  'Triple Play',
+                                                                                                  '',
+                                                                                                ]),
+                                                                                              ),
+                                                                                              const SizedBox(width: 2),
+                                                                                              // Running column
+                                                                                              Expanded(
+                                                                                                child: _buildVerbCategory('Running', [
+                                                                                                  'Steals',
+                                                                                                  'Slides',
+                                                                                                  'Runs',
+                                                                                                  'Rounds',
+                                                                                                  '',
+                                                                                                  '',
+                                                                                                  '',
+                                                                                                  '',
+                                                                                                  '',
+                                                                                                  '',
+                                                                                                ]),
+                                                                                              ),
+                                                                                            ],
                                                                                           ),
-                                                                                          const SizedBox(width: 2),
-                                                                                          // Running column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory('Running', [
-                                                                                              'Steals',
-                                                                                              'Slides',
-                                                                                              'Runs',
-                                                                                              'Rounds',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                              '',
-                                                                                            ]),
+                                                                                          const SizedBox(height: 2),
+                                                                                          // Second row: Reactions, Non Game-Action, empty
+                                                                                          Row(
+                                                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                                                            children: [
+                                                                                              // Reactions column
+                                                                                              Expanded(
+                                                                                                child: _buildVerbCategory(
+                                                                                                  'Reactions',
+                                                                                                  [
+                                                                                                    'Celebrates',
+                                                                                                    'Dejection',
+                                                                                                    'Post Game Win',
+                                                                                                    'Post Game Loss',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                  ],
+                                                                                                ),
+                                                                                              ),
+                                                                                              const SizedBox(width: 2),
+                                                                                              // Non Game-Action column
+                                                                                              Expanded(
+                                                                                                child: _buildVerbCategory(
+                                                                                                  'Non Game-Action',
+                                                                                                  [
+                                                                                                    'Looks On',
+                                                                                                    'Batting Practice',
+                                                                                                    'Fielding Practice',
+                                                                                                    'Takes the Field',
+                                                                                                    'Comes Off the Field',
+                                                                                                    'National Anthem',
+                                                                                                    'Stretching',
+                                                                                                    'Warm Ups',
+                                                                                                    '',
+                                                                                                    '',
+                                                                                                  ],
+                                                                                                ),
+                                                                                              ),
+                                                                                              const SizedBox(width: 2),
+                                                                                              // Empty space to maintain 3-column layout
+                                                                                              Expanded(
+                                                                                                child: Container(),
+                                                                                              ),
+                                                                                            ],
                                                                                           ),
-                                                                                          const SizedBox(width: 2),
-                                                                                          // Defense column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory('Defense', [
-                                                                                              'Pitching',
-                                                                                              'Pitching Change',
-                                                                                              'Catches',
-                                                                                              'Throws',
-                                                                                              'Tags',
-                                                                                              'Groundball',
-                                                                                              'Fielding Position',
-                                                                                              'Double Play',
-                                                                                              'Triple Play',
-                                                                                              '',
-                                                                                            ]),
-                                                                                          ),
-                                                                                          const SizedBox(width: 2),
-                                                                                          // Reactions column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory(
-                                                                                              'Reactions',
-                                                                                              [
-                                                                                                'Celebrates',
-                                                                                                'Dejection',
-                                                                                                'Post Game Win',
-                                                                                                'Post Game Loss',
-                                                                                                '',
-                                                                                                '',
-                                                                                                '',
-                                                                                                '',
-                                                                                                '',
-                                                                                                '',
-                                                                                              ],
-                                                                                            ),
-                                                                                          ),
-                                                                                          const SizedBox(width: 2),
-                                                                                          // Non Game-Action column
-                                                                                          Expanded(
-                                                                                            child: _buildVerbCategory(
-                                                                                              'Non Game-Action',
-                                                                                              [
-                                                                                                'Looks On',
-                                                                                                'Batting Practice',
-                                                                                                'Fielding Practice',
-                                                                                                'Takes the Field',
-                                                                                                'Comes Off the Field',
-                                                                                                'National Anthem',
-                                                                                                'Stretching',
-                                                                                                'Warm Ups',
-                                                                                                '',
-                                                                                                '',
-                                                                                              ],
-                                                                                            ),
-                                                                                          ),
-                                                                                          const SizedBox(width: 2),
                                                                                         ],
                                                                                       ),
                                                                                     ); // Close Container for Wrap
@@ -6404,8 +6421,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             height:
                                                                                 4),
                                                                         // Third row: Dynamic content
-                                                                        Expanded(
-                                                                          // Fills remaining space after verb area takes what it needs
+                                                                        Container(
+                                                                          // Dynamic content row takes only the height it needs
                                                                           child:
                                                                               Row(
                                                                             children: [
@@ -6626,7 +6643,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // Title with background span
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: BorderRadius.circular(3),
@@ -6634,7 +6651,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: Text(
               title,
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
@@ -6672,8 +6689,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (verb.isEmpty) {
       return Container(
         width: double.infinity,
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
@@ -6684,7 +6701,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             '',
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w400,
               color: Colors.transparent,
             ),
@@ -6734,8 +6751,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: double.infinity, // Dynamic width to fit container
-        height: 28, // Reduced height for smaller chips
-        padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+        height: 36, // Further increased height for bigger chips
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
           color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
@@ -6855,8 +6872,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w400,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
                         ),
@@ -6875,8 +6892,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   return Text(
                     verb,
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                       color: Colors.grey.shade700,
                     ),
                     maxLines: 2,
@@ -6894,8 +6911,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: verb,
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w400,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
                         ),
@@ -6915,8 +6932,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   return Text(
                     verb,
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w400,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                       color: Colors.grey.shade700,
                     ),
                     maxLines: 2,
@@ -7162,21 +7179,55 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 2),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _buildVerbChip('Offense', 'Offense')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Defense', 'Defense')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Running', 'Running')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Reactions', 'Reactions')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Non Game-Action', 'Non Game')),
-            const SizedBox(width: 2),
-            Expanded(child: _buildVerbChip('Magic', 'Magic')),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            double chipWidth =
+                (constraints.maxWidth - 4) / 3; // 3 columns with 2px spacing
+            return SizedBox(
+              height: 60, // Fixed height for 2 rows
+              child: Stack(
+                children: [
+                  // Row 1
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    width: chipWidth,
+                    height: 28,
+                    child: _buildVerbChip('Offense', 'Offense'),
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: chipWidth + 2,
+                    width: chipWidth,
+                    height: 28,
+                    child: _buildVerbChip('Defense', 'Defense'),
+                  ),
+                  Positioned(
+                    top: 0,
+                    left: (chipWidth + 2) * 2,
+                    width: chipWidth,
+                    height: 28,
+                    child: _buildVerbChip('Running', 'Running'),
+                  ),
+                  // Row 2
+                  Positioned(
+                    top: 30,
+                    left: 0,
+                    width: chipWidth,
+                    height: 28,
+                    child: _buildVerbChip('Reactions', 'Reactions'),
+                  ),
+                  Positioned(
+                    top: 30,
+                    left: chipWidth + 2,
+                    width: chipWidth,
+                    height: 28,
+                    child: _buildVerbChip('Non Game-Action', 'Non Game'),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
@@ -7210,7 +7261,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(12),
@@ -7224,7 +7275,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
             color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
           ),
@@ -11704,7 +11755,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'FTP Host',
                           labelStyle: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -11754,7 +11805,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 isDense: true,
                                 labelText: 'Username',
                                 labelStyle: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 12,
                                   color: Colors.grey.shade600,
                                 ),
                                 floatingLabelBehavior:
@@ -11802,7 +11853,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 isDense: true,
                                 labelText: 'Port',
                                 labelStyle: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 12,
                                   color: Colors.grey.shade600,
                                 ),
                                 floatingLabelBehavior:
@@ -11844,7 +11895,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'Password',
                           labelStyle: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -11886,7 +11937,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           labelText: 'Remote Path (optional)',
                           labelStyle: TextStyle(
-                            fontSize: 10,
+                            fontSize: 12,
                             color: Colors.grey.shade600,
                           ),
                           floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -12085,7 +12136,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Create New Profile',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12127,7 +12178,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? 'Back to Settings'
                                       : 'Manage Profiles',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12238,7 +12289,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: Text(
                                         profileName,
                                         style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 12,
                                           color: Colors.grey.shade700,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -12349,7 +12400,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -12396,7 +12447,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -12707,7 +12758,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Create New Profile',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12749,7 +12800,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? 'Back to Settings'
                                       : 'Manage Profiles',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     color: Colors.grey.shade700,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -12860,7 +12911,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       child: Text(
                                         profileName,
                                         style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 12,
                                           color: Colors.grey.shade700,
                                         ),
                                         overflow: TextOverflow.ellipsis,
@@ -12971,7 +13022,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             isDense: true,
                             labelText: 'Rename uploaded file as',
                             labelStyle: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -13018,7 +13069,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             labelText:
                                 'Save a duplicate version in another folder',
                             labelStyle: TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               color: Colors.grey.shade600,
                             ),
                             floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -15041,7 +15092,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: Text(
                                   'On the Base Path',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                     color: Colors.grey.shade700,
                                   ),
@@ -15778,6 +15829,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return sortedPlayers;
   }
 
+  // Calculate dynamic sizing based on screen dimensions
+  Map<String, double> _getDynamicSizing() {
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+
+    // Base font size and padding
+    double baseFontSize = 11.0;
+    double baseVerticalPadding = 2.0;
+
+    // Scale based on screen size (minimum 800x600, maximum 2560x1440)
+    final widthScale = (screenWidth / 1200.0).clamp(0.7, 1.5);
+    final heightScale = (screenHeight / 800.0).clamp(0.7, 1.5);
+
+    // Use the smaller scale to maintain proportions
+    final scale = (widthScale < heightScale ? widthScale : heightScale);
+
+    return {
+      'fontSize': (baseFontSize * scale).clamp(9.0, 16.0),
+      'verticalPadding': (baseVerticalPadding * scale).clamp(1.0, 6.0),
+    };
+  }
+
   // Sort Player objects by different criteria
   List<Player> _sortPlayerObjects(
     List<Player> players,
@@ -16411,7 +16485,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     Text(
                                       _currentFtpProfile!,
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 12,
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: -0.5,
@@ -17905,6 +17979,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBothTeamsList() {
+    // Get dynamic sizing based on screen dimensions
+    final sizing = _getDynamicSizing();
+    final dynamicFontSize = sizing['fontSize']!;
+    final dynamicVerticalPadding = sizing['verticalPadding']!;
+
     // Use filtered rosters (respects unified and team-specific search)
     final sortedHomeRoster = List<Player>.from(_getFilteredRoster(true))
       ..sort((a, b) {
@@ -18011,9 +18090,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           _updateCaption();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
+                          padding: EdgeInsets.symmetric(
                             horizontal: 8,
-                            vertical: 3,
+                            vertical: dynamicVerticalPadding *
+                                1.5, // Slightly more padding for this view
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
@@ -18048,7 +18128,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥H${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
@@ -18062,7 +18142,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     player.displayName,
                                   ),
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: dynamicFontSize,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
                                         : FontWeight.normal,
@@ -18155,9 +18235,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           _updateCaption();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
+                          padding: EdgeInsets.symmetric(
                             horizontal: 8,
-                            vertical: 3,
+                            vertical: dynamicVerticalPadding *
+                                1.5, // Slightly more padding for this view
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
@@ -18192,7 +18273,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥V${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
@@ -18206,7 +18287,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     player.displayName,
                                   ),
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: dynamicFontSize,
                                     fontWeight: isSelected
                                         ? FontWeight.w600
                                         : FontWeight.normal,
