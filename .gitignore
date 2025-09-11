@@ -43,3 +43,28 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Additional Flutter build artifacts
+build/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+android/.gradle/
+android/app/build/
+android/build/
+macos/Flutter/ephemeral/
+macos/build/
+.vscode/
+
+# Large media files
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.heic
+*.mp4
+*.mov
+*.zip
+*.dmg
