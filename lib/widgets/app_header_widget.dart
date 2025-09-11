@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:adaptive_navigation/adaptive_navigation.dart';
-import 'package:file_picker/file_picker.dart';
+import '../utils/native_file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import '../services/api_manager.dart';
@@ -482,12 +482,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     String? dirPath;
     try {
       print('Starting folder picker...');
-      print('DEBUG: FilePicker.platform.getDirectoryPath() called');
+      print('DEBUG: getDirectoryPath() called');
 
-      // Add a try-catch specifically around FilePicker
+      // Add a try-catch specifically around file selector
       try {
-        dirPath = await FilePicker.platform.getDirectoryPath();
-        print('DEBUG: FilePicker returned: $dirPath');
+        dirPath = await NativeFilePicker.pickDirectory();
+        print('DEBUG: File selector returned: $dirPath');
       } catch (filePickerError) {
         print('ERROR in FilePicker: $filePickerError');
         ScaffoldMessenger.of(context).showSnackBar(

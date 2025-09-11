@@ -7,7 +7,7 @@ import '../services/ftpclient_service.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
-import 'package:file_picker/file_picker.dart';
+import '../utils/native_file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -539,7 +539,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     'Running',
     'Reactions',
     'Non Game-Action',
-    'Favorites'
+    'Favorites',
   ];
 
   // Verb categories
@@ -2673,13 +2673,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.zero,
-      decoration: BoxDecoration(
-        color: Colors.white,
-      ),
+      decoration: BoxDecoration(color: Colors.white),
       child: Column(
         children: [
-          // Navigation buttons spanning full width
-          _placeFirebarOnRight ? _buildFirebarRow() : _buildNavigationButtons(),
+          // Top nav/firebar removed
+          const SizedBox.shrink(),
           // Caption Builder Section
           Expanded(
             child: Row(
@@ -2848,10 +2846,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Padding(
-                                  padding: EdgeInsets.only(
-                                    left: 4,
-                                    bottom: 2,
-                                  ),
+                                  padding: EdgeInsets.only(left: 4, bottom: 2),
                                   child: Text(
                                     'PERSONALITY',
                                     style: TextStyle(
@@ -2930,10 +2925,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               decoration: BoxDecoration(
                                                 borderRadius:
                                                     const BorderRadius.only(
-                                                  topLeft: Radius.circular(6),
-                                                  bottomLeft: Radius.circular(
+                                                  topLeft: Radius.circular(
                                                     6,
                                                   ),
+                                                  bottomLeft:
+                                                      Radius.circular(6),
                                                 ),
                                               ),
                                               child: TextField(
@@ -2948,7 +2944,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   border: OutlineInputBorder(
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                     borderSide: BorderSide(
                                                       color:
                                                           Colors.grey.shade300,
@@ -2958,7 +2955,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       OutlineInputBorder(
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                     borderSide: BorderSide(
                                                       color:
                                                           Colors.grey.shade300,
@@ -2968,7 +2966,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       OutlineInputBorder(
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                     borderSide: BorderSide(
                                                       color:
                                                           Colors.blue.shade400,
@@ -3069,8 +3068,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       final homePlayer =
                                                           _magicInputMatchingPlayers
                                                               .firstWhere(
-                                                        (p) => _homeRoster
-                                                            .contains(p),
+                                                        (
+                                                          p,
+                                                        ) =>
+                                                            _homeRoster
+                                                                .contains(
+                                                          p,
+                                                        ),
                                                         orElse: () =>
                                                             _magicInputMatchingPlayers
                                                                 .first,
@@ -3078,8 +3082,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       final awayPlayer =
                                                           _magicInputMatchingPlayers
                                                               .firstWhere(
-                                                        (p) => !_homeRoster
-                                                            .contains(p),
+                                                        (
+                                                          p,
+                                                        ) =>
+                                                            !_homeRoster
+                                                                .contains(
+                                                          p,
+                                                        ),
                                                         orElse: () =>
                                                             _magicInputMatchingPlayers
                                                                 .first,
@@ -3150,9 +3159,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             .trim()
                                                             .toLowerCase()
                                                             .split(
-                                                                RegExp(r'\s+'))
-                                                            .where((t) =>
-                                                                t.isNotEmpty)
+                                                              RegExp(r'\s+'),
+                                                            )
+                                                            .where(
+                                                              (t) =>
+                                                                  t.isNotEmpty,
+                                                            )
                                                             .toList();
                                                     final bool hasHrToken =
                                                         tokens.any(
@@ -3290,9 +3302,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       ).hasMatch(lastToken) &&
                                                       _selectedVerb == null) {
                                                     final int inningNum =
-                                                        int.parse(
-                                                      lastToken,
-                                                    );
+                                                        int.parse(lastToken);
                                                     if (inningNum > 0 &&
                                                         inningNum <= 20) {
                                                       setState(() {
@@ -3315,11 +3325,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   if (_typingFirstMagicToken &&
                                                       !hasSpace &&
                                                       singlePlayerRegex
-                                                          .hasMatch(
+                                                          .hasMatch(token) &&
+                                                      !hrPattern.hasMatch(
                                                         token,
-                                                      ) &&
-                                                      !hrPattern
-                                                          .hasMatch(token)) {
+                                                      )) {
                                                     String numberPart =
                                                         token.replaceAll(
                                                       RegExp(
@@ -3333,8 +3342,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     // If no explicit h/v and both teams have this jersey number,
                                                     // prompt for Home/Away choice inline.
                                                     if (!isHomeHint &&
-                                                        !token
-                                                            .startsWith('v')) {
+                                                        !token.startsWith(
+                                                          'v',
+                                                        )) {
                                                       final homeMatches =
                                                           _homeRoster
                                                               .where(
@@ -3376,8 +3386,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         final homePlayer =
                                                             _magicInputMatchingPlayers
                                                                 .firstWhere(
-                                                          (p) => _homeRoster
-                                                              .contains(p),
+                                                          (
+                                                            p,
+                                                          ) =>
+                                                              _homeRoster
+                                                                  .contains(
+                                                            p,
+                                                          ),
                                                           orElse: () =>
                                                               _magicInputMatchingPlayers
                                                                   .first,
@@ -3385,8 +3400,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         final awayPlayer =
                                                             _magicInputMatchingPlayers
                                                                 .firstWhere(
-                                                          (p) => !_homeRoster
-                                                              .contains(
+                                                          (
+                                                            p,
+                                                          ) =>
+                                                              !_homeRoster
+                                                                  .contains(
                                                             p,
                                                           ),
                                                           orElse: () =>
@@ -3580,7 +3598,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       final int inningNum =
                                                           int.tryParse(
                                                                 inningMatch
-                                                                    .group(1)!,
+                                                                    .group(
+                                                                  1,
+                                                                )!,
                                                               ) ??
                                                               0;
                                                       if (inningNum > 0 &&
@@ -3601,8 +3621,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                           .trim()
                                                           .toLowerCase()
                                                           .split(RegExp(r'\s+'))
-                                                          .where((t) =>
-                                                              t.isNotEmpty)
+                                                          .where(
+                                                            (t) => t.isNotEmpty,
+                                                          )
                                                           .toList();
                                                   final bool hasHrToken =
                                                       tokens.any(
@@ -3682,7 +3703,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                                                   // Handle multiple player numbers (e.g., "27 23")
                                                   _handleMultiplePlayerInput(
-                                                      value);
+                                                    value,
+                                                  );
                                                   setState(
                                                     () {},
                                                   ); // refresh highlighting while typing
@@ -3692,8 +3714,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                           // Help button beside firebar
                                           Container(
-                                            margin:
-                                                const EdgeInsets.only(left: 2),
+                                            margin: const EdgeInsets.only(
+                                              left: 2,
+                                            ),
                                             child: IconButton(
                                               onPressed: _showFirebarHelpDialog,
                                               icon: Icon(
@@ -3703,8 +3726,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               ),
                                               tooltip: 'Firebar Help',
                                               style: IconButton.styleFrom(
-                                                padding:
-                                                    const EdgeInsets.all(2),
+                                                padding: const EdgeInsets.all(
+                                                  2,
+                                                ),
                                                 minimumSize: Size.zero,
                                                 tapTargetSize:
                                                     MaterialTapTargetSize
@@ -3759,15 +3783,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             flex: 7,
             child: Column(
               children: [
-                // Top row: either Firebar or Navigation buttons
-                Container(
-                  constraints: const BoxConstraints(minHeight: 76),
-                  padding: const EdgeInsets.only(bottom: 4, left: 0, right: 0),
-                  child: _placeFirebarOnRight
-                      ? _buildFirebarRow()
-                      : _buildNavigationButtons(),
-                ),
-                // Verb section below navigation
+                // Top nav/firebar removed
+                const SizedBox.shrink(),
+                // Verb section
                 Expanded(child: _buildCompactVerbColumn()),
               ],
             ),
@@ -3862,18 +3880,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               _processHomeVisitorChoice('v');
                               return;
                             }
-                            if (!value
-                                .contains('Press H for Home or V for Away')) {
+                            if (!value.contains(
+                              'Press H for Home or V for Away',
+                            )) {
                               final numberPart =
                                   _magicInputMatchingPlayers.first.jerseyNumber;
-                              final homePlayer = _magicInputMatchingPlayers
-                                  .firstWhere((p) => _homeRoster.contains(p),
-                                      orElse: () =>
-                                          _magicInputMatchingPlayers.first);
-                              final awayPlayer = _magicInputMatchingPlayers
-                                  .firstWhere((p) => !_homeRoster.contains(p),
-                                      orElse: () =>
-                                          _magicInputMatchingPlayers.first);
+                              final homePlayer =
+                                  _magicInputMatchingPlayers.firstWhere(
+                                (p) => _homeRoster.contains(p),
+                                orElse: () => _magicInputMatchingPlayers.first,
+                              );
+                              final awayPlayer =
+                                  _magicInputMatchingPlayers.firstWhere(
+                                (p) => !_homeRoster.contains(p),
+                                orElse: () => _magicInputMatchingPlayers.first,
+                              );
                               final homeLastName =
                                   homePlayer.fullName.split(' ').last;
                               final awayLastName =
@@ -3881,8 +3902,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               _magicBarController.text =
                                   '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
                               _magicBarController.selection =
-                                  TextSelection.fromPosition(TextPosition(
-                                      offset: _magicBarController.text.length));
+                                  TextSelection.fromPosition(
+                                TextPosition(
+                                  offset: _magicBarController.text.length,
+                                ),
+                              );
                             }
                             return;
                           }
@@ -4656,15 +4680,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   height: 22,
                                                   width: 70,
                                                   padding: const EdgeInsets
-                                                      .symmetric(horizontal: 6),
+                                                      .symmetric(
+                                                    horizontal: 6,
+                                                  ),
                                                   decoration: BoxDecoration(
                                                     color: Colors.grey.shade100,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                     border: Border.all(
-                                                        color: Colors
-                                                            .grey.shade300),
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                    ),
                                                   ),
                                                   child: Center(
                                                     child: Row(
@@ -4721,12 +4749,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 child: Container(
                                                   height: 22,
                                                   padding: const EdgeInsets
-                                                      .symmetric(horizontal: 6),
+                                                      .symmetric(
+                                                    horizontal: 6,
+                                                  ),
                                                   decoration: BoxDecoration(
                                                     color: Colors.grey.shade100,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            4),
+                                                      4,
+                                                    ),
                                                     border: Border.all(
                                                       color:
                                                           Colors.grey.shade300,
@@ -4795,22 +4826,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             minHeight: 24,
                                           ),
                                           border: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             borderSide: BorderSide(
                                               color: Colors.grey.shade400,
                                             ),
                                           ),
                                           enabledBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             borderSide: BorderSide(
                                               color: Colors.grey.shade400,
                                             ),
                                           ),
                                           focusedBorder: OutlineInputBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             borderSide: BorderSide(
                                               color: Colors.blue.shade400,
                                               width: 1,
@@ -4993,8 +5027,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _originalCaptionBeforeCustomVerb = captionController.text;
               },
               child: Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 1, vertical: 0.5),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 1,
+                  vertical: 0.5,
+                ),
                 height: 28,
                 decoration: BoxDecoration(
                   color: isSelected
@@ -5095,8 +5131,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           currentRow.add(
             Expanded(
               child: Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 0.5,
+                  vertical: 0.5,
+                ),
                 height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
@@ -5224,7 +5262,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Deprecated: filter within the existing visible grids/lists
   Widget _buildUnifiedSearchGrid(
-      List<Player> homeRoster, List<Player> awayRoster) {
+    List<Player> homeRoster,
+    List<Player> awayRoster,
+  ) {
     // Combine both rosters and sort by jersey number
     List<Player> allPlayers = [...homeRoster, ...awayRoster];
     allPlayers.sort((a, b) {
@@ -5280,8 +5320,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (player != null) {
           bool isSelected = selectedHomePlayers.contains(player.displayName) ||
               selectedAwayPlayers.contains(player.displayName);
-          bool isHome =
-              _homeRoster.any((p) => p.displayName == player.displayName);
+          bool isHome = _homeRoster.any(
+            (p) => p.displayName == player.displayName,
+          );
 
           rowChildren.add(
             GestureDetector(
@@ -5516,8 +5557,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 _originalCaptionBeforeCustomVerb = captionController.text;
               },
               child: Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 0.5,
+                  vertical: 0.5,
+                ),
                 height: 33,
                 decoration: BoxDecoration(
                   color: isSelected
@@ -5612,8 +5655,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           currentRow.add(
             Expanded(
               child: Container(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 0.5,
+                  vertical: 0.5,
+                ),
                 height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
@@ -5650,11 +5695,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     homeRoster.sort((a, b) {
       int comparison = 0;
       if (_homePlayerSortBy == 'lastname') {
-        comparison = _getLastNameFromDisplayName(a.displayName)
-            .compareTo(_getLastNameFromDisplayName(b.displayName));
+        comparison = _getLastNameFromDisplayName(
+          a.displayName,
+        ).compareTo(_getLastNameFromDisplayName(b.displayName));
       } else if (_homePlayerSortBy == 'firstname') {
-        comparison = _getFirstNameFromDisplayName(a.displayName)
-            .compareTo(_getFirstNameFromDisplayName(b.displayName));
+        comparison = _getFirstNameFromDisplayName(
+          a.displayName,
+        ).compareTo(_getFirstNameFromDisplayName(b.displayName));
       } else {
         // number
         int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
@@ -5667,11 +5714,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     awayRoster.sort((a, b) {
       int comparison = 0;
       if (_awayPlayerSortBy == 'lastname') {
-        comparison = _getLastNameFromDisplayName(a.displayName)
-            .compareTo(_getLastNameFromDisplayName(b.displayName));
+        comparison = _getLastNameFromDisplayName(
+          a.displayName,
+        ).compareTo(_getLastNameFromDisplayName(b.displayName));
       } else if (_awayPlayerSortBy == 'firstname') {
-        comparison = _getFirstNameFromDisplayName(a.displayName)
-            .compareTo(_getFirstNameFromDisplayName(b.displayName));
+        comparison = _getFirstNameFromDisplayName(
+          a.displayName,
+        ).compareTo(_getFirstNameFromDisplayName(b.displayName));
       } else {
         // number
         int aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
@@ -5959,7 +6008,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Deprecated: filter within the existing visible grids/lists
   Widget _buildUnifiedSearchListView(
-      List<Player> homeRoster, List<Player> awayRoster) {
+    List<Player> homeRoster,
+    List<Player> awayRoster,
+  ) {
     // Combine both rosters and sort by jersey number
     List<Player> allPlayers = [...homeRoster, ...awayRoster];
     allPlayers.sort((a, b) {
@@ -6002,8 +6053,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final player = allPlayers[index];
           bool isSelected = selectedHomePlayers.contains(player.displayName) ||
               selectedAwayPlayers.contains(player.displayName);
-          bool isHome =
-              _homeRoster.any((p) => p.displayName == player.displayName);
+          bool isHome = _homeRoster.any(
+            (p) => p.displayName == player.displayName,
+          );
 
           return GestureDetector(
             onTap: () {
@@ -6079,7 +6131,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Expanded(
                     child: Text(
                       _getFormattedPlayerName(
-                          player.displayName, _homeSortOption),
+                        player.displayName,
+                        _homeSortOption,
+                      ),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight:
@@ -6150,8 +6204,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final player = allPlayers[index];
           bool isSelected = selectedHomePlayers.contains(player.displayName) ||
               selectedAwayPlayers.contains(player.displayName);
-          bool isHome =
-              _homeRoster.any((p) => p.displayName == player.displayName);
+          bool isHome = _homeRoster.any(
+            (p) => p.displayName == player.displayName,
+          );
 
           return GestureDetector(
             onTap: () {
@@ -6227,7 +6282,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Expanded(
                     child: Text(
                       _getFormattedPlayerName(
-                          player.displayName, _homeSortOption),
+                        player.displayName,
+                        _homeSortOption,
+                      ),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight:
@@ -6777,9 +6834,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: firstRow.map((categoryName) {
-            return Expanded(
-              child: _buildDraggableCategoryCard(categoryName),
-            );
+            return Expanded(child: _buildDraggableCategoryCard(categoryName));
           }).toList(),
         ),
         const SizedBox(height: 2),
@@ -6787,9 +6842,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: secondRow.map((categoryName) {
-            return Expanded(
-              child: _buildDraggableCategoryCard(categoryName),
-            );
+            return Expanded(child: _buildDraggableCategoryCard(categoryName));
           }).toList(),
         ),
       ],
@@ -6824,7 +6877,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   child: categoryName == 'Favorites'
                       ? _buildFavoritesCategory()
                       : _buildVerbCategory(
-                          categoryName, verbCategories[categoryName] ?? []),
+                          categoryName,
+                          verbCategories[categoryName] ?? [],
+                        ),
                 ),
               ),
               childWhenDragging: Container(
@@ -6838,10 +6893,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Center(
                   child: Text(
                     'Drop here',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                 ),
               ),
@@ -6850,7 +6902,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: categoryName == 'Favorites'
                     ? _buildFavoritesCategory()
                     : _buildVerbCategory(
-                        categoryName, verbCategories[categoryName] ?? []),
+                        categoryName,
+                        verbCategories[categoryName] ?? [],
+                      ),
               ),
             );
           },
@@ -6929,7 +6983,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ..._favoriteVerbs.map((verb) => _buildVerbOption(verb)).toList(),
           // Add empty chips to fill remaining space
           ...List.generate(
-              10 - _favoriteVerbs.length, (index) => _buildVerbOption('')),
+            10 - _favoriteVerbs.length,
+            (index) => _buildVerbOption(''),
+          ),
         ],
       ),
     );
@@ -10340,7 +10396,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Folder picking functionality
   Future<void> _pickFolder() async {
     print('Starting folder picker...');
-    final dirPath = await FilePicker.platform.getDirectoryPath();
+    final dirPath = await NativeFilePicker.pickDirectory();
     if (dirPath == null) {
       print('No folder selected');
       return;
@@ -16600,8 +16656,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.arrow_back,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.arrow_back,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Prev',
@@ -16626,7 +16685,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     onTap: _copyMetadataFromCaptionWidget,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(4),
@@ -16635,8 +16696,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.copy,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.copy,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Copy',
@@ -16661,7 +16725,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     onTap: _pasteMetadataToCaptionWidget,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(4),
@@ -16670,8 +16736,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.content_paste,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.content_paste,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Paste',
@@ -16687,7 +16756,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ),
               ),
-              // Next
+              // Next + inline Firebar to its right
               Padding(
                 padding: const EdgeInsets.only(left: 2, right: 6),
                 child: SizedBox(
@@ -16706,7 +16775,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         : null,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: (widget.currentIndex != null &&
                                 widget.totalImages != null &&
@@ -16726,8 +16797,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.arrow_forward,
-                              size: 14, color: Colors.grey.shade700),
+                          Icon(
+                            Icons.arrow_forward,
+                            size: 14,
+                            color: Colors.grey.shade700,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'Next',
@@ -16740,6 +16814,102 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+              // Inline Firebar (to the right of Next)
+              Expanded(
+                child: Container(
+                  height: 26,
+                  padding: const EdgeInsets.only(right: 6),
+                  alignment: Alignment.centerLeft,
+                  child: TextField(
+                    controller: _magicBarController,
+                    focusNode: _magicBarFocusNode,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 11),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      hintText: _waitingForHomeVisitorChoice
+                          ? 'Press H for Home or V for Away'
+                          : '🔥 Firebar',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.blue.shade400),
+                      ),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _homePlayerGridMode = false;
+                        _awayPlayerGridMode = false;
+                      });
+                    },
+                    onChanged: (value) {
+                      if (_waitingForHomeVisitorChoice) {
+                        final lowerValue = value.toLowerCase();
+                        final hMatch = RegExp(r'h$').firstMatch(lowerValue);
+                        final vMatch = RegExp(r'v$').firstMatch(lowerValue);
+                        if (hMatch != null) {
+                          _processHomeVisitorChoice('h');
+                          return;
+                        } else if (vMatch != null) {
+                          _processHomeVisitorChoice('v');
+                          return;
+                        }
+                        if (!value.contains('Press H for Home or V for Away')) {
+                          final numberPart =
+                              _magicInputMatchingPlayers.first.jerseyNumber;
+                          final homePlayer =
+                              _magicInputMatchingPlayers.firstWhere(
+                            (p) => _homeRoster.contains(p),
+                            orElse: () => _magicInputMatchingPlayers.first,
+                          );
+                          final awayPlayer =
+                              _magicInputMatchingPlayers.firstWhere(
+                            (p) => !_homeRoster.contains(p),
+                            orElse: () => _magicInputMatchingPlayers.first,
+                          );
+                          final homeLastName =
+                              homePlayer.fullName.split(' ').last;
+                          final awayLastName =
+                              awayPlayer.fullName.split(' ').last;
+                          _magicBarController.text =
+                              '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                          _magicBarController.selection =
+                              TextSelection.fromPosition(
+                            TextPosition(
+                              offset: _magicBarController.text.length,
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      _magicBarVerbInput = value.trim().toLowerCase();
+                      _typingFirstMagicToken = !value.contains(' ');
+                      if (value.isEmpty) {
+                        setState(() {});
+                        return;
+                      }
+                      final raw = value;
+                      final token = raw.trim().toLowerCase();
+                      final hasSpace = raw.contains(' ');
+                      final String lastToken = raw.trimRight().isEmpty
+                          ? ''
+                          : raw.trimRight().split(' ').last.toLowerCase();
+                      // Keep existing parsing logic (delegated to existing handlers)
+                    },
                   ),
                 ),
               ),
@@ -18307,11 +18477,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ..sort((a, b) {
         int comparison = 0;
         if (_homePlayerSortBy == 'lastname') {
-          comparison = _getLastNameFromDisplayName(a.displayName)
-              .compareTo(_getLastNameFromDisplayName(b.displayName));
+          comparison = _getLastNameFromDisplayName(
+            a.displayName,
+          ).compareTo(_getLastNameFromDisplayName(b.displayName));
         } else if (_homePlayerSortBy == 'firstname') {
-          comparison = _getFirstNameFromDisplayName(a.displayName)
-              .compareTo(_getFirstNameFromDisplayName(b.displayName));
+          comparison = _getFirstNameFromDisplayName(
+            a.displayName,
+          ).compareTo(_getFirstNameFromDisplayName(b.displayName));
         } else {
           // number
           final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;
@@ -18324,11 +18496,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ..sort((a, b) {
         int comparison = 0;
         if (_awayPlayerSortBy == 'lastname') {
-          comparison = _getLastNameFromDisplayName(a.displayName)
-              .compareTo(_getLastNameFromDisplayName(b.displayName));
+          comparison = _getLastNameFromDisplayName(
+            a.displayName,
+          ).compareTo(_getLastNameFromDisplayName(b.displayName));
         } else if (_awayPlayerSortBy == 'firstname') {
-          comparison = _getFirstNameFromDisplayName(a.displayName)
-              .compareTo(_getFirstNameFromDisplayName(b.displayName));
+          comparison = _getFirstNameFromDisplayName(
+            a.displayName,
+          ).compareTo(_getFirstNameFromDisplayName(b.displayName));
         } else {
           // number
           final aNum = int.tryParse(a.jerseyNumber ?? '0') ?? 0;

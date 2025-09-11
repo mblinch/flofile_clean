@@ -10,8 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # File & directory picking
-  file_picker: ^8.0.0+1
+  # File & directory picking - using native macOS implementation
 
   # For network requests
   http: ^1.2.1

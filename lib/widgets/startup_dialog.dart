@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import '../utils/native_file_picker.dart';
 import 'dart:async';
 import 'dart:io';
 import '../services/api_manager.dart';
@@ -259,11 +259,16 @@ class _StartupDialogState extends State<StartupDialog> {
 
     try {
       // Get the last used directory
-      final prefs = await SharedPreferences.getInstance();
-      final lastDirectory = prefs.getString('last_images_folder');
+      String? lastDirectory;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        lastDirectory = prefs.getString('last_images_folder');
+      } catch (prefsError) {
+        print('SharedPreferences error: $prefsError');
+        lastDirectory = null; // Continue without saved directory
+      }
 
-      String? result = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Select folder containing your images',
+      String? result = await NativeFilePicker.pickDirectory(
         initialDirectory: lastDirectory,
       );
 
@@ -284,7 +289,13 @@ class _StartupDialogState extends State<StartupDialog> {
             .toList();
 
         // Save the directory for next time
-        await prefs.setString('last_images_folder', result);
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('last_images_folder', result);
+        } catch (prefsError) {
+          print('SharedPreferences save error: $prefsError');
+          // Continue without saving preference
+        }
 
         setState(() {
           selectedFolderPath = result;

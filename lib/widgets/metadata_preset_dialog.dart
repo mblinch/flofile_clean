@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:file_picker/file_picker.dart';
+import '../utils/native_file_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 import '../utils/exiftool_helper.dart';
@@ -879,26 +879,13 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       final lastDirectory = prefs.getString('last_iptc_folder');
 
       // Pick a JPG file
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
+      final String? filePath = await NativeFilePicker.pickFile(
         allowedExtensions: ['jpg', 'jpeg'],
-        dialogTitle: 'Select JPG file to load IPTC metadata from',
         initialDirectory: lastDirectory,
       );
 
-      if (result == null || result.files.isEmpty) {
-        return; // User cancelled
-      }
-
-      final filePath = result.files.first.path;
       if (filePath == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error: Could not get file path'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
+        return; // User cancelled
       }
 
       // Save the directory for next time
@@ -924,7 +911,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
       );
 
       // Read all metadata first to see what's available
-      final args = ['-j', filePath];
+      final args = <String>['-j', filePath];
 
       final exifResult = await ExiftoolHelper.run(args);
 
@@ -1143,7 +1130,8 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('IPTC metadata loaded from ${result.files.first.name}'),
+          content: Text(
+              'IPTC metadata loaded from ${File(filePath).uri.pathSegments.last}'),
           backgroundColor: Colors.green,
         ),
       );

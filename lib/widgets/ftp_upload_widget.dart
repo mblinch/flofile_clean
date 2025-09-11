@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import '../utils/native_file_picker.dart';
 import '../services/ftpclient_service.dart';
 
 class FtpUploadWidget extends StatefulWidget {
@@ -44,10 +44,10 @@ class _FtpUploadWidgetState extends State<FtpUploadWidget> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles();
+    final String? result = await NativeFilePicker.pickFile();
     if (result != null) {
       setState(() {
-        _localPathController.text = result.files.first.path!;
+        _localPathController.text = result;
       });
     }
   }
