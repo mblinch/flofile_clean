@@ -45,4 +45,32 @@ alwaysApply: true
        ```
        Else stop.
 
-3) **Run the checkpoint (show commands before running)**
+3) **Run the checkpoint (show commands before running)*4) **Report**
+- Show the short SHA and commit message:
+  ```
+  git log -1 --oneline
+  ```
+- Say “Checkpoint pushed to origin/main.” or show any error.
+
+---
+
+# No Reverts / History Safety
+
+**Purpose:** Prevent accidental resets/rebases/branch switches or pushes to the wrong place.
+
+**Rules (must always be followed):**
+- **NEVER** run any of these without explicit confirmation from me:
+- `git reset` (any mode), `git rebase` (any form), `git clean`, `git stash pop`,
+ `git checkout <commit>` (detached), `git push --force` / `-f`, or deleting branches/remotes.
+- **NEVER** switch to or push to **rescue/today** (or any branch other than `main`) unless I say:
+**“YES, switch to <branch> and push”**.
+- Before any potentially destructive action, you must:
+1) Explain exactly what will happen,
+2) Show the exact commands you would run,
+3) Wait for me to reply **“YES PROCEED”** (exact phrase).  
+  If I don’t reply with that exact phrase, **do nothing**.
+
+**Safe defaults:**
+- Default branch for all pushes is **main**.
+- Default remote is **origin** at  
+`https://github.com/mblinch/flofile_clean.git`.*
