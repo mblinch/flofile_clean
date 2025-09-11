@@ -1,44 +1,48 @@
 ---
-description:
-globs:
-alwaysApply: true
----
----
-description: Git safety and checkpoint rules for Flofile project
-globs:
-  - "**/*"
+description: Reliable git checkpoints to flofile_clean and a strict no-revert safety net
+globs: ["**"]
 alwaysApply: true
 ---
 
-Rule: Git Checkpointing (flofile_clean)
+# Git Checkpoint (project: flofile_clean)
 
-Instruction:
-When I say "git checkpoint this":
+**Triggers (case-insensitive):**
+- “git checkpoint this”
+- “checkpoint” / “save checkpoint”
+- “git checkpoint this: <message>”
 
-1. Run these commands:
-git pull --ff-only
-git add -A
-git commit -m "Checkpoint: $(date +"%Y-%m-%d %H:%M:%S")" --allow-empty
-git push origin main
+**Goal:** Stage, commit, and push the current project to **origin/main** of  
+`https://github.com/mblinch/flofile_clean.git` with strong safety checks.
 
-2. Always commit & push to the repo:
-https://github.com/mblinch/flofile_clean.git
-on branch main.
+## Behavior
 
-3. Never create or push to rescue/today. If I’m not on main, stop and ask me.
+1) **Resolve message**
+   - If the user typed `git checkpoint this: <message>`, use `<message>`.
+   - Otherwise use a timestamp message like: `Checkpoint: $(date)`.
 
-4. After running, show me:
-- The branch
-- The latest commit hash and message
-- Confirmation it’s pushed to GitHub
+2) **Safety checks (show the output before proceeding)**
+   - Confirm we’re in the project root (should contain a `.git` folder):
+     ```
+     ls -la | grep -E "(\.git)"
+     ```
+   - Confirm current branch is **main**:
+     ```
+     git branch --show-current
+     ```
+     - If not `main`, ASK:  
+       “You’re on <branch>. Switch to main and checkpoint? (yes/no)”
+       - If **yes**: `git checkout main`
+       - If **no**: stop.
+   - Confirm remote is **flofile_clean**:
+     ```
+     git remote get-url origin
+     ```
+     - If it is not exactly `https://github.com/mblinch/flofile_clean.git`, ASK to fix.  
+       If **yes**, run:
+       ```
+       git remote remove origin 2>/dev/null || true
+       git remote add origin https://github.com/mblinch/flofile_clean.git
+       ```
+       Else stop.
 
----
-
-Rule: No Silent Reverts
-
-Instruction:
-Never run git reset, git rebase, git checkout, or any command that would move the project to an older commit, branch, or state unless I explicitly ask for it.
-
-If you think a revert, rebase, or reset might be needed, stop and ask me first.
-
-Always confirm with me before executing any command that could discard, overwrite, or roll back work.
+3) **Run the checkpoint (show commands before running)**
