@@ -1,0 +1,44 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: Git safety and checkpoint rules for Flofile project
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+Rule: Git Checkpointing (flofile_clean)
+
+Instruction:
+When I say "git checkpoint this":
+
+1. Run these commands:
+git pull --ff-only
+git add -A
+git commit -m "Checkpoint: $(date +"%Y-%m-%d %H:%M:%S")" --allow-empty
+git push origin main
+
+2. Always commit & push to the repo:
+https://github.com/mblinch/flofile_clean.git
+on branch main.
+
+3. Never create or push to rescue/today. If I’m not on main, stop and ask me.
+
+4. After running, show me:
+- The branch
+- The latest commit hash and message
+- Confirmation it’s pushed to GitHub
+
+---
+
+Rule: No Silent Reverts
+
+Instruction:
+Never run git reset, git rebase, git checkout, or any command that would move the project to an older commit, branch, or state unless I explicitly ask for it.
+
+If you think a revert, rebase, or reset might be needed, stop and ask me first.
+
+Always confirm with me before executing any command that could discard, overwrite, or roll back work.
