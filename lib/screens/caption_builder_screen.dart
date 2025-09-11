@@ -2419,7 +2419,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         },
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(4.0, 1.0, 4.0, 4.0),
+        padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 4.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

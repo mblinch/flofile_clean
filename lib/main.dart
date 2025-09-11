@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'screens/caption_builder_screen.dart';
 
 void main() {
+  // Suppress debug output in console
+  debugPrint = (String? message, {int? wrapWidth}) {
+    // Suppress all debug output
+  };
+
   // Check if running from a mounted volume (DMG) and warn user
   final executablePath = Platform.resolvedExecutable;
   if (executablePath.contains('/Volumes/')) {
