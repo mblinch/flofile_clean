@@ -59,6 +59,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     print('DEBUG: Metadata popup received metadata: $currentMetadata');
     print('DEBUG: Available keys: ${currentMetadata?.keys.toList()}');
     print(
+        'DEBUG: SupplementalCategories in received metadata: ${currentMetadata?['SupplementalCategories']}');
+    print(
+        'DEBUG: XMP-photoshop:SupplementalCategories in received metadata: ${currentMetadata?['XMP-photoshop:SupplementalCategories']}');
+    print(
         'DEBUG: Caption fields: IPTC:Description=${currentMetadata?['IPTC:Description']}, Description=${currentMetadata?['Description']}, Caption-Abstract=${currentMetadata?['Caption-Abstract']}');
     print(
         'DEBUG: Personality: XMP-getty:Personality=${currentMetadata?['XMP-getty:Personality']}, Personality=${currentMetadata?['Personality']}');
@@ -379,6 +383,12 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
 
     if (oldWidget.metadata != widget.metadata) {
+      print('DEBUG: didUpdateWidget - metadata changed');
+      print('DEBUG: didUpdateWidget - new metadata: ${widget.metadata}');
+      print(
+          'DEBUG: didUpdateWidget - SupplementalCategories in new metadata: ${widget.metadata?['SupplementalCategories']}');
+      print(
+          'DEBUG: didUpdateWidget - XMP-photoshop:SupplementalCategories in new metadata: ${widget.metadata?['XMP-photoshop:SupplementalCategories']}');
       currentMetadata = Map<String, dynamic>.from(widget.metadata ?? {});
       _normalizeMetadataForUi();
       // Rehydrate controllers from the possibly new metadata (prioritizing Photo Mechanic's field)
@@ -402,6 +412,43 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
               .toString();
       if (personalityController.text != updatedPersonality) {
         personalityController.text = updatedPersonality;
+      }
+
+      // Update supplementary category controllers
+      final String updatedSuppCat1 =
+          currentMetadata?['SupplementalCategories1']?.toString() ?? '';
+      final String updatedSuppCat2 =
+          currentMetadata?['SupplementalCategories2']?.toString() ?? '';
+      final String updatedSuppCat3 =
+          currentMetadata?['SupplementalCategories3']?.toString() ?? '';
+
+      print('DEBUG: didUpdateWidget - updating supp cat controllers:');
+      print('  SuppCat1: "$updatedSuppCat1"');
+      print('  SuppCat2: "$updatedSuppCat2"');
+      print('  SuppCat3: "$updatedSuppCat3"');
+      print(
+          '  Controllers exist: SuppCat1=${_fieldControllers.containsKey('SupplementalCategories1')}, SuppCat2=${_fieldControllers.containsKey('SupplementalCategories2')}, SuppCat3=${_fieldControllers.containsKey('SupplementalCategories3')}');
+
+      if (_fieldControllers.containsKey('SupplementalCategories1') &&
+          _fieldControllers['SupplementalCategories1']!.text !=
+              updatedSuppCat1) {
+        print(
+            'DEBUG: Updating SuppCat1 controller from "${_fieldControllers['SupplementalCategories1']!.text}" to "$updatedSuppCat1"');
+        _fieldControllers['SupplementalCategories1']!.text = updatedSuppCat1;
+      }
+      if (_fieldControllers.containsKey('SupplementalCategories2') &&
+          _fieldControllers['SupplementalCategories2']!.text !=
+              updatedSuppCat2) {
+        print(
+            'DEBUG: Updating SuppCat2 controller from "${_fieldControllers['SupplementalCategories2']!.text}" to "$updatedSuppCat2"');
+        _fieldControllers['SupplementalCategories2']!.text = updatedSuppCat2;
+      }
+      if (_fieldControllers.containsKey('SupplementalCategories3') &&
+          _fieldControllers['SupplementalCategories3']!.text !=
+              updatedSuppCat3) {
+        print(
+            'DEBUG: Updating SuppCat3 controller from "${_fieldControllers['SupplementalCategories3']!.text}" to "$updatedSuppCat3"');
+        _fieldControllers['SupplementalCategories3']!.text = updatedSuppCat3;
       }
     }
   }
@@ -491,6 +538,11 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     print(
         'DEBUG: Final supplemental categories: 1="${currentMetadata!['SupplementalCategories1']}", 2="${currentMetadata!['SupplementalCategories2']}", 3="${currentMetadata!['SupplementalCategories3']}"');
+
+    // Force a setState to ensure UI updates
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // Copy all metadata fields except date and time
@@ -1583,6 +1635,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onPreviousImage != null) {
+                                      print(
+                                          'DEBUG: Calling widget.onPreviousImage from popup');
                                       widget.onPreviousImage!();
                                     }
                                   },
@@ -1703,6 +1757,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onNextImage != null) {
+                                      print(
+                                          'DEBUG: Calling widget.onNextImage from popup');
                                       widget.onNextImage!();
                                     }
                                   },

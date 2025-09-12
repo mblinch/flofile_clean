@@ -195,6 +195,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           setState(() {
             currentMetadata = Map<String, dynamic>.from(freshMetadata);
           });
+
+          print('DEBUG: Updated main screen currentMetadata with fresh data');
+          print(
+              'DEBUG: Main screen currentMetadata SupplementalCategories: ${currentMetadata?['SupplementalCategories']}');
         }
       }
     } catch (e) {
@@ -204,6 +208,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
 
     print('DEBUG: Fresh metadata for popup: $freshMetadata');
+    print(
+        'DEBUG: Fresh metadata SupplementalCategories: ${freshMetadata['SupplementalCategories']}');
+    print(
+        'DEBUG: Fresh metadata XMP-photoshop:SupplementalCategories: ${freshMetadata['XMP-photoshop:SupplementalCategories']}');
 
     showDialog(
       context: context,
@@ -222,21 +230,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           // Reload to reflect saved values
           await _loadMetadata();
         },
-        onPreviousImage: () {
+        onPreviousImage: () async {
+          print('DEBUG: Previous button clicked in popup');
           if (currentIndex > 0) {
             setState(() {
               currentIndex--;
             });
+            print('DEBUG: Changed index to $currentIndex, closing popup');
             Navigator.of(context).pop(); // Close the popup
+            // Wait a moment for the popup to close, then reopen with fresh metadata
+            await Future.delayed(const Duration(milliseconds: 50));
+            print('DEBUG: Reopening popup with new image');
             _showMetadataPopup(); // Reopen with new image
           }
         },
-        onNextImage: () {
+        onNextImage: () async {
+          print('DEBUG: Next button clicked in popup');
           if (currentIndex < imagePaths.length - 1) {
             setState(() {
               currentIndex++;
             });
+            print('DEBUG: Changed index to $currentIndex, closing popup');
             Navigator.of(context).pop(); // Close the popup
+            // Wait a moment for the popup to close, then reopen with fresh metadata
+            await Future.delayed(const Duration(milliseconds: 50));
+            print('DEBUG: Reopening popup with new image');
             _showMetadataPopup(); // Reopen with new image
           }
         },
@@ -321,7 +339,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 '-XMP:Subject',
                 '-IPTC:Category',
                 '-Category',
-                // Do not read generic SupplementalCategories to avoid pulling corrupted values
+                '-XMP-photoshop:SupplementalCategories',
+                '-IPTC:SupplementalCategories',
+                '-XMP:SupplementalCategories',
                 '-IPTC:ObjectName',
                 '-ObjectName',
                 '-IPTC:SubLocation',
@@ -368,6 +388,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             } catch (e) {
               print('DEBUG: Error loading fresh metadata for popup: $e');
             }
+
+            print(
+                'DEBUG: onRequestImageChange loaded metadata with SupplementalCategories: ${freshMetadata['SupplementalCategories']}');
+            print(
+                'DEBUG: onRequestImageChange loaded metadata with XMP-photoshop:SupplementalCategories: ${freshMetadata['XMP-photoshop:SupplementalCategories']}');
+            print(
+                'DEBUG: onRequestImageChange loaded metadata with IPTC:SupplementalCategories: ${freshMetadata['IPTC:SupplementalCategories']}');
 
             return {
               'path': imagePath,
