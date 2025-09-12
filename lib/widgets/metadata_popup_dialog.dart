@@ -120,6 +120,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
         '-LensID',
         '-LensModel',
         '-DateTimeOriginal',
+        '-SubSecTimeOriginal',
         '-SerialNumber',
         targetPath,
       ]);
@@ -1400,12 +1401,17 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
           // Format specific EXIF values for better display
           if (exifKey == 'DateTimeOriginal') {
-            // Format date/time for display
+            // Format date/time for display with milliseconds
             try {
-              final dt = DateTime.parse(
-                  value.replaceFirst(':', '-').replaceFirst(':', '-'));
+              final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
+              final dt = _parseExifDateTime(value, subSecTime);
+              final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+              final minute = dt.minute.toString().padLeft(2, '0');
+              final second = dt.second.toString().padLeft(2, '0');
+              final millisecond = dt.millisecond.toString().padLeft(3, '0');
+              final ampm = dt.hour >= 12 ? 'PM' : 'AM';
               value =
-                  '${dt.month}/${dt.day}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+                  '${dt.month}/${dt.day}/${dt.year} $hour:$minute:$second.$millisecond $ampm';
             } catch (e) {
               // Keep original value if parsing fails
             }
@@ -1463,13 +1469,60 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     );
   }
 
+  // Parse EXIF DateTime with support for milliseconds
+  DateTime _parseExifDateTime(String dateStr, [String? subSecTime]) {
+    // Handle EXIF date format: YYYY:MM:DD HH:MM:SS or YYYY:MM:DD HH:MM:SS.sss
+    // Replace colons in date part with dashes for ISO format
+    String isoStr = dateStr.replaceFirst(':', '-').replaceFirst(':', '-');
+
+    // Check if milliseconds are present in the main date string
+    if (isoStr.contains('.')) {
+      // Already has milliseconds, parse directly
+      return DateTime.parse(isoStr);
+    } else if (subSecTime != null && subSecTime.isNotEmpty) {
+      // Combine DateTimeOriginal with SubSecTimeOriginal for milliseconds
+      // SubSecTimeOriginal is typically in format like "123" (milliseconds) or "1234" (microseconds)
+      int milliseconds = 0;
+      try {
+        final subSec = int.parse(subSecTime);
+        if (subSecTime.length <= 3) {
+          // Direct milliseconds
+          milliseconds = subSec;
+        } else if (subSecTime.length == 4) {
+          // Microseconds, convert to milliseconds
+          milliseconds = subSec ~/ 10;
+        } else if (subSecTime.length == 6) {
+          // Nanoseconds, convert to milliseconds
+          milliseconds = subSec ~/ 1000000;
+        }
+      } catch (e) {
+        print('Error parsing SubSecTimeOriginal: $e');
+      }
+
+      // Parse the base datetime and add milliseconds
+      final baseDateTime = DateTime.parse(isoStr);
+      return DateTime(
+        baseDateTime.year,
+        baseDateTime.month,
+        baseDateTime.day,
+        baseDateTime.hour,
+        baseDateTime.minute,
+        baseDateTime.second,
+        milliseconds,
+      );
+    } else {
+      // No milliseconds, parse and return with 0 milliseconds
+      return DateTime.parse(isoStr);
+    }
+  }
+
   String _formatDateForDisplay() {
     if (exifData == null || exifData!['DateTimeOriginal'] == null) return '';
 
     try {
       final dateTimeStr = exifData!['DateTimeOriginal'].toString();
-      final dt = DateTime.parse(
-          dateTimeStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+      final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
+      final dt = _parseExifDateTime(dateTimeStr, subSecTime);
 
       const months = [
         'Jan',
@@ -1497,13 +1550,14 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     try {
       final dateTimeStr = exifData!['DateTimeOriginal'].toString();
-      final dt = DateTime.parse(
-          dateTimeStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+      final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
+      final dt = _parseExifDateTime(dateTimeStr, subSecTime);
       final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
       final minute = dt.minute.toString().padLeft(2, '0');
       final second = dt.second.toString().padLeft(2, '0');
+      final millisecond = dt.millisecond.toString().padLeft(3, '0');
       final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minute:$second $ampm';
+      return '$hour:$minute:$second.$millisecond $ampm';
     } catch (e) {
       return '';
     }

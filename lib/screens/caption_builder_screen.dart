@@ -212,6 +212,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'DEBUG: Fresh metadata SupplementalCategories: ${freshMetadata['SupplementalCategories']}');
     print(
         'DEBUG: Fresh metadata XMP-photoshop:SupplementalCategories: ${freshMetadata['XMP-photoshop:SupplementalCategories']}');
+    print(
+        'DEBUG: Fresh metadata IPTC:SupplementalCategories: ${freshMetadata['IPTC:SupplementalCategories']}');
+    print(
+        'DEBUG: Fresh metadata XMP:SupplementalCategories: ${freshMetadata['XMP:SupplementalCategories']}');
+    print('DEBUG: Fresh metadata keys: ${freshMetadata.keys.toList()}');
 
     showDialog(
       context: context,
@@ -395,6 +400,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 'DEBUG: onRequestImageChange loaded metadata with XMP-photoshop:SupplementalCategories: ${freshMetadata['XMP-photoshop:SupplementalCategories']}');
             print(
                 'DEBUG: onRequestImageChange loaded metadata with IPTC:SupplementalCategories: ${freshMetadata['IPTC:SupplementalCategories']}');
+            print(
+                'DEBUG: onRequestImageChange loaded metadata with XMP:SupplementalCategories: ${freshMetadata['XMP:SupplementalCategories']}');
+            print(
+                'DEBUG: onRequestImageChange full metadata keys: ${freshMetadata.keys.toList()}');
 
             return {
               'path': imagePath,
@@ -745,6 +754,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final args = <String>[
         '-j',
         '-DateTimeOriginal',
+        '-SubSecTimeOriginal',
         '-XMP:Rating',
         '-XMP:Label',
         '-XMP:Tagged',
@@ -772,15 +782,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               final keepVal = item['PMKeep'];
               if (sourceFile != null && dateStr != null) {
                 try {
-                  final dt = DateTime.parse(
-                      dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                  final subSecTime = item['SubSecTimeOriginal']?.toString();
+                  final dt = _parseExifDateTime(dateStr, subSecTime);
                   times[sourceFile] = dt;
-                  // format to 12h as per preference
+                  print(
+                      'DEBUG: Parsed EXIF time for $sourceFile: $dateStr + $subSecTime = $dt');
+                  // format to 12h as per preference, including milliseconds
                   final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
                   final minute = dt.minute.toString().padLeft(2, '0');
                   final second = dt.second.toString().padLeft(2, '0');
+                  final millisecond = dt.millisecond.toString().padLeft(3, '0');
                   final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                  formatted[sourceFile] = '$hour:$minute:$second $ampm';
+                  formatted[sourceFile] =
+                      '$hour:$minute:$second.$millisecond $ampm';
                 } catch (_) {}
               }
               if (sourceFile != null) {
@@ -813,9 +827,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // Continue with fallback to file modified time
       }
 
-      // Fallback to file modified time when missing
+      // Fallback to file modified time when missing (but preserve EXIF precision when available)
       for (final path in imageFiles) {
-        times[path] ??= await File(path).lastModified();
+        if (!times.containsKey(path)) {
+          // Only use file modification time if we don't have EXIF data
+          final fileTime = await File(path).lastModified();
+          times[path] = fileTime;
+          // Format file time to 12h as per preference, including milliseconds
+          final hour = fileTime.hour % 12 == 0 ? 12 : fileTime.hour % 12;
+          final minute = fileTime.minute.toString().padLeft(2, '0');
+          final second = fileTime.second.toString().padLeft(2, '0');
+          final millisecond = fileTime.millisecond.toString().padLeft(3, '0');
+          final ampm = fileTime.hour >= 12 ? 'PM' : 'AM';
+          formatted[path] = '$hour:$minute:$second.$millisecond $ampm';
+        }
         formatted[path] ??= '';
       }
 
@@ -1235,6 +1260,64 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  // Parse EXIF DateTime with support for milliseconds
+  DateTime _parseExifDateTime(String dateStr, [String? subSecTime]) {
+    // Handle EXIF date format: YYYY:MM:DD HH:MM:SS or YYYY:MM:DD HH:MM:SS.sss
+    // Replace colons in date part with dashes for ISO format
+    String isoStr = dateStr.replaceFirst(':', '-').replaceFirst(':', '-');
+
+    print(
+        'DEBUG: _parseExifDateTime called with dateStr="$dateStr", subSecTime="$subSecTime"');
+
+    // Check if milliseconds are present in the main date string
+    if (isoStr.contains('.')) {
+      // Already has milliseconds, parse directly
+      final result = DateTime.parse(isoStr);
+      print('DEBUG: Parsed with existing milliseconds: $result');
+      return result;
+    } else if (subSecTime != null && subSecTime.isNotEmpty) {
+      // Combine DateTimeOriginal with SubSecTimeOriginal for milliseconds
+      // SubSecTimeOriginal is typically in format like "123" (milliseconds) or "1234" (microseconds)
+      int milliseconds = 0;
+      try {
+        final subSec = int.parse(subSecTime);
+        if (subSecTime.length <= 3) {
+          // Direct milliseconds
+          milliseconds = subSec;
+        } else if (subSecTime.length == 4) {
+          // Microseconds, convert to milliseconds
+          milliseconds = subSec ~/ 10;
+        } else if (subSecTime.length == 6) {
+          // Nanoseconds, convert to milliseconds
+          milliseconds = subSec ~/ 1000000;
+        }
+        print(
+            'DEBUG: Converted subSecTime "$subSecTime" to milliseconds: $milliseconds');
+      } catch (e) {
+        print('Error parsing SubSecTimeOriginal: $e');
+      }
+
+      // Parse the base datetime and add milliseconds
+      final baseDateTime = DateTime.parse(isoStr);
+      final result = DateTime(
+        baseDateTime.year,
+        baseDateTime.month,
+        baseDateTime.day,
+        baseDateTime.hour,
+        baseDateTime.minute,
+        baseDateTime.second,
+        milliseconds,
+      );
+      print('DEBUG: Combined DateTimeOriginal + SubSecTimeOriginal: $result');
+      return result;
+    } else {
+      // No milliseconds, parse and return with 0 milliseconds
+      final result = DateTime.parse(isoStr);
+      print('DEBUG: Parsed without milliseconds: $result');
+      return result;
+    }
+  }
+
   // Sort images by date taken from EXIF DateTimeOriginal
   Future<void> _sortImagesByDateTaken(List<String> imageFiles) async {
     print('Sorting ${imageFiles.length} images by date taken...');
@@ -1247,6 +1330,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         final proc = await ExiftoolHelper.run([
           '-j',
           '-DateTimeOriginal',
+          '-SubSecTimeOriginal',
           '-CreateDate',
           '-ModifyDate',
           filePath,
@@ -1264,9 +1348,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
               if (dateStr != null) {
                 try {
-                  // Parse EXIF date format (YYYY:MM:DD HH:MM:SS)
-                  dateTime = DateTime.parse(
-                      dateStr.replaceFirst(':', '-').replaceFirst(':', '-'));
+                  // Parse EXIF date format (YYYY:MM:DD HH:MM:SS or YYYY:MM:DD HH:MM:SS.sss)
+                  final subSecTime = meta['SubSecTimeOriginal']?.toString();
+                  dateTime = _parseExifDateTime(dateStr, subSecTime);
                 } catch (e) {
                   print('Error parsing date for $filePath: $e');
                 }
@@ -1282,10 +1366,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           try {
             final file = File(filePath);
             dateTime = await file.lastModified();
+            print(
+                'DEBUG: Using file modification time for $filePath: $dateTime');
           } catch (e) {
             print('Error getting file date for $filePath: $e');
             dateTime = DateTime.now(); // Ultimate fallback
           }
+        } else {
+          print('DEBUG: Using EXIF time for $filePath: $dateTime');
         }
 
         filesWithDates.add({
