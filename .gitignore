@@ -68,3 +68,8 @@ macos/build/
 *.mov
 *.zip
 *.dmg
+
+# Build artifacts - NEVER commit these
+*.dmg
+build_dmgs/
+.tmp.driveupload/

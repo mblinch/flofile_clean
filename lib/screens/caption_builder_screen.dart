@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
@@ -143,7 +144,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-XMP:Subject',
         '-IPTC:Category',
         '-Category',
-        '-SupplementalCategories',
+        '-XMP-photoshop:SupplementalCategories',
+        '-IPTC:SupplementalCategories',
+        '-XMP:SupplementalCategories',
         '-IPTC:ObjectName',
         '-ObjectName',
         '-IPTC:SubLocation',
@@ -157,6 +160,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Province-State',
         '-ProvinceState',
         '-XMP:State',
+        // Photo Mechanic's preferred country fields
+        '-IPTC:CountryPrimaryLocationName',
+        '-CountryPrimaryLocationName',
+        '-Country',
+        '-XMP:Country',
+        '-IPTC:CountryPrimaryLocationCode',
+        '-CountryPrimaryLocationCode',
+        '-CountryCode',
 
         '-IPTC:SpecialInstructions',
         '-SpecialInstructions',
@@ -200,12 +211,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         metadata: freshMetadata,
         imagePath: imagePaths[currentIndex],
         onMetadataUpdated: (updatedMetadata) async {
+          // Persist edits to the current file before any navigation
+          await _saveExifToolMetadataToImage(
+              imagePaths[currentIndex], updatedMetadata);
+
           setState(() {
             currentMetadata = updatedMetadata;
           });
 
-          // Force reload metadata from file to ensure cache is fresh
-          // This ensures that when the popup is reopened, it gets the updated data
+          // Reload to reflect saved values
           await _loadMetadata();
         },
         onPreviousImage: () {
@@ -256,6 +270,111 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               }
             }
           });
+        },
+        onRequestImageChange: (delta) async {
+          // Change image without closing popup
+          final newIndex = currentIndex + delta;
+          if (newIndex >= 0 && newIndex < imagePaths.length) {
+            setState(() {
+              currentIndex = newIndex;
+            });
+
+            // Load fresh metadata for the new image
+            final imagePath = imagePaths[currentIndex];
+            Map<String, dynamic> freshMetadata = {};
+
+            try {
+              final proc = await ExiftoolHelper.run([
+                '-a', // allow duplicate tags
+                '-j', // JSON output
+                '-IPTC:Description',
+                '-Description',
+                '-Caption-Abstract',
+                '-ImageDescription',
+                '-IPTC:Caption-Abstract',
+                '-IPTC:By-line',
+                '-By-line',
+                '-Creator',
+                '-XMP:Creator',
+                '-IPTC:OriginalTransmissionReference',
+                '-OriginalTransmissionReference',
+                '-TransmissionReference',
+                '-JobID',
+                '-MEID',
+                '-IPTC:By-lineTitle',
+                '-By-lineTitle',
+                '-AuthorsPosition',
+                '-IPTC:CopyrightNotice',
+                '-CopyrightNotice',
+                '-Copyright',
+                '-XMP:Rights',
+                '-IPTC:Credit',
+                '-Credit',
+                '-IPTC:Source',
+                '-Source',
+                '-XMP:Source',
+                '-IPTC:Headline',
+                '-Headline',
+                '-XMP:Title',
+                '-IPTC:Keywords',
+                '-Keywords',
+                '-XMP:Subject',
+                '-IPTC:Category',
+                '-Category',
+                // Do not read generic SupplementalCategories to avoid pulling corrupted values
+                '-IPTC:ObjectName',
+                '-ObjectName',
+                '-IPTC:SubLocation',
+                '-Sub-location',
+                '-SubLocation',
+                '-XMP:Location',
+                '-IPTC:City',
+                '-City',
+                '-XMP:City',
+                '-IPTC:ProvinceState',
+                '-Province-State',
+                '-ProvinceState',
+                '-XMP:State',
+                // Photo Mechanic's preferred country fields
+                '-IPTC:CountryPrimaryLocationName',
+                '-CountryPrimaryLocationName',
+                '-Country',
+                '-XMP:Country',
+                '-IPTC:CountryPrimaryLocationCode',
+                '-CountryPrimaryLocationCode',
+                '-CountryCode',
+                '-IPTC:SpecialInstructions',
+                '-SpecialInstructions',
+                '-XMP:Instructions',
+                '-XMP-photoshop:Instructions',
+                '-XMP-getty:Personality',
+                '-XMP:Personality',
+                '-Personality',
+                '-CaptionWriter',
+                '-TimeDate',
+                '-DateTimeOriginal',
+                '-CreateDate',
+                '-ModifyDate',
+                '-FileModifyDate',
+                imagePath,
+              ]);
+
+              if (proc.exitCode == 0) {
+                final List data = jsonDecode(proc.stdoutText);
+                if (data.isNotEmpty) {
+                  freshMetadata = data.first as Map<String, dynamic>;
+                }
+              }
+            } catch (e) {
+              print('DEBUG: Error loading fresh metadata for popup: $e');
+            }
+
+            return {
+              'path': imagePath,
+              'metadata': freshMetadata,
+            };
+          }
+          throw Exception('Invalid image index');
         },
       ),
     );
@@ -787,7 +906,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // Photo Mechanic's preferred category fields
         '-IPTC:Category',
         '-Category',
-        '-SupplementalCategories',
+        '-XMP-photoshop:SupplementalCategories',
+        '-IPTC:SupplementalCategories',
+        '-XMP:SupplementalCategories',
         // Photo Mechanic's preferred object name field
         '-IPTC:ObjectName',
         '-ObjectName',
@@ -803,6 +924,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-Province-State',
         '-ProvinceState',
         '-XMP:State',
+        // Photo Mechanic's preferred country fields
+        '-IPTC:CountryPrimaryLocationName',
+        '-CountryPrimaryLocationName',
+        '-Country',
+        '-XMP:Country',
+        '-IPTC:CountryPrimaryLocationCode',
+        '-CountryPrimaryLocationCode',
+        '-CountryCode',
 
         // Photo Mechanic's preferred instructions field
         '-IPTC:SpecialInstructions',
@@ -936,26 +1065,23 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      // Handle supplemental categories specially (combine them into array)
-      List<String> suppCats = [];
-      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories1']!);
-      }
-      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories2']!);
-      }
-      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories3']!);
-      }
+      // Handle supplemental categories with overwrite semantics
+      final List<String> rawInputs = [
+        allValues['SupplementalCategories1']?.toString() ?? '',
+        allValues['SupplementalCategories2']?.toString() ?? '',
+        allValues['SupplementalCategories3']?.toString() ?? '',
+      ];
 
-      // Remove individual supplemental category args and add combined one
-      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
-      if (suppCats.isNotEmpty) {
-        args.add('-SupplementalCategories=${suppCats.join(',')}');
-      }
+      // Remove any existing supplemental category args to ensure clean state
+      args.removeWhere((arg) =>
+          arg.startsWith('-SupplementalCategories') ||
+          arg.startsWith('-XMP-photoshop:SupplementalCategories'));
+
+      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
       // Always overwrite original file
-      args.add('-overwrite_original');
+      // Robust IPTC writes: preserve file time, be lenient, ensure UTF-8 for IPTC
+      args.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
       args.add(imagePath);
 
       // Only run exiftool if we have metadata to write
@@ -1027,23 +1153,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      // Handle supplemental categories specially (combine them into array)
-      List<String> suppCats = [];
-      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories1']!);
-      }
-      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories2']!);
-      }
-      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories3']!);
-      }
+      // Handle supplemental categories with overwrite semantics
+      final List<String> rawInputs = [
+        allValues['SupplementalCategories1']?.toString() ?? '',
+        allValues['SupplementalCategories2']?.toString() ?? '',
+        allValues['SupplementalCategories3']?.toString() ?? '',
+      ];
 
-      // Remove individual supplemental category args and add combined one
-      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
-      if (suppCats.isNotEmpty) {
-        args.add('-SupplementalCategories=${suppCats.join(',')}');
-      }
+      // Remove any existing supplemental category args to ensure clean state
+      args.removeWhere((arg) =>
+          arg.startsWith('-SupplementalCategories') ||
+          arg.startsWith('-XMP-photoshop:SupplementalCategories'));
+
+      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
       // Always overwrite original file
       args.add('-overwrite_original');
@@ -1678,25 +1800,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      // Handle supplemental categories specially (combine them into array) - EXACT same logic
-      List<String> suppCats = [];
-      if (allValues['SupplementalCategories1']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories1']!);
-      }
-      if (allValues['SupplementalCategories2']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories2']!);
-      }
-      if (allValues['SupplementalCategories3']?.trim().isNotEmpty == true) {
-        suppCats.add(allValues['SupplementalCategories3']!);
-      }
+      // Handle supplemental categories with overwrite semantics
+      final List<String> rawInputs = [
+        allValues['SupplementalCategories1']?.toString() ?? '',
+        allValues['SupplementalCategories2']?.toString() ?? '',
+        allValues['SupplementalCategories3']?.toString() ?? '',
+      ];
 
-      // Remove individual supplemental category args and add combined one
-      args.removeWhere((arg) => arg.startsWith('-SupplementalCategories'));
-      if (suppCats.isNotEmpty) {
-        args.add('-SupplementalCategories=${suppCats.join(',')}');
-        print(
-            'DEBUG: Added combined SupplementalCategories: ${suppCats.join(',')}');
-      }
+      // Remove any existing supplemental category args to ensure clean state
+      args.removeWhere((arg) =>
+          arg.startsWith('-SupplementalCategories') ||
+          arg.startsWith('-XMP-photoshop:SupplementalCategories'));
+
+      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
       // Always overwrite original file
       args.add('-overwrite_original');
@@ -1712,6 +1828,70 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     } catch (e) {
       print('DEBUG: Error saving metadata: $e');
+    }
+  }
+
+  // Save ExifTool-style metadata directly to a specific image file
+  Future<void> _saveExifToolMetadataToImage(
+      String imagePath, Map<String, dynamic> metadata) async {
+    try {
+      // Build exiftool command arguments directly from ExifTool-style metadata
+      List<String> args = [];
+
+      // Collect supplemental categories using normalized approach
+      // ONLY use the individual UI fields, NOT the corrupted SupplementalCategories array
+      final List<String> rawInputs = [
+        metadata['SupplementalCategories1']?.toString() ?? '',
+        metadata['SupplementalCategories2']?.toString() ?? '',
+        metadata['SupplementalCategories3']?.toString() ?? '',
+      ];
+
+      // Add each field that has a value
+      metadata.forEach((key, value) {
+        if (value != null && value.toString().trim().isNotEmpty) {
+          // Skip date/time fields as they shouldn't be modified
+          if ([
+            'Date',
+            'Time',
+            'DateTimeOriginal',
+            'CreateDate',
+            'ModifyDate',
+            'FileModifyDate'
+          ].contains(key)) {
+            return;
+          }
+
+          // Skip individual supplemental fields here; we'll add combined value once
+          if (key == 'SupplementalCategories' ||
+              key == 'SupplementalCategories1' ||
+              key == 'SupplementalCategories2' ||
+              key == 'SupplementalCategories3') {
+            return;
+          }
+
+          args.add('-$key=${value.toString()}');
+        }
+      });
+
+      // Handle supplemental categories with overwrite semantics
+      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
+
+      // Always overwrite original file
+      args.add('-overwrite_original');
+      args.add(imagePath);
+
+      // Only run exiftool if we have metadata to write
+      if (args.length > 2) {
+        // More than just -overwrite_original and path
+        final proc = await ExiftoolHelper.run(args);
+
+        if (proc.exitCode == 0) {
+        } else {}
+      } else {
+        print('DEBUG: No metadata values to save');
+      }
+    } catch (e) {
+      print('DEBUG: Error saving ExifTool metadata: $e');
     }
   }
 

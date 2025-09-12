@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
+import '../helpers.dart';
 
 class MetadataPopupDialog extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -44,6 +45,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   late TextEditingController captionController;
   late TextEditingController personalityController;
 
+  // Cache for field controllers to prevent cursor jumping
+  final Map<String, TextEditingController> _fieldControllers = {};
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +64,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
         'DEBUG: Personality: XMP-getty:Personality=${currentMetadata?['XMP-getty:Personality']}, Personality=${currentMetadata?['Personality']}');
     print(
         'DEBUG: SupplementalCategories: ${currentMetadata?['SupplementalCategories']} (${currentMetadata?['SupplementalCategories'].runtimeType})');
+    print(
+        'DEBUG: IPTC:SupplementalCategories: ${currentMetadata?['IPTC:SupplementalCategories']} (${currentMetadata?['IPTC:SupplementalCategories'].runtimeType})');
     print(
         'DEBUG: After normalization - SupplementalCategories1=${currentMetadata?['SupplementalCategories1']}, SupplementalCategories2=${currentMetadata?['SupplementalCategories2']}, SupplementalCategories3=${currentMetadata?['SupplementalCategories3']}');
 
@@ -170,58 +176,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   }
 
   void _saveChanges() async {
+    print('DEBUG: === _saveChanges() FUNCTION CALLED ===');
     print(
-        'DEBUG: Starting _saveChanges with currentMetadata: $currentMetadata');
-    print('DEBUG: Original metadata from widget: ${widget.metadata}');
+        'DEBUG: Starting _saveChanges - using _buildOutgoingMetadataFromState()');
 
-    // Ensure controller values are reflected in the outgoing metadata
-    final Map<String, dynamic> outgoing =
-        Map<String, dynamic>.from(currentMetadata ?? {});
-    final String cap = captionController.text.trim();
-    print('DEBUG: Caption from controller: "$cap"');
-    if (cap.isNotEmpty) {
-      // Only save to the primary field to avoid duplication
-      outgoing['IPTC:Description'] = cap; // Photo Mechanic's preferred field
-      // Remove duplicate fields to prevent future duplication
-      outgoing.remove('Description');
-      outgoing.remove('Caption-Abstract');
-      outgoing.remove('IPTC:Caption-Abstract');
-      outgoing.remove('ImageDescription');
-      print(
-          'DEBUG: Added caption to outgoing metadata (IPTC:Description only)');
-    } else {
-      outgoing.remove('IPTC:Description');
-      outgoing.remove('Description');
-      outgoing.remove('Caption-Abstract');
-      outgoing.remove('IPTC:Caption-Abstract');
-      outgoing.remove('ImageDescription');
-      print('DEBUG: Removed caption fields from outgoing metadata');
-    }
-
-    final String pers = personalityController.text.trim();
-    print('DEBUG: Personality from controller: "$pers"');
-    if (pers.isNotEmpty) {
-      // Only save to the primary field to avoid duplication
-      outgoing['XMP-getty:Personality'] = pers;
-      // Remove any duplicate fields to prevent future duplication
-      outgoing.remove('Personality');
-      print(
-          'DEBUG: Added personality to outgoing metadata (XMP-getty:Personality only)');
-    } else {
-      outgoing.remove('XMP-getty:Personality');
-      outgoing.remove('Personality');
-      print('DEBUG: Removed personality fields from outgoing metadata');
-    }
-
-    // Note: We don't need to process currentMetadata again since we've already
-    // handled the caption and personality fields above, and the save method
-    // will process the outgoing metadata directly
-
-    print('DEBUG: Final outgoing metadata: $outgoing');
+    // Use the same method as Next/Previous buttons to ensure consistency
+    final Map<String, dynamic> outgoing = _buildOutgoingMetadataFromState();
 
     try {
-      // Save metadata to the image file using ExifTool
-      await _saveMetadataToFile(outgoing);
+      // Use the same save method as Next/Previous buttons to ensure consistency
+      widget.onMetadataUpdated(outgoing);
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -252,9 +216,79 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
   }
 
+  // Build an outgoing metadata map that reflects current controller values
+  Map<String, dynamic> _buildOutgoingMetadataFromState() {
+    print('DEBUG: _buildOutgoingMetadataFromState() called');
+
+    // Start with currentMetadata which contains all the field changes from regular text fields
+    final Map<String, dynamic> outgoing =
+        Map<String, dynamic>.from(currentMetadata ?? {});
+
+    // Override with ALL field controller values to ensure we capture any changes
+    // This fixes issues where onChanged callbacks might not have fired
+    print('DEBUG: Field controllers count: ${_fieldControllers.length}');
+    _fieldControllers.forEach((key, controller) {
+      final value = controller.text.trim();
+      print('DEBUG: Field $key = "$value"');
+      if (value.isNotEmpty) {
+        outgoing[key] = value;
+
+        // Also write to Photo Mechanic's preferred IPTC field
+        final photoMechanicKey = _getPhotoMechanicField(key);
+        if (photoMechanicKey != null) {
+          outgoing[photoMechanicKey] = value;
+        }
+      } else {
+        // Remove empty fields
+        outgoing.remove(key);
+        final photoMechanicKey = _getPhotoMechanicField(key);
+        if (photoMechanicKey != null) {
+          outgoing.remove(photoMechanicKey);
+        }
+      }
+    });
+
+    // Override with Caption controller value (since it's handled separately)
+    final String cap = captionController.text.trim();
+    if (cap.isNotEmpty) {
+      // Only save to the primary field to avoid duplication
+      outgoing['IPTC:Description'] = cap;
+      // Remove duplicates
+      outgoing.remove('Description');
+      outgoing.remove('Caption-Abstract');
+      outgoing.remove('IPTC:Caption-Abstract');
+      outgoing.remove('ImageDescription');
+    } else {
+      outgoing.remove('IPTC:Description');
+      outgoing.remove('Description');
+      outgoing.remove('Caption-Abstract');
+      outgoing.remove('IPTC:Caption-Abstract');
+      outgoing.remove('ImageDescription');
+    }
+
+    // Override with Personality controller value (since it's handled separately)
+    final String pers = personalityController.text.trim();
+    if (pers.isNotEmpty) {
+      outgoing['XMP-getty:Personality'] = pers;
+      outgoing.remove('Personality');
+    } else {
+      outgoing.remove('XMP-getty:Personality');
+      outgoing.remove('Personality');
+    }
+
+    // Supplemental categories are now handled in the _fieldControllers loop above
+
+    print('DEBUG: Final outgoing metadata count: ${outgoing.length}');
+    print(
+        'DEBUG: Supplemental categories in outgoing: 1="${outgoing['SupplementalCategories1']}", 2="${outgoing['SupplementalCategories2']}", 3="${outgoing['SupplementalCategories3']}"');
+
+    return outgoing;
+  }
+
   // Save metadata to the image file using ExifTool
   Future<void> _saveMetadataToFile(Map<String, dynamic> metadata) async {
-    if (widget.imagePath == null) return;
+    final imagePath = _currentImagePath ?? widget.imagePath;
+    if (imagePath == null) return;
 
     // Build ExifTool command arguments
     List<String> args = [];
@@ -278,9 +312,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
         // Handle supplemental categories specially
         if (key == 'SupplementalCategories1' ||
             key == 'SupplementalCategories2' ||
-            key == 'SupplementalCategories3') {
-          // Skip individual fields, we'll handle them together
-          print('DEBUG: Skipping individual supp cat field: $key');
+            key == 'SupplementalCategories3' ||
+            key == 'SupplementalCategories') {
+          // Skip individual fields AND the corrupted master field, we'll handle them together with helper
+          print('DEBUG: Skipping supp cat field: $key');
           return;
         }
 
@@ -291,28 +326,21 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       }
     });
 
-    // Handle supplemental categories - combine them
-    List<String> suppCats = [];
-    if (metadata['SupplementalCategories1']?.toString().isNotEmpty == true) {
-      suppCats.add(metadata['SupplementalCategories1']!);
-    }
-    if (metadata['SupplementalCategories2']?.toString().isNotEmpty == true) {
-      suppCats.add(metadata['SupplementalCategories2']!);
-    }
-    if (metadata['SupplementalCategories3']?.toString().isNotEmpty == true) {
-      suppCats.add(metadata['SupplementalCategories3']!);
-    }
+    // Handle supplemental categories with overwrite semantics
+    final List<String> rawInputs = [
+      metadata['SupplementalCategories1']?.toString() ?? '',
+      metadata['SupplementalCategories2']?.toString() ?? '',
+      metadata['SupplementalCategories3']?.toString() ?? '',
+    ];
 
-    if (suppCats.isNotEmpty) {
-      args.add('-SupplementalCategories=${suppCats.join(',')}');
-    }
+    args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
     // Add overwrite flag and image path
     args.add('-overwrite_original');
-    args.add(widget.imagePath!);
+    args.add(imagePath);
 
     print('DEBUG: ExifTool command args: $args');
-    print('DEBUG: Image path: ${widget.imagePath}');
+    print('DEBUG: Image path: $imagePath');
     print('DEBUG: Full command would be: exiftool ${args.join(' ')}');
 
     // Run ExifTool command
@@ -331,6 +359,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   void dispose() {
     captionController.dispose();
     personalityController.dispose();
+    // Dispose all cached field controllers
+    for (final controller in _fieldControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -378,26 +410,87 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   void _normalizeMetadataForUi() {
     if (currentMetadata == null) return;
 
-    final dynamic supp = currentMetadata!['SupplementalCategories'] ??
-        currentMetadata!['IPTC:SupplementalCategories'];
+    print('DEBUG: _normalizeMetadataForUi called');
+    print(
+        'DEBUG: Available supplemental category fields: SupplementalCategories=${currentMetadata!['SupplementalCategories']}, IPTC:SupplementalCategories=${currentMetadata!['IPTC:SupplementalCategories']}, XMP:SupplementalCategories=${currentMetadata!['XMP:SupplementalCategories']}');
+
+    // Clear existing values first
+    currentMetadata!.remove('SupplementalCategories1');
+    currentMetadata!.remove('SupplementalCategories2');
+    currentMetadata!.remove('SupplementalCategories3');
+
+    final dynamic supp =
+        currentMetadata!['XMP-photoshop:SupplementalCategories'] ??
+            currentMetadata!['IPTC:SupplementalCategories'] ??
+            currentMetadata!['SupplementalCategories'] ??
+            currentMetadata!['XMP:SupplementalCategories'];
+
+    String sourceField = 'none';
+    if (currentMetadata!['XMP-photoshop:SupplementalCategories'] != null)
+      sourceField = 'XMP-photoshop:SupplementalCategories';
+    else if (currentMetadata!['IPTC:SupplementalCategories'] != null)
+      sourceField = 'IPTC:SupplementalCategories';
+    else if (currentMetadata!['SupplementalCategories'] != null)
+      sourceField = 'SupplementalCategories';
+    else if (currentMetadata!['XMP:SupplementalCategories'] != null)
+      sourceField = 'XMP:SupplementalCategories';
+
+    print(
+        'DEBUG: Found supplemental categories: $supp (${supp.runtimeType}) from field: $sourceField');
+
     List<String> parts = [];
     if (supp is List) {
-      parts = supp.map((e) => e.toString()).toList();
-    } else if (supp is String) {
-      // Split by comma or semicolon; trim spaces
-      parts = supp.split(',').map((s) => s.trim()).toList();
-      if (parts.length == 1 && supp.contains(';')) {
-        parts = supp.split(';').map((s) => s.trim()).toList();
+      print('DEBUG: Processing as List');
+      parts = supp
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    } else if (supp is String && supp.isNotEmpty) {
+      print('DEBUG: Processing as String: "$supp"');
+      String cleanSupp = supp.trim();
+
+      // Remove brackets if present (e.g., "[SPO, BBN, BBA]" -> "SPO, BBN, BBA")
+      if (cleanSupp.startsWith('[') && cleanSupp.endsWith(']')) {
+        cleanSupp = cleanSupp.substring(1, cleanSupp.length - 1);
+        print('DEBUG: Removed brackets: "$cleanSupp"');
       }
+
+      // Split by comma or semicolon; trim spaces and filter empty
+      if (cleanSupp.contains(',')) {
+        parts = cleanSupp
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else if (cleanSupp.contains(';')) {
+        parts = cleanSupp
+            .split(';')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else if (cleanSupp.isNotEmpty) {
+        // Single category
+        parts = [cleanSupp];
+      }
+      print('DEBUG: Split into parts: $parts');
     }
 
     // Assign to UI keys
-    if (parts.isNotEmpty)
+    if (parts.isNotEmpty) {
       currentMetadata!['SupplementalCategories1'] = parts[0];
-    if (parts.length > 1)
+      print('DEBUG: Set SupplementalCategories1 = "${parts[0]}"');
+    }
+    if (parts.length > 1) {
       currentMetadata!['SupplementalCategories2'] = parts[1];
-    if (parts.length > 2)
+      print('DEBUG: Set SupplementalCategories2 = "${parts[1]}"');
+    }
+    if (parts.length > 2) {
       currentMetadata!['SupplementalCategories3'] = parts[2];
+      print('DEBUG: Set SupplementalCategories3 = "${parts[2]}"');
+    }
+
+    print(
+        'DEBUG: Final supplemental categories: 1="${currentMetadata!['SupplementalCategories1']}", 2="${currentMetadata!['SupplementalCategories2']}", 3="${currentMetadata!['SupplementalCategories3']}"');
   }
 
   // Copy all metadata fields except date and time
@@ -700,9 +793,35 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   Widget _buildField(String label, String key, {int? maxLines}) {
     // Prioritize Photo Mechanic's preferred IPTC field, then fallback to original key
     final photoMechanicKey = _getPhotoMechanicField(key);
-    String value = currentMetadata?[photoMechanicKey]?.toString() ??
-        currentMetadata?[key]?.toString() ??
-        '';
+
+    // Handle array values properly - extract first value or join with commas
+    String value = '';
+    final rawValue =
+        currentMetadata?[photoMechanicKey] ?? currentMetadata?[key];
+    if (rawValue != null) {
+      if (rawValue is List) {
+        // If it's a list, join with commas (no space for keywords)
+        if (key == 'Keywords') {
+          value = rawValue.map((e) => e.toString()).join(',');
+        } else {
+          value = rawValue.map((e) => e.toString()).join(', ');
+        }
+      } else {
+        // Check if it's a string that looks like an array (starts with [ and ends with ])
+        final stringValue = rawValue.toString();
+        if (stringValue.startsWith('[') && stringValue.endsWith(']')) {
+          // Remove brackets and clean up
+          final cleaned = stringValue.substring(1, stringValue.length - 1);
+          if (key == 'Keywords') {
+            value = cleaned; // Keep as-is for keywords
+          } else {
+            value = cleaned; // Keep as-is for other fields too
+          }
+        } else {
+          value = stringValue;
+        }
+      }
+    }
 
     // Special handling for Urgency field - use popup menu
     if (key == 'Urgency') {
@@ -738,7 +857,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
               setState(() {
                 currentMetadata =
                     Map<String, dynamic>.from(currentMetadata ?? {});
-                if (newValue != null && newValue.isNotEmpty) {
+                if (newValue.isNotEmpty) {
                   currentMetadata![key] = newValue;
                   final photoMechanicKey = _getPhotoMechanicField(key);
                   if (photoMechanicKey != null) {
@@ -916,8 +1035,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       );
     }
 
-    // Regular text field for other fields
-    final controller = TextEditingController(text: value);
+    // Regular text field for other fields - use cached controller to prevent cursor jumping
+    if (!_fieldControllers.containsKey(key)) {
+      _fieldControllers[key] = TextEditingController(text: value);
+    } else {
+      // Update existing controller text if it's different
+      if (_fieldControllers[key]!.text != value) {
+        _fieldControllers[key]!.text = value;
+      }
+    }
+    final controller = _fieldControllers[key]!;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1395,7 +1522,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Left side - Image preview with EXIF data
-                  if (widget.imagePath != null)
+                  if ((_currentImagePath ?? widget.imagePath) != null)
                     Padding(
                       padding: const EdgeInsets.all(6),
                       child: Container(
@@ -1417,8 +1544,11 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                 width: 568,
                                 height: 400,
                                 child: ExtendedImage.file(
-                                  File(widget.imagePath!),
+                                  File(_currentImagePath ?? widget.imagePath!),
+                                  key: ValueKey(
+                                      _currentImagePath ?? widget.imagePath),
                                   fit: BoxFit.contain,
+                                  enableLoadState: false,
                                 ),
                               ),
                             ),
@@ -1431,19 +1561,25 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                 // Previous button (left)
                                 GestureDetector(
                                   onTap: () async {
+                                    // Save current metadata before moving to previous image
+                                    final outgoing =
+                                        _buildOutgoingMetadataFromState();
+                                    widget.onMetadataUpdated(outgoing);
+
                                     if (widget.onRequestImageChange != null) {
                                       // Ask parent to move -1 and return new path/metadata
                                       try {
                                         final result = await widget
                                             .onRequestImageChange!(-1);
-                                        setState(() {
-                                          _currentImagePath =
-                                              (result['path'] as String?);
-                                          currentMetadata =
-                                              Map<String, dynamic>.from(
-                                                  (result['metadata'] ?? {})
-                                                      as Map);
-                                        });
+                                        // Update without animation to prevent flashing
+                                        _currentImagePath =
+                                            (result['path'] as String?);
+                                        currentMetadata =
+                                            Map<String, dynamic>.from(
+                                                (result['metadata'] ?? {})
+                                                    as Map);
+                                        _normalizeMetadataForUi(); // Split supplemental categories
+                                        setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onPreviousImage != null) {
@@ -1546,18 +1682,24 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                 // Next button (right)
                                 GestureDetector(
                                   onTap: () async {
+                                    // Save current metadata before moving to next image
+                                    final outgoing =
+                                        _buildOutgoingMetadataFromState();
+                                    widget.onMetadataUpdated(outgoing);
+
                                     if (widget.onRequestImageChange != null) {
                                       try {
                                         final result = await widget
                                             .onRequestImageChange!(1);
-                                        setState(() {
-                                          _currentImagePath =
-                                              (result['path'] as String?);
-                                          currentMetadata =
-                                              Map<String, dynamic>.from(
-                                                  (result['metadata'] ?? {})
-                                                      as Map);
-                                        });
+                                        // Update without animation to prevent flashing
+                                        _currentImagePath =
+                                            (result['path'] as String?);
+                                        currentMetadata =
+                                            Map<String, dynamic>.from(
+                                                (result['metadata'] ?? {})
+                                                    as Map);
+                                        _normalizeMetadataForUi(); // Split supplemental categories
+                                        setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onNextImage != null) {
@@ -1616,8 +1758,11 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                     text: TextSpan(
                                       children: [
                                         TextSpan(
-                                          text: widget.imagePath != null
-                                              ? widget.imagePath!
+                                          text: (_currentImagePath ??
+                                                      widget.imagePath) !=
+                                                  null
+                                              ? (_currentImagePath ??
+                                                      widget.imagePath)!
                                                   .split('/')
                                                   .last
                                               : 'Image',
@@ -1707,7 +1852,11 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                   ),
                   const SizedBox(width: 12),
                   GestureDetector(
-                    onTap: _saveChanges,
+                    onTap: () {
+                      print('DEBUG: === SAVE BUTTON CLICKED ===');
+                      print('DEBUG: About to call _saveChanges()');
+                      _saveChanges();
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 7),

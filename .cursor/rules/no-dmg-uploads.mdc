@@ -1,0 +1,36 @@
+# No DMG Uploads Rule
+
+**Purpose:** Prevent DMG files from being uploaded to git repositories unless explicitly requested.
+
+## Rule
+
+**NEVER** commit, stage, or upload DMG files (*.dmg) to git repositories unless the user explicitly says "upload DMG" or similar.
+
+## Why This Rule Exists
+
+- DMG files are build artifacts, not source code
+- They are extremely large (often 100MB+ each)
+- They cause repository bloat and push failures
+- They should be generated, not stored in version control
+- Multiple DMG files can make repositories several GB in size
+
+## What to Do Instead
+
+- Always exclude *.dmg from .gitignore
+- If DMG files are needed, use Git LFS or external storage
+- Generate DMGs during build process, don't commit them
+- If user needs a DMG, provide instructions to build it locally
+
+## Exception
+
+Only upload DMG files if the user explicitly requests it with phrases like:
+- "upload the DMG"
+- "include the DMG file"
+- "commit the DMG"
+
+## Implementation
+
+- Add *.dmg to .gitignore
+- Check for DMG files before any git operations
+- Warn user if DMG files are detected in staging area
+- Suggest alternatives if DMG upload is requested
