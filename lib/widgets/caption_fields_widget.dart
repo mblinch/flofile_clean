@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../utils/native_file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/exiftool_helper.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -9898,7 +9899,145 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  void _updateCaption() {
+  // Helper method to flatten nested lists/arrays
+  List<String> _flattenList(dynamic value) {
+    List<String> result = [];
+
+    if (value is List) {
+      for (var item in value) {
+        if (item is List) {
+          result.addAll(_flattenList(item));
+        } else if (item != null && item.toString().trim().isNotEmpty) {
+          result.add(item.toString().trim());
+        }
+      }
+    } else if (value != null && value.toString().trim().isNotEmpty) {
+      result.add(value.toString().trim());
+    }
+
+    return result;
+  }
+
+  // Sanitize Creator/Credit strings coming from IPTC/XMP to remove nested list artifacts
+  String? _sanitizeBylineString(String? value) {
+    if (value == null) return null;
+    String s = value.toString();
+
+    // If it's a simple clean string, return it as-is
+    if (!s.contains('[') &&
+        !s.contains(',') &&
+        s.trim().isNotEmpty &&
+        s.toLowerCase() != 'null') {
+      return s.trim();
+    }
+
+    // Remove any square brackets and extra quotes
+    s = s.replaceAll(RegExp(r'[\[\]"]'), '').trim();
+    // Strip leading/trailing common separators that can leak in from bad metadata
+    s = s.replaceAll(RegExp(r'^[;,/\s]+'), '');
+    s = s.replaceAll(RegExp(r'[;,/\s]+$'), '');
+    // Collapse multiple spaces
+    s = s.replaceAll(RegExp(r'\s+'), ' ');
+
+    if (s.isEmpty || s.toLowerCase() == 'null') return null;
+    return s;
+  }
+
+  // Load Creator and Credit fields directly from image file using ExifTool
+  Future<Map<String, String?>> _loadCreatorAndCreditFromImage(
+      String imagePath) async {
+    try {
+      final proc = await ExiftoolHelper.run([
+        '-j',
+        // Creator/Photographer candidates
+        '-IPTC:By-line',
+        '-By-line',
+        '-Byline',
+        '-Creator',
+        '-XMP:Creator',
+        '-Artist',
+        '-Photographer',
+        '-IPTC:Photographer',
+        '-XMP:Photographer',
+        '-IPTC:Credit',
+        '-Credit',
+        imagePath,
+      ]);
+
+      if (proc.exitCode == 0) {
+        final List data = jsonDecode(proc.stdoutText);
+        if (data.isNotEmpty) {
+          final metadata = data.first as Map<String, dynamic>;
+
+          // DEBUG: Show ALL metadata fields we got from the image
+          print('DEBUG: ===== ALL EXIF METADATA FIELDS =====');
+          metadata.forEach((key, value) {
+            print('DEBUG: $key = $value');
+          });
+          print('DEBUG: ===== END METADATA DUMP =====');
+
+          // Helper function to clean up creator/credit values
+          String? cleanMetadataValue(dynamic value) {
+            if (value == null) return null;
+
+            // Handle nested arrays or lists
+            if (value is List) {
+              if (value.isNotEmpty) {
+                // If it's a nested structure, flatten it and get the first non-empty value
+                final flattened = _flattenList(value);
+                return flattened.isNotEmpty
+                    ? flattened.first.toString().trim()
+                    : null;
+              }
+              return null;
+            }
+
+            // Handle regular string
+            return value.toString().trim().isNotEmpty
+                ? value.toString().trim()
+                : null;
+          }
+
+          // FUCK THE CLEANING - just grab the raw values directly
+          String? creator = metadata['Creator']?.toString() ??
+              metadata['Artist']?.toString() ??
+              metadata['Photographer']?.toString() ??
+              metadata['IPTC:Photographer']?.toString() ??
+              metadata['XMP:Photographer']?.toString() ??
+              metadata['IPTC:By-line']?.toString() ??
+              metadata['By-line']?.toString() ??
+              metadata['Byline']?.toString() ??
+              metadata['XMP:Creator']?.toString();
+          String? credit = metadata['IPTC:Credit']?.toString() ??
+              metadata['Credit']?.toString();
+
+          // NO SANITIZING - just use the raw values
+          // creator = _sanitizeBylineString(creator);
+          // credit = _sanitizeBylineString(credit);
+
+          print(
+              'DEBUG: Raw metadata creator: ${metadata['IPTC:By-line']} / ${metadata['By-line']} / ${metadata['Byline']} / ${metadata['Creator']} / ${metadata['XMP:Creator']} / ${metadata['Artist']} / ${metadata['Photographer']} / ${metadata['IPTC:Photographer']} / ${metadata['XMP:Photographer']}');
+          print(
+              'DEBUG: Raw metadata credit: ${metadata['IPTC:Credit']} / ${metadata['Credit']}');
+          print('DEBUG: Cleaned creator: "$creator", credit: "$credit"');
+
+          return {
+            'creator': creator,
+            'credit': credit,
+          };
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Error running ExifTool for creator/credit: $e');
+    }
+
+    return {
+      'creator': null,
+      'credit': null,
+    };
+  }
+
+  void _updateCaption() async {
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
@@ -10133,25 +10272,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
-    // Get creator and credit from current metadata widget values or fall back to original metadata
+    // Get creator and credit from current image file directly using ExifTool
     String? creatorValue;
     String? creditValue;
 
-    // Try to get current values from metadata widget first
-    if (widget.getCurrentMetadataValues != null) {
-      final currentValues = widget.getCurrentMetadataValues!();
-      creatorValue = currentValues['Creator'];
-      creditValue = currentValues['Credit'];
+    // Load Creator and Credit directly from the current image file
+    if (widget.currentImagePath != null &&
+        widget.currentImagePath!.isNotEmpty) {
+      final values =
+          await _loadCreatorAndCreditFromImage(widget.currentImagePath!);
+      creatorValue = values['creator'];
+      creditValue = values['credit'];
       print(
-        'DEBUG: Using current metadata values - Creator: "$creatorValue", Credit: "$creditValue"',
-      );
+          'DEBUG: Loaded from image file - Creator: "$creatorValue", Credit: "$creditValue"');
     } else {
-      // Fall back to original metadata
-      creatorValue = widget.metadata?['Creator']?.toString();
-      creditValue = widget.metadata?['Credit']?.toString();
+      // Fall back to metadata if no image path
+      creatorValue = widget.metadata?['IPTC:By-line']?.toString() ??
+          widget.metadata?['By-line']?.toString() ??
+          widget.metadata?['Creator']?.toString() ??
+          widget.metadata?['XMP:Creator']?.toString();
+      creditValue = widget.metadata?['IPTC:Credit']?.toString() ??
+          widget.metadata?['Credit']?.toString();
       print(
-        'DEBUG: Using original metadata - Creator: "$creatorValue", Credit: "$creditValue"',
-      );
+          'DEBUG: No image path, using metadata - Creator: "$creatorValue", Credit: "$creditValue"');
     }
 
     // Debug logging
@@ -10174,6 +10317,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       byline = ''; // No creator/credit info available
     }
+
+    print('DEBUG: Final byline: "$byline"');
 
     // Add custom text between players if provided (but not magic input)
     String customTextPart = '';
@@ -10215,7 +10360,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${_isPriorToGame ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix${byline.isNotEmpty ? ' ($byline)' : ''}';
+        '$gamePart at $stadium on $formattedDate $locationSuffix.${byline.isNotEmpty ? ' (Photo by $byline)' : ''}';
 
     // Set caption text directly (no diacritic removal)
     captionController.text = caption;
