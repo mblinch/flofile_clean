@@ -101,7 +101,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Load fresh metadata directly from the file for the popup
     // This ensures we get the actual file data, not processed widget data
     final imagePath = imagePaths[currentIndex];
-    print('DEBUG: Loading fresh metadata for popup from: $imagePath');
+    print('📖 LOADING: Loading fresh metadata for popup from: $imagePath');
 
     Map<String, dynamic> freshMetadata = {};
 
@@ -206,17 +206,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Fallback to current metadata if fresh load fails
       freshMetadata = Map<String, dynamic>.from(currentMetadata ?? {});
     }
-
-    print('DEBUG: Fresh metadata for popup: $freshMetadata');
-    print(
-        'DEBUG: Fresh metadata SupplementalCategories: ${freshMetadata['SupplementalCategories']}');
-    print(
-        'DEBUG: Fresh metadata XMP-photoshop:SupplementalCategories: ${freshMetadata['XMP-photoshop:SupplementalCategories']}');
-    print(
-        'DEBUG: Fresh metadata IPTC:SupplementalCategories: ${freshMetadata['IPTC:SupplementalCategories']}');
-    print(
-        'DEBUG: Fresh metadata XMP:SupplementalCategories: ${freshMetadata['XMP:SupplementalCategories']}');
-    print('DEBUG: Fresh metadata keys: ${freshMetadata.keys.toList()}');
 
     showDialog(
       context: context,
@@ -1107,15 +1096,97 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Build exiftool command arguments
       List<String> args = [];
 
-      // Add each field that has a value
+      // Add each field that has a value, handle keywords specially
       allValues.forEach((key, value) {
         if (value.trim().isNotEmpty) {
-          args.add('-$key=$value');
-          if (key == 'Creator') {
-            print('DEBUG: Adding Creator to exiftool args: -$key=$value');
+          // Skip all keyword-related fields; they'll be handled separately
+          if (key != 'IPTC:Keywords' &&
+              key != 'Keywords' &&
+              key != 'Subject' &&
+              key != 'XMP:Subject' &&
+              key != 'XMP-dc:Subject') {
+            args.add('-$key=$value');
+            if (key == 'Creator') {
+              print('DEBUG: Adding Creator to exiftool args: -$key=$value');
+            }
           }
         }
       });
+
+      // Handle keywords with Photo Mechanic compatibility
+      // Check current metadata if not found in form values
+      print('DEBUG: Looking for keywords in save function:');
+      print('  allValues[IPTC:Keywords]: ${allValues['IPTC:Keywords']}');
+      print('  allValues[XMP-dc:Subject]: ${allValues['XMP-dc:Subject']}');
+      print('  currentMetadata[Keywords]: ${currentMetadata?['Keywords']}');
+      print(
+          '  currentMetadata[IPTC:Keywords]: ${currentMetadata?['IPTC:Keywords']}');
+
+      final keywordsValue = allValues['IPTC:Keywords'] ??
+          allValues['XMP-dc:Subject'] ??
+          currentMetadata?['Keywords'] ??
+          currentMetadata?['IPTC:Keywords'];
+      print('DEBUG: Final keywordsValue: $keywordsValue');
+
+      // Convert to string and check if not empty
+      String? keywordsString = keywordsValue?.toString();
+      if (keywordsString != null && keywordsString.trim().isNotEmpty) {
+        // Clean any array brackets first, then parse keywords from comma-separated string
+        String cleanValue = keywordsString.trim();
+        if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+          cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+        }
+        final keywords = cleanValue
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet() // Remove duplicates
+            .toList();
+
+        if (keywords.isNotEmpty) {
+          // FIRST: Clear all keyword fields in a separate call
+          final clearArgs = [
+            '-XMP-dc:Subject=',
+            '-IPTC:Keywords=',
+            '-XMP:Subject=',
+            '-Keywords=',
+            '-overwrite_original',
+            '-P',
+            '-m',
+            '-charset',
+            'iptc=UTF8',
+            imagePath
+          ];
+
+          print('DEBUG: Clearing all keyword fields first');
+          final clearProc = await ExiftoolHelper.run(clearArgs);
+
+          if (clearProc.exitCode == 0) {
+            // SECOND: Add each keyword individually in separate call
+            final addArgs = <String>[];
+            for (final String kw in keywords) {
+              // Write ONLY to IPTC:Keywords to avoid PM/XMP duplicates
+              addArgs.add('-IPTC:Keywords+=$kw');
+            }
+            addArgs.addAll([
+              '-overwrite_original',
+              '-P',
+              '-m',
+              '-charset',
+              'iptc=UTF8',
+              imagePath
+            ]);
+
+            print('DEBUG: Adding keywords: $keywords');
+            final addProc = await ExiftoolHelper.run(addArgs);
+
+            if (addProc.exitCode == 0) {
+              print('DEBUG: Keywords written successfully');
+            }
+          }
+          return; // Skip the rest of the normal save since we handled keywords separately
+        }
+      }
 
       // Handle supplemental categories with overwrite semantics
       final List<String> rawInputs = [
@@ -1402,11 +1473,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Handle image selection
   void _onImageSelected(int index) {
-    print('DEBUG: _onImageSelected called with index: $index');
-    print('DEBUG: _originalCaptionData is: $_originalCaptionData');
+    // TEMPORARILY DISABLED: Don't save on navigation to prevent conflicts with popup save
+    // _saveIptcMetadata(); // DISABLED
 
-    // Directly switch to the selected image without checking for unsaved changes
-    print('DEBUG: Switching directly to image $index');
+    // Switch to the selected image
     _switchToImage(index);
   }
 
@@ -1629,16 +1699,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Switch to a new image (internal method)
   void _switchToImage(int index) {
-    print('DEBUG: _switchToImage called with index: $index');
-    print('DEBUG: Clearing _originalCaptionData');
-
     setState(() {
       currentIndex = index;
     });
 
     // Clear the original caption data to prevent false change detection
     _originalCaptionData = null;
-    print('DEBUG: _originalCaptionData after clearing: $_originalCaptionData');
 
     _loadMetadata();
   }
@@ -1852,18 +1918,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       case 'Object Name':
         return 'IPTC:ObjectName'; // Photo Mechanic's preferred field
       case 'Stadium':
-        return 'IPTC:SubLocation'; // Photo Mechanic's preferred field
+        return 'IPTC:Sub-location'; // Photo Mechanic's preferred field (FIXED)
       case 'City':
         return 'IPTC:City'; // Photo Mechanic's preferred field
       case 'Province/State':
-        return 'IPTC:ProvinceState'; // Photo Mechanic's preferred field
+        return 'IPTC:Province-State'; // Photo Mechanic's preferred field (FIXED)
+      case 'Country':
+        return 'IPTC:Country-Primary-Location-Name'; // Photo Mechanic's preferred field (FIXED)
+      case 'Country Code':
+        return 'IPTC:Country-Primary-Location-Code'; // Photo Mechanic's preferred field (FIXED)
 
       case 'Special Instructions':
-        return 'IPTC:SpecialInstructions'; // Photo Mechanic's preferred field
+        return 'IPTC:Special-Instructions'; // Photo Mechanic's preferred field (FIXED)
       case 'Personality':
         return 'XMP-getty:Personality';
       case 'Caption':
-        return 'IPTC:Description'; // Photo Mechanic's preferred field
+        return 'IPTC:Caption-Abstract'; // Photo Mechanic's preferred field (FIXED)
       case 'Date':
         return 'TimeDate';
       case 'Time':
@@ -1961,8 +2031,56 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         metadata['SupplementalCategories3']?.toString() ?? '',
       ];
 
+      // Clone metadata to allow removals (e.g., keywords keys)
+      final Map<String, dynamic> md = Map<String, dynamic>.from(metadata);
+
+      // Handle keywords with Photo Mechanic compatibility
+      // Prefer IPTC:Keywords coming from UI; fallback to generic Keywords if present
+      String? kwValue = (md['IPTC:Keywords'] ?? md['Keywords'])?.toString();
+      if (kwValue != null && kwValue.trim().isNotEmpty) {
+        String cleanValue = kwValue.trim();
+        // Remove surrounding array brackets if present
+        if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+          cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+        }
+        // Split into unique list
+        final List<String> kwList = cleanValue
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet()
+            .toList();
+
+        if (kwList.isNotEmpty) {
+          // Clear ALL keyword fields completely
+          // Clear ALL possible keyword field variations to remove old corrupted data
+          args.addAll([
+            '-XMP-dc:Subject=',
+            '-IPTC:Keywords=',
+            '-XMP:Subject=',
+            '-Keywords=',
+            '-Subject=', // This is what Photo Mechanic reads from
+            '-XMP-photoshop:Keywords=',
+            '-XMP:Keywords=',
+            '-EXIF:Keywords=',
+          ]);
+          // Write all keywords as single comma-separated string to ALL keyword fields
+          // This ensures both the app and Photo Mechanic see clean, consistent keywords
+          final String allKeywords = kwList.join(', ');
+          args.add('-IPTC:Keywords=$allKeywords');
+          args.add('-Subject=$allKeywords');
+          args.add('-XMP-dc:Subject=$allKeywords');
+        }
+      }
+      // Remove any keyword-related keys so they are not written generically below
+      md.remove('IPTC:Keywords');
+      md.remove('Keywords');
+      md.remove('XMP:Subject');
+      md.remove('XMP-dc:Subject');
+      md.remove('KeywordsTest');
+
       // Add each field that has a value
-      metadata.forEach((key, value) {
+      md.forEach((key, value) {
         if (value != null && value.toString().trim().isNotEmpty) {
           // Skip date/time fields as they shouldn't be modified
           if ([
@@ -1991,8 +2109,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Handle supplemental categories with overwrite semantics
       args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
-      // Always overwrite original file
-      args.add('-overwrite_original');
+      // Always overwrite original file; keep times and ensure IPTC UTF-8
+      args.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
       args.add(imagePath);
 
       // Only run exiftool if we have metadata to write
@@ -2152,7 +2270,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               break;
             case 'Keywords':
               exifMetadata['Keywords'] = value;
-              exifMetadata['XMP:Subject'] = value;
+              // Do not mirror to XMP:Subject here; we handle keywords centrally when building exiftool args
               break;
             case 'Supp Cat 1':
             case 'Supp Cat 2':

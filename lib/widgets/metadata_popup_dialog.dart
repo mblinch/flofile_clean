@@ -181,10 +181,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   }
 
   void _saveChanges() async {
-    print('DEBUG: === _saveChanges() FUNCTION CALLED ===');
-    print(
-        'DEBUG: Starting _saveChanges - using _buildOutgoingMetadataFromState()');
-
     // Use the same method as Next/Previous buttons to ensure consistency
     final Map<String, dynamic> outgoing = _buildOutgoingMetadataFromState();
 
@@ -223,21 +219,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   // Build an outgoing metadata map that reflects current controller values
   Map<String, dynamic> _buildOutgoingMetadataFromState() {
-    print('DEBUG: _buildOutgoingMetadataFromState() called');
-
     // Start with currentMetadata which contains all the field changes from regular text fields
     final Map<String, dynamic> outgoing =
         Map<String, dynamic>.from(currentMetadata ?? {});
 
     // Override with ALL field controller values to ensure we capture any changes
     // This fixes issues where onChanged callbacks might not have fired
-    print('DEBUG: Field controllers count: ${_fieldControllers.length}');
     _fieldControllers.forEach((key, controller) {
       final value = controller.text.trim();
-      print('DEBUG: Field $key = "$value"');
       if (value.isNotEmpty) {
         outgoing[key] = value;
-
         // Also write to Photo Mechanic's preferred IPTC field
         final photoMechanicKey = _getPhotoMechanicField(key);
         if (photoMechanicKey != null) {
@@ -283,9 +274,17 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     // Supplemental categories are now handled in the _fieldControllers loop above
 
-    print('DEBUG: Final outgoing metadata count: ${outgoing.length}');
-    print(
-        'DEBUG: Supplemental categories in outgoing: 1="${outgoing['SupplementalCategories1']}", 2="${outgoing['SupplementalCategories2']}", 3="${outgoing['SupplementalCategories3']}"');
+    // Handle KeywordsTest specially - remove it and use for IPTC:Keywords only
+    final String testKW = (outgoing['KeywordsTest'] ?? '').toString().trim();
+    outgoing.remove('KeywordsTest'); // Remove the test field
+    outgoing.remove('Keywords');
+    outgoing.remove('XMP:Subject');
+
+    if (testKW.isNotEmpty) {
+      outgoing['IPTC:Keywords'] = testKW;
+    } else {
+      outgoing.remove('IPTC:Keywords'); // Clear if empty
+    }
 
     return outgoing;
   }
@@ -324,21 +323,122 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           return;
         }
 
-        // Use the key directly as the ExifTool field name
-        // This matches how the main screen saves metadata
-        args.add('-$key=$value');
+        // Skip Keywords/Subject here; handled centrally below
+        if (key != 'IPTC:Keywords' &&
+            key != 'XMP-dc:Subject' &&
+            key != 'Keywords' &&
+            key != 'Subject' &&
+            key != 'XMP:Subject') {
+          args.add('-$key=$value');
+        }
         print('DEBUG: Adding field: -$key=$value');
       }
     });
 
-    // Handle supplemental categories with overwrite semantics
-    final List<String> rawInputs = [
-      metadata['SupplementalCategories1']?.toString() ?? '',
-      metadata['SupplementalCategories2']?.toString() ?? '',
-      metadata['SupplementalCategories3']?.toString() ?? '',
-    ];
+    // Centralize keyword handling: clear XMP/Keywords and write IPTC per item
+    // Remove any pre-added keyword args
+    args.removeWhere((arg) =>
+        arg.startsWith('-IPTC:Keywords') ||
+        arg.startsWith('-XMP:Subject') ||
+        arg.startsWith('-XMP-dc:Subject') ||
+        arg.startsWith('-Subject') ||
+        arg.startsWith('-Keywords'));
 
-    args.addAll(buildSupplementalCategoriesArgs(rawInputs));
+    final String keywordsValue =
+        (metadata['IPTC:Keywords'] ?? metadata['Keywords'])?.toString() ?? '';
+    print('DEBUG SAVE: Raw keywordsValue from metadata: "$keywordsValue"');
+
+    if (keywordsValue.trim().isNotEmpty) {
+      // Clean any array brackets first
+      String cleanValue = keywordsValue.trim();
+      if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+        cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+      }
+      final List<String> kw = cleanValue
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+      print('DEBUG SAVE: Parsed keywords to save: $kw');
+
+      if (kw.isNotEmpty) {
+        print('DEBUG SAVE: About to save ${kw.length} keywords: $kw');
+
+        // TEST: Try adding keywords without clearing first (to test if clearing is the problem)
+        if (kw.length > 0) {
+          // Clear ALL possible keyword fields first to remove any corrupted data
+          final List<String> args = [
+            '-overwrite_original',
+            '-XMP-dc:Subject=',
+            '-IPTC:Keywords=',
+            '-XMP:Subject=',
+            '-Keywords=',
+            '-Subject=',
+            '-XMP-photoshop:Keywords=',
+            '-XMP:Keywords=',
+            '-EXIF:Keywords=',
+          ];
+          // Use TWO separate ExifTool commands: first clear, then write
+          final String allKeywords = kw.join(', ');
+
+          // STEP 1: Clear ALL keyword fields completely (safe approach)
+          final List<String> clearArgs = [
+            '-overwrite_original',
+            '-XMP-dc:Subject=',
+            '-IPTC:Keywords=',
+            '-XMP:Subject=',
+            '-Keywords=',
+            '-Subject=',
+            '-XMP-photoshop:Keywords=',
+            '-XMP:Keywords=',
+            '-EXIF:Keywords=',
+            imagePath
+          ];
+
+          print('🔥 POPUP SAVE STEP 1: Clearing all keyword fields');
+          final clearProc = await ExiftoolHelper.run(clearArgs);
+          print('🔥 POPUP SAVE STEP 1: Clear exit code: ${clearProc.exitCode}');
+
+          if (clearProc.exitCode == 0) {
+            // STEP 2: Write new keywords to all fields
+            final List<String> writeArgs = [
+              '-overwrite_original',
+              '-IPTC:Keywords=$allKeywords',
+              '-Subject=$allKeywords',
+              '-XMP-dc:Subject=$allKeywords',
+              imagePath
+            ];
+
+            print('🔥 POPUP SAVE STEP 2: Writing new keywords: $allKeywords');
+            final writeProc = await ExiftoolHelper.run(writeArgs);
+            print(
+                '🔥 POPUP SAVE STEP 2: Write exit code: ${writeProc.exitCode}');
+
+            if (writeProc.exitCode != 0) {
+              print(
+                  '🔥 POPUP SAVE STEP 2: Write error: ${writeProc.stderrText}');
+              throw Exception(
+                  'Failed to write keywords: ${writeProc.stderrText}');
+            }
+            print('🔥 POPUP SAVE: SUCCESS - Keywords saved in 2 steps!');
+          } else {
+            print(
+                '🔥 POPUP SAVE STEP 1: Clear failed: ${clearProc.stderrText}');
+            throw Exception(
+                'Failed to clear keywords: ${clearProc.stderrText}');
+          }
+        } else {
+          print(
+              'DEBUG SAVE: ERROR - kw list is empty but we entered this branch! Skipping to prevent data loss.');
+        }
+      }
+    } else {
+      print(
+          'DEBUG SAVE: No keywords to save (empty value) - SKIPPING CLEAR TO PREVENT DATA LOSS');
+      // DO NOT clear existing keywords if the value is empty - this could be a bug
+      // Only clear if we explicitly know the user wants to remove all keywords
+    }
 
     // Add overwrite flag and image path
     args.add('-overwrite_original');
@@ -348,11 +448,12 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     print('DEBUG: Image path: $imagePath');
     print('DEBUG: Full command would be: exiftool ${args.join(' ')}');
 
-    // Run ExifTool command
-    final proc = await ExiftoolHelper.run(args);
-
-    if (proc.exitCode != 0) {
-      throw Exception('ExifTool failed: ${proc.stderrText}');
+    // Run ExifTool command for non-keyword fields
+    if (args.isNotEmpty) {
+      final proc = await ExiftoolHelper.run(args);
+      if (proc.exitCode != 0) {
+        throw Exception('ExifTool failed: ${proc.stderrText}');
+      }
     }
   }
 
@@ -824,7 +925,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         _buildField('Credit', 'Credit'),
                         _buildField('Source', 'Source'),
                         _buildField('Headline', 'Headline'),
-                        _buildField('Keywords', 'Keywords'),
+                        _buildField('Keywords (Test)', 'KeywordsTest'),
                         _buildField('Urgency', 'Urgency'),
                       ]
                           .map((widget) => Padding(
@@ -849,256 +950,58 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     // Handle array values properly - extract first value or join with commas
     String value = '';
-    final rawValue =
-        currentMetadata?[photoMechanicKey] ?? currentMetadata?[key];
+
+    dynamic rawValue;
+    if (key == 'KeywordsTest') {
+      // ONLY read from IPTC:Keywords - ignore XMP:Subject which has brackets
+      rawValue =
+          currentMetadata?['IPTC:Keywords'] ?? currentMetadata?['Keywords'];
+    } else {
+      rawValue = currentMetadata?[photoMechanicKey] ?? currentMetadata?[key];
+    }
+
     if (rawValue != null) {
       if (rawValue is List) {
-        // If it's a list, join with commas (no space for keywords)
-        if (key == 'Keywords') {
-          value = rawValue.map((e) => e.toString()).join(',');
-        } else {
-          value = rawValue.map((e) => e.toString()).join(', ');
-        }
+        // Convert ExifTool arrays to comma-separated strings with NO brackets
+        // Remove duplicates from arrays (keywords often get duplicated)
+        final cleanItems = rawValue
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toSet() // Remove duplicates
+            .toList();
+        value = cleanItems.join(', ');
       } else {
-        // Check if it's a string that looks like an array (starts with [ and ends with ])
+        // For non-array values, use as-is but clean any bracket artifacts
         final stringValue = rawValue.toString();
         if (stringValue.startsWith('[') && stringValue.endsWith(']')) {
           // Remove brackets and clean up
           final cleaned = stringValue.substring(1, stringValue.length - 1);
-          if (key == 'Keywords') {
-            value = cleaned; // Keep as-is for keywords
-          } else {
-            value = cleaned; // Keep as-is for other fields too
-          }
+          value = cleaned;
         } else {
           value = stringValue;
         }
       }
     }
 
-    // Special handling for Urgency field - use popup menu
-    if (key == 'Urgency') {
-      // Extract just the number from "5 (normal urgency)" format if needed
-      if (value.isNotEmpty) {
-        final match = RegExp(r'^(\d+)').firstMatch(value);
-        if (match != null) {
-          value = match.group(1)!;
-        }
-      }
-
-      // Default to '5' (Normal) if no urgency is defined or invalid value
-      if (value.isEmpty ||
-          !['0', '1', '2', '3', '4', '5', '6', '7', '8'].contains(value)) {
-        value = '5';
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 3),
-          PopupMenuButton<String>(
-            initialValue:
-                value, // value is already validated and defaulted to '5' above
-            onSelected: (newValue) {
-              setState(() {
-                currentMetadata =
-                    Map<String, dynamic>.from(currentMetadata ?? {});
-                if (newValue.isNotEmpty) {
-                  currentMetadata![key] = newValue;
-                  final photoMechanicKey = _getPhotoMechanicField(key);
-                  if (photoMechanicKey != null) {
-                    currentMetadata![photoMechanicKey] = newValue;
-                  }
-                } else {
-                  currentMetadata!.remove(key);
-                  final photoMechanicKey = _getPhotoMechanicField(key);
-                  if (photoMechanicKey != null) {
-                    currentMetadata!.remove(photoMechanicKey);
-                  }
-                }
-              });
-            },
-            constraints: const BoxConstraints(maxHeight: 300),
-            itemBuilder: (context) => [
-              PopupMenuItem<String>(
-                value: '',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  'Select urgency',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '0',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '0 - Undefined',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '1',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '1 - High',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '2',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '2',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '3',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '3',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '4',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '4',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '5',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '5 - Normal',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '6',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '6',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '7',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '7',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: '8',
-                height: 28,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  '8 - Low',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ),
-            ],
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.grey.shade500),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _getUrgencyDisplayText(
-                          value), // value is already validated above
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors
-                            .black, // Always black since value is always valid
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Icon(Icons.arrow_drop_down, size: 16),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
+    // Special handling for KeywordsTest - use chips instead of text field
+    if (key == 'KeywordsTest') {
+      // Ensure no stray controller remains for this key
+      _fieldControllers.remove(key);
+      return _buildKeywordChips(label, value);
     }
 
-    // Regular text field for other fields - use cached controller to prevent cursor jumping
-    if (!_fieldControllers.containsKey(key)) {
-      _fieldControllers[key] = TextEditingController(text: value);
+    // Get or create controller for this key. Only set text on creation to avoid
+    // resetting selection/caret and breaking backspace/highlight behavior.
+    late final TextEditingController controller;
+    if (_fieldControllers.containsKey(key)) {
+      controller = _fieldControllers[key]!;
+      // Do not overwrite controller.text here
     } else {
-      // Update existing controller text if it's different
-      if (_fieldControllers[key]!.text != value) {
-        _fieldControllers[key]!.text = value;
-      }
+      controller = TextEditingController(text: value);
+      _fieldControllers[key] = controller;
     }
-    final controller = _fieldControllers[key]!;
 
+    // Build labeled text field matching existing styling
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1116,24 +1019,18 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           maxLines: maxLines ?? 1,
           onChanged: (newValue) {
             setState(() {
-              currentMetadata =
-                  Map<String, dynamic>.from(currentMetadata ?? {});
-              if (newValue.isNotEmpty) {
-                // Write to both the original key and Photo Mechanic's preferred field
-                currentMetadata![key] = newValue;
-
-                // Also write to Photo Mechanic's preferred IPTC field
-                final photoMechanicKey = _getPhotoMechanicField(key);
-                if (photoMechanicKey != null) {
-                  currentMetadata![photoMechanicKey] = newValue;
+              final trimmed = newValue.trim();
+              if (trimmed.isNotEmpty) {
+                currentMetadata![key] = trimmed;
+                final pmKey = _getPhotoMechanicField(key);
+                if (pmKey != null) {
+                  currentMetadata![pmKey] = trimmed;
                 }
               } else {
                 currentMetadata!.remove(key);
-
-                // Also remove Photo Mechanic's preferred field
-                final photoMechanicKey = _getPhotoMechanicField(key);
-                if (photoMechanicKey != null) {
-                  currentMetadata!.remove(photoMechanicKey);
+                final pmKey = _getPhotoMechanicField(key);
+                if (pmKey != null) {
+                  currentMetadata!.remove(pmKey);
                 }
               }
             });
@@ -1160,10 +1057,157 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
               borderSide: BorderSide(color: Colors.grey.shade500),
             ),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             isDense: true,
           ),
           style: const TextStyle(fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKeywordChips(String label, String value) {
+    // Parse current keywords from metadata (always fresh)
+    String currentValue = currentMetadata?['IPTC:Keywords']?.toString() ??
+        currentMetadata?['Keywords']?.toString() ??
+        value;
+
+    // Clean any bracket artifacts from the value
+    if (currentValue.isNotEmpty) {
+      // Remove outer array brackets if present
+      if (currentValue.startsWith('[') && currentValue.endsWith(']')) {
+        currentValue = currentValue.substring(1, currentValue.length - 1);
+      }
+      // Remove any remaining brackets from individual keywords
+      currentValue = currentValue.replaceAll('[', '').replaceAll(']', '');
+    }
+
+    final List<String> keywords = currentValue.isEmpty
+        ? <String>[]
+        : currentValue
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet() // de-duplicate on read
+            .toList();
+
+    final TextEditingController addController = TextEditingController();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade500),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Existing keyword chips
+              if (keywords.isNotEmpty)
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: keywords.map((keyword) {
+                    return Chip(
+                      label: Text(
+                        keyword,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      deleteIcon: Icon(Icons.close,
+                          size: 14, color: Colors.grey.shade600),
+                      onDeleted: () {
+                        setState(() {
+                          keywords.remove(keyword);
+                          final newValue =
+                              keywords.isEmpty ? '' : keywords.join(', ');
+
+                          // Update all keyword-related fields
+                          if (newValue.isEmpty) {
+                            currentMetadata!.remove('KeywordsTest');
+                            currentMetadata!.remove('IPTC:Keywords');
+                            currentMetadata!.remove('Keywords');
+                          } else {
+                            currentMetadata!['KeywordsTest'] = newValue;
+                            currentMetadata!['IPTC:Keywords'] = newValue;
+                          }
+                        });
+                      },
+                      backgroundColor: Colors.blue.shade50,
+                      side: BorderSide(color: Colors.blue.shade200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    );
+                  }).toList(),
+                ),
+              if (keywords.isNotEmpty) const SizedBox(height: 8),
+              // Add new keyword field
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: addController,
+                      decoration: InputDecoration(
+                        hintText: 'Add keyword...',
+                        hintStyle: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade500),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 4),
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                      onSubmitted: (keyword) {
+                        final trimmed = keyword.trim();
+                        if (trimmed.isNotEmpty && !keywords.contains(trimmed)) {
+                          setState(() {
+                            keywords.add(trimmed);
+                            final newValue = keywords.join(', ');
+                            currentMetadata!['KeywordsTest'] = newValue;
+                            currentMetadata!['IPTC:Keywords'] = newValue;
+                          });
+                          addController.clear();
+                        }
+                      },
+                    ),
+                  ),
+                  IconButton(
+                    icon:
+                        Icon(Icons.add, size: 16, color: Colors.blue.shade600),
+                    onPressed: () {
+                      final trimmed = addController.text.trim();
+                      if (trimmed.isNotEmpty && !keywords.contains(trimmed)) {
+                        setState(() {
+                          keywords.add(trimmed);
+                          final newValue = keywords.join(', ');
+                          currentMetadata!['KeywordsTest'] = newValue;
+                          currentMetadata!['IPTC:Keywords'] = newValue;
+                        });
+                        addController.clear();
+                      }
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -1246,6 +1290,9 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       case 'IPTC:Keywords':
       case 'Keywords':
       case 'XMP:Subject':
+        return 'IPTC:Keywords';
+
+      case 'KeywordsTest':
         return 'IPTC:Keywords';
 
       case 'IPTC:Category':
@@ -1963,8 +2010,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                   const SizedBox(width: 12),
                   GestureDetector(
                     onTap: () {
-                      print('DEBUG: === SAVE BUTTON CLICKED ===');
-                      print('DEBUG: About to call _saveChanges()');
                       _saveChanges();
                     },
                     child: Container(

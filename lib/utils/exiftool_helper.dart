@@ -145,7 +145,15 @@ class ExiftoolHelper {
       );
     }
 
-    print('DEBUG: Running exiftool at: $exiftoolPath with args: $args');
+    // Check if this is a main save (lots of args) vs popup save (few args)
+    if (args.length > 20) {
+      print(
+          '🚨 MAIN SAVE: Running massive ExifTool command with ${args.length} args');
+      print('🚨 MAIN SAVE: First few args: ${args.take(10).join(' ')}');
+      print('🚨 MAIN SAVE: Target file: ${args.last}');
+    } else {
+      print('DEBUG: Running exiftool at: $exiftoolPath with args: $args');
+    }
 
     try {
       // If using bundled script on macOS, prefer invoking via /usr/bin/perl
