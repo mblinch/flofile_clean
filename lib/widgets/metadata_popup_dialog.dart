@@ -184,8 +184,20 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     // Use the same method as Next/Previous buttons to ensure consistency
     final Map<String, dynamic> outgoing = _buildOutgoingMetadataFromState();
 
+    print(
+        '🔥 POPUP SAVE START: Keywords in outgoing data: "${outgoing['IPTC:Keywords']}"');
+    print(
+        '🔥 POPUP SAVE START: Current metadata IPTC:Keywords: "${currentMetadata?['IPTC:Keywords']}"');
+    print(
+        '🔥 POPUP SAVE START: Current metadata KeywordsTest: "${currentMetadata?['KeywordsTest']}"');
+    print('🔥 POPUP SAVE START: Subject in outgoing: "${outgoing['Subject']}"');
+    print('🔥 POPUP SAVE START: All outgoing keys: ${outgoing.keys.toList()}');
+
     try {
-      // Use the same save method as Next/Previous buttons to ensure consistency
+      // FIRST: Actually save to file using ExifTool
+      await _saveMetadataToFile(outgoing);
+
+      // THEN: Update the app state
       widget.onMetadataUpdated(outgoing);
 
       // Show success message
@@ -200,12 +212,12 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       // Update our local metadata to match what was saved
       currentMetadata = Map<String, dynamic>.from(outgoing);
 
-      // Notify parent of changes
-      widget.onMetadataUpdated(outgoing);
+      print('🔥 POPUP SAVE SUCCESS: Save completed, closing dialog');
 
       // Close the dialog
       Navigator.of(context).pop();
     } catch (e) {
+      print('🔥 POPUP SAVE ERROR: $e');
       // Show error message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -282,8 +294,13 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     if (testKW.isNotEmpty) {
       outgoing['IPTC:Keywords'] = testKW;
+      // CRITICAL: Also update Subject field to match the cleaned keywords
+      outgoing['Subject'] = testKW;
     } else {
-      outgoing.remove('IPTC:Keywords'); // Clear if empty
+      // When keywords are deleted, explicitly set empty string so save logic clears the field
+      outgoing['IPTC:Keywords'] = '';
+      // CRITICAL: Also clear Subject field
+      outgoing['Subject'] = '';
     }
 
     return outgoing;
@@ -330,8 +347,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
             key != 'Subject' &&
             key != 'XMP:Subject') {
           args.add('-$key=$value');
+          print('DEBUG: Adding field: -$key=$value');
+        } else {
+          print('DEBUG: SKIPPING keyword/subject field: $key=$value');
         }
-        print('DEBUG: Adding field: -$key=$value');
       }
     });
 
@@ -365,82 +384,91 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       if (kw.isNotEmpty) {
         print('DEBUG SAVE: About to save ${kw.length} keywords: $kw');
 
-        // TEST: Try adding keywords without clearing first (to test if clearing is the problem)
-        if (kw.length > 0) {
-          // Clear ALL possible keyword fields first to remove any corrupted data
-          final List<String> args = [
-            '-overwrite_original',
-            '-XMP-dc:Subject=',
-            '-IPTC:Keywords=',
-            '-XMP:Subject=',
-            '-Keywords=',
-            '-Subject=',
-            '-XMP-photoshop:Keywords=',
-            '-XMP:Keywords=',
-            '-EXIF:Keywords=',
-          ];
-          // Use TWO separate ExifTool commands: first clear, then write
-          final String allKeywords = kw.join(', ');
-
-          // STEP 1: Clear ALL keyword fields completely (safe approach)
-          final List<String> clearArgs = [
-            '-overwrite_original',
-            '-XMP-dc:Subject=',
-            '-IPTC:Keywords=',
-            '-XMP:Subject=',
-            '-Keywords=',
-            '-Subject=',
-            '-XMP-photoshop:Keywords=',
-            '-XMP:Keywords=',
-            '-EXIF:Keywords=',
-            imagePath
-          ];
-
-          print('🔥 POPUP SAVE STEP 1: Clearing all keyword fields');
-          final clearProc = await ExiftoolHelper.run(clearArgs);
-          print('🔥 POPUP SAVE STEP 1: Clear exit code: ${clearProc.exitCode}');
-
-          if (clearProc.exitCode == 0) {
-            // STEP 2: Write new keywords to all fields
-            final List<String> writeArgs = [
-              '-overwrite_original',
-              '-IPTC:Keywords=$allKeywords',
-              '-Subject=$allKeywords',
-              '-XMP-dc:Subject=$allKeywords',
-              imagePath
-            ];
-
-            print('🔥 POPUP SAVE STEP 2: Writing new keywords: $allKeywords');
-            final writeProc = await ExiftoolHelper.run(writeArgs);
-            print(
-                '🔥 POPUP SAVE STEP 2: Write exit code: ${writeProc.exitCode}');
-
-            if (writeProc.exitCode != 0) {
-              print(
-                  '🔥 POPUP SAVE STEP 2: Write error: ${writeProc.stderrText}');
-              throw Exception(
-                  'Failed to write keywords: ${writeProc.stderrText}');
-            }
-            print('🔥 POPUP SAVE: SUCCESS - Keywords saved in 2 steps!');
-          } else {
-            print(
-                '🔥 POPUP SAVE STEP 1: Clear failed: ${clearProc.stderrText}');
-            throw Exception(
-                'Failed to clear keywords: ${clearProc.stderrText}');
-          }
-        } else {
-          print(
-              'DEBUG SAVE: ERROR - kw list is empty but we entered this branch! Skipping to prevent data loss.');
+        // STEP 1: NUCLEAR CLEAR - Use separate command like our successful manual test
+        final List<String> clearArgs = [
+          '-Subject=',
+          '-XMP-dc:Subject=',
+          '-XMP:Subject=',
+          '-Keywords=', // NUCLEAR: Clear the problematic legacy Keywords field
+          '-IPTC:Keywords=', // Clear existing
+          '-XMP:Keywords=', // Clear any other variants
+          '-XMP-photoshop:Keywords=',
+          '-overwrite_original',
+          imagePath,
+        ];
+        print('DEBUG: Step 1 - Nuclear clear: exiftool ${clearArgs.join(' ')}');
+        final clearProc = await ExiftoolHelper.run(clearArgs);
+        print('DEBUG: Clear exit code: ${clearProc.exitCode}');
+        if (clearProc.exitCode != 0) {
+          print('DEBUG: Clear stderr: ${clearProc.stderrText}');
+          throw Exception('Failed to clear keywords: ${clearProc.stderrText}');
         }
+
+        // STEP 2: ADD KEYWORDS - Write to both IPTC:Keywords AND Subject for Photo Mechanic compatibility
+        final List<String> addArgs = [];
+        // Write keywords to multiple fields to ensure Photo Mechanic sees them
+        final String allKeywords = kw.join(', ');
+        addArgs.add('-Subject=$allKeywords'); // Photo Mechanic reads from this
+        for (final keyword in kw) {
+          addArgs.add(
+              '-IPTC:Keywords+=$keyword'); // Individual keywords for the app
+        }
+        addArgs.addAll(['-overwrite_original', imagePath]);
+
+        print('DEBUG: Step 2 - Add keywords: exiftool ${addArgs.join(' ')}');
+        final addProc = await ExiftoolHelper.run(addArgs);
+        print('DEBUG: Add exit code: ${addProc.exitCode}');
+        if (addProc.exitCode != 0) {
+          print('DEBUG: Add stderr: ${addProc.stderrText}');
+          throw Exception('Failed to add keywords: ${addProc.stderrText}');
+        }
+
+        // DO NOT return here, allow the main save to process other fields.
+      } else {
+        // User has cleared all keywords. Run a command to clear all related fields.
+        print(
+            'DEBUG: User cleared all keywords. Clearing all keyword/subject fields.');
+        final List<String> clearKwArgs = [
+          '-IPTC:Keywords=',
+          '-Subject=',
+          '-XMP-dc:Subject=',
+          '-XMP:Subject=',
+          '-Keywords=', // NUCLEAR: Clear the problematic legacy Keywords field
+          '-XMP:Keywords=', // Clear any other variants
+          '-XMP-photoshop:Keywords=',
+          '-overwrite_original',
+          imagePath,
+        ];
+        final kwClearProc = await ExiftoolHelper.run(clearKwArgs);
+        if (kwClearProc.exitCode != 0) {
+          print('DEBUG: Failed to clear keywords: ' + kwClearProc.stderrText);
+          throw Exception(
+              'Failed to clear keywords: ' + kwClearProc.stderrText);
+        }
+        // DO NOT return here, allow the main save to process other fields.
       }
     } else {
+      // User has cleared all keywords. Run a command to clear all related fields.
       print(
-          'DEBUG SAVE: No keywords to save (empty value) - SKIPPING CLEAR TO PREVENT DATA LOSS');
-      // DO NOT clear existing keywords if the value is empty - this could be a bug
-      // Only clear if we explicitly know the user wants to remove all keywords
+          'DEBUG: User cleared all keywords. Clearing all keyword/subject fields.');
+      final List<String> clearKwArgs = [
+        '-IPTC:Keywords=',
+        '-Subject=',
+        '-XMP-dc:Subject=',
+        '-XMP:Subject=',
+        '-Keywords=',
+        '-overwrite_original',
+        imagePath,
+      ];
+      final kwClearProc = await ExiftoolHelper.run(clearKwArgs);
+      if (kwClearProc.exitCode != 0) {
+        print('DEBUG: Failed to clear keywords: ' + kwClearProc.stderrText);
+        throw Exception('Failed to clear keywords: ' + kwClearProc.stderrText);
+      }
+      // DO NOT return here, allow the main save to process other fields.
     }
 
-    // Add overwrite flag and image path
+    // Add overwrite flag and image path for the general metadata save
     args.add('-overwrite_original');
     args.add(imagePath);
 
@@ -953,7 +981,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
     dynamic rawValue;
     if (key == 'KeywordsTest') {
-      // ONLY read from IPTC:Keywords - ignore XMP:Subject which has brackets
+      // Read from IPTC:Keywords first (edited data), fallback to Keywords (original data)
       rawValue =
           currentMetadata?['IPTC:Keywords'] ?? currentMetadata?['Keywords'];
     } else {
@@ -1067,10 +1095,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   }
 
   Widget _buildKeywordChips(String label, String value) {
-    // Parse current keywords from metadata (always fresh)
+    // Parse current keywords from metadata - prefer IPTC:Keywords, fallback to Keywords
     String currentValue = currentMetadata?['IPTC:Keywords']?.toString() ??
         currentMetadata?['Keywords']?.toString() ??
-        value;
+        '';
+
+    print('🔍 KEYWORD CHIPS: currentValue from metadata: "$currentValue"');
+    print(
+        '🔍 KEYWORD CHIPS: IPTC:Keywords: "${currentMetadata?['IPTC:Keywords']}"');
+    print('🔍 KEYWORD CHIPS: Keywords: "${currentMetadata?['Keywords']}"');
+    print('🔍 KEYWORD CHIPS: Subject: "${currentMetadata?['Subject']}"');
 
     // Clean any bracket artifacts from the value
     if (currentValue.isNotEmpty) {
@@ -1130,20 +1164,29 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                       deleteIcon: Icon(Icons.close,
                           size: 14, color: Colors.grey.shade600),
                       onDeleted: () {
+                        print('🗑️ DELETING KEYWORD: "$keyword"');
+                        print('🗑️ BEFORE DELETE: keywords = $keywords');
                         setState(() {
                           keywords.remove(keyword);
                           final newValue =
                               keywords.isEmpty ? '' : keywords.join(', ');
+                          print('🗑️ AFTER DELETE: newValue = "$newValue"');
 
                           // Update all keyword-related fields
                           if (newValue.isEmpty) {
                             currentMetadata!.remove('KeywordsTest');
                             currentMetadata!.remove('IPTC:Keywords');
                             currentMetadata!.remove('Keywords');
+                            print(
+                                '🗑️ CLEARED ALL: removed KeywordsTest, IPTC:Keywords, Keywords');
                           } else {
                             currentMetadata!['KeywordsTest'] = newValue;
                             currentMetadata!['IPTC:Keywords'] = newValue;
+                            print(
+                                '🗑️ UPDATED: KeywordsTest and IPTC:Keywords = "$newValue"');
                           }
+                          print(
+                              '🗑️ CURRENT METADATA IPTC:Keywords: "${currentMetadata!['IPTC:Keywords']}"');
                         });
                       },
                       backgroundColor: Colors.blue.shade50,

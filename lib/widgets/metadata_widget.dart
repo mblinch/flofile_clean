@@ -167,7 +167,20 @@ class _MetadataWidgetState extends State<MetadataWidget> {
             .toList();
         keywordsTestController.text = cleanKeywords.join(', ');
       } else if (keywordsValue != null) {
-        keywordsTestController.text = keywordsValue.toString();
+        // NEVER use .toString() on arrays - it creates literal brackets!
+        String kwString = keywordsValue.toString();
+        // If it looks like an array string, clean it up
+        if (kwString.startsWith('[') && kwString.endsWith(']')) {
+          kwString = kwString.substring(1, kwString.length - 1);
+        }
+        // Clean any remaining array artifacts and split by comma
+        final cleanKeywords = kwString
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet()
+            .toList();
+        keywordsTestController.text = cleanKeywords.join(', ');
       } else {
         keywordsTestController.text = '';
       }

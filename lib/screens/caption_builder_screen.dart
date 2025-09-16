@@ -210,20 +210,21 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     showDialog(
       context: context,
       builder: (context) => MetadataPopupDialog(
-        metadata: freshMetadata,
-        imagePath: imagePaths[currentIndex],
-        onMetadataUpdated: (updatedMetadata) async {
-          // Persist edits to the current file before any navigation
-          await _saveExifToolMetadataToImage(
-              imagePaths[currentIndex], updatedMetadata);
-
+        metadata: freshMetadata, // Use fresh data from file, not cached data
+        onMetadataUpdated: (updatedMetadata) {
+          // The popup is responsible for its own saving.
+          // This callback should ONLY update the main screen's state.
+          print('🔥 MAIN SCREEN: Popup closed, received updated metadata');
+          print(
+              '🔥 MAIN SCREEN: Updated metadata IPTC:Keywords: "${updatedMetadata['IPTC:Keywords']}"');
+          print(
+              '🔥 MAIN SCREEN: Updated metadata Subject: "${updatedMetadata['Subject']}"');
           setState(() {
             currentMetadata = updatedMetadata;
           });
-
-          // Reload to reflect saved values
-          await _loadMetadata();
+          print('🔥 MAIN SCREEN: setState() called with new metadata');
         },
+        imagePath: imagePaths[currentIndex],
         onPreviousImage: () async {
           print('DEBUG: Previous button clicked in popup');
           if (currentIndex > 0) {
@@ -1128,64 +1129,102 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           currentMetadata?['IPTC:Keywords'];
       print('DEBUG: Final keywordsValue: $keywordsValue');
 
-      // Convert to string and check if not empty
-      String? keywordsString = keywordsValue?.toString();
-      if (keywordsString != null && keywordsString.trim().isNotEmpty) {
-        // Clean any array brackets first, then parse keywords from comma-separated string
-        String cleanValue = keywordsString.trim();
-        if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
-          cleanValue = cleanValue.substring(1, cleanValue.length - 1);
-        }
-        final keywords = cleanValue
-            .split(',')
-            .map((k) => k.trim())
-            .where((k) => k.isNotEmpty)
-            .toSet() // Remove duplicates
-            .toList();
+      // Check if keywords have changed to avoid unnecessary clear/write operations
+      final String currentKeywords = keywordsValue?.toString() ?? '';
+      final String originalKeywords =
+          (currentMetadata?['IPTC:Keywords'] ?? currentMetadata?['Keywords'])
+                  ?.toString() ??
+              '';
 
-        if (keywords.isNotEmpty) {
-          // FIRST: Clear all keyword fields in a separate call
-          final clearArgs = [
-            '-XMP-dc:Subject=',
+      // Clean both values for comparison
+      String cleanCurrent = currentKeywords.trim();
+      String cleanOriginal = originalKeywords.trim();
+
+      if (cleanCurrent.startsWith('[') && cleanCurrent.endsWith(']')) {
+        cleanCurrent = cleanCurrent.substring(1, cleanCurrent.length - 1);
+      }
+      if (cleanOriginal.startsWith('[') && cleanOriginal.endsWith(']')) {
+        cleanOriginal = cleanOriginal.substring(1, cleanOriginal.length - 1);
+      }
+
+      // Parse into sets for comparison (order doesn't matter)
+      final Set<String> currentSet = cleanCurrent.isEmpty
+          ? <String>{}
+          : cleanCurrent
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+      final Set<String> originalSet = cleanOriginal.isEmpty
+          ? <String>{}
+          : cleanOriginal
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+
+      final bool keywordsChanged =
+          !currentSet.difference(originalSet).isEmpty ||
+              !originalSet.difference(currentSet).isEmpty;
+
+      print('🔍 MAIN SAVE - KEYWORD CHANGE DETECTION:');
+      print('🔍 Original: $originalSet');
+      print('🔍 Current:  $currentSet');
+      print('🔍 Changed:  $keywordsChanged');
+
+      // TEMPORARILY DISABLE CHANGE DETECTION - CAUSING FILE CORRUPTION
+      // Process keywords every time for now (safe mode)
+      if (true) {
+        // SIMPLE APPROACH - NO CLEARING, JUST OVERWRITE
+        // Always process keywords
+        print(
+            '🔥 MAIN SAVE - PROCESSING KEYWORDS (SAFE MODE - NO CHANGE DETECTION)...');
+
+        // Convert to string and check if not empty
+        String? keywordsString = keywordsValue?.toString();
+        if (keywordsString != null && keywordsString.trim().isNotEmpty) {
+          // Clean any array brackets first, then parse keywords from comma-separated string
+          String cleanValue = keywordsString.trim();
+          if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+            cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+          }
+          final keywords = cleanValue
+              .split(',')
+              .map((k) => k.trim())
+              .where((k) => k.isNotEmpty)
+              .toSet() // Remove duplicates
+              .toList();
+
+          if (keywords.isNotEmpty) {
+            // LIGHTROOM APPROACH: Add each keyword individually to main command
+            print(
+                '🔧 MAIN SAVE LIGHTROOM: Adding ${keywords.length} individual keywords to main command');
+            // Clear existing keywords first
+            args.add('-IPTC:Keywords=');
+            // Add each keyword individually
+            for (final keyword in keywords) {
+              args.add('-IPTC:Keywords+=$keyword');
+            }
+          }
+        } else {
+          // If user cleared keywords, write empty IPTC:Keywords in a dedicated call
+          print(
+              '🔧 MAIN SAVE: User cleared keywords - clearing IPTC and related subject fields');
+          final clearKwArgs = [
             '-IPTC:Keywords=',
+            '-Subject=',
+            '-XMP-dc:Subject=',
             '-XMP:Subject=',
             '-Keywords=',
             '-overwrite_original',
-            '-P',
-            '-m',
-            '-charset',
-            'iptc=UTF8',
-            imagePath
+            imagePath,
           ];
-
-          print('DEBUG: Clearing all keyword fields first');
-          final clearProc = await ExiftoolHelper.run(clearArgs);
-
-          if (clearProc.exitCode == 0) {
-            // SECOND: Add each keyword individually in separate call
-            final addArgs = <String>[];
-            for (final String kw in keywords) {
-              // Write ONLY to IPTC:Keywords to avoid PM/XMP duplicates
-              addArgs.add('-IPTC:Keywords+=$kw');
-            }
-            addArgs.addAll([
-              '-overwrite_original',
-              '-P',
-              '-m',
-              '-charset',
-              'iptc=UTF8',
-              imagePath
-            ]);
-
-            print('DEBUG: Adding keywords: $keywords');
-            final addProc = await ExiftoolHelper.run(addArgs);
-
-            if (addProc.exitCode == 0) {
-              print('DEBUG: Keywords written successfully');
-            }
+          final kwClearProc = await ExiftoolHelper.run(clearKwArgs);
+          if (kwClearProc.exitCode != 0) {
+            print('DEBUG: Failed to clear keywords: ' + kwClearProc.stderrText);
           }
-          return; // Skip the rest of the normal save since we handled keywords separately
         }
+        // Continue with the normal save since keywords are now part of main command
       }
 
       // Handle supplemental categories with overwrite semantics
@@ -2034,49 +2073,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Clone metadata to allow removals (e.g., keywords keys)
       final Map<String, dynamic> md = Map<String, dynamic>.from(metadata);
 
-      // Handle keywords with Photo Mechanic compatibility
-      // Prefer IPTC:Keywords coming from UI; fallback to generic Keywords if present
-      String? kwValue = (md['IPTC:Keywords'] ?? md['Keywords'])?.toString();
-      if (kwValue != null && kwValue.trim().isNotEmpty) {
-        String cleanValue = kwValue.trim();
-        // Remove surrounding array brackets if present
-        if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
-          cleanValue = cleanValue.substring(1, cleanValue.length - 1);
-        }
-        // Split into unique list
-        final List<String> kwList = cleanValue
-            .split(',')
-            .map((k) => k.trim())
-            .where((k) => k.isNotEmpty)
-            .toSet()
-            .toList();
+      // KEYWORDS ARE NOW HANDLED EXCLUSIVELY BY THE POPUP - MAIN SAVE IGNORES ALL KEYWORD FIELDS
+      // This prevents the main save from overwriting popup keyword changes
 
-        if (kwList.isNotEmpty) {
-          // Clear ALL keyword fields completely
-          // Clear ALL possible keyword field variations to remove old corrupted data
-          args.addAll([
-            '-XMP-dc:Subject=',
-            '-IPTC:Keywords=',
-            '-XMP:Subject=',
-            '-Keywords=',
-            '-Subject=', // This is what Photo Mechanic reads from
-            '-XMP-photoshop:Keywords=',
-            '-XMP:Keywords=',
-            '-EXIF:Keywords=',
-          ]);
-          // Write all keywords as single comma-separated string to ALL keyword fields
-          // This ensures both the app and Photo Mechanic see clean, consistent keywords
-          final String allKeywords = kwList.join(', ');
-          args.add('-IPTC:Keywords=$allKeywords');
-          args.add('-Subject=$allKeywords');
-          args.add('-XMP-dc:Subject=$allKeywords');
-        }
-      }
       // Remove any keyword-related keys so they are not written generically below
       md.remove('IPTC:Keywords');
       md.remove('Keywords');
       md.remove('XMP:Subject');
       md.remove('XMP-dc:Subject');
+      md.remove('Subject');
       md.remove('KeywordsTest');
 
       // Add each field that has a value
