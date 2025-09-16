@@ -2837,7 +2837,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         },
       ),
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 4.0),
+        padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2948,74 +2948,77 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             // RIGHT COLUMN - Player picker, firebar, verbs
             Expanded(
               flex: 6,
-              child: CaptionFieldsWidget(
-                key: _captionFieldsKey2,
-                metadata: currentMetadata,
-                onMetadataUpdated: (metadata) {
-                  setState(() {
-                    currentMetadata = metadata;
-                  });
-                },
-                getCurrentMetadataValues: () {
-                  // Metadata values now come from popup dialog, not main UI widget
-                  return {};
-                },
-                homeTeam: selectedHomeTeam,
-                awayTeam: selectedAwayTeam,
-                onNextImage: () {
-                  if (currentIndex < imagePaths.length - 1) {
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: CaptionFieldsWidget(
+                  key: _captionFieldsKey2,
+                  metadata: currentMetadata,
+                  onMetadataUpdated: (metadata) {
                     setState(() {
-                      _thumbCenterRequestId++;
+                      currentMetadata = metadata;
                     });
-                    _onImageSelected(currentIndex + 1);
-                  }
-                },
-                onPreviousImage: () {
-                  if (currentIndex > 0) {
+                  },
+                  getCurrentMetadataValues: () {
+                    // Metadata values now come from popup dialog, not main UI widget
+                    return {};
+                  },
+                  homeTeam: selectedHomeTeam,
+                  awayTeam: selectedAwayTeam,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onReset: _handleReset,
+                  personalityOverride: _personalityOverride,
+                  onImagesLoaded: (files) {
+                    print(
+                        'DEBUG: onImagesLoaded called with ${files.length} files');
                     setState(() {
-                      _thumbCenterRequestId++;
+                      imagePaths = files;
+                      currentIndex = 0;
                     });
-                    _onImageSelected(currentIndex - 1);
-                  }
-                },
-                onReset: _handleReset,
-                personalityOverride: _personalityOverride,
-                onImagesLoaded: (files) {
-                  print(
-                      'DEBUG: onImagesLoaded called with ${files.length} files');
-                  setState(() {
-                    imagePaths = files;
-                    currentIndex = 0;
-                  });
-                },
-                onStartFolderWatcher: _startFolderWatcher,
-                preloadedHomeRoster:
-                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-                preloadedAwayRoster:
-                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-                currentImagePath:
-                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                totalImages: imagePaths.length,
-                onSaveIptc: _saveIptcMetadata,
-                onImageUploaded: (imagePath) {
-                  // Queue manager handles adding to uploaded set
-                  // This callback is mainly for the main FTP button
-                  if (!_currentlyUploading.contains(imagePath)) {
+                  },
+                  onStartFolderWatcher: _startFolderWatcher,
+                  preloadedHomeRoster:
+                      _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                  preloadedAwayRoster:
+                      _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                  currentImagePath:
+                      imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                  currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                  totalImages: imagePaths.length,
+                  onSaveIptc: _saveIptcMetadata,
+                  onImageUploaded: (imagePath) {
+                    // Queue manager handles adding to uploaded set
+                    // This callback is mainly for the main FTP button
+                    if (!_currentlyUploading.contains(imagePath)) {
+                      setState(() {
+                        _uploadedImages.add(imagePath);
+                        _uploadProgress
+                            .remove(imagePath); // Clear progress when done
+                      });
+                    }
+                  },
+                  onUploadProgress: (imagePath, progress) {
                     setState(() {
-                      _uploadedImages.add(imagePath);
-                      _uploadProgress
-                          .remove(imagePath); // Clear progress when done
+                      _uploadProgress[imagePath] = progress;
                     });
-                  }
-                },
-                onUploadProgress: (imagePath, progress) {
-                  setState(() {
-                    _uploadProgress[imagePath] = progress;
-                  });
-                },
-              ),
-            ),
+                  },
+                ),
+              ), // Close CaptionFieldsWidget
+            ), // Close Align
           ],
         ),
       ),

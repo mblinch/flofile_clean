@@ -2899,11 +2899,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         alignment: Alignment.centerLeft,
                         child: Container(
                           width: double.infinity,
-                          height:
-                              96, // Increased height to accommodate both rows comfortably
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                          ), // Add top and bottom padding
                           margin: EdgeInsets.zero,
                           alignment: Alignment.centerLeft,
                           // No border decoration
@@ -3738,14 +3733,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ),
-
-                                    // Middle and right columns with buttons removed; firebar now stands alone in this row
-                                  ],
-                                ),
-                        ),
-                      ),
+                                      ), // end inner Row
+                                    ), // end Expanded
+                                  ], // end outer Row children
+                                ), // end outer Row
+                        ), // end Container
+                      ), // end Align
 
                       // Player and Verb Selection Area
                       Expanded(child: _buildCaptionBuildingSection()),
@@ -7519,7 +7512,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: Colors.black87,
                 ),
               ),
-              Spacer(),
             ],
           ),
           const SizedBox(height: 4),
@@ -16751,9 +16743,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildNavigationButtons() {
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 2, 0, 2),
-      height: 96, // Increased height to accommodate both rows comfortably
       decoration: BoxDecoration(
-        color: Colors.amberAccent.withOpacity(0.25), // Temp: highlight area
         borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
@@ -17279,86 +17269,79 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildBackButtonWithWidth(double width, {VoidCallback? onPressed}) {
-    return Column(
-      children: [
-        // Back button
-        Align(
-          alignment: Alignment.centerLeft,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: width, // Use passed width parameter
+        margin: const EdgeInsets.symmetric(
+          horizontal: 5,
+        ), // 5px padding from left and right
+        child: CustomButton(
+          onTap: onPressed ??
+              () {
+                setState(() {
+                  if (_cameFromCelebration) {
+                    // Return to celebration section
+                    _selectedVerb = 'Celebration';
+                    _selectedActionVerb =
+                        null; // Reset action verb to clear caption
+                    _selectedHittingAction = null;
+                    _selectedCelebrationType = null; // Reset celebration type
+                    _isCelebratingScoring = false; // Reset scoring celebration
+                    _isCelebratingWithTeammates =
+                        false; // Reset teammates celebration
+                    _cameFromCelebration = false; // Reset the flag
+                    // Reset all menu items
+                    _rbiCount = null;
+                    _selectedRbiInning = null;
+                    _showExtraInnings = false;
+                    _extraInningsPage = 0;
+                  } else {
+                    // Return to main verb menu
+                    _selectedVerb = null;
+                    _selectedActionVerb =
+                        null; // Reset action verb to clear caption
+                    _selectedHittingAction = null;
+                    _rbiCount = null;
+                    _selectedRbiInning = null;
+                    _showExtraInnings = false;
+                    _extraInningsPage = 0;
+                  }
+                });
+                _updateCaption();
+              },
           child: Container(
-            width: width, // Use passed width parameter
-            margin: const EdgeInsets.symmetric(
-              horizontal: 5,
-            ), // 5px padding from left and right
-            child: CustomButton(
-              onTap: onPressed ??
-                  () {
-                    setState(() {
-                      if (_cameFromCelebration) {
-                        // Return to celebration section
-                        _selectedVerb = 'Celebration';
-                        _selectedActionVerb =
-                            null; // Reset action verb to clear caption
-                        _selectedHittingAction = null;
-                        _selectedCelebrationType =
-                            null; // Reset celebration type
-                        _isCelebratingScoring =
-                            false; // Reset scoring celebration
-                        _isCelebratingWithTeammates =
-                            false; // Reset teammates celebration
-                        _cameFromCelebration = false; // Reset the flag
-                        // Reset all menu items
-                        _rbiCount = null;
-                        _selectedRbiInning = null;
-                        _showExtraInnings = false;
-                        _extraInningsPage = 0;
-                      } else {
-                        // Return to main verb menu
-                        _selectedVerb = null;
-                        _selectedActionVerb =
-                            null; // Reset action verb to clear caption
-                        _selectedHittingAction = null;
-                        _rbiCount = null;
-                        _selectedRbiInning = null;
-                        _showExtraInnings = false;
-                        _extraInningsPage = 0;
-                      }
-                    });
-                    _updateCaption();
-                  },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey.shade300),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                const SizedBox(
+                  width: 15,
+                ), // 15px padding from the left edge
+                Icon(
+                  Icons.arrow_back,
+                  size: 14,
+                  color: Colors.grey.shade700,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    const SizedBox(
-                      width: 15,
-                    ), // 15px padding from the left edge
-                    Icon(
-                      Icons.arrow_back,
-                      size: 14,
-                      color: Colors.grey.shade700,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Back',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 4),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 

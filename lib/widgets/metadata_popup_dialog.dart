@@ -931,6 +931,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         _buildField('Country Code', 'CountryCode'),
                         _buildField(
                             'Special Instructions', 'SpecialInstructions'),
+                        _buildField('Urgency', 'Urgency'),
                       ]
                           .map((widget) => Padding(
                                 padding: const EdgeInsets.only(bottom: 5.0),
@@ -954,7 +955,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                         _buildField('Source', 'Source'),
                         _buildField('Headline', 'Headline'),
                         _buildField('Keywords (Test)', 'KeywordsTest'),
-                        _buildField('Urgency', 'Urgency'),
                       ]
                           .map((widget) => Padding(
                                 padding: const EdgeInsets.only(bottom: 5.0),
@@ -1016,6 +1016,11 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       // Ensure no stray controller remains for this key
       _fieldControllers.remove(key);
       return _buildKeywordChips(label, value);
+    }
+
+    // Special handling for Urgency - use dropdown instead of text field
+    if (key == 'Urgency') {
+      return _buildUrgencyDropdown(label, value);
     }
 
     // Get or create controller for this key. Only set text on creation to avoid
@@ -1150,6 +1155,76 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Add new keyword field at the top
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.add, size: 16, color: Colors.black),
+                    onPressed: () {
+                      final trimmed = addController.text.trim();
+                      if (trimmed.isNotEmpty) {
+                        // Split by commas and add each keyword
+                        final newKeywords = trimmed
+                            .split(',')
+                            .map((k) => k.trim())
+                            .where((k) => k.isNotEmpty && !keywords.contains(k))
+                            .toList();
+
+                        if (newKeywords.isNotEmpty) {
+                          setState(() {
+                            keywords.addAll(newKeywords);
+                            final newValue = keywords.join(', ');
+                            currentMetadata!['KeywordsTest'] = newValue;
+                            currentMetadata!['IPTC:Keywords'] = newValue;
+                          });
+                          addController.clear();
+                        }
+                      }
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: addController,
+                      decoration: InputDecoration(
+                        hintText: 'Add keyword(s) separated by commas...',
+                        hintStyle: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade500),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 4),
+                        isDense: true,
+                      ),
+                      style: const TextStyle(fontSize: 11),
+                      onSubmitted: (keyword) {
+                        final trimmed = keyword.trim();
+                        if (trimmed.isNotEmpty) {
+                          // Split by commas and add each keyword
+                          final newKeywords = trimmed
+                              .split(',')
+                              .map((k) => k.trim())
+                              .where(
+                                  (k) => k.isNotEmpty && !keywords.contains(k))
+                              .toList();
+
+                          if (newKeywords.isNotEmpty) {
+                            setState(() {
+                              keywords.addAll(newKeywords);
+                              final newValue = keywords.join(', ');
+                              currentMetadata!['KeywordsTest'] = newValue;
+                              currentMetadata!['IPTC:Keywords'] = newValue;
+                            });
+                            addController.clear();
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              if (keywords.isNotEmpty) const SizedBox(height: 8),
               // Existing keyword chips
               if (keywords.isNotEmpty)
                 Wrap(
@@ -1159,10 +1234,10 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                     return Chip(
                       label: Text(
                         keyword,
-                        style: const TextStyle(fontSize: 11),
+                        style: const TextStyle(fontSize: 9),
                       ),
                       deleteIcon: Icon(Icons.close,
-                          size: 14, color: Colors.grey.shade600),
+                          size: 10, color: Colors.grey.shade600),
                       onDeleted: () {
                         print('🗑️ DELETING KEYWORD: "$keyword"');
                         print('🗑️ BEFORE DELETE: keywords = $keywords');
@@ -1189,66 +1264,17 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                               '🗑️ CURRENT METADATA IPTC:Keywords: "${currentMetadata!['IPTC:Keywords']}"');
                         });
                       },
-                      backgroundColor: Colors.blue.shade50,
-                      side: BorderSide(color: Colors.blue.shade200),
+                      backgroundColor: Colors.grey.shade100,
+                      side: BorderSide(color: Colors.grey.shade300),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
+                          horizontal: 2, vertical: 0),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     );
                   }).toList(),
                 ),
-              if (keywords.isNotEmpty) const SizedBox(height: 8),
-              // Add new keyword field
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: addController,
-                      decoration: InputDecoration(
-                        hintText: 'Add keyword...',
-                        hintStyle: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500),
-                        border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 4),
-                        isDense: true,
-                      ),
-                      style: const TextStyle(fontSize: 11),
-                      onSubmitted: (keyword) {
-                        final trimmed = keyword.trim();
-                        if (trimmed.isNotEmpty && !keywords.contains(trimmed)) {
-                          setState(() {
-                            keywords.add(trimmed);
-                            final newValue = keywords.join(', ');
-                            currentMetadata!['KeywordsTest'] = newValue;
-                            currentMetadata!['IPTC:Keywords'] = newValue;
-                          });
-                          addController.clear();
-                        }
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    icon:
-                        Icon(Icons.add, size: 16, color: Colors.blue.shade600),
-                    onPressed: () {
-                      final trimmed = addController.text.trim();
-                      if (trimmed.isNotEmpty && !keywords.contains(trimmed)) {
-                        setState(() {
-                          keywords.add(trimmed);
-                          final newValue = keywords.join(', ');
-                          currentMetadata!['KeywordsTest'] = newValue;
-                          currentMetadata!['IPTC:Keywords'] = newValue;
-                        });
-                        addController.clear();
-                      }
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -1280,6 +1306,64 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       default:
         return value;
     }
+  }
+
+  Widget _buildUrgencyDropdown(String label, String value) {
+    // Define urgency levels
+    final urgencyLevels = ['0', '1', '2', '3', '4', '5', '6', '7', '8'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          height: 32, // Match the height of text fields
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: Colors.grey.shade500),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: urgencyLevels.contains(value) ? value : '5',
+              isExpanded: true,
+              items: urgencyLevels.map((String level) {
+                return DropdownMenuItem<String>(
+                  value: level,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                    child: Text(
+                      _getUrgencyDisplayText(level),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    currentMetadata!['Urgency'] = newValue;
+                    final pmKey = _getPhotoMechanicField('Urgency');
+                    if (pmKey != null) {
+                      currentMetadata![pmKey] = newValue;
+                    }
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   String? _getPhotoMechanicField(String key) {
@@ -2014,7 +2098,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
             // Footer with action buttons
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 16, bottom: 0),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
                 borderRadius: const BorderRadius.only(
