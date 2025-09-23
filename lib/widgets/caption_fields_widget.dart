@@ -2756,7 +2756,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   controller: captionController,
                                   maxLines: 4,
                                   onChanged: _onCaptionChanged,
-                                  style: const TextStyle(fontSize: 11),
+                                  style: const TextStyle(fontSize: 12),
                                   decoration: InputDecoration(
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(6),
@@ -3939,16 +3939,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ),
       child: Row(
         children: [
-          // Left Team (Home or Away depending on _homeOnLeft)
-          Expanded(
-            flex: 3,
+          // Left Team (Home or Away depending on _homeOnLeft) - Fixed width
+          SizedBox(
+            width: 340,
             child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
           ),
 
           const SizedBox(width: 4),
 
-          // Verbs (Center) - 70% of space
-          Expanded(flex: 7, child: _buildCompactVerbColumn()),
+          // Verbs (Center) - Takes remaining space
+          Expanded(child: _buildCompactVerbColumn()),
         ],
       ),
     );
@@ -4397,6 +4397,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     //     '${isHome ? "HOME" : "AWAY"} Search: "$searchText", Roster: ${roster.length}, Filtered: ${filteredRoster.length}');
 
     return Container(
+      width: double.infinity,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(6),
@@ -5578,7 +5579,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             jerseyNum.toString(),
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 11,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.w500,
@@ -5591,7 +5592,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 11,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -5670,7 +5671,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(2),
       child: Column(children: rows),
     );
   }
@@ -6303,7 +6304,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCompactVerbColumn() {
     return Container(
-      padding: const EdgeInsets.all(6),
+      width: double.infinity,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(6),
@@ -6892,7 +6894,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
               ),
               child: Container(
-                margin: const EdgeInsets.only(right: 2),
+                margin: const EdgeInsets.only(right: 1),
                 child: categoryName == 'Favorites'
                     ? _buildFavoritesCategory()
                     : _buildVerbCategory(
@@ -16393,7 +16395,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final screenHeight = screenSize.height;
 
     // Base font size and padding
-    double baseFontSize = 8.0;
+    double baseFontSize = 10.0;
     double baseVerticalPadding = 2.0;
 
     // Scale based on screen size (minimum 800x600, maximum 2560x1440)
@@ -16742,7 +16744,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildNavigationButtons() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 2, 0, 2),
+      margin: const EdgeInsets.fromLTRB(0, 7, 0, 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
       ),
@@ -16754,11 +16756,126 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
+              // Firebar label and input field
+              Row(
+                children: [
+                  // Firebar label
+                  Text(
+                    '🔥FIREBAR:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                      letterSpacing: -1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  // Firebar input field (fixed width - smaller to account for title)
+                  SizedBox(
+                    width: 200, // Fixed width
+                    height: 26,
+                    child: TextField(
+                      controller: _magicBarController,
+                      focusNode: _magicBarFocusNode,
+                      maxLines: 1,
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        hintText: _waitingForHomeVisitorChoice
+                            ? 'Press H for Home or V for Away'
+                            : '',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.blue.shade400),
+                        ),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _homePlayerGridMode = false;
+                          _awayPlayerGridMode = false;
+                        });
+                      },
+                      onChanged: (value) {
+                        if (_waitingForHomeVisitorChoice) {
+                          final lowerValue = value.toLowerCase();
+                          final hMatch = RegExp(r'h$').firstMatch(lowerValue);
+                          final vMatch = RegExp(r'v$').firstMatch(lowerValue);
+                          if (hMatch != null) {
+                            _processHomeVisitorChoice('h');
+                            return;
+                          } else if (vMatch != null) {
+                            _processHomeVisitorChoice('v');
+                            return;
+                          }
+                          if (!value
+                              .contains('Press H for Home or V for Away')) {
+                            final numberPart =
+                                _magicInputMatchingPlayers.first.jerseyNumber;
+                            final homePlayer =
+                                _magicInputMatchingPlayers.firstWhere(
+                              (p) => _homeRoster.contains(p),
+                              orElse: () => _magicInputMatchingPlayers.first,
+                            );
+                            final awayPlayer =
+                                _magicInputMatchingPlayers.firstWhere(
+                              (p) => !_homeRoster.contains(p),
+                              orElse: () => _magicInputMatchingPlayers.first,
+                            );
+                            final homeLastName =
+                                homePlayer.fullName.split(' ').last;
+                            final awayLastName =
+                                awayPlayer.fullName.split(' ').last;
+                            _magicBarController.text =
+                                '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
+                            _magicBarController.selection =
+                                TextSelection.fromPosition(
+                              TextPosition(
+                                offset: _magicBarController.text.length,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        _magicBarVerbInput = value.trim().toLowerCase();
+                        _typingFirstMagicToken = !value.contains(' ');
+                        if (value.isEmpty) {
+                          setState(() {});
+                          return;
+                        }
+                        final raw = value;
+                        final token = raw.trim().toLowerCase();
+                        final hasSpace = raw.contains(' ');
+                        final String lastToken = raw.trimRight().isEmpty
+                            ? ''
+                            : raw.trimRight().split(' ').last.toLowerCase();
+                        // Keep existing parsing logic (delegated to existing handlers)
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 6),
               // Prev
               Padding(
                 padding: const EdgeInsets.only(left: 6, right: 2),
                 child: SizedBox(
                   width: 70,
+                  height: 26,
                   child: CustomButton(
                     onTap: (widget.currentIndex != null &&
                             widget.currentIndex! > 0)
@@ -16816,6 +16933,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: SizedBox(
                   width: 70,
+                  height: 26,
                   child: CustomButton(
                     onTap: _copyMetadataFromCaptionWidget,
                     child: Container(
@@ -16856,6 +16974,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 2),
                 child: SizedBox(
                   width: 70,
+                  height: 26,
                   child: CustomButton(
                     onTap: _pasteMetadataToCaptionWidget,
                     child: Container(
@@ -16896,6 +17015,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 padding: const EdgeInsets.only(left: 2, right: 6),
                 child: SizedBox(
                   width: 70,
+                  height: 26,
                   child: CustomButton(
                     onTap: (widget.currentIndex != null &&
                             widget.totalImages != null &&
@@ -16952,125 +17072,97 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ),
               ),
-              // Inline Firebar (to the right of Next)
-              Expanded(
-                child: Container(
-                  height: 26,
-                  padding: const EdgeInsets.only(right: 6),
-                  alignment: Alignment.centerLeft,
-                  child: TextField(
-                    controller: _magicBarController,
-                    focusNode: _magicBarFocusNode,
-                    maxLines: 1,
-                    style: const TextStyle(fontSize: 11),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 8,
-                      ),
-                      hintText: _waitingForHomeVisitorChoice
-                          ? 'Press H for Home or V for Away'
-                          : '🔥 Firebar',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.blue.shade400),
-                      ),
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _homePlayerGridMode = false;
-                        _awayPlayerGridMode = false;
-                      });
-                    },
-                    onChanged: (value) {
-                      if (_waitingForHomeVisitorChoice) {
-                        final lowerValue = value.toLowerCase();
-                        final hMatch = RegExp(r'h$').firstMatch(lowerValue);
-                        final vMatch = RegExp(r'v$').firstMatch(lowerValue);
-                        if (hMatch != null) {
-                          _processHomeVisitorChoice('h');
-                          return;
-                        } else if (vMatch != null) {
-                          _processHomeVisitorChoice('v');
-                          return;
-                        }
-                        if (!value.contains('Press H for Home or V for Away')) {
-                          final numberPart =
-                              _magicInputMatchingPlayers.first.jerseyNumber;
-                          final homePlayer =
-                              _magicInputMatchingPlayers.firstWhere(
-                            (p) => _homeRoster.contains(p),
-                            orElse: () => _magicInputMatchingPlayers.first,
-                          );
-                          final awayPlayer =
-                              _magicInputMatchingPlayers.firstWhere(
-                            (p) => !_homeRoster.contains(p),
-                            orElse: () => _magicInputMatchingPlayers.first,
-                          );
-                          final homeLastName =
-                              homePlayer.fullName.split(' ').last;
-                          final awayLastName =
-                              awayPlayer.fullName.split(' ').last;
-                          _magicBarController.text =
-                              '$numberPart - Press H for $homeLastName #${homePlayer.jerseyNumber} or V for $awayLastName #${awayPlayer.jerseyNumber}';
-                          _magicBarController.selection =
-                              TextSelection.fromPosition(
-                            TextPosition(
-                              offset: _magicBarController.text.length,
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                      _magicBarVerbInput = value.trim().toLowerCase();
-                      _typingFirstMagicToken = !value.contains(' ');
-                      if (value.isEmpty) {
-                        setState(() {});
-                        return;
-                      }
-                      final raw = value;
-                      final token = raw.trim().toLowerCase();
-                      final hasSpace = raw.contains(' ');
-                      final String lastToken = raw.trimRight().isEmpty
-                          ? ''
-                          : raw.trimRight().split(' ').last.toLowerCase();
-                      // Keep existing parsing logic (delegated to existing handlers)
-                    },
-                  ),
-                ),
-              ),
+              // Removed previous inline Firebar on the right (now placed before Prev)
               // Removed top-row FTP Settings button (moved to second row)
             ],
           ),
-          const SizedBox(height: 8),
-          // Paste Previous button row
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            alignment: WrapAlignment.start,
+          const SizedBox(height: 4),
+          // Second row (Firebar Helper + Reset, Paste Previous, FTP, Settings)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              // Reset button (moved to left of Paste Previous)
+              // Firebar Helper (positioned below Firebar - wider for hint text)
+              Container(
+                width: 340, // Fixed width - wider for hint text
+                height: 26,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(
+                      _homeRoster.isNotEmpty
+                          ? 'Start by typing a player code, e.g. h${_homeRoster.first.jerseyNumber}'
+                          : 'Start by typing a player code, e.g. h27',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Reset button (positioned to align with Prev button)
               Padding(
-                padding: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.only(left: 6, right: 2),
+                child: SizedBox(
+                  width: 70,
+                  height: 26,
+                  child: CustomButton(
+                    onTap: _fullReset,
+                    child: Container(
+                      width: 70,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.refresh,
+                            size: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Reset',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              // Paste Previous button
+              SizedBox(
+                width: 219,
+                height: 26,
                 child: CustomButton(
-                  onTap: _fullReset,
+                  onTap: _pasteLastCaption,
                   child: Container(
-                    width: 80,
+                    width: 219,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
+                      color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
@@ -17078,17 +17170,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.refresh,
-                          size: 12,
+                          Icons.history,
+                          size: 14,
                           color: Colors.grey.shade700,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 2),
                         Text(
-                          'Reset',
+                          'Paste Previous',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey.shade700,
                             fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
                           ),
                         ),
                       ],
@@ -17096,44 +17188,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ),
               ),
-              // Paste Previous button
-              CustomButton(
-                onTap: _pasteLastCaption,
-                child: Container(
-                  width: 205,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.history,
-                        size: 14,
-                        color: Colors.grey.shade700,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Paste Previous',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const SizedBox(width: 6),
               // FTP button (second row)
               SizedBox(
-                width: 250,
+                width: 180,
                 height: 26,
                 child: CustomButton(
                   onTap: _disableFtp ? null : _onFtpPressed,
@@ -17189,6 +17247,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                 ),
               ),
+              const SizedBox(width: 6),
               // FTP Settings button (to the right of FTP)
               SizedBox(
                 width: 60,
