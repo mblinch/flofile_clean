@@ -5579,7 +5579,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             jerseyNum.toString(),
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.w500,
@@ -5592,7 +5592,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: isSelected
                                   ? FontWeight.w600
                                   : FontWeight.normal,
@@ -16772,7 +16772,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   const SizedBox(width: 3),
                   // Firebar input field (fixed width - smaller to account for title)
                   SizedBox(
-                    width: 200, // Fixed width
+                    width: 262, // Fixed width
                     height: 26,
                     child: TextField(
                       controller: _magicBarController,
