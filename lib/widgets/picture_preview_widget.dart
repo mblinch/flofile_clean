@@ -270,6 +270,33 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     return '${value}mm';
   }
 
+  String _buildCameraAndLensText() {
+    if (_exifData == null) return '';
+
+    List<String> parts = [];
+
+    // Add camera make and model
+    String camera =
+        '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'.trim();
+    if (camera.isNotEmpty) {
+      parts.add(camera);
+    }
+
+    // Add lens info
+    if (_exifData!['LensModel'] != null &&
+        _exifData!['LensModel'].toString().isNotEmpty) {
+      parts.add('${_exifData!['LensModel']}');
+    } else if (_exifData!['Lens'] != null &&
+        _exifData!['Lens'].toString().isNotEmpty) {
+      parts.add('${_exifData!['Lens']}');
+    } else if (_exifData!['LensID'] != null &&
+        _exifData!['LensID'].toString().isNotEmpty) {
+      parts.add('${_exifData!['LensID']}');
+    }
+
+    return parts.join(' • ');
+  }
+
   String _buildNaturalLanguageSettings() {
     if (_exifData == null) return '';
 
@@ -287,7 +314,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     if (_exifData!['FNumber'] != null) {
       String aperture = _formatAperture(_exifData!['FNumber']);
       if (aperture.isNotEmpty) {
-        parts.add('at $aperture');
+        parts.add(aperture);
       }
     }
 
@@ -295,20 +322,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     if (_exifData!['FocalLength'] != null) {
       String focal = _formatFocalLength(_exifData!['FocalLength']);
       if (focal.isNotEmpty) {
-        parts.add('at $focal');
+        parts.add(focal);
       }
-    }
-
-    // Add lens info at the end if available
-    if (_exifData!['LensModel'] != null &&
-        _exifData!['LensModel'].toString().isNotEmpty) {
-      parts.add('using a ${_exifData!['LensModel']}');
-    } else if (_exifData!['Lens'] != null &&
-        _exifData!['Lens'].toString().isNotEmpty) {
-      parts.add('using a ${_exifData!['Lens']}');
-    } else if (_exifData!['LensID'] != null &&
-        _exifData!['LensID'].toString().isNotEmpty) {
-      parts.add('using a ${_exifData!['LensID']}');
     }
 
     if (parts.isEmpty) return '';
@@ -407,8 +422,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                     p.basename(
                                         widget.imagePaths[widget.currentIndex]),
                                     style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.normal,
                                       color: Colors.black87,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -420,15 +435,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                             // Center: Pixel size
                             if (_exifData!['ImageWidth'] != null &&
                                 _exifData!['ImageHeight'] != null)
-                              Flexible(
+                              Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 12),
                                   child: Text(
                                     '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
+                                    textAlign: TextAlign.center,
                                     style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.normal,
                                       color: Colors.black87,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -442,7 +458,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                             Expanded(
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
-                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   // Previous button
                                   IconButton(
@@ -474,9 +489,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                         : null,
                                     icon: Icon(
                                       Icons.chevron_left,
-                                      color: widget.currentIndex > 0
-                                          ? Colors.black87
-                                          : Colors.grey,
+                                      color: Colors.black87,
                                       size: 16,
                                     ),
                                     padding: EdgeInsets.zero,
@@ -485,18 +498,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                   ),
 
                                   // Image counter between arrows
-                                  Flexible(
-                                    child: Text(
-                                      '${widget.currentIndex + 1}/$imageCount',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                      softWrap: false,
+                                  Text(
+                                    '${widget.currentIndex + 1}/$imageCount',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.normal,
+                                      color: Colors.black87,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    softWrap: false,
                                   ),
 
                                   // Next button
@@ -530,10 +541,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                         : null,
                                     icon: Icon(
                                       Icons.chevron_right,
-                                      color:
-                                          widget.currentIndex < imageCount - 1
-                                              ? Colors.black87
-                                              : Colors.grey,
+                                      color: Colors.black87,
                                       size: 16,
                                     ),
                                     padding: EdgeInsets.zero,
@@ -705,16 +713,15 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         )
                       : Row(
                           children: [
-                            // Left: Camera model
+                            // Left: Camera model and lens
                             if (_exifData!['Make'] != null ||
                                 _exifData!['Model'] != null)
                               Expanded(
                                 child: Text(
-                                  '${_exifData!['Make'] ?? ''} ${_exifData!['Model'] ?? ''}'
-                                      .trim(),
+                                  _buildCameraAndLensText(),
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.normal,
                                     color: Colors.grey.shade600,
                                   ),
                                   overflow: TextOverflow.ellipsis,
@@ -723,13 +730,12 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
                             // Center: Natural language camera settings
                             Expanded(
-                              flex: 1,
                               child: Center(
                                 child: Text(
                                   _buildNaturalLanguageSettings(),
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.normal,
                                     color: Colors.grey.shade600,
                                   ),
                                   textAlign: TextAlign.center,
@@ -750,8 +756,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                       _formatDateTime(
                                           _exifData!['DateTimeOriginal']),
                                       style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.normal,
                                         color: Colors.grey.shade600,
                                       ),
                                       textAlign: TextAlign.right,
