@@ -9,6 +9,8 @@ class PreferencesService {
       'favorite_verbs_baseball'; // Sport-specific favorites
   static const String _keyCurrentSport = 'current_sport'; // Track current sport
   static const String _keyFavoriteTeams = 'favorite_teams';
+  static const String _keyFavoriteTeamsBaseball =
+      'favorite_teams_baseball'; // Sport-specific team favorites
   static const String _keyFtpProfiles = 'ftp_profiles';
   static const String _keyCurrentFtpProfile = 'current_ftp_profile';
   static const String _keyPlaceFirebarOnRight = 'place_firebar_on_right';
@@ -135,24 +137,37 @@ class PreferencesService {
     await prefs.setString(key, json.encode(verbs.toList()));
   }
 
-  // Favorite Teams Preferences
-  Future<Set<String>> getFavoriteTeams() async {
+  // Favorite Teams Preferences (sport-specific)
+  Future<Set<String>> getFavoriteTeams({String sport = 'baseball'}) async {
     final prefs = await _getPrefs();
-    final teamsJson = prefs.getString(_keyFavoriteTeams);
+    final key = _getFavoriteTeamsKey(sport);
+    final teamsJson = prefs.getString(key);
     if (teamsJson != null) {
       try {
         final List<dynamic> teamsList = json.decode(teamsJson);
         return teamsList.cast<String>().toSet();
       } catch (e) {
-        print('Error parsing favorite teams: $e');
+        print('Error parsing favorite teams for $sport: $e');
       }
     }
     return <String>{};
   }
 
-  Future<void> saveFavoriteTeams(Set<String> teams) async {
+  Future<void> saveFavoriteTeams(Set<String> teams,
+      {String sport = 'baseball'}) async {
     final prefs = await _getPrefs();
-    await prefs.setString(_keyFavoriteTeams, json.encode(teams.toList()));
+    final key = _getFavoriteTeamsKey(sport);
+    await prefs.setString(key, json.encode(teams.toList()));
+  }
+
+  // Helper for favorite teams key per sport
+  String _getFavoriteTeamsKey(String sport) {
+    switch (sport.toLowerCase()) {
+      case 'baseball':
+        return _keyFavoriteTeamsBaseball;
+      default:
+        return '${_keyFavoriteTeams}_${sport.toLowerCase()}';
+    }
   }
 
   // FTP Profiles Preferences

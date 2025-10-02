@@ -154,7 +154,8 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   Future<void> _loadFavoriteTeams() async {
     _favoriteTeams.clear();
-    _favoriteTeams.addAll(await _preferencesService.getFavoriteTeams());
+    _favoriteTeams
+        .addAll(await _preferencesService.getFavoriteTeams(sport: 'baseball'));
     setState(() {});
   }
 
@@ -347,8 +348,35 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                             ),
                           ),
                         ),
-                        if (_favoriteTeams.contains(item))
-                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                        // Clickable star icon to toggle favorite
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (_favoriteTeams.contains(item)) {
+                                _favoriteTeams.remove(item);
+                              } else {
+                                _favoriteTeams.add(item);
+                              }
+
+                              // Save favorite teams preference for baseball
+                              _preferencesService.saveFavoriteTeams(
+                                  _favoriteTeams,
+                                  sport: 'baseball');
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              _favoriteTeams.contains(item)
+                                  ? Icons.star
+                                  : Icons.star_border,
+                              size: 12,
+                              color: _favoriteTeams.contains(item)
+                                  ? Colors.amber
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -474,8 +502,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                             _favoriteTeams.add(team);
                           }
 
-                          // Save favorite teams preference
-                          _preferencesService.saveFavoriteTeams(_favoriteTeams);
+                          // Save favorite teams preference for baseball
+                          _preferencesService.saveFavoriteTeams(_favoriteTeams,
+                              sport: 'baseball');
                         });
                       },
                     );
