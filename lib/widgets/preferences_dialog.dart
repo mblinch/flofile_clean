@@ -153,7 +153,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return AlertDialog(
       title: const Text('Preferences'),
       content: SizedBox(
-        width: 400,
+        width: 350,
         height: 500,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -267,4 +267,3 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     );
   }
 }
-
