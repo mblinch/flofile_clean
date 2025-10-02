@@ -11,6 +11,7 @@ import '../utils/native_file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/exiftool_helper.dart';
+import '../services/preferences_service.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -289,6 +290,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _unifiedSearchText = '';
   String _managerName = '';
 
+  // Preferences service
+  late PreferencesService _preferencesService;
+  bool _preferencesLoaded = false;
+  String _currentSport =
+      'baseball'; // Track current sport for saving sport-specific preferences
+
   // Prevent recursive onChanged updates for caption shortcuts
   bool _isProcessingCaptionShortcut = false;
 
@@ -366,7 +373,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'City': cityController.text,
         'Province-State': provinceController.text,
       };
-      print('DEBUG: Stored metadata for Last button: $_lastSavedMetadata');
     }
   }
 
@@ -1626,6 +1632,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void initState() {
     super.initState();
+    _initializePreferences();
     // Rebuild when magic bar focus changes to toggle verb bolding and switch to list mode
     _magicBarFocusNode.addListener(() {
       print(
@@ -1634,7 +1641,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         // Switch to list mode when magic bar is focused for easier player selection
         if (_magicBarFocusNode.hasFocus) {
-          print('DEBUG: Switching to list mode');
           _homePlayerGridMode = false;
           _awayPlayerGridMode = false;
         }
@@ -1667,12 +1673,61 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Store current metadata before disposing
     _storeCurrentMetadata();
 
+    // Save preferences before disposing
+    _savePreferences();
+
     _homeSearchController.dispose();
     _awaySearchController.dispose();
     _unifiedSearchController.dispose();
     _magicBarController.dispose();
     _magicBarFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _initializePreferences() async {
+    _preferencesService = await PreferencesService.getInstance();
+    await _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    // Load current sport first
+    _currentSport = await _preferencesService.getCurrentSport();
+
+    // Load category order for current sport
+    _categoryOrder =
+        await _preferencesService.getCategoryOrder(sport: _currentSport);
+
+    // Load favorite verbs for current sport
+    _favoriteVerbs =
+        await _preferencesService.getFavoriteVerbs(sport: _currentSport);
+
+    // Load firebar position
+    _placeFirebarOnRight = await _preferencesService.getPlaceFirebarOnRight();
+
+    // Load last saved metadata
+    _lastSavedMetadata = await _preferencesService.getLastSavedMetadata();
+
+    // Load FTP profiles
+    _ftpProfiles = await _preferencesService.getFtpProfiles();
+    _currentFtpProfile = await _preferencesService.getCurrentFtpProfile();
+
+    if (mounted) {
+      setState(() {
+        _preferencesLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _savePreferences() async {
+    await _preferencesService.saveCategoryOrder(_categoryOrder,
+        sport: _currentSport);
+    await _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
+        sport: _currentSport);
+    await _preferencesService.savePlaceFirebarOnRight(_placeFirebarOnRight);
+    await _preferencesService.saveLastSavedMetadata(_lastSavedMetadata);
+    await _preferencesService.saveFtpProfiles(_ftpProfiles);
+    await _preferencesService.saveCurrentFtpProfile(_currentFtpProfile);
+    await _preferencesService.saveCurrentSport(_currentSport);
   }
 
   void _initializeSampleData() {
@@ -2008,7 +2063,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     for (final match in codeMatches) {
       final code = match.group(0)!.trim();
-      print('DEBUG: Processing code: $code');
       _processCodeOnSpacebar(value, match, code);
     }
   }
@@ -2016,7 +2070,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Process code when spacebar is pressed
   void _processCodeOnSpacebar(String value, RegExpMatch match, String code) {
     // Process the code every time spacebar is pressed (allow repetition)
-    print('DEBUG: Processing code: $code');
 
     // Process different types of codes
     final lowerCode = code.toLowerCase();
@@ -2081,8 +2134,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     if (found != null) {
-      print('DEBUG: Found player for code $code: ${found.displayName}');
-
       // Build replacement text
       String replacement = found.displayName;
 
@@ -2342,7 +2393,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final codeMatches = RegExp(
             r'([hv]\d{1,3}|[hv]{2}\d{1,3}|[hv][tv]|[hv]|[ag]|[ah]|[av]|[i]\d{1,3}) ',
           ).allMatches(value);
-          print('DEBUG: Found ${codeMatches.length} potential codes');
 
           // Find the code that ends right at the cursor position
           RegExpMatch? bestMatch;
@@ -2360,7 +2410,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
           if (bestMatch != null) {
             final code = bestMatch.group(0)!.trim();
-            print('DEBUG: Processing code: $code');
 
             // Process the code (this will handle all types: player, team, inning, against)
             _processCodeOnSpacebar(value, bestMatch, code);
@@ -6991,6 +7040,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             // Swap the categories
             _categoryOrder[draggedIndex] = categoryName;
             _categoryOrder[targetIndex] = draggedCategory;
+
+            // Save the new category order immediately for current sport
+            _preferencesService.saveCategoryOrder(_categoryOrder,
+                sport: _currentSport);
           }
         });
       },
@@ -7085,26 +7138,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               color: Colors.amber.shade200,
               borderRadius: BorderRadius.circular(3),
             ),
-            child: RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Favorites',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' (Long press any verb to add)',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.normal,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
+            child: const Text(
+              'Favorites',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
             ),
           ),
@@ -7212,6 +7251,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           } else {
             _favoriteVerbs.add(verb);
           }
+
+          // Save favorite verbs preference for current sport
+          _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
+              sport: _currentSport);
         });
       },
       child: Container(
@@ -8173,7 +8216,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Magic input parsing methods
   bool _isMagicInput(String input) {
-    print('DEBUG: _isMagicInput called with: "$input"');
     if (input.isEmpty) return false;
 
     final parts = input.trim().toLowerCase().split(' ');
@@ -8214,10 +8256,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Check if it's a team prefix + number (h27, v23, hh27, vv23)
       final teamPrefixRegex = RegExp(r'^(h{1,2}|v{1,2})(\d+)$');
       final match = teamPrefixRegex.firstMatch(firstPart);
-      print('DEBUG: Checking team prefix for "$firstPart", match: $match');
       if (match != null) {
         isValidFirstPart = true;
-        print('DEBUG: Valid team prefix + number found');
       }
     }
 
@@ -10097,11 +10137,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final metadata = data.first as Map<String, dynamic>;
 
           // DEBUG: Show ALL metadata fields we got from the image
-          print('DEBUG: ===== ALL EXIF METADATA FIELDS =====');
-          metadata.forEach((key, value) {
-            print('DEBUG: $key = $value');
-          });
-          print('DEBUG: ===== END METADATA DUMP =====');
 
           // Helper function to clean up creator/credit values
           String? cleanMetadataValue(dynamic value) {
@@ -10142,21 +10177,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // creator = _sanitizeBylineString(creator);
           // credit = _sanitizeBylineString(credit);
 
-          print(
-              'DEBUG: Raw metadata creator: ${metadata['IPTC:By-line']} / ${metadata['By-line']} / ${metadata['Byline']} / ${metadata['Creator']} / ${metadata['XMP:Creator']} / ${metadata['Artist']} / ${metadata['Photographer']} / ${metadata['IPTC:Photographer']} / ${metadata['XMP:Photographer']}');
-          print(
-              'DEBUG: Raw metadata credit: ${metadata['IPTC:Credit']} / ${metadata['Credit']}');
-          print('DEBUG: Cleaned creator: "$creator", credit: "$credit"');
-
           return {
             'creator': creator,
             'credit': credit,
           };
         }
       }
-    } catch (e) {
-      print('DEBUG: Error running ExifTool for creator/credit: $e');
-    }
+    } catch (e) {}
 
     return {
       'creator': null,
@@ -10425,7 +10452,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Debug logging
-    print('DEBUG: Creator: "$creatorValue", Credit: "$creditValue"');
 
     String photoBy;
     // Since we're now getting String values from the metadata widget, we don't need List handling
@@ -10444,8 +10470,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       byline = ''; // No creator/credit info available
     }
-
-    print('DEBUG: Final byline: "$byline"');
 
     // Add custom text between players if provided (but not magic input)
     String customTextPart = '';
@@ -10498,8 +10522,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Public method to upload any image via FTP (called from thumbnail grid)
   Future<void> uploadImageViaFtp(String imagePath) async {
-    print('DEBUG: uploadImageViaFtp called for: $imagePath');
-
     // Check if FTP settings are configured
     if (_ftpHost.isEmpty || _ftpUsername.isEmpty || _ftpPassword.isEmpty) {
       throw Exception('Please configure FTP settings first!');
@@ -10534,7 +10556,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       );
 
       if (result.success == true) {
-        print('DEBUG: FTP upload successful for $imagePath');
         // Notify parent that image was uploaded successfully
         if (widget.onImageUploaded != null) {
           widget.onImageUploaded!(imagePath);
@@ -10543,7 +10564,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         throw Exception(result.error ?? 'FTP upload failed');
       }
     } catch (e) {
-      print('DEBUG: FTP upload failed for $imagePath: $e');
       throw e;
     }
   }
@@ -10569,13 +10589,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Check if an image is selected
-    print('DEBUG: FTP Upload - currentImagePath: "${widget.currentImagePath}"');
-    print(
-      'DEBUG: FTP Upload - currentImagePath is null: ${widget.currentImagePath == null}',
-    );
-    print(
-      'DEBUG: FTP Upload - currentImagePath is empty: ${widget.currentImagePath?.isEmpty}',
-    );
 
     if (widget.currentImagePath == null || widget.currentImagePath!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -10686,12 +10699,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
 
       // Start folder watcher
-      print('DEBUG: Attempting to start folder watcher for: $dirPath');
       if (widget.onStartFolderWatcher != null) {
-        print('DEBUG: onStartFolderWatcher callback is available');
         widget.onStartFolderWatcher!(dirPath);
-      } else {
-        print('DEBUG: onStartFolderWatcher callback is null');
       }
 
       // Show success message
@@ -11470,21 +11479,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     allMetadata['Sub-location'] = stadiumController.text;
     allMetadata['City'] = cityController.text;
     allMetadata['Province-State'] = provinceController.text;
-
-    print(
-      'DEBUG: personalityController.text = "${personalityController.text}"',
-    );
-    print(
-      'DEBUG: allMetadata["XMP-getty:Personality"] = "${allMetadata['XMP-getty:Personality']}"',
-    );
-    print(
-      'DEBUG: personalityController.text length: ${personalityController.text.length}',
-    );
-    print(
-      'DEBUG: personalityController.text isEmpty: ${personalityController.text.isEmpty}',
-    );
-
-    print('DEBUG: All metadata before filtering: $allMetadata');
 
     // Remove date and time fields
     allMetadata.remove('Date');

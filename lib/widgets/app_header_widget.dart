@@ -5,6 +5,8 @@ import '../utils/native_file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import '../services/api_manager.dart';
+import '../services/preferences_service.dart';
+import 'preferences_dialog.dart';
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(List<String>) onImagesLoaded;
@@ -32,6 +34,9 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
 class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   // API Manager
   final ApiManager _apiManager = ApiManager();
+
+  // Preferences service
+  late PreferencesService _preferencesService;
 
   // Platform channel for window operations
   static const MethodChannel _windowChannel = MethodChannel('window_control');
@@ -137,8 +142,20 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   @override
   void initState() {
     super.initState();
+    _initializePreferences();
     // Test initial API connection
     _testApiConnection();
+  }
+
+  Future<void> _initializePreferences() async {
+    _preferencesService = await PreferencesService.getInstance();
+    await _loadFavoriteTeams();
+  }
+
+  Future<void> _loadFavoriteTeams() async {
+    _favoriteTeams.clear();
+    _favoriteTeams.addAll(await _preferencesService.getFavoriteTeams());
+    setState(() {});
   }
 
   @override
@@ -245,6 +262,18 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ],
         ),
       ),
+      actions: [
+        IconButton(
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => const PreferencesDialog(),
+            );
+          },
+          icon: const Icon(Icons.settings),
+          tooltip: 'Preferences',
+        ),
+      ],
     );
   }
 
@@ -444,6 +473,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                           } else {
                             _favoriteTeams.add(team);
                           }
+
+                          // Save favorite teams preference
+                          _preferencesService.saveFavoriteTeams(_favoriteTeams);
                         });
                       },
                     );
