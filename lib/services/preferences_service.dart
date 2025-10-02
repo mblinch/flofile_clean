@@ -15,6 +15,10 @@ class PreferencesService {
   static const String _keyCurrentFtpProfile = 'current_ftp_profile';
   static const String _keyPlaceFirebarOnRight = 'place_firebar_on_right';
   static const String _keyLastSavedMetadata = 'last_saved_metadata';
+  // Custom verb wordings (per sport)
+  static const String _keyCustomVerbWordings = 'custom_verb_wordings';
+  static const String _keyCustomVerbWordingsBaseball =
+      'custom_verb_wordings_baseball';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -110,6 +114,16 @@ class PreferencesService {
         return _keyCategoryOrderBaseball;
       default:
         return '${_keyCategoryOrder}_${sport.toLowerCase()}';
+    }
+  }
+
+  // Helper for custom verb wordings key per sport
+  String _getCustomVerbWordingsKey(String sport) {
+    switch (sport.toLowerCase()) {
+      case 'baseball':
+        return _keyCustomVerbWordingsBaseball;
+      default:
+        return '${_keyCustomVerbWordings}_${sport.toLowerCase()}';
     }
   }
 
@@ -239,6 +253,47 @@ class PreferencesService {
       await prefs.setString(_keyLastSavedMetadata, json.encode(metadata));
     } else {
       await prefs.remove(_keyLastSavedMetadata);
+    }
+  }
+
+  // Custom Verb Wordings (per sport)
+  Future<Map<String, String>> getCustomVerbWordings(
+      {String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final key = _getCustomVerbWordingsKey(sport);
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return <String, String>{};
+    try {
+      final Map<String, dynamic> decoded = json.decode(jsonString);
+      return decoded.map((k, v) => MapEntry(k, v.toString()));
+    } catch (e) {
+      print('Error parsing custom verb wordings for ' +
+          sport +
+          ': ' +
+          e.toString());
+      return <String, String>{};
+    }
+  }
+
+  Future<void> saveCustomVerbWording(String verb, String wording,
+      {String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final key = _getCustomVerbWordingsKey(sport);
+    final existing = await getCustomVerbWordings(sport: sport);
+    existing[verb] = wording;
+    await prefs.setString(key, json.encode(existing));
+  }
+
+  Future<void> removeCustomVerbWording(String verb,
+      {String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final key = _getCustomVerbWordingsKey(sport);
+    final existing = await getCustomVerbWordings(sport: sport);
+    existing.remove(verb);
+    if (existing.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(existing));
     }
   }
 

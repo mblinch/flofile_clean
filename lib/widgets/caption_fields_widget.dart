@@ -295,6 +295,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _preferencesLoaded = false;
   String _currentSport =
       'baseball'; // Track current sport for saving sport-specific preferences
+  Map<String, String> _customVerbWordings = {}; // Custom wordings for verbs
 
   // Prevent recursive onChanged updates for caption shortcuts
   bool _isProcessingCaptionShortcut = false;
@@ -1571,6 +1572,380 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // Helper method to get the display text for a verb (custom or original)
+  String _getVerbDisplayText(String verb) {
+    // Always return the original verb name for display in chips
+    return verb;
+  }
+
+  // Helper method to prefill the edit dialog with what the verb writes
+  String _getDefaultVerbWordingForEdit(String verb) {
+    final custom = _customVerbWordings[verb];
+    if (custom != null && custom.trim().isNotEmpty) {
+      return custom.trim();
+    }
+    // Return the base action phrase that this verb writes (without "against the team" part)
+    // This is what the user can customize
+    switch (verb) {
+      case 'Home Run':
+        return 'home run';
+      case 'Single':
+        return 'single';
+      case 'Double':
+        return 'double';
+      case 'Triple':
+        return 'triple';
+      case 'Sacrifice Fly':
+        return 'sacrifice fly';
+      case 'Grand Slam':
+        return 'grand slam';
+      case 'At Bat':
+        return 'takes an at bat in his batting stance';
+      case 'Pitching':
+        return 'delivers a pitch';
+      case 'Swings':
+        return 'swings';
+      case 'Bunts':
+        return 'bunts';
+      case 'Hit by Pitch':
+        return 'is hit by a pitch';
+      case 'Walks':
+        return 'takes a walk';
+      case 'Fielding Position':
+        return 'takes fielding position';
+      case 'Looks On':
+        return 'looks on';
+      case 'Walks Off Field':
+        return 'walks off the field';
+      case 'Runs Off Field':
+        return 'runs off the field';
+      case 'Takes the Field':
+        return 'takes the field';
+      case 'Comes Off the Field':
+        return 'comes off the field';
+      case 'National Anthem':
+        return 'looks on during the national anthem prior to play';
+      case 'Stretching':
+        return 'stretches prior to play';
+      case 'Warm Ups':
+        return 'takes part in warm ups prior to play';
+      case 'Pitching Change':
+        return 'pitcher taken out of the game';
+      case 'Catches':
+        return 'catches a ball';
+      case 'Throws':
+        return 'throws a ball';
+      case 'Tags':
+        return 'tags a runner out';
+      case 'Groundball':
+        return 'fields a groundball';
+      case 'Double Play':
+        return 'turns a double play';
+      case 'Triple Play':
+        return 'turns a triple play';
+      case 'Steals':
+        return 'steals a base';
+      case 'Slides':
+        return 'slides into a base';
+      case 'Runs':
+        return 'runs to a base';
+      case 'Rounds':
+        return 'rounds a base';
+      case 'Celebrates':
+      case 'Celebration':
+        return 'celebrates';
+      case 'Dejection':
+        return 'reacts with dejection';
+      default:
+        return _getVerbDisplayText(verb);
+    }
+  }
+
+  String _getExampleCaption(String verb, [String? customWording]) {
+    // Pick a random player from the available rosters
+    String playerInfo = 'John Smith'; // fallback
+    String opposingTeamName = 'opposing team'; // fallback
+
+    List<Player> allPlayers = [..._homeRoster, ..._awayRoster];
+    if (allPlayers.isNotEmpty) {
+      final randomIndex =
+          DateTime.now().millisecondsSinceEpoch % allPlayers.length;
+      final randomPlayer = allPlayers[randomIndex];
+
+      // Check if player is from home or away team
+      bool isHomePlayer = _homeRoster.contains(randomPlayer);
+      String teamName = isHomePlayer
+          ? (selectedHomeTeam ?? 'Home Team')
+          : (selectedAwayTeam ?? 'Away Team');
+      opposingTeamName = isHomePlayer
+          ? (selectedAwayTeam ?? 'Away Team')
+          : (selectedHomeTeam ?? 'Home Team');
+
+      // Format: "Player Name #27 of the Team Name"
+      String number = randomPlayer.jerseyNumber ?? '';
+      if (number.isNotEmpty) {
+        playerInfo = '${randomPlayer.fullName} #$number of the $teamName';
+      } else {
+        playerInfo = '${randomPlayer.fullName} of the $teamName';
+      }
+    }
+
+    // Generate example caption based on verb - use custom wording if provided
+    String action = customWording?.trim().isNotEmpty == true
+        ? customWording!
+        : (_customVerbWordings[verb] ?? _getDefaultVerbWordingForEdit(verb));
+
+    return '$playerInfo $action against the $opposingTeamName...';
+  }
+
+  void _showEditVerbDialog(String verb) {
+    final originalVerbName = verb; // Store the original verb name
+    final currentWording = _getDefaultVerbWordingForEdit(verb);
+    final TextEditingController controller =
+        TextEditingController(text: currentWording);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+              titlePadding: EdgeInsets.zero,
+              title: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Text(
+                  'Edit "$originalVerbName" wording',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              contentPadding: const EdgeInsets.all(16),
+              content: SizedBox(
+                width: 450,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Customize wording',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      maxLines: 3,
+                      style: const TextStyle(fontSize: 12),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          // Update the example caption when text changes
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Enter custom wording',
+                        hintStyle: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade400),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Example caption:',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _getExampleCaption(verb, controller.text),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              actions: [
+                ElevatedButton(
+                  onPressed: () async {
+                    // Reset to default
+                    await _preferencesService.removeCustomVerbWording(verb,
+                        sport: _currentSport);
+
+                    setState(() {
+                      _customVerbWordings.remove(verb);
+                    });
+                    _updateCaption();
+
+                    Navigator.pop(context);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Reset "$verb" to default',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        duration: const Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade100,
+                    foregroundColor: Colors.grey.shade700,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: const Text(
+                    'Reset to Default',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade100,
+                    foregroundColor: Colors.grey.shade700,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final customWording = controller.text.trim();
+                    if (customWording.isEmpty) {
+                      // Remove custom wording if empty
+                      await _preferencesService.removeCustomVerbWording(verb,
+                          sport: _currentSport);
+
+                      setState(() {
+                        _customVerbWordings.remove(verb);
+                      });
+                      _updateCaption();
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Reset "$verb" to default',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } else if (customWording != verb) {
+                      // Save custom verb wording to preferences
+                      await _preferencesService.saveCustomVerbWording(
+                          verb, customWording,
+                          sport: _currentSport);
+
+                      setState(() {
+                        _customVerbWordings[verb] = customWording;
+                      });
+                      _updateCaption();
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Custom wording saved: "$verb" → "$customWording"',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } else {
+                      // No change, just close
+                      Navigator.pop(context);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: const Text(
+                    'Save',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildFirebarSection(
     String title,
     String subtitle,
@@ -1700,6 +2075,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Load favorite verbs for current sport
     _favoriteVerbs =
         await _preferencesService.getFavoriteVerbs(sport: _currentSport);
+
+    // Load custom verb wordings for current sport
+    _customVerbWordings =
+        await _preferencesService.getCustomVerbWordings(sport: _currentSport);
 
     // Load firebar position
     _placeFirebarOnRight = await _preferencesService.getPlaceFirebarOnRight();
@@ -7216,6 +7595,71 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Get the shortest unique prefix for this verb
     String shortestPrefix = _getShortestUniquePrefix(verb, allVerbs);
     return GestureDetector(
+      onSecondaryTapDown: (details) {
+        // Show context menu on right-click
+        final RenderBox overlay =
+            Overlay.of(context).context.findRenderObject() as RenderBox;
+        final RelativeRect position = RelativeRect.fromRect(
+          Rect.fromPoints(
+            details.globalPosition,
+            details.globalPosition,
+          ),
+          Offset.zero & overlay.size,
+        );
+
+        showMenu<String>(
+          context: context,
+          position: position,
+          items: [
+            PopupMenuItem<String>(
+              value: 'favorite',
+              child: Row(
+                children: [
+                  Icon(
+                    _favoriteVerbs.contains(verb)
+                        ? Icons.star
+                        : Icons.star_border,
+                    size: 18,
+                    color: _favoriteVerbs.contains(verb)
+                        ? Colors.amber
+                        : Colors.grey,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(_favoriteVerbs.contains(verb)
+                      ? 'Remove from Favorites'
+                      : 'Add to Favorites'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, size: 18, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Text('Edit Wording'),
+                ],
+              ),
+            ),
+          ],
+        ).then((value) {
+          if (value == 'favorite') {
+            setState(() {
+              if (_favoriteVerbs.contains(verb)) {
+                _favoriteVerbs.remove(verb);
+              } else {
+                _favoriteVerbs.add(verb);
+              }
+
+              // Save favorite verbs preference for current sport
+              _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
+                  sport: _currentSport);
+            });
+          } else if (value == 'edit') {
+            _showEditVerbDialog(verb);
+          }
+        });
+      },
       onTap: () {
         setState(() {
           if (isSelected) {
@@ -7378,7 +7822,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     text: TextSpan(
                       children: [
                         TextSpan(
-                          text: verb,
+                          text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -7409,7 +7853,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     text: TextSpan(
                       children: [
                         TextSpan(
-                          text: verb,
+                          text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -7439,7 +7883,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     text: TextSpan(
                       children: [
                         TextSpan(
-                          text: verb,
+                          text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -7471,7 +7915,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     text: TextSpan(
                       children: [
                         TextSpan(
-                          text: verb,
+                          text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -14074,14 +14518,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   String _buildActionPhrase() {
     String baseAction = '';
-    final verbToUse = _selectedActionVerb ?? _selectedVerb;
-    if (verbToUse == null) return '';
+    final originalVerb = _selectedActionVerb ?? _selectedVerb;
+    if (originalVerb == null) return '';
+
+    // Check for custom wording first - if it exists, use it for most verbs
+    final String? customWording = _customVerbWordings[originalVerb];
+    final bool hasCustomWording =
+        customWording != null && customWording.trim().isNotEmpty;
 
     // Get the count of active players for plural/singular verb forms
     final activePlayerCount =
         selectedHomePlayers.length + selectedAwayPlayers.length;
 
-    switch (verbToUse) {
+    // Use original verb for switch logic, but custom wording for output
+    switch (originalVerb) {
       case 'Single':
         baseAction = 'single';
         break;
@@ -14104,14 +14554,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         baseAction = 'grand slam';
         break;
       case 'At Bat':
-        return 'takes an at bat in his batting stance against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'takes an at bat in his batting stance against the ${_getOpposingTeamName()}';
       case 'Pitching':
-        return 'delivers a pitch against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'delivers a pitch against the ${_getOpposingTeamName()}';
       case 'Swings':
-        return 'swings against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'swings against the ${_getOpposingTeamName()}';
       case 'Bunts':
-        return 'bunts against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'bunts against the ${_getOpposingTeamName()}';
       case 'Hit by Pitch':
+        if (hasCustomWording) {
+          // Check if opposing players are selected
+          final opposingPlayers = _getOpposingPlayers();
+          if (opposingPlayers.isNotEmpty) {
+            final pitcherName = _formatPlayersWithTeam(opposingPlayers);
+            return '$customWording by $pitcherName';
+          } else {
+            final opposingTeam = _getOpposingTeamName();
+            return '$customWording against the $opposingTeam';
+          }
+        }
         // Check if opposing players are selected
         final opposingPlayers = _getOpposingPlayers();
         if (opposingPlayers.isNotEmpty) {
@@ -14122,6 +14591,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return 'gets hit by a pitch against the $opposingTeam';
         }
       case 'Walks':
+        if (hasCustomWording) {
+          // Check if opposing players are selected
+          final opposingPlayersWalks = _getOpposingPlayers();
+          if (opposingPlayersWalks.isNotEmpty) {
+            final pitcherName = _formatPlayersWithTeam(opposingPlayersWalks);
+            return '$customWording against $pitcherName';
+          } else {
+            final opposingTeam = _getOpposingTeamName();
+            return '$customWording against the $opposingTeam';
+          }
+        }
         // Check if opposing players are selected
         final opposingPlayersWalks = _getOpposingPlayers();
         if (opposingPlayersWalks.isNotEmpty) {
@@ -14132,7 +14612,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return 'takes a walk against the $opposingTeam';
         }
       case 'Fielding Position':
-        return 'takes fielding position against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'takes fielding position against the ${_getOpposingTeamName()}';
 
       case 'Looks On':
         // Check if multiple players are selected
@@ -14239,13 +14721,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         }
       case 'Catches':
+        if (hasCustomWording) {
+          return '$customWording against the ${_getOpposingTeamName()}';
+        }
         if (_selectedFieldingAction == 'Diving Catch' || _isDivingCatch) {
           return 'makes a diving catch against the ${_getOpposingTeamName()}';
         } else {
           return 'catches a ball against the ${_getOpposingTeamName()}';
         }
       case 'Throws':
-        return 'throws a ball against the ${_getOpposingTeamName()}';
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'throws a ball against the ${_getOpposingTeamName()}';
       case 'Tags':
         if (_selectedTagsAction != null) {
           // Handle On the Base Path as a special case first
@@ -14325,6 +14812,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
         return 'tags a player out of the ${_getOpposingTeamName()}';
       case 'Groundball':
+        if (hasCustomWording) {
+          return '$customWording against the ${_getOpposingTeamName()}';
+        }
         if (_isDivingCatch) {
           return 'dives for a groundball against the ${_getOpposingTeamName()}';
         } else {
@@ -14687,12 +15177,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return 'runs on the field prior to playing the ${_getOpposingTeamName()}';
         }
       default:
-        baseAction = verbToUse.toLowerCase();
+        baseAction = originalVerb.toLowerCase();
+    }
+
+    // Apply custom wording override to base action (except Home Run handled below)
+    final String? customBase = _customVerbWordings[originalVerb];
+    if (customBase != null &&
+        customBase.trim().isNotEmpty &&
+        originalVerb != 'Home Run') {
+      baseAction = customBase.trim();
     }
 
     // Build the hit phrase
     String hitPhrase = '';
-    final bool isHomeRunAction = verbToUse == 'Home Run';
+    final bool isHomeRunAction = originalVerb == 'Home Run';
     if (!isHomeRunAction && _rbiCount != null && _rbiCount! > 0) {
       final rbiText =
           _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
@@ -16150,19 +16648,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _buildHomeRunPhrase() {
-    if (_selectedHomeRunType == null) return 'home run';
+    // If a custom wording for Home Run exists, prefer it for generic case
+    final String? customHr = _customVerbWordings['Home Run'];
+    if (_selectedHomeRunType == null) return customHr?.trim() ?? 'home run';
 
     switch (_selectedHomeRunType!) {
       case 'Solo':
-        return 'solo home run';
+        return customHr != null && customHr.isNotEmpty
+            ? 'solo ${customHr.trim()}'
+            : 'solo home run';
       case 'Two-Run':
-        return 'two-run home run';
+        return customHr != null && customHr.isNotEmpty
+            ? 'two-run ${customHr.trim()}'
+            : 'two-run home run';
       case 'Three-Run':
-        return 'three-run home run';
+        return customHr != null && customHr.isNotEmpty
+            ? 'three-run ${customHr.trim()}'
+            : 'three-run home run';
       case 'Grand Slam':
-        return 'grand slam home run';
+        return customHr != null && customHr.isNotEmpty
+            ? 'grand slam ${customHr.trim()}'
+            : 'grand slam home run';
       default:
-        return 'home run';
+        return customHr?.trim() ?? 'home run';
     }
   }
 
