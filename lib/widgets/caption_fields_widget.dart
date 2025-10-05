@@ -1557,7 +1557,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Text(
                           'The Firebar automatically selects players and builds captions as you type. Just press SPACE to complete each part!',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 10,
                             color: Colors.blue.shade700,
                             fontStyle: FontStyle.italic,
                           ),
@@ -1728,7 +1728,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Text(
                   'Edit "$originalVerbName" wording',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey.shade800,
                   ),
@@ -7681,33 +7681,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           // For verbs that need full popup interface (Home Run, Single, Double, Triple)
           _showHittingPopup(globalPosition, verb);
         } else {
-          // For other verbs, use normal selection logic
-          setState(() {
-            if (isSelected) {
+          // For ALL other verbs, show popup without innings
+          // This prevents switching to the second screen with Back button
+          if (isSelected) {
+            // If already selected, deselect it
+            setState(() {
               _selectedVerb = null;
-              _selectedActionVerb = null; // Clear action verb when deselecting
+              _selectedActionVerb = null;
               _selectedHomeRunType = null;
-              _selectedTagsAction = null; // Clear tags action when deselecting
-              _selectedBase = null; // Clear selected base when deselecting
+              _selectedTagsAction = null;
+              _selectedBase = null;
               _rbiCount = null;
               _selectedRbiInning = null;
-            } else {
-              _selectedVerb = verb;
-              _selectedActionVerb = verb; // Store for caption generation
-              _selectedHomeRunType = null;
-              _rbiCount = null;
-              _selectedRbiInning = null;
-
-              // Clear magic bar text for Home Run to ensure verb categories are hidden
-              if (verb == 'Home Run') {
-                // Magic bar removed: no-op
-                print('DEBUG: Home Run selected - cleared magic bar text');
-                print('DEBUG: _selectedVerb = $_selectedVerb');
-                print('DEBUG: customBetweenPlayersController.text = ""');
-              }
-            }
-          });
-          _updateCaption();
+            });
+            _updateCaption();
+          } else {
+            // Show popup without innings for all other verbs (like Post Game Win)
+            _showSimpleVerbPopup(globalPosition, verb);
+          }
         }
       },
       onLongPress: () {
@@ -7846,7 +7837,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 10,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -7907,7 +7898,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         TextSpan(
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 10,
                             fontWeight: FontWeight.w500,
                             color: Colors.grey.shade700,
                           ),
@@ -8118,8 +8109,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             // Calculate dialog dimensions and position
-            const double dialogWidth = 400;
-            const double dialogHeight = 550;
+            const double dialogWidth = 550;
             final screenWidth = MediaQuery.of(context).size.width;
             final screenHeight = MediaQuery.of(context).size.height;
 
@@ -8132,8 +8122,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             if (left + dialogWidth > screenWidth - 10)
               left = screenWidth - dialogWidth - 10;
             if (top < 10) top = 10;
-            if (top + dialogHeight > screenHeight - 10)
-              top = screenHeight - dialogHeight - 10;
 
             return Stack(
               children: [
@@ -8153,7 +8141,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
                       width: dialogWidth,
-                      height: dialogHeight,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(4),
                         color: Colors.white,
@@ -8163,6 +8150,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         children: [
                           // Title
                           Container(
+                            width: dialogWidth,
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
@@ -8172,200 +8160,517 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                             ),
                             child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   verbName,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.grey.shade800,
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => Navigator.pop(context),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: Colors.grey.shade700,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                           // Content
-                          Expanded(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Home Run Type section (only for Home Run)
-                                  if (verbName == 'Home Run') ...[
-                                    Text(
-                                      'Home Run Type',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 2,
-                                      runSpacing: 2,
-                                      children: [
-                                        'Solo',
-                                        'Two-Run',
-                                        'Three-Run',
-                                        'Grand Slam'
-                                      ].map((hrType) {
-                                        final isSelected =
-                                            _selectedHomeRunType == hrType;
-                                        return GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedHomeRunType =
-                                                  _selectedHomeRunType == hrType
-                                                      ? null
-                                                      : hrType;
-                                              // Set the verb when user makes a selection
-                                              _selectedVerb = verbName;
-                                              _selectedActionVerb = verbName;
-                                            });
-                                            setDialogState(() {});
-                                            _updateCaption();
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 5),
-                                            decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? Colors.grey.shade300
-                                                  : Colors.grey.shade50,
-                                              borderRadius:
-                                                  BorderRadius.circular(3),
-                                              border: Border.all(
-                                                  color: Colors.grey.shade300,
-                                                  width: 0.5),
-                                            ),
-                                            child: Text(
-                                              hrType,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-
-                                  // RBI section (for Single, Double, Triple)
-                                  if (verbName != 'Home Run') ...[
-                                    Text(
-                                      'RBI',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 2,
-                                      runSpacing: 2,
-                                      children: [1, 2, 3].map((rbi) {
-                                        final isSelected = _rbiCount == rbi;
-                                        return GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _rbiCount =
-                                                  _rbiCount == rbi ? null : rbi;
-                                              // Set the verb when user makes a selection
-                                              _selectedVerb = verbName;
-                                              _selectedActionVerb = verbName;
-                                            });
-                                            setDialogState(() {});
-                                            _updateCaption();
-                                          },
-                                          child: Container(
-                                            width: 28,
-                                            height: 28,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? Colors.grey.shade300
-                                                  : Colors.grey.shade50,
-                                              borderRadius:
-                                                  BorderRadius.circular(3),
-                                              border: Border.all(
-                                                  color: Colors.grey.shade300,
-                                                  width: 0.5),
-                                            ),
-                                            child: Text(
-                                              '$rbi',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-
-                                  // Options section
-                                  Text(
-                                    'Options',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  if (verbName == 'Home Run')
-                                    ..._buildHomeRunOptionsForPopup(
-                                        setDialogState)
-                                  else
-                                    ..._buildHittingOptionsForPopup(
-                                        setDialogState, verbName),
-                                  const SizedBox(height: 16),
-
-                                  // Inning section
-                                  Text(
-                                    'Inning',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _buildInningGridForPopup(
-                                      setDialogState, verbName),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // Back button
                           Container(
                             padding: const EdgeInsets.all(12),
-                            child: ElevatedButton(
-                              onPressed: () => Navigator.pop(context),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey.shade100,
-                                foregroundColor: Colors.grey.shade700,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
+                            width: dialogWidth,
+                            child: IntrinsicHeight(
                               child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(Icons.arrow_back, size: 16),
-                                  SizedBox(width: 4),
-                                  Text('Back', style: TextStyle(fontSize: 11)),
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // First column: Innings
+                                  SizedBox(
+                                    width: 120,
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Inning',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          _buildInningGridForPopup(
+                                              setDialogState,
+                                              verbName ??
+                                                  _pendingVerbSelection ??
+                                                  ''),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Second column: RBI and Options
+                                  SizedBox(
+                                    width: 180,
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Home Run Type section (only for Home Run)
+                                          if (verbName == 'Home Run') ...[
+                                            Text(
+                                              'Home Run Type',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Column(
+                                              children: [
+                                                // First row: Solo and Two-Run
+                                                Row(
+                                                  children: ['Solo', 'Two-Run']
+                                                      .map((hrType) {
+                                                    final isSelected =
+                                                        _selectedHomeRunType ==
+                                                            hrType;
+                                                    return Expanded(
+                                                      child: Container(
+                                                        margin: const EdgeInsets
+                                                            .only(right: 2),
+                                                        child: GestureDetector(
+                                                          onTap: () {
+                                                            setState(() {
+                                                              _selectedHomeRunType =
+                                                                  _selectedHomeRunType ==
+                                                                          hrType
+                                                                      ? null
+                                                                      : hrType;
+                                                              // Set the action verb for caption generation but DON'T set _selectedVerb
+                                                              // This prevents the UI from switching to the interface with Back button
+                                                              _selectedActionVerb =
+                                                                  verbName;
+                                                            });
+                                                            setDialogState(
+                                                                () {});
+                                                            _updateCaption();
+                                                          },
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical:
+                                                                        5),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: isSelected
+                                                                  ? Colors.grey
+                                                                      .shade300
+                                                                  : Colors.grey
+                                                                      .shade50,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          3),
+                                                              border: Border.all(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade300,
+                                                                  width: 0.5),
+                                                            ),
+                                                            child: Text(
+                                                              hrType,
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade700,
+                                                              ),
+                                                              textAlign:
+                                                                  TextAlign
+                                                                      .center,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                // Second row: Three-Run and Grand Slam
+                                                Row(
+                                                  children: [
+                                                    'Three-Run',
+                                                    'Grand Slam'
+                                                  ].map((hrType) {
+                                                    final isSelected =
+                                                        _selectedHomeRunType ==
+                                                            hrType;
+                                                    return Expanded(
+                                                      child: Container(
+                                                        margin: const EdgeInsets
+                                                            .only(right: 2),
+                                                        child: GestureDetector(
+                                                          onTap: () {
+                                                            setState(() {
+                                                              _selectedHomeRunType =
+                                                                  _selectedHomeRunType ==
+                                                                          hrType
+                                                                      ? null
+                                                                      : hrType;
+                                                              // Set the action verb for caption generation but DON'T set _selectedVerb
+                                                              // This prevents the UI from switching to the interface with Back button
+                                                              _selectedActionVerb =
+                                                                  verbName;
+                                                            });
+                                                            setDialogState(
+                                                                () {});
+                                                            _updateCaption();
+                                                          },
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        8,
+                                                                    vertical:
+                                                                        5),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: isSelected
+                                                                  ? Colors.grey
+                                                                      .shade300
+                                                                  : Colors.grey
+                                                                      .shade50,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          3),
+                                                              border: Border.all(
+                                                                  color: Colors
+                                                                      .grey
+                                                                      .shade300,
+                                                                  width: 0.5),
+                                                            ),
+                                                            child: Text(
+                                                              hrType,
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade700,
+                                                              ),
+                                                              textAlign:
+                                                                  TextAlign
+                                                                      .center,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 16),
+                                          ],
+
+                                          // RBI section (for Single, Double, Triple)
+                                          if (verbName != 'Home Run') ...[
+                                            Text(
+                                              'RBI',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [1, 2, 3].map((rbi) {
+                                                final isSelected =
+                                                    _rbiCount == rbi;
+                                                return Expanded(
+                                                  child: Container(
+                                                    margin:
+                                                        const EdgeInsets.only(
+                                                            right: 2),
+                                                    child: GestureDetector(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          _rbiCount =
+                                                              _rbiCount == rbi
+                                                                  ? null
+                                                                  : rbi;
+                                                          // Set the action verb for caption generation but DON'T set _selectedVerb
+                                                          // This prevents the UI from switching to the interface with Back button
+                                                          _selectedActionVerb =
+                                                              verbName;
+                                                        });
+                                                        setDialogState(() {});
+                                                        _updateCaption();
+                                                      },
+                                                      child: Container(
+                                                        height: 28,
+                                                        alignment:
+                                                            Alignment.center,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: isSelected
+                                                              ? Colors
+                                                                  .grey.shade300
+                                                              : Colors
+                                                                  .grey.shade50,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(3),
+                                                          border: Border.all(
+                                                              color: Colors.grey
+                                                                  .shade300,
+                                                              width: 0.5),
+                                                        ),
+                                                        child: Text(
+                                                          '$rbi',
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color: Colors
+                                                                .grey.shade700,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                            const SizedBox(height: 16),
+                                          ],
+
+                                          // Options section
+                                          Text(
+                                            'Options',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          if (verbName == 'Home Run')
+                                            ..._buildHomeRunOptionsForPopup(
+                                                setDialogState)
+                                          else
+                                            ..._buildHittingOptionsForPopup(
+                                                setDialogState, verbName),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Right column: Copy, Save, FTP buttons
+                                  SizedBox(
+                                    width: 190,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            SizedBox(
+                                              width: 90,
+                                              height: 49,
+                                              child: ElevatedButton(
+                                                onPressed: () {
+                                                  // Copy metadata to clipboard
+                                                  if (widget.onCopyMetadata !=
+                                                      null) {
+                                                    widget.onCopyMetadata!();
+                                                  }
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  foregroundColor:
+                                                      Colors.grey.shade700,
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: const [
+                                                    Icon(Icons.copy, size: 14),
+                                                    SizedBox(width: 4),
+                                                    Text('Copy',
+                                                        style: TextStyle(
+                                                            fontSize: 10)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            SizedBox(
+                                              width: 90,
+                                              height: 49,
+                                              child: ElevatedButton(
+                                                onPressed: () async {
+                                                  // Save IPTC metadata
+                                                  if (widget.onSaveIptc !=
+                                                      null) {
+                                                    await widget.onSaveIptc!();
+                                                  }
+                                                  // Close the popup
+                                                  Navigator.pop(context);
+                                                  // Move to next image
+                                                  if (widget.onNextImage !=
+                                                      null) {
+                                                    widget.onNextImage!();
+                                                  }
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  foregroundColor:
+                                                      Colors.grey.shade700,
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 8),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: const [
+                                                    Text('Save',
+                                                        style: TextStyle(
+                                                            fontSize: 10)),
+                                                    SizedBox(width: 4),
+                                                    Icon(Icons.arrow_forward,
+                                                        size: 14),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: 190,
+                                          height: 49,
+                                          child: ElevatedButton(
+                                            onPressed: _disableFtp
+                                                ? null
+                                                : _onFtpPressed,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: _disableFtp
+                                                  ? Colors.grey.shade300
+                                                  : const Color(0xFF0052CC),
+                                              foregroundColor: _disableFtp
+                                                  ? Colors.grey.shade600
+                                                  : Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 8),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              alignment: Alignment.centerLeft,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                const Icon(Icons.cloud_upload,
+                                                    size: 16),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _currentFtpProfile != null
+                                                      ? 'FTP ($_currentFtpProfile)'
+                                                      : 'FTP',
+                                                  style: const TextStyle(
+                                                      fontSize: 11),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 190,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Transform.scale(
+                                                scale: 0.7,
+                                                child: Checkbox(
+                                                  value: _disableFtp,
+                                                  onChanged: (bool? value) {
+                                                    setState(() {
+                                                      _disableFtp =
+                                                          value ?? false;
+                                                    });
+                                                    setDialogState(() {});
+                                                  },
+                                                  materialTapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                ),
+                                              ),
+                                              Transform.translate(
+                                                offset: const Offset(-8, 0),
+                                                child: const Text(
+                                                  'Disable FTP Button',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -8415,7 +8720,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             option['label'] as String,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w500,
               color: Colors.grey.shade700,
             ),
@@ -8445,8 +8750,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedHittingAction = _selectedHittingAction == option['value']
                 ? null
                 : option['value'] as String;
-            // Set the verb when user makes a selection
-            _selectedVerb = verbName;
+            // Set the action verb for caption generation but DON'T set _selectedVerb
+            // This prevents the UI from switching to the interface with Back button
             _selectedActionVerb = verbName;
           });
           setDialogState(() {});
@@ -8464,7 +8769,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             option['label'] as String,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w500,
               color: Colors.grey.shade700,
             ),
@@ -8490,6 +8795,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     return Column(
       children: [
+        // Prior to Game button for "Looks On" verb
+        if (verbName == 'Looks On') ...[
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isPriorToGame = !_isPriorToGame;
+                if (_isPriorToGame) {
+                  _selectedRbiInning = null;
+                }
+                // Set the action verb for caption generation but DON'T set _selectedVerb
+                // This prevents the UI from switching to the interface with Back button
+                _selectedActionVerb = verbName;
+              });
+              setDialogState(() {});
+              _updateCaption();
+            },
+            child: Container(
+              width: double.infinity,
+              height: 33,
+              margin: const EdgeInsets.only(bottom: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color:
+                    _isPriorToGame ? Colors.grey.shade300 : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: Colors.grey.shade300, width: 0.5),
+              ),
+              child: Text(
+                'Prior to Game',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: _isPriorToGame ? Colors.white : Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+        ],
         // Inning buttons in 3 rows with 4th column for plus/minus
         ...List.generate(3, (rowIndex) {
           return Padding(
@@ -8512,8 +8855,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             _selectedRbiInning == inning ? null : inning;
                         if (_selectedRbiInning != null) {
                           _isPriorToGame = false;
-                          // Set the verb when user makes a selection
-                          _selectedVerb = verbName;
+                          // Set the action verb for caption generation but DON'T set _selectedVerb
+                          // This prevents the UI from switching to the interface with Back button
                           _selectedActionVerb = verbName;
                         }
                       });
@@ -8536,7 +8879,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: Text(
                         '$inning',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           color:
                               isSelected ? Colors.white : Colors.grey.shade700,
@@ -8638,6 +8981,222 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  void _showSimpleVerbPopup(Offset position, String verbName) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Calculate dialog dimensions
+            const double dialogWidth = 300;
+            const double dialogHeight = 150;
+
+            // Get screen dimensions
+            final screenWidth = MediaQuery.of(context).size.width;
+            final screenHeight = MediaQuery.of(context).size.height;
+
+            // Center the dialog on the click position
+            double left = position.dx - (dialogWidth / 2);
+            double top = position.dy - (dialogHeight / 2);
+
+            // Ensure dialog stays within screen bounds
+            if (left < 10) left = 10;
+            if (left + dialogWidth > screenWidth - 10)
+              left = screenWidth - dialogWidth - 10;
+            if (top < 10) top = 10;
+            if (top + dialogHeight > screenHeight - 10)
+              top = screenHeight - dialogHeight - 10;
+
+            return Stack(
+              children: [
+                // Full screen GestureDetector to close on tap outside
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+                // Position the dialog centered on the click location
+                Positioned(
+                  left: left,
+                  top: top,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Title
+                        Container(
+                          width: dialogWidth,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(4),
+                              topRight: Radius.circular(4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                verbName,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.pop(context);
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  alignment: Alignment.center,
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Content
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          width: dialogWidth,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                height: 40,
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    // Set the action verb for caption generation
+                                    setState(() {
+                                      _selectedActionVerb = verbName;
+                                    });
+                                    _updateCaption();
+                                    // Save IPTC metadata
+                                    if (widget.onSaveIptc != null) {
+                                      await widget.onSaveIptc!();
+                                    }
+                                    // Close the popup
+                                    Navigator.pop(context);
+                                    // Move to next image
+                                    if (widget.onNextImage != null) {
+                                      widget.onNextImage!();
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: Colors.grey.shade700,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Text('Save',
+                                          style: TextStyle(fontSize: 10)),
+                                      SizedBox(width: 4),
+                                      Icon(Icons.arrow_forward, size: 14),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 40,
+                                child: ElevatedButton(
+                                  onPressed: _disableFtp ? null : _onFtpPressed,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _disableFtp
+                                        ? Colors.grey.shade300
+                                        : const Color(0xFF0052CC),
+                                    foregroundColor: _disableFtp
+                                        ? Colors.grey.shade600
+                                        : Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    alignment: Alignment.centerLeft,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.cloud_upload, size: 16),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _currentFtpProfile != null
+                                            ? 'FTP ($_currentFtpProfile)'
+                                            : 'FTP',
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Transform.scale(
+                                    scale: 0.7,
+                                    child: Checkbox(
+                                      value: _disableFtp,
+                                      onChanged: (bool? value) {
+                                        setState(() {
+                                          _disableFtp = value ?? false;
+                                        });
+                                        setDialogState(() {});
+                                      },
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                  Transform.translate(
+                                    offset: const Offset(-8, 0),
+                                    child: const Text(
+                                      'Disable FTP Button',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showCompactInningSelector([Offset? position, String? verbName]) {
     _pendingVerbSelection = verbName; // Store the verb name
     showDialog(
@@ -8703,7 +9262,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         children: [
                           // Title
                           Container(
-                            width: 400, // Match the content width
+                            width: 386, // Match the content width
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
@@ -8718,7 +9277,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Text(
                                   'Inning',
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.grey.shade800,
                                   ),
@@ -8743,12 +9302,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           // Content
                           Container(
                             padding: const EdgeInsets.all(12),
-                            width: 400, // Two-column layout: innings + FTP
+                            width: 386, // Two-column layout: innings + FTP
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 SizedBox(
-                                  width: 150,
+                                  width: 120,
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -8791,13 +9350,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         _isPriorToGame = false;
                                                       }
 
-                                                      // Now set the verb after inning is selected
+                                                      // Set the action verb for caption generation but DON'T set _selectedVerb
+                                                      // This prevents the UI from switching to the interface with Back button
                                                       if (_pendingVerbSelection !=
                                                           null) {
-                                                        _selectedVerb =
-                                                            _pendingVerbSelection;
+                                                        // Only set the action verb for caption generation
                                                         _selectedActionVerb =
                                                             _pendingVerbSelection;
+                                                        // Don't set _selectedVerb to keep verb chips visible
                                                         _selectedHomeRunType =
                                                             null;
                                                         _rbiCount = null;
@@ -8829,7 +9389,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     child: Text(
                                                       '$inning',
                                                       style: TextStyle(
-                                                        fontSize: 13,
+                                                        fontSize: 10,
                                                         fontWeight:
                                                             FontWeight.w500,
                                                         color: isSelected
@@ -8933,12 +9493,68 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               ),
                                             ),
                                           ),
+                                          // Prior to Game button for "Looks On" verb
+                                          if (_pendingVerbSelection ==
+                                              'Looks On')
+                                            Expanded(
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    _isPriorToGame =
+                                                        !_isPriorToGame;
+                                                    if (_isPriorToGame) {
+                                                      _selectedRbiInning = null;
+                                                    }
+                                                    // Set the action verb for caption generation but DON'T set _selectedVerb
+                                                    // This prevents the UI from switching to the interface with Back button
+                                                    if (_pendingVerbSelection !=
+                                                        null) {
+                                                      _selectedActionVerb =
+                                                          _pendingVerbSelection;
+                                                    }
+                                                  });
+                                                  setDialogState(() {});
+                                                  _updateCaption();
+                                                },
+                                                child: Container(
+                                                  height: 20,
+                                                  margin: const EdgeInsets.only(
+                                                      left: 4),
+                                                  alignment: Alignment.center,
+                                                  decoration: BoxDecoration(
+                                                    color: _isPriorToGame
+                                                        ? Colors.grey.shade300
+                                                        : Colors.grey.shade50,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            3),
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade300,
+                                                        width: 0.5),
+                                                  ),
+                                                  child: Text(
+                                                    'Prior to Game',
+                                                    style: TextStyle(
+                                                      fontSize: 8,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: _isPriorToGame
+                                                          ? Colors.white
+                                                          : Colors
+                                                              .grey.shade700,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 0),
+                                const SizedBox(width: 16),
                                 SizedBox(
                                   width: 210,
                                   child: Column(
@@ -8949,8 +9565,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           SizedBox(
-                                            width: 100,
-                                            height: 40,
+                                            width: 90,
+                                            height: 49,
                                             child: ElevatedButton(
                                               onPressed: () {
                                                 // Copy metadata to clipboard
@@ -8985,8 +9601,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                           const SizedBox(width: 8),
                                           SizedBox(
-                                            width: 100,
-                                            height: 40,
+                                            width: 90,
+                                            height: 49,
                                             child: ElevatedButton(
                                               onPressed: () async {
                                                 // Save IPTC metadata
@@ -9030,8 +9646,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ),
                                       const SizedBox(height: 8),
                                       SizedBox(
-                                        width: 210,
-                                        height: 40,
+                                        width: 190,
+                                        height: 49,
                                         child: ElevatedButton(
                                           onPressed: _disableFtp
                                               ? null
@@ -9053,7 +9669,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                           child: Row(
                                             mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                                MainAxisAlignment.center,
                                             children: [
                                               const Icon(Icons.cloud_upload,
                                                   size: 16),
@@ -9069,36 +9685,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Transform.scale(
-                                            scale: 0.7,
-                                            child: Checkbox(
-                                              value: _disableFtp,
-                                              onChanged: (bool? value) {
-                                                setState(() {
-                                                  _disableFtp = value ?? false;
-                                                });
-                                                setDialogState(() {});
-                                              },
-                                              materialTapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                          ),
-                                          Transform.translate(
-                                            offset: const Offset(-8, 0),
-                                            child: const Text(
-                                              'Disable FTP Button',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey,
+                                      SizedBox(
+                                        width: 190,
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Transform.scale(
+                                              scale: 0.7,
+                                              child: Checkbox(
+                                                value: _disableFtp,
+                                                onChanged: (bool? value) {
+                                                  setState(() {
+                                                    _disableFtp =
+                                                        value ?? false;
+                                                  });
+                                                  setDialogState(() {});
+                                                },
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
                                               ),
                                             ),
-                                          ),
-                                        ],
+                                            Transform.translate(
+                                              offset: const Offset(-8, 0),
+                                              child: const Text(
+                                                'Disable FTP Button',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -13778,7 +14398,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     Text(
                       'Edit Profile: $profileName',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey.shade800,
                       ),
@@ -14190,7 +14810,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ? 'FTP Profile Manager'
                           : 'FTP Server Settings',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey.shade800,
                       ),
@@ -14584,7 +15204,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Text(
                     'Profile Manager',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: Colors.grey.shade800,
                     ),
@@ -14812,7 +15432,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ? 'FTP Profile Manager'
                           : 'FTP Server Settings',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey.shade800,
                       ),
@@ -15208,7 +15828,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Text(
                     'Profile Manager',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: Colors.grey.shade800,
                     ),
@@ -16758,7 +17378,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             _selectedHomeRunType ?? 'Home Run',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade800,
             ),
@@ -16872,7 +17492,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         TextSpan(
                                           text: boldPart,
                                           style: TextStyle(
-                                            fontSize: 13,
+                                            fontSize: 10,
                                             fontWeight: FontWeight.w700,
                                             color: Colors.grey.shade800,
                                           ),
@@ -16880,7 +17500,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       TextSpan(
                                         text: hrType.substring(boldPart.length),
                                         style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: 10,
                                           fontWeight: FontWeight.w500,
                                           color: Colors.grey.shade700,
                                         ),
@@ -16964,7 +17584,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             _selectedVerb ?? 'At Bat',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: Colors.grey.shade800,
             ),
@@ -17026,7 +17646,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             '←',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 10,
                               fontWeight: FontWeight.w500,
                               color: Colors.grey.shade700,
                             ),
@@ -17064,7 +17684,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Text(
                             '$inning',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 10,
                               fontWeight: FontWeight.w500,
                               color: Colors.grey.shade700,
                             ),
@@ -17822,7 +18442,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Text(
                               '$rbi',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 10,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.grey.shade700,
                               ),
@@ -17908,7 +18528,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 10,
                     fontWeight: FontWeight.w500,
                     color: isSelected
                         ? Colors.grey.shade800
@@ -18376,7 +18996,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             focusNode: _magicBarFocusNode,
                             maxLines: 1,
                             style: const TextStyle(
-                                fontSize: 13,
+                                fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.5),
                             decoration: InputDecoration(
@@ -19045,6 +19665,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Reusable inning selector widget
   Widget _buildReusableInningSelector() {
+    // Always hide the background inning selector - only show innings in popup
+    // Return empty container to maintain layout structure
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(left: 8, right: 0, bottom: 8),
+      child: const SizedBox.shrink(),
+    );
+
+    // Original code kept for reference but never executed
     // Determine which innings to show based on the current state
     List<int> inningsToShow;
     int currentPage =
@@ -19117,7 +19746,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Text(
                           '$inning',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 10,
                             fontWeight: FontWeight.w500,
                             color: isSelected
                                 ? Colors.white
