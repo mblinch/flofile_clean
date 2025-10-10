@@ -343,7 +343,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
-  bool _removeAccent = false; // Toggle for diacritic removal
+  bool _removeAccent = true; // Toggle for diacritic removal
   bool _disableFtp = false; // Default to false (FTP enabled)
   bool _isFtpDisabled = false; // Track FTP button disable state
   final int _ftpPictureNumber =
@@ -9399,6 +9399,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
+    // Set the action verb immediately so caption updates right away
+    setState(() {
+      _selectedActionVerb = verbName;
+    });
+    _updateCaption();
+
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
@@ -10281,6 +10287,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _pendingVerbSelection = verbName; // Store the verb name
     _showOvertimePeriods =
         false; // Reset overtime periods visibility when dialog opens
+
+    // Set the action verb immediately so caption updates right away
+    setState(() {
+      _selectedActionVerb = verbName;
+    });
+    _updateCaption();
+
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
@@ -10556,18 +10569,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         SizedBox(
                                           width: 190,
                                           height: 49,
-                                          child: ElevatedButton.icon(
+                                          child: ElevatedButton(
                                             onPressed: () {
                                               widget.onSaveIptc?.call();
                                               Navigator.pop(context);
                                               widget.onNextImage?.call();
                                             },
-                                            icon: Icon(
-                                              Icons.arrow_forward,
-                                              size: 16,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                            label: Text(
+                                            child: Text(
                                               'Save →',
                                               style: TextStyle(
                                                 fontSize: 12,
@@ -14155,7 +14163,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Prev',
+                      'Save',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -14251,7 +14259,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Next',
+                      'Save',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -14804,8 +14812,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   void _fullReset() async {
     setState(() {
-      captionController.clear();
-      personalityController.clear();
+      // Don't clear caption and personality - they'll be restored from metadata
       customCelebrationController.clear();
       // Magic bar removed
       _homeSearchController.clear();
@@ -14883,28 +14890,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _typingFirstMagicToken = false;
     });
 
-    // Update the UI
-    _updateCaption();
-    _updatePersonalityField();
+    // After reset, reload metadata from the current image's IPTC data
+    // This will restore the original caption, location info, etc.
+    _hasBeenReset = false; // Temporarily allow metadata loading
+    _loadMetadata();
+    _hasBeenReset =
+        true; // Set back to true to prevent auto-loading on next image change
 
-    // After reset, apply caption from saved IPTC template (if available)
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final defaultTemplateJson = prefs.getString('default_metadata_template');
-      if (defaultTemplateJson != null) {
-        final Map<String, dynamic> template = jsonDecode(defaultTemplateJson);
-        final String? templateCaption =
-            (template['Caption'] as String?)?.trim();
-        if (templateCaption != null && templateCaption.isNotEmpty) {
-          setState(() {
-            captionController.text = templateCaption;
-          });
-          // Do not call _updateCaption() here; teams may be unset and would clear the caption
-        }
-      }
-    } catch (_) {
-      // Ignore template errors on reset
-    }
+    // Don't call _updateCaption() here - we want to keep the caption from metadata
 
     if (widget.onReset != null) widget.onReset!();
 
@@ -17792,6 +17785,119 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else {
           return 'runs on the field prior to playing the ${_getOpposingTeamName()}';
         }
+      // Hockey verbs
+      case 'Shoots':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'shoots against the ${_getOpposingTeamName()}';
+      case 'Scores':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'scores against the ${_getOpposingTeamName()}';
+      case 'Passes':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'passes against the ${_getOpposingTeamName()}';
+      case 'Skates':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'skates against the ${_getOpposingTeamName()}';
+      case 'Faceoff':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'takes a faceoff against the ${_getOpposingTeamName()}';
+      case 'Power Play':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'on the power play against the ${_getOpposingTeamName()}';
+      case 'Breakaway':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'breaks away against the ${_getOpposingTeamName()}';
+      case 'Blocks':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'blocks against the ${_getOpposingTeamName()}';
+      case 'Saves':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'makes a save against the ${_getOpposingTeamName()}';
+      case 'Clears':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'clears the puck against the ${_getOpposingTeamName()}';
+      case 'Checks':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'checks against the ${_getOpposingTeamName()}';
+      case 'Defends':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'defends against the ${_getOpposingTeamName()}';
+      case 'Penalty Kill':
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'on the penalty kill against the ${_getOpposingTeamName()}';
+      case 'Warm Ups':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'warm up prior to playing the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'warms up prior to playing the ${_getOpposingTeamName()}';
+        }
+      case 'Takes the Ice':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'take the ice prior to playing the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'takes the ice prior to playing the ${_getOpposingTeamName()}';
+        }
+      case 'Comes Off the Ice':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'come off the ice against the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'comes off the ice against the ${_getOpposingTeamName()}';
+        }
+      case 'National Anthem':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'stand for the national anthem prior to playing the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'stands for the national anthem prior to playing the ${_getOpposingTeamName()}';
+        }
+      case 'Stretching':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'stretch prior to playing the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording prior to playing the ${_getOpposingTeamName()}'
+              : 'stretches prior to playing the ${_getOpposingTeamName()}';
+        }
+      case 'Bench':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'sit on the bench against the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'sits on the bench against the ${_getOpposingTeamName()}';
+        }
       default:
         baseAction = originalVerb.toLowerCase();
     }
@@ -20128,7 +20234,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                                 const SizedBox(width: 2),
                                 Text(
-                                  'Prev',
+                                  'Save',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
@@ -20267,19 +20373,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.arrow_forward,
-                                  size: 14,
-                                  color: Colors.grey.shade700,
-                                ),
-                                const SizedBox(width: 2),
                                 Text(
-                                  'Next',
+                                  'Save',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                     color: Colors.grey.shade700,
                                   ),
+                                ),
+                                const SizedBox(width: 2),
+                                Icon(
+                                  Icons.arrow_forward,
+                                  size: 14,
+                                  color: Colors.grey.shade700,
                                 ),
                               ],
                             ),
