@@ -10287,6 +10287,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _pendingVerbSelection = verbName; // Store the verb name
     _showOvertimePeriods =
         false; // Reset overtime periods visibility when dialog opens
+    bool showingPlayerSelection = false; // Track player selection view
 
     // Set the action verb immediately so caption updates right away
     setState(() {
@@ -10297,6 +10298,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
+      barrierDismissible: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -10387,7 +10389,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             // Content
                             Container(
                               padding: const EdgeInsets.all(8),
-                              child: Row(
+                              child: !showingPlayerSelection ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   SizedBox(
