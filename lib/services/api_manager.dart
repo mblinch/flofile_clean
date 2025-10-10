@@ -1,20 +1,46 @@
 import 'mlb_api_service.dart';
+import 'nhl_api_service.dart';
 import 'balldontlie_api_service.dart';
 
 class ApiManager {
   static const String _mlbStatsApi = 'MLB Stats API';
+  static const String _nhlStatsApi = 'NHL Stats API';
   static const String _balldontlieApi = 'Balldontlie.io API';
 
   final MlbApiService _mlbService = MlbApiService();
+  final NhlApiService _nhlService = NhlApiService();
   final BalldontlieApiService _balldontlieService = BalldontlieApiService();
 
   String _currentApi = _mlbStatsApi; // Default to MLB
+  String _currentSport = 'baseball'; // Track current sport
 
   String get currentApi => _currentApi;
+  String get currentSport => _currentSport;
 
   void setApi(String api) {
     _currentApi = api;
     print('API Manager: Switched to $api');
+  }
+
+  /// Sets the sport and automatically selects the appropriate API
+  void setSport(String sport) {
+    _currentSport = sport.toLowerCase();
+
+    // Automatically select the appropriate API based on sport
+    switch (_currentSport) {
+      case 'hockey':
+        _currentApi = _nhlStatsApi;
+        break;
+      case 'basketball':
+        _currentApi = _balldontlieApi;
+        break;
+      case 'baseball':
+      default:
+        _currentApi = _mlbStatsApi;
+        break;
+    }
+
+    print('API Manager: Switched to $_currentSport mode using $_currentApi');
   }
 
   /// Fetches teams from the currently selected API
@@ -22,7 +48,9 @@ class ApiManager {
     print('API Manager: Fetching teams from $_currentApi');
 
     try {
-      if (_currentApi == _balldontlieApi) {
+      if (_currentApi == _nhlStatsApi) {
+        return await _nhlService.fetchAllTeams();
+      } else if (_currentApi == _balldontlieApi) {
         final balldontlieTeams = await _balldontlieService.fetchAllTeams();
         // Convert BalldontlieTeam to TeamInfo for compatibility
         return balldontlieTeams
@@ -47,7 +75,9 @@ class ApiManager {
     print('API Manager: Fetching roster from $_currentApi for team $teamName');
 
     try {
-      if (_currentApi == _balldontlieApi) {
+      if (_currentApi == _nhlStatsApi) {
+        return await _nhlService.fetchRosterByTeamName(teamName);
+      } else if (_currentApi == _balldontlieApi) {
         // For balldontlie, we need to find the team ID first
         final teams = await _balldontlieService.fetchAllTeams();
         final team = teams.firstWhere(
@@ -91,7 +121,15 @@ class ApiManager {
     print('API Manager: Fetching venue for team $teamName from $_currentApi');
 
     try {
-      if (_currentApi == _balldontlieApi) {
+      if (_currentApi == _nhlStatsApi) {
+        // For NHL API, venue info is already included in team data
+        final teams = await _nhlService.fetchAllTeams();
+        final team = teams.firstWhere(
+          (t) => t.name == teamName,
+          orElse: () => throw Exception('Team "$teamName" not found'),
+        );
+        return team.venueName;
+      } else if (_currentApi == _balldontlieApi) {
         return await _balldontlieService.fetchVenueForTeam(teamName);
       } else {
         // For MLB API, venue info is already included in team data
@@ -131,7 +169,9 @@ class ApiManager {
 
   /// Gets the connection status message
   String getConnectionStatusMessage() {
-    if (_currentApi == _balldontlieApi) {
+    if (_currentApi == _nhlStatsApi) {
+      return 'Connected to NHL Stats API';
+    } else if (_currentApi == _balldontlieApi) {
       return 'Connected to Balldontlie.io API';
     } else {
       return 'Connected to MLB Stats API';

@@ -13,6 +13,7 @@ import '../widgets/caption_fields_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
 
 import '../widgets/startup_dialog.dart';
+import '../widgets/sport_selection_dialog.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
@@ -62,6 +63,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   String? _personalityOverride;
 
   // Startup configuration
+  bool _isSportSelected = false;
+  String? _selectedSport;
   bool _isStartupComplete = false;
   String? _selectedFolderPath;
   // File system watcher for detecting new images
@@ -589,6 +592,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  void _handleSportSelected(String sport) {
+    setState(() {
+      _selectedSport = sport;
+      _isSportSelected = true;
+    });
+
+    // Configure API Manager for the selected sport
+    _apiManager.setSport(sport);
+  }
+
   void _handleStartupComplete(
       String folderPath, String? homeTeam, String? awayTeam) {
     setState(() {
@@ -618,7 +631,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       });
 
       if (selectedHomeTeam != null) {
+        print('Loading home team roster for: $selectedHomeTeam');
         final homeRoster = await _apiManager.fetchTeamRoster(selectedHomeTeam!);
+        print('Loaded ${homeRoster.length} home team players');
         setState(() {
           _cachedHomeRoster = homeRoster;
           _playerLoadingProgress = 0.5;
@@ -627,7 +642,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       // Load away team players
       if (selectedAwayTeam != null) {
+        print('Loading away team roster for: $selectedAwayTeam');
         final awayRoster = await _apiManager.fetchTeamRoster(selectedAwayTeam!);
+        print('Loaded ${awayRoster.length} away team players');
         setState(() {
           _cachedAwayRoster = awayRoster;
           _playerLoadingProgress = 1.0;
@@ -2721,6 +2738,25 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       ),
     );
 
+    // Show sport selection dialog first if sport not selected
+    if (!_isSportSelected) {
+      return Stack(
+        children: [
+          // Main app in background
+          mainAppContent,
+          // Semi-transparent overlay
+          Container(
+            color: Colors.black.withOpacity(0.3),
+            child: Center(
+              child: SportSelectionDialog(
+                onSportSelected: _handleSportSelected,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     // Show startup dialog overlay if configuration is not complete
     if (!_isStartupComplete) {
       return Stack(
@@ -2733,6 +2769,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             child: Center(
               child: StartupDialog(
                 onConfigurationComplete: _handleStartupComplete,
+                sport: _selectedSport,
               ),
             ),
           ),
@@ -2964,6 +3001,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   },
                   homeTeam: selectedHomeTeam,
                   awayTeam: selectedAwayTeam,
+                  sport: _selectedSport,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
                       setState(() {

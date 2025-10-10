@@ -236,6 +236,7 @@ class CaptionFieldsWidget extends StatefulWidget {
       onUploadProgress; // Callback for upload progress
   final Map<String, String> Function()? getCurrentMetadataValues;
   final VoidCallback? onCopyMetadata; // Callback to copy metadata to clipboard
+  final String? sport; // Current sport mode (baseball, hockey, basketball)
 
   const CaptionFieldsWidget({
     super.key,
@@ -260,6 +261,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onUploadProgress,
     this.getCurrentMetadataValues,
     this.onCopyMetadata,
+    this.sport,
   });
 
   @override
@@ -542,7 +544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Controls layout swap: when true, Firebar is on the right and buttons on the left
   bool _placeFirebarOnRight = true;
 
-  // Verb categories order (for drag and drop)
+  // Verb categories order (for drag and drop) - will be updated based on sport
   List<String> _categoryOrder = [
     'Offense',
     'Defense',
@@ -552,8 +554,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     'Favorites',
   ];
 
-  // Verb categories
-  final Map<String, List<String>> verbCategories = {
+  // Get category order based on current sport
+  List<String> get categoryOrder {
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    switch (sport) {
+      case 'hockey':
+        return [
+          'Offense',
+          'Defense',
+          'Non Game-Action',
+          'Reactions',
+          'Favorites',
+        ];
+      case 'baseball':
+      default:
+        return [
+          'Offense',
+          'Defense',
+          'Running',
+          'Reactions',
+          'Non Game-Action',
+          'Favorites',
+        ];
+    }
+  }
+
+  // Baseball verb categories
+  final Map<String, List<String>> baseballVerbCategories = {
     'Offense': [
       'Single',
       'Double',
@@ -600,6 +627,66 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Pitching Change',
     ],
   };
+
+  // Hockey verb categories
+  final Map<String, List<String>> hockeyVerbCategories = {
+    'Offense': [
+      'Shoots',
+      'Scores',
+      'Passes',
+      'Skates',
+      'Faceoff',
+      'Power Play',
+      'Breakaway',
+      '',
+      '',
+    ],
+    'Defense': [
+      'Blocks',
+      'Saves',
+      'Clears',
+      'Checks',
+      'Defends',
+      'Penalty Kill',
+      '',
+      '',
+      '',
+    ],
+    'Non Game-Action': [
+      'Looks On',
+      'Warm Ups',
+      'Takes the Ice',
+      'Comes Off the Ice',
+      'National Anthem',
+      'Stretching',
+      'Bench',
+      '',
+      '',
+    ],
+    'Reactions': [
+      'Celebrates',
+      'Dejection',
+      'Post Game Win',
+      'Post Game Loss',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
+  };
+
+  // Get verb categories based on current sport
+  Map<String, List<String>> get verbCategories {
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    switch (sport) {
+      case 'hockey':
+        return hockeyVerbCategories;
+      case 'baseball':
+      default:
+        return baseballVerbCategories;
+    }
+  }
 
   // Match a magic-bar verb token to a canonical verb using the following rules:
   // - Single-word verbs: the first 2–3 letters are accepted (require at least 2)
@@ -2067,12 +2154,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Future<void> _loadPreferences() async {
-    // Load current sport first
-    _currentSport = await _preferencesService.getCurrentSport();
+    // Use sport from widget parameter, or load from preferences
+    _currentSport = widget.sport?.toLowerCase() ??
+        await _preferencesService.getCurrentSport();
 
-    // Load category order for current sport
-    _categoryOrder =
+    // Load category order for current sport (or use default for sport if not saved)
+    final savedCategoryOrder =
         await _preferencesService.getCategoryOrder(sport: _currentSport);
+    _categoryOrder =
+        savedCategoryOrder.isNotEmpty ? savedCategoryOrder : categoryOrder;
 
     // Load favorite verbs for current sport
     _favoriteVerbs =
@@ -2285,6 +2375,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void didUpdateWidget(CaptionFieldsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // Check if sport has changed and reload preferences
+    if (oldWidget.sport != widget.sport) {
+      _loadPreferences();
+    }
+
     if (widget.personalityOverride != null &&
         widget.personalityOverride != oldWidget.personalityOverride) {
       personalityController.text = widget.personalityOverride!;

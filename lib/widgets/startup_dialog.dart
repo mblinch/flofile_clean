@@ -41,10 +41,12 @@ class CustomButton extends StatelessWidget {
 class StartupDialog extends StatefulWidget {
   final Function(String folderPath, String? homeTeam, String? awayTeam)
       onConfigurationComplete;
+  final String? sport; // Current sport mode
 
   const StartupDialog({
     Key? key,
     required this.onConfigurationComplete,
+    this.sport,
   }) : super(key: key);
 
   @override
@@ -95,6 +97,12 @@ class _StartupDialogState extends State<StartupDialog> {
   @override
   void initState() {
     super.initState();
+
+    // Configure API Manager based on sport
+    if (widget.sport != null) {
+      _apiManager.setSport(widget.sport!);
+    }
+
     _initializePreferences();
     _loadTeams();
     _startTyping();
@@ -244,45 +252,124 @@ class _StartupDialogState extends State<StartupDialog> {
       final teams = await _apiManager.fetchTeams();
       setState(() {
         availableTeams = teams.map((team) => team.name).toList()..sort();
+        // Clear selected teams when loading new teams (sport changed)
+        selectedHomeTeam = null;
+        selectedAwayTeam = null;
         isLoadingTeams = false;
       });
     } catch (e) {
       print('Error loading teams: $e');
-      // Fallback to common MLB teams if API fails
+      // Fallback teams based on sport
       setState(() {
         _isOffline = true;
-        availableTeams = [
-          'Arizona Diamondbacks',
-          'Atlanta Braves',
-          'Baltimore Orioles',
-          'Boston Red Sox',
-          'Chicago Cubs',
-          'Chicago White Sox',
-          'Cincinnati Reds',
-          'Cleveland Guardians',
-          'Colorado Rockies',
-          'Detroit Tigers',
-          'Houston Astros',
-          'Kansas City Royals',
-          'Los Angeles Angels',
-          'Los Angeles Dodgers',
-          'Miami Marlins',
-          'Milwaukee Brewers',
-          'Minnesota Twins',
-          'New York Mets',
-          'New York Yankees',
-          'Oakland Athletics',
-          'Philadelphia Phillies',
-          'Pittsburgh Pirates',
-          'San Diego Padres',
-          'San Francisco Giants',
-          'Seattle Mariners',
-          'St. Louis Cardinals',
-          'Tampa Bay Rays',
-          'Texas Rangers',
-          'Toronto Blue Jays',
-          'Washington Nationals'
-        ];
+        final sport = widget.sport?.toLowerCase() ?? 'baseball';
+
+        if (sport == 'hockey') {
+          availableTeams = [
+            'Anaheim Ducks',
+            'Arizona Coyotes',
+            'Boston Bruins',
+            'Buffalo Sabres',
+            'Calgary Flames',
+            'Carolina Hurricanes',
+            'Chicago Blackhawks',
+            'Colorado Avalanche',
+            'Columbus Blue Jackets',
+            'Dallas Stars',
+            'Detroit Red Wings',
+            'Edmonton Oilers',
+            'Florida Panthers',
+            'Los Angeles Kings',
+            'Minnesota Wild',
+            'Montreal Canadiens',
+            'Nashville Predators',
+            'New Jersey Devils',
+            'New York Islanders',
+            'New York Rangers',
+            'Ottawa Senators',
+            'Philadelphia Flyers',
+            'Pittsburgh Penguins',
+            'San Jose Sharks',
+            'Seattle Kraken',
+            'St. Louis Blues',
+            'Tampa Bay Lightning',
+            'Toronto Maple Leafs',
+            'Vancouver Canucks',
+            'Vegas Golden Knights',
+            'Washington Capitals',
+            'Winnipeg Jets'
+          ];
+        } else if (sport == 'basketball') {
+          availableTeams = [
+            'Atlanta Hawks',
+            'Boston Celtics',
+            'Brooklyn Nets',
+            'Charlotte Hornets',
+            'Chicago Bulls',
+            'Cleveland Cavaliers',
+            'Dallas Mavericks',
+            'Denver Nuggets',
+            'Detroit Pistons',
+            'Golden State Warriors',
+            'Houston Rockets',
+            'Indiana Pacers',
+            'Los Angeles Clippers',
+            'Los Angeles Lakers',
+            'Memphis Grizzlies',
+            'Miami Heat',
+            'Milwaukee Bucks',
+            'Minnesota Timberwolves',
+            'New Orleans Pelicans',
+            'New York Knicks',
+            'Oklahoma City Thunder',
+            'Orlando Magic',
+            'Philadelphia 76ers',
+            'Phoenix Suns',
+            'Portland Trail Blazers',
+            'Sacramento Kings',
+            'San Antonio Spurs',
+            'Toronto Raptors',
+            'Utah Jazz',
+            'Washington Wizards'
+          ];
+        } else {
+          // Default to MLB teams
+          availableTeams = [
+            'Arizona Diamondbacks',
+            'Atlanta Braves',
+            'Baltimore Orioles',
+            'Boston Red Sox',
+            'Chicago Cubs',
+            'Chicago White Sox',
+            'Cincinnati Reds',
+            'Cleveland Guardians',
+            'Colorado Rockies',
+            'Detroit Tigers',
+            'Houston Astros',
+            'Kansas City Royals',
+            'Los Angeles Angels',
+            'Los Angeles Dodgers',
+            'Miami Marlins',
+            'Milwaukee Brewers',
+            'Minnesota Twins',
+            'New York Mets',
+            'New York Yankees',
+            'Oakland Athletics',
+            'Philadelphia Phillies',
+            'Pittsburgh Pirates',
+            'San Diego Padres',
+            'San Francisco Giants',
+            'Seattle Mariners',
+            'St. Louis Cardinals',
+            'Tampa Bay Rays',
+            'Texas Rangers',
+            'Toronto Blue Jays',
+            'Washington Nationals'
+          ];
+        }
+        // Clear selected teams when using fallback teams (sport changed)
+        selectedHomeTeam = null;
+        selectedAwayTeam = null;
         isLoadingTeams = false;
       });
     }
