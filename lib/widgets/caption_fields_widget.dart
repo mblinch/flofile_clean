@@ -343,8 +343,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
-  final bool _removeAccent = false; // Disabled diacritic removal
+  bool _removeAccent = false; // Toggle for diacritic removal
   bool _disableFtp = false; // Default to false (FTP enabled)
+  bool _isFtpDisabled = false; // Track FTP button disable state
   final int _ftpPictureNumber =
       1; // Counter for FTP picture number, starting at 001
 
@@ -528,6 +529,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Additional verb building state
   int? _selectedRbiInning;
+  String? _selectedPeriod; // Track selected hockey period
+  bool _showOvertimePeriods = false; // Track whether to show overtime periods
   bool _isDivingCatch = false;
   bool _walkOff = false;
   bool _isPriorToGame = false; // Track if "prior to the game" is selected
@@ -562,6 +565,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return [
           'Offense',
           'Defense',
+          'Goalie',
           'Non Game-Action',
           'Reactions',
           'Favorites',
@@ -643,11 +647,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
     'Defense': [
       'Blocks',
-      'Saves',
       'Clears',
       'Checks',
       'Defends',
       'Penalty Kill',
+      '',
+      '',
+      '',
+      '',
+    ],
+    'Goalie': [
+      'Saves',
+      '',
+      '',
+      '',
+      '',
+      '',
       '',
       '',
       '',
@@ -728,7 +743,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   final bool _isResetting = false;
-
   // Add a flag to track if the user has manually reset the fields.
   bool _hasBeenReset = false;
   // Track team positioning (true = home on left, false = home on right)
@@ -2266,7 +2280,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       print('Error fetching venue for game: $e');
     }
   }
-
   // Removed _setCityFromStadium function - no auto-population of city/state
 
   Future<void> _loadTeamRosters() async {
@@ -3241,9 +3254,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 Padding(
                                   padding: const EdgeInsets.only(
                                     left: 4,
-                                    bottom: 2,
+                                    bottom: 0,
                                   ),
                                   child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     children: [
                                       const Text(
                                         'CAPTION',
@@ -3259,7 +3274,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         style: TextButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 4,
-                                            vertical: 2,
+                                            vertical: 0,
                                           ),
                                           minimumSize: Size.zero,
                                           tapTargetSize:
@@ -3278,7 +3293,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               'Quick Codes',
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
-                                                fontSize: 9,
+                                                fontSize: 10,
                                                 color: Colors.grey.shade600,
                                                 fontWeight: FontWeight.w500,
                                                 height: 1.1,
@@ -3287,89 +3302,145 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ],
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
+                                      // Remove Diacritics checkbox
+                                      GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _removeAccent = !_removeAccent;
+                                          });
+                                          // Re-update caption to apply/remove diacritics
+                                          _updateCaption();
+                                        },
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Transform.scale(
+                                              scale: 0.6,
+                                              child: Checkbox(
+                                                value: _removeAccent,
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    _removeAccent =
+                                                        value ?? false;
+                                                  });
+                                                  // Re-update caption to apply/remove diacritics
+                                                  _updateCaption();
+                                                },
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                splashRadius: 0,
+                                                overlayColor:
+                                                    WidgetStateProperty.all(
+                                                        Colors.transparent),
+                                                side: BorderSide(
+                                                    color: Colors.grey.shade500,
+                                                    width: 1),
+                                              ),
+                                            ),
+                                            Transform.translate(
+                                              offset: const Offset(-6, 0),
+                                              child: Text(
+                                                'Remove Diacritics',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.grey.shade700,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                TextField(
-                                  controller: captionController,
-                                  maxLines: 4,
-                                  onChanged: _onCaptionChanged,
-                                  style: const TextStyle(fontSize: 12),
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade400,
+                                Transform.translate(
+                                  offset: const Offset(0, -4),
+                                  child: TextField(
+                                    controller: captionController,
+                                    maxLines: 4,
+                                    onChanged: _onCaptionChanged,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
                                       ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade400,
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
                                       ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.blue.shade400,
-                                        width: 2,
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        borderSide: BorderSide(
+                                          color: Colors.blue.shade400,
+                                          width: 2,
+                                        ),
                                       ),
+                                      contentPadding: const EdgeInsets.all(8),
+                                      filled: true,
+                                      fillColor: Colors.grey.shade50,
                                     ),
-                                    contentPadding: const EdgeInsets.all(8),
-                                    filled: true,
-                                    fillColor: Colors.grey.shade50,
-                                  ),
-                                  inputFormatters: [
-                                    HighlightedTokenDeletionFormatter(
-                                      getRanges: () => _highlightedRanges,
-                                      onTokenDeleted:
-                                          (deletedRange, tokenText) {
-                                        // Update personality if this was a player expansion
-                                        final playerName = _tokenToPlayerName[
-                                            tokenText.trim()];
-                                        if (playerName != null) {
-                                          _removePlayerFromPersonality(
-                                            playerName,
-                                          );
-                                          // Remove mapping for this exact token text
-                                          _tokenToPlayerName.remove(
-                                            tokenText.trim(),
-                                          );
-                                        }
-
-                                        // Rebuild highlight ranges after deletion
-                                        final int removedLen =
-                                            deletedRange.end -
-                                                deletedRange.start;
-                                        final List<TextRange> updated = [];
-                                        for (final r in _highlightedRanges) {
-                                          // Skip the deleted range itself
-                                          if (r.start >= deletedRange.start &&
-                                              r.end <= deletedRange.end) {
-                                            continue;
-                                          }
-                                          if (r.start >= deletedRange.end) {
-                                            updated.add(
-                                              TextRange(
-                                                start: r.start - removedLen,
-                                                end: r.end - removedLen,
-                                              ),
+                                    inputFormatters: [
+                                      HighlightedTokenDeletionFormatter(
+                                        getRanges: () => _highlightedRanges,
+                                        onTokenDeleted:
+                                            (deletedRange, tokenText) {
+                                          // Update personality if this was a player expansion
+                                          final playerName = _tokenToPlayerName[
+                                              tokenText.trim()];
+                                          if (playerName != null) {
+                                            _removePlayerFromPersonality(
+                                              playerName,
                                             );
-                                          } else {
-                                            updated.add(r);
+                                            // Remove mapping for this exact token text
+                                            _tokenToPlayerName.remove(
+                                              tokenText.trim(),
+                                            );
                                           }
-                                        }
-                                        _highlightedRanges = updated;
-                                        (captionController
-                                                as HighlightingTextEditingController)
-                                            .highlightedRanges = updated;
-                                        (captionController
-                                                as HighlightingTextEditingController)
-                                            .invalidRanges = [];
-                                        setState(() {});
-                                      },
-                                    ),
-                                  ],
+
+                                          // Rebuild highlight ranges after deletion
+                                          final int removedLen =
+                                              deletedRange.end -
+                                                  deletedRange.start;
+                                          final List<TextRange> updated = [];
+                                          for (final r in _highlightedRanges) {
+                                            // Skip the deleted range itself
+                                            if (r.start >= deletedRange.start &&
+                                                r.end <= deletedRange.end) {
+                                              continue;
+                                            }
+                                            if (r.start >= deletedRange.end) {
+                                              updated.add(
+                                                TextRange(
+                                                  start: r.start - removedLen,
+                                                  end: r.end - removedLen,
+                                                ),
+                                              );
+                                            } else {
+                                              updated.add(r);
+                                            }
+                                          }
+                                          _highlightedRanges = updated;
+                                          (captionController
+                                                  as HighlightingTextEditingController)
+                                              .highlightedRanges = updated;
+                                          (captionController
+                                                  as HighlightingTextEditingController)
+                                              .invalidRanges = [];
+                                          setState(() {});
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -3385,7 +3456,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Padding(
-                                  padding: EdgeInsets.only(left: 4, bottom: 2),
+                                  padding: EdgeInsets.only(
+                                      left: 4, top: 7, bottom: 0),
                                   child: Text(
                                     'PERSONALITY',
                                     style: TextStyle(
@@ -8150,8 +8222,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   bool _shouldShowInningSelector(String verb) {
-    // Define which verbs ONLY need inning selection (no other options)
+    // Define which verbs ONLY need inning/period selection (no other options)
     const verbsNeedingOnlyInning = {
+      // Baseball verbs
       'At Bat',
       'Pitching',
       'Swings',
@@ -8174,6 +8247,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Takes the Field',
       'Comes Off the Field',
       'Strikeout',
+      // Hockey verbs
+      'Shoots',
+      'Scores',
+      'Passes',
+      'Skates',
+      'Faceoff',
+      'Power Play',
+      'Breakaway',
+      'Blocks',
+      'Saves',
+      'Clears',
+      'Checks',
+      'Defends',
+      'Penalty Kill',
+      'Warm Ups',
+      'Takes the Ice',
+      'Comes Off the Ice',
+      'National Anthem',
+      'Stretching',
+      'Bench',
+      'Celebrates',
+      'Dejection',
+      'Post Game Win',
+      'Post Game Loss',
     };
 
     return verbsNeedingOnlyInning.contains(verb);
@@ -8752,7 +8849,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                               ),
                                               Transform.translate(
-                                                offset: const Offset(-8, 0),
+                                                offset: const Offset(0, 0),
                                                 child: const Text(
                                                   'Disable FTP Button',
                                                   style: TextStyle(
@@ -9295,6 +9392,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   void _showCompactInningSelector([Offset? position, String? verbName]) {
     _pendingVerbSelection = verbName; // Store the verb name
+
+    // Check if we're in hockey mode
+    if (widget.sport?.toLowerCase() == 'hockey') {
+      _showCompactPeriodSelector(position, verbName);
+      return;
+    }
+
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
@@ -9892,6 +9996,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildMainVerbSelector() {
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    final String thirdCategory = sport == 'hockey' ? 'Goalie' : 'Running';
+    print(
+        'DEBUG _buildMainVerbSelector: sport=$sport, thirdCategory=$thirdCategory');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -9926,9 +10035,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Positioned(
                     top: 0,
                     left: (chipWidth + 2) * 2,
-                    width: chipWidth,
+                    width: chipWidth -
+                        0.5, // Slightly narrower to prevent overflow
                     height: 28,
-                    child: _buildVerbChip('Running', 'Running'),
+                    child: _buildVerbChip(thirdCategory, thirdCategory),
                   ),
                   // Row 2
                   Positioned(
@@ -10166,6 +10276,426 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // Hockey period selector
+  void _showCompactPeriodSelector([Offset? position, String? verbName]) {
+    _pendingVerbSelection = verbName; // Store the verb name
+    _showOvertimePeriods =
+        false; // Reset overtime periods visibility when dialog opens
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Calculate dialog dimensions and ensure it stays within screen bounds
+            const double dialogWidth = 380;
+            const double dialogHeight = 200;
+            final screenWidth = MediaQuery.of(context).size.width;
+            final screenHeight = MediaQuery.of(context).size.height;
+
+            // Calculate centered position
+            double left = (position?.dx ?? screenWidth / 2) - (dialogWidth / 2);
+            double top = (position?.dy ?? screenHeight / 2) - 100;
+
+            // Ensure dialog stays within screen bounds with 10px padding
+            if (left < 10) left = 10;
+            if (left + dialogWidth > screenWidth - 10)
+              left = screenWidth - dialogWidth - 10;
+            if (top < 10) top = 10;
+            if (top + dialogHeight > screenHeight - 10)
+              top = screenHeight - dialogHeight - 10;
+
+            return Stack(
+              children: [
+                // Full screen GestureDetector to close on tap outside
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(color: Colors.transparent),
+                  ),
+                ),
+                // Position the dialog centered on the click location
+                Positioned(
+                  left: left,
+                  top: top,
+                  child: Material(
+                    elevation: 8,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: Colors.white,
+                      ),
+                      child: IntrinsicWidth(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Title
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(4),
+                                  topRight: Radius.circular(4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Period',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => Navigator.pop(context),
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      width: 20,
+                                      height: 20,
+                                      alignment: Alignment.center,
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 14,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Content
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: 120,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // First row: 1, 2, 3
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 4),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                            children: [
+                                              _buildPeriodButton(
+                                                  '1', setDialogState),
+                                              const SizedBox(width: 4),
+                                              _buildPeriodButton(
+                                                  '2', setDialogState),
+                                              const SizedBox(width: 4),
+                                              _buildPeriodButton(
+                                                  '3', setDialogState),
+                                            ],
+                                          ),
+                                        ),
+                                        // Second row: OT, SO, Prior
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 4),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                            children: [
+                                              _buildPeriodButton(
+                                                  'OT', setDialogState),
+                                              const SizedBox(width: 4),
+                                              _buildPeriodButton(
+                                                  'SO', setDialogState),
+                                              const SizedBox(width: 4),
+                                              _buildPriorButton(setDialogState),
+                                            ],
+                                          ),
+                                        ),
+                                        // Third row: Toggle button under OT
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 4),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                            children: [
+                                              MouseRegion(
+                                                cursor:
+                                                    SystemMouseCursors.click,
+                                                child: GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _showOvertimePeriods =
+                                                          !_showOvertimePeriods;
+                                                    });
+                                                    setDialogState(() {});
+                                                  },
+                                                  child: Container(
+                                                    width: 36,
+                                                    height: 33,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          _showOvertimePeriods
+                                                              ? Colors
+                                                                  .grey.shade400
+                                                              : Colors
+                                                                  .grey.shade50,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              3),
+                                                      border: Border.all(
+                                                        color: Colors
+                                                            .grey.shade300,
+                                                        width: 0.5,
+                                                      ),
+                                                    ),
+                                                    child: Icon(
+                                                      _showOvertimePeriods
+                                                          ? Icons.expand_less
+                                                          : Icons.expand_more,
+                                                      size: 16,
+                                                      color:
+                                                          _showOvertimePeriods
+                                                              ? Colors.white
+                                                              : Colors.grey
+                                                                  .shade700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Fourth row: Overtime periods (conditionally shown)
+                                        if (_showOvertimePeriods)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 4),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.start,
+                                              children: [
+                                                _buildPeriodButton(
+                                                    '1OT', setDialogState),
+                                                const SizedBox(width: 4),
+                                                _buildPeriodButton(
+                                                    '2OT', setDialogState),
+                                                const SizedBox(width: 4),
+                                                _buildPeriodButton(
+                                                    '3OT', setDialogState),
+                                              ],
+                                            ),
+                                          ),
+                                        if (_showOvertimePeriods)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 4),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.start,
+                                              children: [
+                                                _buildPeriodButton(
+                                                    '4OT', setDialogState),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // FTP Controls Column
+                                  SizedBox(
+                                    width: 200,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Copy button
+                                        SizedBox(
+                                          width: 190,
+                                          height: 49,
+                                          child: ElevatedButton.icon(
+                                            onPressed: widget.onCopyMetadata,
+                                            icon: Icon(
+                                              Icons.copy,
+                                              size: 16,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            label: Text(
+                                              'Copy',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.grey.shade100,
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              side: BorderSide(
+                                                  color: Colors.grey.shade400),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Save button
+                                        SizedBox(
+                                          width: 190,
+                                          height: 49,
+                                          child: ElevatedButton.icon(
+                                            onPressed: () {
+                                              widget.onSaveIptc?.call();
+                                              Navigator.pop(context);
+                                              widget.onNextImage?.call();
+                                            },
+                                            icon: Icon(
+                                              Icons.arrow_forward,
+                                              size: 16,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            label: Text(
+                                              'Save →',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  Colors.grey.shade100,
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              side: BorderSide(
+                                                  color: Colors.grey.shade400),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // FTP button
+                                        SizedBox(
+                                          width: 190,
+                                          height: 49,
+                                          child: ElevatedButton.icon(
+                                            onPressed: _isFtpDisabled
+                                                ? null
+                                                : () => _uploadToFtp(),
+                                            icon: Icon(
+                                              Icons.cloud_upload,
+                                              size: 16,
+                                              color: _isFtpDisabled
+                                                  ? Colors.grey.shade400
+                                                  : Colors.white,
+                                            ),
+                                            label: Text(
+                                              'FTP',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: _isFtpDisabled
+                                                    ? Colors.grey.shade400
+                                                    : Colors.white,
+                                              ),
+                                            ),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: _isFtpDisabled
+                                                  ? Colors.grey.shade200
+                                                  : Colors.blue.shade600,
+                                              elevation: 0,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 0),
+                                        // Disable FTP Button checkbox
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Transform.scale(
+                                              scale: 0.7,
+                                              child: Checkbox(
+                                                value: _isFtpDisabled,
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    _isFtpDisabled =
+                                                        value ?? false;
+                                                  });
+                                                  setDialogState(() {});
+                                                },
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                splashRadius: 0,
+                                                overlayColor:
+                                                    WidgetStateProperty.all(
+                                                        Colors.transparent),
+                                                side: BorderSide(
+                                                    color: Colors.grey.shade500,
+                                                    width: 1),
+                                              ),
+                                            ),
+                                            Transform.translate(
+                                              offset: const Offset(-6, 0),
+                                              child: GestureDetector(
+                                                onTap: () {
+                                                  setState(() {
+                                                    _isFtpDisabled =
+                                                        !_isFtpDisabled;
+                                                  });
+                                                  setDialogState(() {});
+                                                },
+                                                child: Text(
+                                                  'Disable FTP Button',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showInningSelector() {
     showDialog(
       context: context,
@@ -10229,6 +10759,124 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: const Text('Cancel'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPeriodButton(String period, [Function? dialogSetState]) {
+    final isSelected = _selectedPeriod == period;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedPeriod = _selectedPeriod == period ? null : period;
+            if (_selectedPeriod != null) {
+              _isPriorToGame = false;
+            }
+            // Set the action verb for caption generation
+            if (_pendingVerbSelection != null) {
+              _selectedActionVerb = _pendingVerbSelection;
+              _selectedHomeRunType = null;
+              _rbiCount = null;
+            }
+          });
+          if (dialogSetState != null) {
+            dialogSetState(() {});
+          }
+          _updateCaption();
+        },
+        child: Container(
+          width: 36,
+          height: 33,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: Colors.grey.shade300,
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            period,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOvertimeToggleButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showOvertimePeriods = !_showOvertimePeriods;
+        });
+      },
+      child: Container(
+        width: 36,
+        height: 33,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color:
+              _showOvertimePeriods ? Colors.grey.shade400 : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: Colors.grey.shade300,
+            width: 0.5,
+          ),
+        ),
+        child: Icon(
+          _showOvertimePeriods ? Icons.expand_less : Icons.expand_more,
+          size: 16,
+          color: _showOvertimePeriods ? Colors.white : Colors.grey.shade700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriorButton([Function? dialogSetState]) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _isPriorToGame = !_isPriorToGame;
+            if (_isPriorToGame) {
+              _selectedPeriod = null;
+            }
+          });
+          if (dialogSetState != null) {
+            dialogSetState(() {});
+          }
+          _updateCaption();
+        },
+        child: Container(
+          width: 36,
+          height: 33,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _isPriorToGame ? Colors.grey.shade400 : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: Colors.grey.shade300,
+              width: 0.5,
+            ),
+          ),
+          child: Text(
+            'Prior',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: _isPriorToGame ? Colors.white : Colors.grey.shade700,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -10297,6 +10945,50 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return 'thirtieth';
       default:
         return '${number}th';
+    }
+  }
+
+  // Helper method to get hockey period text for captions
+  String _getHockeyPeriodText(String period) {
+    switch (period) {
+      case '1':
+        return ' during the first period';
+      case '2':
+        return ' during the second period';
+      case '3':
+        return ' during the third period';
+      case 'OT':
+        return ' during overtime';
+      case 'SO':
+        return ' during the shootout';
+      case '1OT':
+        return ' during the first overtime';
+      case '2OT':
+        return ' during double overtime';
+      case '3OT':
+        return ' during triple overtime';
+      case '4OT':
+        return ' during quadruple overtime';
+      case '5OT':
+        return ' during quintuple overtime';
+      case '6OT':
+        return ' during sextuple overtime';
+      case '7OT':
+        return ' during septuple overtime';
+      case '8OT':
+        return ' during octuple overtime';
+      case '9OT':
+        return ' during nonuple overtime';
+      default:
+        // Handle any other overtime periods (10OT, 11OT, etc.)
+        if (period.endsWith('OT')) {
+          final otNumber = period.replaceAll('OT', '');
+          final number = int.tryParse(otNumber);
+          if (number != null && number >= 10) {
+            return ' during ${_getOrdinalSuffix(number)} overtime';
+          }
+        }
+        return ' during the $period';
     }
   }
 
@@ -12578,18 +13270,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    // Add inning if specified (but not for post-game verbs or Pitching Change)
+    // Add inning/period if specified (but not for post-game verbs or Pitching Change)
     String inningPart = '';
     final isPostGameVerb =
         _selectedVerb == 'Post Game Win' || _selectedVerb == 'Post Game Loss';
     final isPitchingChange = _selectedVerb == 'Pitching Change';
 
     if (!isPostGameVerb && !isPitchingChange) {
-      if (_selectedRbiInning != null) {
-        inningPart =
-            ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
-      } else if (_isPriorToGame) {
-        inningPart = ' prior to the game';
+      if (widget.sport?.toLowerCase() == 'hockey') {
+        // Hockey mode: use periods
+        if (_selectedPeriod != null) {
+          inningPart = _getHockeyPeriodText(_selectedPeriod!);
+        } else if (_isPriorToGame) {
+          inningPart = ' prior to the game';
+        }
+      } else {
+        // Baseball mode: use innings
+        if (_selectedRbiInning != null) {
+          inningPart =
+              ' during the ${_getOrdinalSuffix(_selectedRbiInning!)} inning';
+        } else if (_isPriorToGame) {
+          inningPart = ' prior to the game';
+        }
       }
       // Note: _isPriorToGame is handled separately in the gamePart logic
     }
@@ -12653,7 +13355,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String opponentPartModified;
 
     if (_isPriorToGame) {
-      gamePart = 'in their MLB game';
+      // Set game part based on sport
+      final sport = widget.sport?.toLowerCase() ?? 'baseball';
+      gamePart = sport == 'hockey' ? 'in their NHL game' : 'in their MLB game';
+
       // For "prior to game", we need to extract just the team name from opponentPart
       String teamName = '';
       if (opponentPart.contains('against the ')) {
@@ -12675,19 +13380,97 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         opponentPartModified = ' prior to play against the $teamName';
       }
     } else {
-      gamePart = 'in their MLB game';
+      // Set game part based on sport
+      final sport = widget.sport?.toLowerCase() ?? 'baseball';
+      gamePart = sport == 'hockey' ? 'in their NHL game' : 'in their MLB game';
       opponentPartModified = opponentPart;
     }
 
-    final caption = '$dateline '
+    var caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${_isPriorToGame ? '' : inningPart} '
         '$gamePart at $stadium on $formattedDate $locationSuffix.${byline.isNotEmpty ? ' (Photo by $byline)' : ''}';
 
-    // Set caption text directly (no diacritic removal)
+    // Apply diacritic removal if checkbox is checked
+    if (_removeAccent) {
+      caption = _removeDiacritics(caption);
+    }
+
     captionController.text = caption;
 
     // Update personality field with all selected players (always call to handle empty case)
     _updatePersonalityField();
+  }
+
+  // Helper function to remove diacritics (accents) from text
+  String _removeDiacritics(String text) {
+    const diacritics = {
+      'á': 'a',
+      'à': 'a',
+      'ä': 'a',
+      'â': 'a',
+      'ã': 'a',
+      'å': 'a',
+      'Á': 'A',
+      'À': 'A',
+      'Ä': 'A',
+      'Â': 'A',
+      'Ã': 'A',
+      'Å': 'A',
+      'é': 'e',
+      'è': 'e',
+      'ë': 'e',
+      'ê': 'e',
+      'É': 'E',
+      'È': 'E',
+      'Ë': 'E',
+      'Ê': 'E',
+      'í': 'i',
+      'ì': 'i',
+      'ï': 'i',
+      'î': 'i',
+      'Í': 'I',
+      'Ì': 'I',
+      'Ï': 'I',
+      'Î': 'I',
+      'ó': 'o',
+      'ò': 'o',
+      'ö': 'o',
+      'ô': 'o',
+      'õ': 'o',
+      'ø': 'o',
+      'Ó': 'O',
+      'Ò': 'O',
+      'Ö': 'O',
+      'Ô': 'O',
+      'Õ': 'O',
+      'Ø': 'O',
+      'ú': 'u',
+      'ù': 'u',
+      'ü': 'u',
+      'û': 'u',
+      'Ú': 'U',
+      'Ù': 'U',
+      'Ü': 'U',
+      'Û': 'U',
+      'ñ': 'n',
+      'Ñ': 'N',
+      'ç': 'c',
+      'Ç': 'C',
+      'ý': 'y',
+      'ÿ': 'y',
+      'Ý': 'Y',
+      'ß': 'ss',
+      'æ': 'ae',
+      'Æ': 'AE',
+      'œ': 'oe',
+      'Œ': 'OE',
+    };
+
+    String result = text;
+    diacritics.forEach((key, value) {
+      result = result.replaceAll(key, value);
+    });
+    return result;
   }
 
   // Public method to upload any image via FTP (called from thumbnail grid)
@@ -13555,6 +14338,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _clearVerbSubSelections() {
     _selectedHomeRunType = null;
     _rbiCount = null;
+    _selectedPeriod = null; // Clear hockey period selection
     _isBatterRunning = false;
     _isSliding = false;
     _showFieldingOptions = false;
@@ -13568,6 +14352,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _selectedCelebrationType = null;
     _selectedAtBatAction = null;
     _selectedBattingAction = null;
+  }
+
+  // Simple FTP upload method placeholder
+  void _uploadToFtp() {
+    // TODO: Implement actual FTP upload functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('FTP upload functionality not yet implemented'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _onCopyPressed() {
@@ -16133,12 +16928,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     int day,
   ) {
     if (_isGameInUnitedStates()) {
-      // US format: CITY, STATE - DATE
-      return '${city.toUpperCase()}, ${stateOrProvince.toUpperCase()} - $monthUpper $day:';
+      // US format: CITY, FULL STATE NAME - DATE
+      // Expand state abbreviation to full name if needed
+      final fullStateName = _expandStateAbbreviation(stateOrProvince);
+      return '${city.toUpperCase()}, ${fullStateName.toUpperCase()} - $monthUpper $day:';
     } else {
-      // Canadian format: CITY, PROVINCE_ABBREVIATION - DATE
-      final provAbbr = _abbr(stateOrProvince);
-      return '${city.toUpperCase()}, $provAbbr - $monthUpper $day:';
+      // Canadian format: CITY, CANADA - DATE
+      return '${city.toUpperCase()}, CANADA - $monthUpper $day:';
     }
   }
 
@@ -16148,33 +16944,127 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String formattedDate,
   ) {
     if (_isGameInUnitedStates()) {
-      // US format: in City, State (no country needed)
-      // Special case for Washington DC - keep DC capitalized
-      final formattedState =
-          stateOrProvince == 'DC' ? 'DC' : _capitalize(stateOrProvince);
-      return 'in ${_capitalize(city)}, $formattedState';
+      // US format: in City, Full State Name (no country needed)
+      // Expand state abbreviation to full name if needed
+      final fullStateName = _expandStateAbbreviation(stateOrProvince);
+      return 'in ${_capitalize(city)}, ${_capitalize(fullStateName)}';
     } else {
-      // Canadian format: in City, Province, Canada
-      return 'in ${_capitalize(city)}, ${_capitalize(stateOrProvince)}, Canada';
+      // Canadian format: in City, Full Province Name, Canada
+      // Expand province abbreviation to full name if needed
+      final fullProvinceName = _expandProvinceAbbreviation(stateOrProvince);
+      return 'in ${_capitalize(city)}, ${_capitalize(fullProvinceName)}, Canada';
     }
   }
 
+  // Helper method to expand Canadian province abbreviations to full names
+  String _expandProvinceAbbreviation(String provinceOrAbbr) {
+    const provinceExpansion = {
+      'ON': 'Ontario',
+      'QC': 'Quebec',
+      'BC': 'British Columbia',
+      'AB': 'Alberta',
+      'SK': 'Saskatchewan',
+      'MB': 'Manitoba',
+      'NB': 'New Brunswick',
+      'NS': 'Nova Scotia',
+      'PE': 'Prince Edward Island',
+      'NL': 'Newfoundland and Labrador',
+      'NT': 'Northwest Territories',
+      'NU': 'Nunavut',
+      'YT': 'Yukon',
+    };
+
+    return provinceExpansion[provinceOrAbbr] ?? provinceOrAbbr;
+  }
+
+  // Helper method to expand US state abbreviations to full names
+  String _expandStateAbbreviation(String stateOrAbbr) {
+    const stateExpansion = {
+      'AL': 'Alabama',
+      'AK': 'Alaska',
+      'AZ': 'Arizona',
+      'AR': 'Arkansas',
+      'CA': 'California',
+      'CO': 'Colorado',
+      'CT': 'Connecticut',
+      'DE': 'Delaware',
+      'FL': 'Florida',
+      'GA': 'Georgia',
+      'HI': 'Hawaii',
+      'ID': 'Idaho',
+      'IL': 'Illinois',
+      'IN': 'Indiana',
+      'IA': 'Iowa',
+      'KS': 'Kansas',
+      'KY': 'Kentucky',
+      'LA': 'Louisiana',
+      'ME': 'Maine',
+      'MD': 'Maryland',
+      'MA': 'Massachusetts',
+      'MI': 'Michigan',
+      'MN': 'Minnesota',
+      'MS': 'Mississippi',
+      'MO': 'Missouri',
+      'MT': 'Montana',
+      'NE': 'Nebraska',
+      'NV': 'Nevada',
+      'NH': 'New Hampshire',
+      'NJ': 'New Jersey',
+      'NM': 'New Mexico',
+      'NY': 'New York',
+      'NC': 'North Carolina',
+      'ND': 'North Dakota',
+      'OH': 'Ohio',
+      'OK': 'Oklahoma',
+      'OR': 'Oregon',
+      'PA': 'Pennsylvania',
+      'RI': 'Rhode Island',
+      'SC': 'South Carolina',
+      'SD': 'South Dakota',
+      'TN': 'Tennessee',
+      'TX': 'Texas',
+      'UT': 'Utah',
+      'VT': 'Vermont',
+      'VA': 'Virginia',
+      'WA': 'Washington',
+      'WV': 'West Virginia',
+      'WI': 'Wisconsin',
+      'WY': 'Wyoming',
+      'DC': 'District of Columbia',
+    };
+
+    return stateExpansion[stateOrAbbr] ?? stateOrAbbr;
+  }
+
   bool _isGameInUnitedStates() {
-    // Check if the province/state is a Canadian province
+    // Check if the province/state is a Canadian province (full name or abbreviation)
     final canadianProvinces = {
       'Ontario',
+      'ON',
       'Quebec',
+      'QC',
       'British Columbia',
+      'BC',
       'Alberta',
+      'AB',
       'Saskatchewan',
+      'SK',
       'Manitoba',
+      'MB',
       'New Brunswick',
+      'NB',
       'Nova Scotia',
+      'NS',
       'Prince Edward Island',
+      'PE',
       'Newfoundland and Labrador',
+      'NL',
       'Northwest Territories',
+      'NT',
       'Nunavut',
+      'NU',
       'Yukon',
+      'YT',
     };
 
     return !canadianProvinces.contains(provinceController.text);
@@ -16924,7 +17814,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       hitPhrase = 'hits a $baseAction';
     }
-
     // Add celebration action if specified
     if (_selectedHittingAction != null) {
       switch (_selectedHittingAction!) {

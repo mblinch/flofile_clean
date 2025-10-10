@@ -53,15 +53,31 @@ class PreferencesService {
             'Error parsing category order for ' + sport + ': ' + e.toString());
       }
     }
-    // Return default order if not found or error
-    final defaultOrder = [
-      'Offense',
-      'Defense',
-      'Running',
-      'Reactions',
-      'Non Game-Action',
-      'Favorites',
-    ];
+    // Return sport-specific default order if not found or error
+    final List<String> defaultOrder;
+    switch (sport.toLowerCase()) {
+      case 'hockey':
+        defaultOrder = [
+          'Offense',
+          'Defense',
+          'Goalie',
+          'Non Game-Action',
+          'Reactions',
+          'Favorites',
+        ];
+        break;
+      case 'baseball':
+      default:
+        defaultOrder = [
+          'Offense',
+          'Defense',
+          'Running',
+          'Reactions',
+          'Non Game-Action',
+          'Favorites',
+        ];
+        break;
+    }
     print('DEBUG: No saved category order for ' +
         sport +
         '; using default ' +

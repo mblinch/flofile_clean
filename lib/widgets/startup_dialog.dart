@@ -103,32 +103,50 @@ class _StartupDialogState extends State<StartupDialog> {
       _apiManager.setSport(widget.sport!);
     }
 
-    _initializePreferences();
-    _loadTeams();
+    _initializeAndLoadData();
     _startTyping();
+  }
+
+  Future<void> _initializeAndLoadData() async {
+    // Wait for preferences to load first, then load teams
+    await _initializePreferences();
+    await _loadTeams();
   }
 
   Future<void> _initializePreferences() async {
     _preferencesService = await PreferencesService.getInstance();
-    _favoriteTeams =
-        await _preferencesService.getFavoriteTeams(sport: 'baseball');
+
+    // Load favorite teams for the current sport
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    print('DEBUG _initializePreferences: Loading favorites for sport=$sport');
+    _favoriteTeams = await _preferencesService.getFavoriteTeams(sport: sport);
+    print(
+        'DEBUG _initializePreferences: Loaded favorite teams: $_favoriteTeams');
 
     // Extract home and away favorites from the set
     // We'll use a simple convention: favorites are stored as "HOME:teamname" and "AWAY:teamname"
     for (var team in _favoriteTeams) {
       if (team.startsWith('HOME:')) {
         _favoriteHomeTeam = team.substring(5);
+        print(
+            'DEBUG _initializePreferences: Found home favorite: $_favoriteHomeTeam');
       } else if (team.startsWith('AWAY:')) {
         _favoriteAwayTeam = team.substring(5);
+        print(
+            'DEBUG _initializePreferences: Found away favorite: $_favoriteAwayTeam');
       }
     }
 
     // Automatically select favorite teams if they exist
     if (_favoriteHomeTeam != null) {
       selectedHomeTeam = _favoriteHomeTeam;
+      print(
+          'DEBUG _initializePreferences: Set selectedHomeTeam=$selectedHomeTeam');
     }
     if (_favoriteAwayTeam != null) {
       selectedAwayTeam = _favoriteAwayTeam;
+      print(
+          'DEBUG _initializePreferences: Set selectedAwayTeam=$selectedAwayTeam');
     }
 
     if (mounted) {
@@ -252,9 +270,26 @@ class _StartupDialogState extends State<StartupDialog> {
       final teams = await _apiManager.fetchTeams();
       setState(() {
         availableTeams = teams.map((team) => team.name).toList()..sort();
-        // Clear selected teams when loading new teams (sport changed)
-        selectedHomeTeam = null;
-        selectedAwayTeam = null;
+        print('DEBUG _loadTeams: Loaded ${availableTeams.length} teams');
+        // Restore favorite teams if they exist and are in the team list
+        print('DEBUG _loadTeams: Checking home favorite: $_favoriteHomeTeam');
+        if (_favoriteHomeTeam != null &&
+            availableTeams.contains(_favoriteHomeTeam)) {
+          selectedHomeTeam = _favoriteHomeTeam;
+          print('DEBUG _loadTeams: Set selectedHomeTeam=$selectedHomeTeam');
+        } else {
+          print(
+              'DEBUG _loadTeams: Home favorite not found in team list or null');
+        }
+        print('DEBUG _loadTeams: Checking away favorite: $_favoriteAwayTeam');
+        if (_favoriteAwayTeam != null &&
+            availableTeams.contains(_favoriteAwayTeam)) {
+          selectedAwayTeam = _favoriteAwayTeam;
+          print('DEBUG _loadTeams: Set selectedAwayTeam=$selectedAwayTeam');
+        } else {
+          print(
+              'DEBUG _loadTeams: Away favorite not found in team list or null');
+        }
         isLoadingTeams = false;
       });
     } catch (e) {
@@ -367,9 +402,31 @@ class _StartupDialogState extends State<StartupDialog> {
             'Washington Nationals'
           ];
         }
-        // Clear selected teams when using fallback teams (sport changed)
-        selectedHomeTeam = null;
-        selectedAwayTeam = null;
+        print(
+            'DEBUG _loadTeams (fallback): Loaded ${availableTeams.length} fallback teams for $sport');
+        // Restore favorite teams if they exist and are in the team list
+        print(
+            'DEBUG _loadTeams (fallback): Checking home favorite: $_favoriteHomeTeam');
+        if (_favoriteHomeTeam != null &&
+            availableTeams.contains(_favoriteHomeTeam)) {
+          selectedHomeTeam = _favoriteHomeTeam;
+          print(
+              'DEBUG _loadTeams (fallback): Set selectedHomeTeam=$selectedHomeTeam');
+        } else {
+          print(
+              'DEBUG _loadTeams (fallback): Home favorite not found in team list or null');
+        }
+        print(
+            'DEBUG _loadTeams (fallback): Checking away favorite: $_favoriteAwayTeam');
+        if (_favoriteAwayTeam != null &&
+            availableTeams.contains(_favoriteAwayTeam)) {
+          selectedAwayTeam = _favoriteAwayTeam;
+          print(
+              'DEBUG _loadTeams (fallback): Set selectedAwayTeam=$selectedAwayTeam');
+        } else {
+          print(
+              'DEBUG _loadTeams (fallback): Away favorite not found in team list or null');
+        }
         isLoadingTeams = false;
       });
     }
@@ -984,12 +1041,14 @@ class _StartupDialogState extends State<StartupDialog> {
                                                             'HOME:$selectedHomeTeam');
                                                       }
 
-                                                      // Save favorite teams preference for baseball
+                                                      // Save favorite teams preference for current sport
+                                                      final sport = widget.sport
+                                                              ?.toLowerCase() ??
+                                                          'baseball';
                                                       _preferencesService
                                                           .saveFavoriteTeams(
                                                               _favoriteTeams,
-                                                              sport:
-                                                                  'baseball');
+                                                              sport: sport);
                                                     });
                                                   },
                                                   behavior:
@@ -1103,12 +1162,14 @@ class _StartupDialogState extends State<StartupDialog> {
                                                             'AWAY:$selectedAwayTeam');
                                                       }
 
-                                                      // Save favorite teams preference for baseball
+                                                      // Save favorite teams preference for current sport
+                                                      final sport = widget.sport
+                                                              ?.toLowerCase() ??
+                                                          'baseball';
                                                       _preferencesService
                                                           .saveFavoriteTeams(
                                                               _favoriteTeams,
-                                                              sport:
-                                                                  'baseball');
+                                                              sport: sport);
                                                     });
                                                   },
                                                   behavior:
