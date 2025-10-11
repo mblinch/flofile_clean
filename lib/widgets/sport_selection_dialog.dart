@@ -19,8 +19,8 @@ class SportSelectionDialog extends StatelessWidget {
       child: GestureDetector(
         onTap: () => onSportSelected(sport.toLowerCase()),
         child: Container(
-          width: 200,
-          height: 220,
+          width: 180,
+          height: 200,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -121,14 +121,14 @@ class SportSelectionDialog extends StatelessWidget {
                       Icons.sports_baseball,
                       const Color(0xFF0052CC),
                     ),
-                    const SizedBox(width: 24),
+                    const SizedBox(width: 16),
                     _buildSportCard(
                       context,
                       'Hockey',
                       Icons.sports_hockey,
                       const Color(0xFFD32F2F),
                     ),
-                    const SizedBox(width: 24),
+                    const SizedBox(width: 16),
                     _buildSportCard(
                       context,
                       'Basketball',

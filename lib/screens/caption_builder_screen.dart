@@ -73,6 +73,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Loading states
   bool _isLoadingPlayers = false;
   double _playerLoadingProgress = 0.0;
+  bool _isLoadingImages = false;
+  double _imageLoadingProgress = 0.0;
 
   // Global keys for accessing widgets
 
@@ -662,8 +664,18 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _isLoadingPlayers = false;
     });
 
-    // Load images from the selected folder
+    // Step 2: Load images from the selected folder
+    setState(() {
+      _isLoadingImages = true;
+      _imageLoadingProgress = 0.0;
+    });
+
     await _loadImagesFromFolder(folderPath);
+
+    setState(() {
+      _isLoadingImages = false;
+      _imageLoadingProgress = 1.0;
+    });
 
     print('Images loaded: ${imagePaths.length} - going straight to app');
   }
@@ -705,8 +717,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             !fileName.startsWith('tmp.');
       }).toList();
 
-      // Set images immediately for instant thumbnail rendering and try to
-      // preserve the previously selected image (if it still exists)
+      // Sort images by capture time BEFORE setting the first image
+      setState(() {
+        _imageLoadingProgress = 0.3;
+      });
+      await _sortImagesByDateTaken(imageFiles);
+
+      setState(() {
+        _imageLoadingProgress = 0.8;
+      });
+
+      // Set images after sorting to ensure the first image is chronologically first
       setState(() {
         imagePaths = List.from(imageFiles);
         if (previouslySelectedPath != null) {
@@ -720,8 +741,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Clean up any temporary files that might have been loaded
       _removeTemporaryFiles();
 
-      // In the background: batch EXIF read for DateTimeOriginal, compute formatted times, and sort
-      // Fire-and-forget without awaiting
+      // In the background: batch EXIF read for DateTimeOriginal, compute formatted times
+      // Fire-and-forget without awaiting (sorting is already done above)
       Future(() async {
         try {
           await _loadExifTimesAndSort(imageFiles);
@@ -1452,7 +1473,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Create a list of maps with file path and date taken
     List<Map<String, dynamic>> filesWithDates = [];
 
-    for (String filePath in imageFiles) {
+    for (int i = 0; i < imageFiles.length; i++) {
+      final filePath = imageFiles[i];
+
+      // Update progress during sorting
+      if (imageFiles.length > 10) {
+        // Only update progress for larger sets
+        setState(() {
+          _imageLoadingProgress = 0.3 + (0.5 * (i / imageFiles.length));
+        });
+      }
       try {
         final proc = await ExiftoolHelper.run([
           '-j',
@@ -2777,8 +2807,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       );
     }
 
-    // Show loading screen only for players
-    if (_isLoadingPlayers) {
+    // Show loading screen for players or images
+    if (_isLoadingPlayers || _isLoadingImages) {
       return Scaffold(
         backgroundColor: Colors.grey.shade100,
         body: Center(
@@ -2809,8 +2839,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
-                const Text(
-                  'Loading Players...',
+                Text(
+                  _isLoadingPlayers
+                      ? 'Loading Players...'
+                      : 'Loading Images...',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w500,
@@ -2819,14 +2851,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
                 const SizedBox(height: 16),
                 LinearProgressIndicator(
-                  value: _playerLoadingProgress,
+                  value: _isLoadingPlayers
+                      ? _playerLoadingProgress
+                      : _imageLoadingProgress,
                   backgroundColor: Colors.grey.shade200,
                   valueColor:
                       AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${(_playerLoadingProgress * 100).toInt()}%',
+                  '${((_isLoadingPlayers ? _playerLoadingProgress : _imageLoadingProgress) * 100).toInt()}%',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey.shade600,

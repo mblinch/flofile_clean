@@ -635,13 +635,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Hockey verb categories
   final Map<String, List<String>> hockeyVerbCategories = {
     'Offense': [
-      'Shoots',
-      'Scores',
-      'Passes',
       'Skates',
+      'Battles',
+      'Scores',
       'Faceoff',
-      'Power Play',
-      'Breakaway',
+      '',
+      '',
+      '',
       '',
       '',
     ],
@@ -10288,6 +10288,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _showOvertimePeriods =
         false; // Reset overtime periods visibility when dialog opens
     bool showingPlayerSelection = false; // Track player selection view
+    bool showingHomeTeam =
+        selectedHomePlayers.isEmpty; // Start with opposing team
 
     // Set the action verb immediately so caption updates right away
     setState(() {
@@ -10389,308 +10391,388 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             // Content
                             Container(
                               padding: const EdgeInsets.all(8),
-                              child: !showingPlayerSelection ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 120,
-                                    child: Column(
+                              child: showingPlayerSelection
+                                  ? _buildPlayerSelectionView(
+                                      setDialogState,
+                                      () {
+                                        showingPlayerSelection = false;
+                                      },
+                                      showingHomeTeam,
+                                      () {
+                                        showingHomeTeam = !showingHomeTeam;
+                                      })
+                                  : Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        // First row: 1, 2, 3
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 4),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                        SizedBox(
+                                          width: 120,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              _buildPeriodButton(
-                                                  '1', setDialogState),
-                                              const SizedBox(width: 4),
-                                              _buildPeriodButton(
-                                                  '2', setDialogState),
-                                              const SizedBox(width: 4),
-                                              _buildPeriodButton(
-                                                  '3', setDialogState),
-                                            ],
-                                          ),
-                                        ),
-                                        // Second row: OT, SO, Prior
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 4),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.start,
-                                            children: [
-                                              _buildPeriodButton(
-                                                  'OT', setDialogState),
-                                              const SizedBox(width: 4),
-                                              _buildPeriodButton(
-                                                  'SO', setDialogState),
-                                              const SizedBox(width: 4),
-                                              _buildPriorButton(setDialogState),
-                                            ],
-                                          ),
-                                        ),
-                                        // Third row: Toggle button under OT
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 4),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.start,
-                                            children: [
-                                              MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors.click,
-                                                child: GestureDetector(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      _showOvertimePeriods =
-                                                          !_showOvertimePeriods;
-                                                    });
-                                                    setDialogState(() {});
-                                                  },
-                                                  child: Container(
-                                                    width: 36,
-                                                    height: 33,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      color:
-                                                          _showOvertimePeriods
-                                                              ? Colors
-                                                                  .grey.shade400
-                                                              : Colors
-                                                                  .grey.shade50,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              3),
-                                                      border: Border.all(
-                                                        color: Colors
-                                                            .grey.shade300,
-                                                        width: 0.5,
+                                              // First row: 1, 2, 3
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 4),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.start,
+                                                  children: [
+                                                    _buildPeriodButton(
+                                                        '1', setDialogState),
+                                                    const SizedBox(width: 4),
+                                                    _buildPeriodButton(
+                                                        '2', setDialogState),
+                                                    const SizedBox(width: 4),
+                                                    _buildPeriodButton(
+                                                        '3', setDialogState),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Second row: OT, SO, Prior
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 4),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.start,
+                                                  children: [
+                                                    _buildPeriodButton(
+                                                        'OT', setDialogState),
+                                                    const SizedBox(width: 4),
+                                                    _buildPeriodButton(
+                                                        'SO', setDialogState),
+                                                    const SizedBox(width: 4),
+                                                    _buildPriorButton(
+                                                        setDialogState),
+                                                  ],
+                                                ),
+                                              ),
+                                              // Third row: Toggle button under OT
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 4),
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.start,
+                                                  children: [
+                                                    MouseRegion(
+                                                      cursor: SystemMouseCursors
+                                                          .click,
+                                                      child: GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            _showOvertimePeriods =
+                                                                !_showOvertimePeriods;
+                                                          });
+                                                          setDialogState(() {});
+                                                        },
+                                                        child: Container(
+                                                          width: 36,
+                                                          height: 33,
+                                                          alignment:
+                                                              Alignment.center,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color:
+                                                                _showOvertimePeriods
+                                                                    ? Colors
+                                                                        .grey
+                                                                        .shade400
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade50,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        3),
+                                                            border: Border.all(
+                                                              color: Colors.grey
+                                                                  .shade300,
+                                                              width: 0.5,
+                                                            ),
+                                                          ),
+                                                          child: Icon(
+                                                            _showOvertimePeriods
+                                                                ? Icons
+                                                                    .expand_less
+                                                                : Icons
+                                                                    .expand_more,
+                                                            size: 16,
+                                                            color:
+                                                                _showOvertimePeriods
+                                                                    ? Colors
+                                                                        .white
+                                                                    : Colors
+                                                                        .grey
+                                                                        .shade700,
+                                                          ),
+                                                        ),
                                                       ),
                                                     ),
-                                                    child: Icon(
-                                                      _showOvertimePeriods
-                                                          ? Icons.expand_less
-                                                          : Icons.expand_more,
-                                                      size: 16,
+                                                  ],
+                                                ),
+                                              ),
+                                              // Fourth row: Overtime periods (conditionally shown)
+                                              if (_showOvertimePeriods)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 4),
+                                                  child: Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.start,
+                                                    children: [
+                                                      _buildPeriodButton('1OT',
+                                                          setDialogState),
+                                                      const SizedBox(width: 4),
+                                                      _buildPeriodButton('2OT',
+                                                          setDialogState),
+                                                      const SizedBox(width: 4),
+                                                      _buildPeriodButton('3OT',
+                                                          setDialogState),
+                                                    ],
+                                                  ),
+                                                ),
+                                              if (_showOvertimePeriods)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          bottom: 4),
+                                                  child: Row(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment.start,
+                                                    children: [
+                                                      _buildPeriodButton('4OT',
+                                                          setDialogState),
+                                                    ],
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // FTP Controls Column
+                                        SizedBox(
+                                          width: 200,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Add Players button
+                                              SizedBox(
+                                                width: 190,
+                                                height: 35,
+                                                child: ElevatedButton(
+                                                  onPressed: () {
+                                                    setDialogState(() {
+                                                      showingPlayerSelection =
+                                                          true;
+                                                    });
+                                                  },
+                                                  child: Text(
+                                                    'Add Players',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
                                                       color:
-                                                          _showOvertimePeriods
-                                                              ? Colors.white
-                                                              : Colors.grey
-                                                                  .shade700,
+                                                          Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.grey.shade100,
+                                                    elevation: 0,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    side: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // Copy button
+                                              SizedBox(
+                                                width: 190,
+                                                height: 49,
+                                                child: ElevatedButton.icon(
+                                                  onPressed:
+                                                      widget.onCopyMetadata,
+                                                  icon: Icon(
+                                                    Icons.copy,
+                                                    size: 16,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                  label: Text(
+                                                    'Copy',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.grey.shade100,
+                                                    elevation: 0,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    side: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // Save button
+                                              SizedBox(
+                                                width: 190,
+                                                height: 49,
+                                                child: ElevatedButton(
+                                                  onPressed: () {
+                                                    widget.onSaveIptc?.call();
+                                                    Navigator.pop(context);
+                                                    widget.onNextImage?.call();
+                                                  },
+                                                  child: Text(
+                                                    'Save →',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.grey.shade100,
+                                                    elevation: 0,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
+                                                    ),
+                                                    side: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // FTP button
+                                              SizedBox(
+                                                width: 190,
+                                                height: 49,
+                                                child: ElevatedButton.icon(
+                                                  onPressed: _isFtpDisabled
+                                                      ? null
+                                                      : () => _uploadToFtp(),
+                                                  icon: Icon(
+                                                    Icons.cloud_upload,
+                                                    size: 16,
+                                                    color: _isFtpDisabled
+                                                        ? Colors.grey.shade400
+                                                        : Colors.white,
+                                                  ),
+                                                  label: Text(
+                                                    'FTP',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: _isFtpDisabled
+                                                          ? Colors.grey.shade400
+                                                          : Colors.white,
+                                                    ),
+                                                  ),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        _isFtpDisabled
+                                                            ? Colors
+                                                                .grey.shade200
+                                                            : Colors
+                                                                .blue.shade600,
+                                                    elevation: 0,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              4),
                                                     ),
                                                   ),
                                                 ),
                                               ),
+                                              const SizedBox(height: 0),
+                                              // Disable FTP Button checkbox
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Transform.scale(
+                                                    scale: 0.7,
+                                                    child: Checkbox(
+                                                      value: _isFtpDisabled,
+                                                      onChanged: (value) {
+                                                        setState(() {
+                                                          _isFtpDisabled =
+                                                              value ?? false;
+                                                        });
+                                                        setDialogState(() {});
+                                                      },
+                                                      materialTapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      splashRadius: 0,
+                                                      overlayColor:
+                                                          WidgetStateProperty
+                                                              .all(Colors
+                                                                  .transparent),
+                                                      side: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          width: 1),
+                                                    ),
+                                                  ),
+                                                  Transform.translate(
+                                                    offset: const Offset(-6, 0),
+                                                    child: GestureDetector(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          _isFtpDisabled =
+                                                              !_isFtpDisabled;
+                                                        });
+                                                        setDialogState(() {});
+                                                      },
+                                                      child: Text(
+                                                        'Disable FTP Button',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: Colors
+                                                              .grey.shade700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ],
                                           ),
                                         ),
-                                        // Fourth row: Overtime periods (conditionally shown)
-                                        if (_showOvertimePeriods)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 4),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.start,
-                                              children: [
-                                                _buildPeriodButton(
-                                                    '1OT', setDialogState),
-                                                const SizedBox(width: 4),
-                                                _buildPeriodButton(
-                                                    '2OT', setDialogState),
-                                                const SizedBox(width: 4),
-                                                _buildPeriodButton(
-                                                    '3OT', setDialogState),
-                                              ],
-                                            ),
-                                          ),
-                                        if (_showOvertimePeriods)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                                bottom: 4),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.start,
-                                              children: [
-                                                _buildPeriodButton(
-                                                    '4OT', setDialogState),
-                                              ],
-                                            ),
-                                          ),
                                       ],
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // FTP Controls Column
-                                  SizedBox(
-                                    width: 200,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Copy button
-                                        SizedBox(
-                                          width: 190,
-                                          height: 49,
-                                          child: ElevatedButton.icon(
-                                            onPressed: widget.onCopyMetadata,
-                                            icon: Icon(
-                                              Icons.copy,
-                                              size: 16,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                            label: Text(
-                                              'Copy',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.grey.shade100,
-                                              elevation: 0,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              side: BorderSide(
-                                                  color: Colors.grey.shade400),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        // Save button
-                                        SizedBox(
-                                          width: 190,
-                                          height: 49,
-                                          child: ElevatedButton(
-                                            onPressed: () {
-                                              widget.onSaveIptc?.call();
-                                              Navigator.pop(context);
-                                              widget.onNextImage?.call();
-                                            },
-                                            child: Text(
-                                              'Save →',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.grey.shade100,
-                                              elevation: 0,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              side: BorderSide(
-                                                  color: Colors.grey.shade400),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        // FTP button
-                                        SizedBox(
-                                          width: 190,
-                                          height: 49,
-                                          child: ElevatedButton.icon(
-                                            onPressed: _isFtpDisabled
-                                                ? null
-                                                : () => _uploadToFtp(),
-                                            icon: Icon(
-                                              Icons.cloud_upload,
-                                              size: 16,
-                                              color: _isFtpDisabled
-                                                  ? Colors.grey.shade400
-                                                  : Colors.white,
-                                            ),
-                                            label: Text(
-                                              'FTP',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: _isFtpDisabled
-                                                    ? Colors.grey.shade400
-                                                    : Colors.white,
-                                              ),
-                                            ),
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: _isFtpDisabled
-                                                  ? Colors.grey.shade200
-                                                  : Colors.blue.shade600,
-                                              elevation: 0,
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 0),
-                                        // Disable FTP Button checkbox
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Transform.scale(
-                                              scale: 0.7,
-                                              child: Checkbox(
-                                                value: _isFtpDisabled,
-                                                onChanged: (value) {
-                                                  setState(() {
-                                                    _isFtpDisabled =
-                                                        value ?? false;
-                                                  });
-                                                  setDialogState(() {});
-                                                },
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                splashRadius: 0,
-                                                overlayColor:
-                                                    WidgetStateProperty.all(
-                                                        Colors.transparent),
-                                                side: BorderSide(
-                                                    color: Colors.grey.shade500,
-                                                    width: 1),
-                                              ),
-                                            ),
-                                            Transform.translate(
-                                              offset: const Offset(-6, 0),
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  setState(() {
-                                                    _isFtpDisabled =
-                                                        !_isFtpDisabled;
-                                                  });
-                                                  setDialogState(() {});
-                                                },
-                                                child: Text(
-                                                  'Disable FTP Button',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.grey.shade700,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
                           ],
                         ),
@@ -10846,6 +10928,204 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           size: 16,
           color: _showOvertimePeriods ? Colors.white : Colors.grey.shade700,
         ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerSelectionView(Function setDialogState, VoidCallback onDone,
+      bool showingHomeTeam, VoidCallback onToggleTeam) {
+    // Determine which team to show
+    final roster = showingHomeTeam ? _homeRoster : _awayRoster;
+    final selectedPlayers =
+        showingHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+    final teamName = showingHomeTeam ? widget.homeTeam : widget.awayTeam;
+
+    return SizedBox(
+      width: 370, // Fixed width to match normal view
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Toggle button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                teamName ?? (showingHomeTeam ? 'Home' : 'Away'),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  setDialogState(() {
+                    onToggleTeam();
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade300,
+                  foregroundColor: Colors.grey.shade700,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Switch Team',
+                  style: TextStyle(fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Player number grid (single team)
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: roster.map((p) {
+              final parts = p.displayName.split('#');
+              final number = parts.length > 1 ? parts[1].trim() : '?';
+              final lastName =
+                  parts.length > 0 ? parts[0].trim().split(' ').last : '';
+              final isSelected = selectedPlayers.contains(p.displayName);
+              final isHomeTeam = showingHomeTeam;
+
+              return GestureDetector(
+                onTap: () {
+                  print(
+                      'DEBUG: Player tapped: ${p.displayName}, showingHomeTeam: $showingHomeTeam');
+                  setState(() {
+                    if (showingHomeTeam) {
+                      if (isSelected) {
+                        selectedHomePlayers.remove(p.displayName);
+                        print('DEBUG: Removed from home: ${p.displayName}');
+                      } else {
+                        // Track which team was selected first; set first player if not set
+                        if (_firstTeamSelected == null) {
+                          _firstTeamSelected = showingHomeTeam;
+                          _firstPlayerSelected =
+                              _removeJerseyNumberFromName(p.displayName);
+                          print(
+                              'DEBUG: Set first team selected: $showingHomeTeam, first player: $_firstPlayerSelected');
+                        }
+                        selectedHomePlayers.add(p.displayName);
+                        print(
+                            'DEBUG: Added to home: ${p.displayName}, total home players: ${selectedHomePlayers.length}');
+                      }
+                    } else {
+                      if (isSelected) {
+                        selectedAwayPlayers.remove(p.displayName);
+                        print('DEBUG: Removed from away: ${p.displayName}');
+                      } else {
+                        // Track which team was selected first; set first player if not set
+                        if (_firstTeamSelected == null) {
+                          _firstTeamSelected = showingHomeTeam;
+                          _firstPlayerSelected =
+                              _removeJerseyNumberFromName(p.displayName);
+                          print(
+                              'DEBUG: Set first team selected: $showingHomeTeam, first player: $_firstPlayerSelected');
+                        }
+                        selectedAwayPlayers.add(p.displayName);
+                        print(
+                            'DEBUG: Added to away: ${p.displayName}, total away players: ${selectedAwayPlayers.length}');
+                      }
+                    }
+                    print(
+                        'DEBUG: Before _updateCaption - home: ${selectedHomePlayers.length}, away: ${selectedAwayPlayers.length}');
+                  });
+                  _updateCaption();
+
+                  // Store the original caption AFTER it's been updated (for grid selection)
+                  _originalCaptionBeforeCustomVerb = captionController.text;
+
+                  setDialogState(() {});
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Container(
+                    width: 45,
+                    height: 55,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? (isHomeTeam ? Colors.grey.shade700 : Colors.white)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: isSelected
+                            ? (isHomeTeam
+                                ? Colors.grey.shade700
+                                : Colors.grey.shade400)
+                            : Colors.grey.shade300,
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          number,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? (isHomeTeam
+                                    ? Colors.white
+                                    : Colors.grey.shade800)
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          lastName.length > 8
+                              ? lastName.substring(0, 8)
+                              : lastName,
+                          style: TextStyle(
+                            fontSize: 8,
+                            color: isSelected
+                                ? (isHomeTeam
+                                    ? Colors.white.withOpacity(0.9)
+                                    : Colors.grey.shade700)
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          // Done button
+          SizedBox(
+            width: double.infinity,
+            height: 35,
+            child: ElevatedButton(
+              onPressed: () {
+                setDialogState(() {
+                  onDone();
+                });
+              },
+              child: Text(
+                'Done',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -17789,54 +18069,156 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       // Hockey verbs
       case 'Shoots':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'shoots against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'shoots against the ${_getOpposingTeamName()}';
       case 'Scores':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'scores against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'scores against the ${_getOpposingTeamName()}';
       case 'Passes':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'passes against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'passes against the ${_getOpposingTeamName()}';
       case 'Skates':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'skates against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'skates against the ${_getOpposingTeamName()}';
+      case 'Battles':
+        final opposingPlayers2 = _getOpposingPlayers();
+        if (opposingPlayers2.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers2);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'battles against $playerNames';
+        }
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'battles against the ${_getOpposingTeamName()}';
       case 'Faceoff':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'takes a faceoff against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'takes a faceoff against the ${_getOpposingTeamName()}';
       case 'Power Play':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'on the power play against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'on the power play against the ${_getOpposingTeamName()}';
       case 'Breakaway':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'breaks away against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'breaks away against the ${_getOpposingTeamName()}';
       case 'Blocks':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'blocks against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'blocks against the ${_getOpposingTeamName()}';
       case 'Saves':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'makes a save against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'makes a save against the ${_getOpposingTeamName()}';
       case 'Clears':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'clears the puck against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'clears the puck against the ${_getOpposingTeamName()}';
       case 'Checks':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'checks against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'checks against the ${_getOpposingTeamName()}';
       case 'Defends':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'defends against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'defends against the ${_getOpposingTeamName()}';
       case 'Penalty Kill':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'on the penalty kill against $playerNames';
+        }
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'on the penalty kill against the ${_getOpposingTeamName()}';
