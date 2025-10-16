@@ -7,6 +7,8 @@ import 'dart:async';
 import '../services/api_manager.dart';
 import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
+import 'camera_serial_dialog.dart';
+import '../services/camera_serial_service.dart';
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(List<String>) onImagesLoaded;
@@ -14,14 +16,20 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(String?)? onAwayTeamChanged;
   final Function(String)? onApiChanged;
   final Function(String)? onStartFolderWatcher;
+  final CameraSerialService cameraService;
+  final String? currentLayout;
+  final Function(String)? onLayoutChanged;
 
   const AppHeaderWidget({
     super.key,
     required this.onImagesLoaded,
+    required this.cameraService,
     this.onHomeTeamChanged,
     this.onAwayTeamChanged,
     this.onApiChanged,
     this.onStartFolderWatcher,
+    this.currentLayout,
+    this.onLayoutChanged,
   });
 
   @override
@@ -44,6 +52,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   // State variables for team selection
   String? selectedAwayTeam;
   String? selectedHomeTeam;
+
+  // Serial number bylines state
+  bool _serialNumberBylinesEnabled = true;
   String selectedApi = 'MLB Stats API'; // API selection
   final bool _isConnectedToApi =
       false; // This would be connected to your API service
@@ -150,12 +161,26 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   Future<void> _initializePreferences() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadFavoriteTeams();
+    await _loadSerialNumberBylines();
   }
 
   Future<void> _loadFavoriteTeams() async {
     _favoriteTeams.clear();
     _favoriteTeams
         .addAll(await _preferencesService.getFavoriteTeams(sport: 'baseball'));
+    setState(() {});
+  }
+
+  Future<void> _loadSerialNumberBylines() async {
+    _serialNumberBylinesEnabled =
+        await _preferencesService.getSerialNumberBylines();
+    setState(() {});
+  }
+
+  Future<void> _toggleSerialNumberBylines() async {
+    _serialNumberBylinesEnabled = !_serialNumberBylinesEnabled;
+    await _preferencesService
+        .saveSerialNumberBylines(_serialNumberBylinesEnabled);
     setState(() {});
   }
 
@@ -232,38 +257,128 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                 },
               ),
             ),
-            // Connectivity indicator
-            FutureBuilder<bool>(
-              future: _testApiConnection(),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data == true) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.cable,
-                        size: 14,
-                        color: Colors.green.shade600,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Connected to roster source',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
           ],
         ),
       ),
       actions: [
+        InkWell(
+          onTap: _toggleSerialNumberBylines,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.badge,
+                  size: 12,
+                  color: _serialNumberBylinesEnabled
+                      ? Colors.green.shade600
+                      : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Serial Number Byline Mode',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: _serialNumberBylinesEnabled
+                        ? Colors.green.shade700
+                        : Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  _serialNumberBylinesEnabled
+                      ? Icons.check_circle
+                      : Icons.cancel,
+                  size: 12,
+                  color: _serialNumberBylinesEnabled
+                      ? Colors.green.shade600
+                      : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => CameraSerialDialog(
+                        cameraService: widget.cameraService,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.edit),
+                  iconSize: 12,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 20, minHeight: 20),
+                  tooltip: 'Edit Camera Serial Numbers',
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Layout dropdown
+        Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.grey.shade300, width: 1),
+          ),
+          child: DropdownButton<String>(
+            value: widget.currentLayout ?? 'players_list_left',
+            underline: const SizedBox(),
+            icon: const Icon(Icons.view_quilt, size: 14),
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade800,
+              fontWeight: FontWeight.w500,
+            ),
+            dropdownColor: Colors.white,
+            isDense: true,
+            items: const [
+              DropdownMenuItem(
+                value: 'players_list_left',
+                child: Text('Players List Left'),
+              ),
+              DropdownMenuItem(
+                value: 'players_list_right',
+                child: Text('Players List Right'),
+              ),
+              DropdownMenuItem(
+                value: 'players_list_top',
+                child: Text('Players List Top'),
+              ),
+              DropdownMenuItem(
+                value: 'players_list_bottom',
+                child: Text('Players List Bottom'),
+              ),
+              DropdownMenuItem(
+                value: 'compact_players_above',
+                child: Text('Compact Players Above'),
+              ),
+              DropdownMenuItem(
+                value: 'matrix_board',
+                child: Text('Matrix Board'),
+              ),
+              DropdownMenuItem(
+                value: 'player_popup_board',
+                child: Text('Player Popup'),
+              ),
+            ],
+            onChanged: (String? newValue) {
+              if (newValue != null && widget.onLayoutChanged != null) {
+                widget.onLayoutChanged!(newValue);
+              }
+            },
+          ),
+        ),
         IconButton(
           onPressed: () {
             showDialog(

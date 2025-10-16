@@ -4,6 +4,8 @@ import 'dart:convert';
 import '../services/mlb_api_service.dart';
 import '../services/api_manager.dart';
 import '../services/ftpclient_service.dart';
+import '../services/camera_serial_service.dart';
+import 'unknown_serial_dialog.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
@@ -237,6 +239,9 @@ class CaptionFieldsWidget extends StatefulWidget {
   final Map<String, String> Function()? getCurrentMetadataValues;
   final VoidCallback? onCopyMetadata; // Callback to copy metadata to clipboard
   final String? sport; // Current sport mode (baseball, hockey, basketball)
+  final CameraSerialService?
+      cameraService; // Camera serial service for automatic bylines
+  final bool hidePlayerPicker; // Hide the player picker section
 
   const CaptionFieldsWidget({
     super.key,
@@ -262,6 +267,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.getCurrentMetadataValues,
     this.onCopyMetadata,
     this.sport,
+    this.cameraService,
+    this.hidePlayerPicker = false,
   });
 
   @override
@@ -658,8 +665,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
     'Goalie': [
       'Saves',
-      '',
-      '',
+      'Handles the Puck',
+      'Stands in Net',
       '',
       '',
       '',
@@ -4461,8 +4468,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ), // end Row containing navigation + FTP buttons
                       ), // end Align
 
-                      // Player and Verb Selection Area
-                      Expanded(child: _buildCaptionBuildingSection()),
+                      // Player and Verb Selection Area (hidden for certain layouts)
+                      if (!widget.hidePlayerPicker)
+                        Expanded(child: _buildCaptionBuildingSection()),
                     ],
                   ),
                 ),
@@ -8252,11 +8260,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Scores',
       'Passes',
       'Skates',
+      'Battles',
       'Faceoff',
       'Power Play',
       'Breakaway',
       'Blocks',
       'Saves',
+      'Handles the Puck',
+      'Stands in Net',
       'Clears',
       'Checks',
       'Defends',
@@ -10560,21 +10571,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              // Add Players button
+                                              // Save button
                                               SizedBox(
                                                 width: 190,
-                                                height: 35,
+                                                height: 49,
                                                 child: ElevatedButton(
                                                   onPressed: () {
-                                                    setDialogState(() {
-                                                      showingPlayerSelection =
-                                                          true;
-                                                    });
+                                                    widget.onSaveIptc?.call();
+                                                    Navigator.pop(context);
+                                                    widget.onNextImage?.call();
                                                   },
                                                   child: Text(
-                                                    'Add Players',
+                                                    'Save →',
                                                     style: TextStyle(
-                                                      fontSize: 11,
+                                                      fontSize: 12,
                                                       color:
                                                           Colors.grey.shade700,
                                                     ),
@@ -10635,20 +10645,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                               ),
                                               const SizedBox(height: 8),
-                                              // Save button
+                                              // Add Players button
                                               SizedBox(
                                                 width: 190,
-                                                height: 49,
+                                                height: 35,
                                                 child: ElevatedButton(
                                                   onPressed: () {
-                                                    widget.onSaveIptc?.call();
-                                                    Navigator.pop(context);
-                                                    widget.onNextImage?.call();
+                                                    setDialogState(() {
+                                                      showingPlayerSelection =
+                                                          true;
+                                                    });
                                                   },
                                                   child: Text(
-                                                    'Save →',
+                                                    'Add Players',
                                                     style: TextStyle(
-                                                      fontSize: 12,
+                                                      fontSize: 11,
                                                       color:
                                                           Colors.grey.shade700,
                                                     ),
@@ -13343,6 +13354,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     };
   }
 
+  Future<void> _showUnknownSerialDialog(String serialNumber) async {
+    await showDialog(
+      context: context,
+      builder: (context) => UnknownSerialDialog(
+        serialNumber: serialNumber,
+        cameraService: widget.cameraService!,
+        onPhotographerAssigned: (photographerName) {
+          print(
+              'DEBUG: Serial number $serialNumber assigned to $photographerName');
+          // Update caption after assignment
+          _updateCaption();
+        },
+      ),
+    );
+  }
+
   void _updateCaption() async {
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
@@ -13476,10 +13503,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           (isHitInterface && hasMultiplePlayers) ||
           (isCelebrationInterface && hasMultiplePlayers)) {
         // If "with teammates" is selected OR we're in a hit interface with multiple players, only use the main player
+        // Determine which team the main player is from using normalized comparison (same logic as _getTeammates)
+        final isMainPlayerHome = selectedHomePlayers.any(
+          (player) =>
+              _removeJerseyNumberFromName(player) == _firstPlayerSelected,
+        );
         final mainPlayerTeam =
-            selectedHomePlayers.contains(_firstPlayerSelected)
-                ? selectedHomeTeam
-                : selectedAwayTeam;
+            isMainPlayerHome ? selectedHomeTeam : selectedAwayTeam;
         playerName = '$_firstPlayerSelected of the $mainPlayerTeam';
       } else {
         // If "with teammates" is NOT selected and not a multi-player hit interface, use all active players
@@ -13619,6 +13649,49 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Since we're now getting String values from the metadata widget, we don't need List handling
     photoBy = creatorValue ?? '';
 
+    // Try to detect photographer from camera serial number if no creator is set and serial number bylines are enabled
+    if (photoBy.isEmpty &&
+        widget.cameraService != null &&
+        widget.metadata != null) {
+      // Check if serial number bylines are enabled
+      try {
+        final preferencesService = await PreferencesService.getInstance();
+        final serialNumberBylinesEnabled =
+            await preferencesService.getSerialNumberBylines();
+
+        if (serialNumberBylinesEnabled) {
+          final serialNumber = widget.metadata!['SerialNumber']?.toString();
+          if (serialNumber != null && serialNumber.isNotEmpty) {
+            if (widget.cameraService!.isSerialNumberUnknown(serialNumber)) {
+              // Show dialog for unknown serial number
+              await _showUnknownSerialDialog(serialNumber);
+              // Try to detect again after potential assignment
+              final detectedPhotographer = widget.cameraService!
+                  .detectPhotographerFromExif(widget.metadata!);
+              if (detectedPhotographer != null) {
+                photoBy = detectedPhotographer;
+                print(
+                    'DEBUG: Auto-detected photographer from camera serial after assignment: $photoBy');
+              }
+            } else {
+              final detectedPhotographer = widget.cameraService!
+                  .detectPhotographerFromExif(widget.metadata!);
+              if (detectedPhotographer != null) {
+                photoBy = detectedPhotographer;
+                print(
+                    'DEBUG: Auto-detected photographer from camera serial: $photoBy');
+              }
+            }
+          }
+        } else {
+          print(
+              'DEBUG: Serial number bylines disabled, skipping auto-detection');
+        }
+      } catch (e) {
+        print('DEBUG: Error checking serial number bylines preference: $e');
+      }
+    }
+
     // Build the byline using EXIF Creator/Credit data
     String byline;
     if (photoBy.isNotEmpty &&
@@ -13689,6 +13762,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update personality field with all selected players (always call to handle empty case)
     _updatePersonalityField();
+  }
+
+  // Public method to select a player and verb from external widgets (like PlayerPopupCaptionBoard)
+  void selectPlayerAndVerb(Player player, String verb, bool isHome) {
+    setState(() {
+      // Clear existing selections
+      selectedHomePlayers.clear();
+      selectedAwayPlayers.clear();
+
+      // Select the player
+      final playerDisplayName = player.displayName ?? player.fullName;
+      if (isHome) {
+        selectedHomePlayers.add(playerDisplayName);
+      } else {
+        selectedAwayPlayers.add(playerDisplayName);
+      }
+
+      // Set the verb
+      _selectedVerb = verb;
+      _selectedActionVerb = verb;
+    });
+
+    // Trigger caption generation
+    _updateCaption();
   }
 
   // Helper function to remove diacritics (accents) from text
@@ -17918,11 +18015,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           }
 
-          // Add opponent
-          if (opposingPlayers.isNotEmpty) {
+          // Add opponent - only if there are actual opposing players selected
+          // For celebrates, we should only show "against" if players from BOTH teams are selected
+          if (selectedHomePlayers.isNotEmpty &&
+              selectedAwayPlayers.isNotEmpty) {
+            // Both teams have players selected - show opposing players
             final playerNames = _formatPlayersWithTeam(opposingPlayers);
             return '$customCelebration against $playerNames';
           } else {
+            // Only one team has players selected - they are teammates celebrating
             return '$customCelebration against the $opposingTeam';
           }
         }
@@ -17967,11 +18068,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         }
 
-        // Add opponent
-        if (opposingPlayers.isNotEmpty) {
+        // Add opponent - only if there are actual opposing players selected
+        // For celebrates, we should only show "against" if players from BOTH teams are selected
+        if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isNotEmpty) {
+          // Both teams have players selected - show opposing players
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$celebrationPhrase against $playerNames';
         } else {
+          // Only one team has players selected - they are teammates celebrating
           return '$celebrationPhrase against the $opposingTeam';
         }
       case 'Dejection':
@@ -18178,6 +18282,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'makes a save against the ${_getOpposingTeamName()}';
+      case 'Handles the Puck':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'handles the puck against $playerNames';
+        }
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'handles the puck against the ${_getOpposingTeamName()}';
+      case 'Stands in Net':
+        final opposingPlayers = _getOpposingPlayers();
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return hasCustomWording
+              ? '$customWording against $playerNames'
+              : 'stands in net against $playerNames';
+        }
+        return hasCustomWording
+            ? '$customWording against the ${_getOpposingTeamName()}'
+            : 'stands in net against the ${_getOpposingTeamName()}';
       case 'Clears':
         final opposingPlayers = _getOpposingPlayers();
         if (opposingPlayers.isNotEmpty) {

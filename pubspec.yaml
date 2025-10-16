@@ -43,6 +43,9 @@ dependencies:
 
   # Local storage
   shared_preferences: ^2.2.2
+  
+  # File picker for importing camera serial numbers
+  file_picker: ^8.0.0+1
 
 dev_dependencies:
   flutter_test:

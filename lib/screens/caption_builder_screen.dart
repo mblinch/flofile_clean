@@ -11,6 +11,8 @@ import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
 import '../widgets/thumbnail_grid_widget.dart';
+import '../widgets/matrix_caption_board.dart';
+import '../widgets/player_popup_caption_board.dart';
 
 import '../widgets/startup_dialog.dart';
 import '../widgets/sport_selection_dialog.dart';
@@ -18,6 +20,8 @@ import '../widgets/sport_selection_dialog.dart';
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
+import '../services/preferences_service.dart';
+import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
 
 class CaptionBuilderScreen extends StatefulWidget {
@@ -30,6 +34,7 @@ class CaptionBuilderScreen extends StatefulWidget {
 class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // API manager
   final ApiManager _apiManager = ApiManager();
+  final CameraSerialService _cameraService = CameraSerialService();
 
   // Image state management
   List<String> imagePaths = [];
@@ -47,6 +52,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // XMP metadata for rating and color label
   Map<String, int> _xmpRatings = {};
   Map<String, String> _xmpLabels = {};
+
+  // Resolution warning state
+  int _resolutionWarningThreshold = 3000;
+  bool _showResolutionWarning = false;
+
+  // Photoshop path
+  String? _photoshopPath;
+
+  // Layout preference
+  String _currentLayout = 'players_list_left';
+
+  // Player selection state
+  List<Player> selectedHomePlayers = [];
+  List<Player> selectedAwayPlayers = [];
+  String? _firstPlayerSelected;
+  bool? _firstTeamSelected;
   // XMP metadata for tagged/keep flags
   Map<String, bool> _xmpTagged = {};
   // Files that appear locked (not writable by owner)
@@ -927,6 +948,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    await _cameraService.initialize();
+    print('DEBUG: Camera service initialized successfully');
+
+    // Load resolution warning threshold, Photoshop path, and layout
+    final preferencesService = await PreferencesService.getInstance();
+    _resolutionWarningThreshold =
+        await preferencesService.getResolutionWarningThreshold();
+    _photoshopPath = await preferencesService.getPhotoshopPath();
+    _currentLayout = await preferencesService.getCurrentLayout();
   }
 
   // Load metadata from the current image
@@ -953,6 +987,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         '-By-line',
         '-Creator',
         '-XMP:Creator',
+        // Camera info for automatic byline detection
+        '-Make',
+        '-Model',
+        '-SerialNumber',
+        // Image dimensions for resolution warning
+        '-ImageWidth',
+        '-ImageHeight',
+        '-ExifImageWidth',
+        '-ExifImageHeight',
         // Photo Mechanic's preferred job ID field
         '-IPTC:OriginalTransmissionReference',
         '-OriginalTransmissionReference',
@@ -1057,6 +1100,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentMetadata = loadedMetadata;
               _originalMetadata = Map<String, dynamic>.from(
                   loadedMetadata); // Store original for change detection
+
+              // Check image resolution for warning
+              _checkImageResolution(loadedMetadata);
 
               // Also track original caption data for change detection directly from loaded metadata
               final Map<String, dynamic> originalCaptionFromMeta = {
@@ -2875,6 +2921,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     return Scaffold(
       appBar: AppHeaderWidget(
+        cameraService: _cameraService,
         onImagesLoaded: (images) {
           print('CaptionBuilderScreen received ${images.length} images');
           setState(() {
@@ -2906,131 +2953,952 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           });
           print('API changed in main screen: $api');
         },
+        currentLayout: _currentLayout,
+        onLayoutChanged: (String newLayout) async {
+          setState(() {
+            _currentLayout = newLayout;
+          });
+          // Save to preferences
+          final preferencesService = await PreferencesService.getInstance();
+          await preferencesService.saveCurrentLayout(newLayout);
+        },
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // LEFT COLUMN - Picture Preview and Thumbnails
-            Expanded(
-              flex: 4,
-              child: Column(
-                children: [
-                  // Picture preview - 50% of screen height
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.5,
-                    child: PicturePreviewWidget(
-                      key: _picturePreviewKey2,
-                      imagePaths: imagePaths,
-                      currentIndex: currentIndex,
-                      onImageSelected: _onImageSelected,
-                      onNextImage: () {
-                        if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex + 1);
-                        }
-                      },
-                      onPreviousImage: () {
-                        if (currentIndex > 0) {
-                          setState(() {
-                            _thumbCenterRequestId++;
-                          });
-                          _onImageSelected(currentIndex - 1);
-                        }
-                      },
-                      // Quick navigation (no thumbnail centering or extra state churn)
-                      onQuickNextImage: () {
-                        print('DEBUG: Quick next image called');
-                        if (currentIndex < imagePaths.length - 1) {
-                          setState(() {
-                            currentIndex = currentIndex + 1;
-                          });
-                          _loadMetadata();
-                        }
-                      },
-                      onQuickPreviousImage: () {
-                        print('DEBUG: Quick previous image called');
-                        if (currentIndex > 0) {
-                          setState(() {
-                            currentIndex = currentIndex - 1;
-                          });
-                          _loadMetadata();
-                        }
-                      },
-                      onSaveIptc: _saveIptcMetadata,
-                      onSaveIptcBackground: _saveIptcMetadataBackground,
-                      onCopyMetadata: _onCopyMetadata,
-                      onPasteMetadata: _onPasteMetadata,
-                      onApplyIptcTemplate: _onApplyIptcTemplate,
-                      onFtpImage: _onFtpImage,
-                      onImageDeleted: _onImageDeleted,
-                      onImageRenamed: _onImageRenamed,
-                      uploadedImages: _uploadedImages,
-                      queuedUploads: _queuedUploads,
-                      currentlyUploading: _currentlyUploading,
-                      uploadProgress: _uploadProgress,
-                      xmpRatings: _xmpRatings,
-                      xmpLabels: _xmpLabels,
-                      xmpTagged: _xmpTagged,
-                      lockedPaths: _lockedPaths,
-                      onEditMetadata: _showMetadataPopup,
-                    ),
-                  ),
+        child: _buildLayout(),
+      ),
+    );
+  }
 
-                  // Divider line between picture preview and thumbnails
-                  Container(
-                    height: 1,
-                    color: Colors.grey.shade300,
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+  // Build layout based on current layout preference
+  Widget _buildLayout() {
+    switch (_currentLayout) {
+      case 'players_list_left':
+        return _buildPlayersListLeftLayout();
+      case 'players_list_right':
+        return _buildPlayersListRightLayout();
+      case 'players_list_top':
+        return _buildPlayersListTopLayout();
+      case 'players_list_bottom':
+        return _buildPlayersListBottomLayout();
+      case 'compact_players_above':
+        return _buildCompactPlayersAboveLayout();
+      case 'matrix_board':
+        return _buildMatrixBoardLayout();
+      case 'player_popup_board':
+        return _buildPlayerPopupLayout();
+      default:
+        return _buildPlayersListLeftLayout();
+    }
+  }
 
-                  // Thumbnail grid - takes remaining space
-                  Expanded(
-                    child: ThumbnailGridWidget(
-                      imagePaths: imagePaths,
-                      currentIndex: currentIndex,
-                      onImageSelected: _onImageSelected,
-                      uploadedImages: _uploadedImages,
-                      queuedUploads: _queuedUploads,
-                      currentlyUploading: _currentlyUploading,
-                      uploadProgress: _uploadProgress,
-                      xmpRatings: _xmpRatings,
-                      xmpLabels: _xmpLabels,
-                      xmpTagged: _xmpTagged,
-                      lockedPaths: _lockedPaths,
-                      centerRequestId: _thumbCenterRequestId,
-                      onImageDeleted: _onImageDeleted,
-                      onCopyMetadata: _onCopyMetadata,
-                      onPasteMetadata: _onPasteMetadata,
-                      onApplyIptcTemplate: _onApplyIptcTemplate,
-                      onFtpImage: _onFtpImage,
-                      onImageRenamed: _onImageRenamed,
-                      onMultiSelect: _onMultiSelect,
-                      onEditMetadata: _showMetadataPopup,
-                    ),
-                  ),
-                ],
+  // Current layout: Players List Left (default)
+  Widget _buildPlayersListLeftLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT COLUMN - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Column(
+            children: [
+              // Resolution warning (if applicable)
+              _buildResolutionWarning(),
+
+              // Picture preview - 50% of screen height
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onQuickNextImage: () {
+                    print('DEBUG: Quick next image called');
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
               ),
-            ),
 
-            // RIGHT COLUMN - Player picker, firebar, verbs
-            Expanded(
-              flex: 6,
-              child: Align(
-                alignment: Alignment.bottomCenter,
+              // Divider line between picture preview and thumbnails
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+
+              // Thumbnail grid - takes remaining space
+              Expanded(
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // RIGHT COLUMN - Player picker, firebar, verbs
+        Expanded(
+          flex: 6,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
+                setState(() {
+                  currentMetadata = metadata;
+                });
+              },
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
+                setState(() {
+                  imagePaths = files;
+                  currentIndex = 0;
+                });
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
+                  setState(() {
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress.remove(imagePath);
+                  });
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
+                setState(() {
+                  _uploadProgress[imagePath] = progress;
+                });
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Players List Right Layout
+  Widget _buildPlayersListRightLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT COLUMN - Player picker, firebar, verbs
+        Expanded(
+          flex: 6,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
+                setState(() {
+                  currentMetadata = metadata;
+                });
+              },
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
+                setState(() {
+                  imagePaths = files;
+                  currentIndex = 0;
+                });
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
+                  setState(() {
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress.remove(imagePath);
+                  });
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
+                setState(() {
+                  _uploadProgress[imagePath] = progress;
+                });
+              },
+            ),
+          ),
+        ),
+
+        // RIGHT COLUMN - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Column(
+            children: [
+              // Resolution warning (if applicable)
+              _buildResolutionWarning(),
+
+              // Picture preview - 50% of screen height
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onQuickNextImage: () {
+                    print('DEBUG: Quick next image called');
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+
+              // Divider line between picture preview and thumbnails
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+
+              // Thumbnail grid - takes remaining space
+              Expanded(
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Players List Top Layout
+  Widget _buildPlayersListTopLayout() {
+    return Column(
+      children: [
+        // TOP ROW - Player picker, firebar, verbs
+        Expanded(
+          flex: 6,
+          child: CaptionFieldsWidget(
+            key: _captionFieldsKey2,
+            metadata: currentMetadata,
+            cameraService: _cameraService,
+            onMetadataUpdated: (metadata) {
+              setState(() {
+                currentMetadata = metadata;
+              });
+            },
+            getCurrentMetadataValues: () {
+              return {};
+            },
+            homeTeam: selectedHomeTeam,
+            awayTeam: selectedAwayTeam,
+            sport: _selectedSport,
+            onNextImage: () {
+              if (currentIndex < imagePaths.length - 1) {
+                setState(() {
+                  _thumbCenterRequestId++;
+                });
+                _onImageSelected(currentIndex + 1);
+              }
+            },
+            onPreviousImage: () {
+              if (currentIndex > 0) {
+                setState(() {
+                  _thumbCenterRequestId++;
+                });
+                _onImageSelected(currentIndex - 1);
+              }
+            },
+            onReset: _handleReset,
+            personalityOverride: _personalityOverride,
+            onImagesLoaded: (files) {
+              print('DEBUG: onImagesLoaded called with ${files.length} files');
+              setState(() {
+                imagePaths = files;
+                currentIndex = 0;
+              });
+            },
+            onStartFolderWatcher: _startFolderWatcher,
+            preloadedHomeRoster:
+                _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+            preloadedAwayRoster:
+                _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+            currentImagePath:
+                imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+            currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+            totalImages: imagePaths.length,
+            onSaveIptc: _saveIptcMetadata,
+            onImageUploaded: (imagePath) {
+              if (!_currentlyUploading.contains(imagePath)) {
+                setState(() {
+                  _uploadedImages.add(imagePath);
+                  _uploadProgress.remove(imagePath);
+                });
+              }
+            },
+            onUploadProgress: (imagePath, progress) {
+              setState(() {
+                _uploadProgress[imagePath] = progress;
+              });
+            },
+          ),
+        ),
+
+        // Divider line
+        Container(
+          height: 1,
+          color: Colors.grey.shade300,
+          margin: const EdgeInsets.symmetric(vertical: 12),
+        ),
+
+        // BOTTOM ROW - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Row(
+            children: [
+              // Picture preview
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    // Resolution warning (if applicable)
+                    _buildResolutionWarning(),
+                    Expanded(
+                      child: PicturePreviewWidget(
+                        key: _picturePreviewKey2,
+                        imagePaths: imagePaths,
+                        currentIndex: currentIndex,
+                        onImageSelected: _onImageSelected,
+                        onNextImage: () {
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex + 1);
+                          }
+                        },
+                        onPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex - 1);
+                          }
+                        },
+                        onQuickNextImage: () {
+                          print('DEBUG: Quick next image called');
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              currentIndex = currentIndex + 1;
+                            });
+                            _loadMetadata();
+                          }
+                        },
+                        onQuickPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() {
+                              currentIndex = currentIndex - 1;
+                            });
+                            _loadMetadata();
+                          }
+                        },
+                        onSaveIptc: _saveIptcMetadata,
+                        onSaveIptcBackground: _saveIptcMetadataBackground,
+                        onCopyMetadata: _onCopyMetadata,
+                        onPasteMetadata: _onPasteMetadata,
+                        onApplyIptcTemplate: _onApplyIptcTemplate,
+                        onFtpImage: _onFtpImage,
+                        onImageDeleted: _onImageDeleted,
+                        onImageRenamed: _onImageRenamed,
+                        uploadedImages: _uploadedImages,
+                        queuedUploads: _queuedUploads,
+                        currentlyUploading: _currentlyUploading,
+                        uploadProgress: _uploadProgress,
+                        xmpRatings: _xmpRatings,
+                        xmpLabels: _xmpLabels,
+                        xmpTagged: _xmpTagged,
+                        lockedPaths: _lockedPaths,
+                        onEditMetadata: _showMetadataPopup,
+                        onEditInPhotoshop: _launchPhotoshop,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Divider line
+              Container(
+                width: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+
+              // Thumbnail grid
+              Expanded(
+                flex: 1,
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Players List Bottom Layout
+  Widget _buildPlayersListBottomLayout() {
+    return Column(
+      children: [
+        // TOP ROW - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Row(
+            children: [
+              // Picture preview
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    // Resolution warning (if applicable)
+                    _buildResolutionWarning(),
+                    Expanded(
+                      child: PicturePreviewWidget(
+                        key: _picturePreviewKey2,
+                        imagePaths: imagePaths,
+                        currentIndex: currentIndex,
+                        onImageSelected: _onImageSelected,
+                        onNextImage: () {
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex + 1);
+                          }
+                        },
+                        onPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex - 1);
+                          }
+                        },
+                        onQuickNextImage: () {
+                          print('DEBUG: Quick next image called');
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              currentIndex = currentIndex + 1;
+                            });
+                            _loadMetadata();
+                          }
+                        },
+                        onQuickPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() {
+                              currentIndex = currentIndex - 1;
+                            });
+                            _loadMetadata();
+                          }
+                        },
+                        onSaveIptc: _saveIptcMetadata,
+                        onSaveIptcBackground: _saveIptcMetadataBackground,
+                        onCopyMetadata: _onCopyMetadata,
+                        onPasteMetadata: _onPasteMetadata,
+                        onApplyIptcTemplate: _onApplyIptcTemplate,
+                        onFtpImage: _onFtpImage,
+                        onImageDeleted: _onImageDeleted,
+                        onImageRenamed: _onImageRenamed,
+                        uploadedImages: _uploadedImages,
+                        queuedUploads: _queuedUploads,
+                        currentlyUploading: _currentlyUploading,
+                        uploadProgress: _uploadProgress,
+                        xmpRatings: _xmpRatings,
+                        xmpLabels: _xmpLabels,
+                        xmpTagged: _xmpTagged,
+                        lockedPaths: _lockedPaths,
+                        onEditMetadata: _showMetadataPopup,
+                        onEditInPhotoshop: _launchPhotoshop,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Divider line
+              Container(
+                width: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+
+              // Thumbnail grid
+              Expanded(
+                flex: 1,
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Divider line
+        Container(
+          height: 1,
+          color: Colors.grey.shade300,
+          margin: const EdgeInsets.symmetric(vertical: 12),
+        ),
+
+        // BOTTOM ROW - Player picker, firebar, verbs
+        Expanded(
+          flex: 6,
+          child: CaptionFieldsWidget(
+            key: _captionFieldsKey2,
+            metadata: currentMetadata,
+            cameraService: _cameraService,
+            onMetadataUpdated: (metadata) {
+              setState(() {
+                currentMetadata = metadata;
+              });
+            },
+            getCurrentMetadataValues: () {
+              return {};
+            },
+            homeTeam: selectedHomeTeam,
+            awayTeam: selectedAwayTeam,
+            sport: _selectedSport,
+            onNextImage: () {
+              if (currentIndex < imagePaths.length - 1) {
+                setState(() {
+                  _thumbCenterRequestId++;
+                });
+                _onImageSelected(currentIndex + 1);
+              }
+            },
+            onPreviousImage: () {
+              if (currentIndex > 0) {
+                setState(() {
+                  _thumbCenterRequestId++;
+                });
+                _onImageSelected(currentIndex - 1);
+              }
+            },
+            onReset: _handleReset,
+            personalityOverride: _personalityOverride,
+            onImagesLoaded: (files) {
+              print('DEBUG: onImagesLoaded called with ${files.length} files');
+              setState(() {
+                imagePaths = files;
+                currentIndex = 0;
+              });
+            },
+            onStartFolderWatcher: _startFolderWatcher,
+            preloadedHomeRoster:
+                _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+            preloadedAwayRoster:
+                _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+            currentImagePath:
+                imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+            currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+            totalImages: imagePaths.length,
+            onSaveIptc: _saveIptcMetadata,
+            onImageUploaded: (imagePath) {
+              if (!_currentlyUploading.contains(imagePath)) {
+                setState(() {
+                  _uploadedImages.add(imagePath);
+                  _uploadProgress.remove(imagePath);
+                });
+              }
+            },
+            onUploadProgress: (imagePath, progress) {
+              setState(() {
+                _uploadProgress[imagePath] = progress;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Compact Players Above Layout
+  Widget _buildCompactPlayersAboveLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT COLUMN - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Column(
+            children: [
+              // Resolution warning (if applicable)
+              _buildResolutionWarning(),
+
+              // Picture preview - 50% of screen height
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onQuickNextImage: () {
+                    print('DEBUG: Quick next image called');
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+
+              // Divider line between picture preview and thumbnails
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+
+              // Thumbnail grid - takes remaining space
+              Expanded(
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // RIGHT COLUMN - Compact Player Picker Above Verb Picker
+        Expanded(
+          flex: 6,
+          child: Column(
+            children: [
+              // Compact Player Picker (spans full width)
+              _buildCompactPlayerPicker(),
+
+              // Divider line
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+              ),
+
+              // Verb Picker (takes remaining space)
+              Expanded(
                 child: CaptionFieldsWidget(
                   key: _captionFieldsKey2,
                   metadata: currentMetadata,
+                  cameraService: _cameraService,
                   onMetadataUpdated: (metadata) {
                     setState(() {
                       currentMetadata = metadata;
                     });
                   },
                   getCurrentMetadataValues: () {
-                    // Metadata values now come from popup dialog, not main UI widget
                     return {};
                   },
                   homeTeam: selectedHomeTeam,
@@ -3073,13 +3941,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   totalImages: imagePaths.length,
                   onSaveIptc: _saveIptcMetadata,
                   onImageUploaded: (imagePath) {
-                    // Queue manager handles adding to uploaded set
-                    // This callback is mainly for the main FTP button
                     if (!_currentlyUploading.contains(imagePath)) {
                       setState(() {
                         _uploadedImages.add(imagePath);
-                        _uploadProgress
-                            .remove(imagePath); // Clear progress when done
+                        _uploadProgress.remove(imagePath);
                       });
                     }
                   },
@@ -3089,11 +3954,777 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     });
                   },
                 ),
-              ), // Close CaptionFieldsWidget
-            ), // Close Align
-          ],
+              ),
+            ],
+          ),
         ),
+      ],
+    );
+  }
+
+  // Matrix Board Layout - Fast caption building with matrix grid
+  Widget _buildMatrixBoardLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT COLUMN - Matrix Caption Board
+        Expanded(
+          flex: 7,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: MatrixCaptionBoard(
+              homeTeamName: selectedHomeTeam,
+              awayTeamName: selectedAwayTeam,
+              homeTeamAbbr: _getTeamAbbreviation(selectedHomeTeam),
+              awayTeamAbbr: _getTeamAbbreviation(selectedAwayTeam),
+              homeRoster: _cachedHomeRoster,
+              awayRoster: _cachedAwayRoster,
+              venue: currentMetadata?['Headline']?.toString(),
+              gameDate: _getPhotoDate(),
+              period: 'the first period',
+              metadata: currentMetadata,
+              onCaptionGenerated: (caption) {
+                // Update caption in metadata
+                setState(() {
+                  if (currentMetadata != null) {
+                    currentMetadata!['Caption-Abstract'] = caption;
+                  }
+                });
+              },
+            ),
+          ),
+        ),
+
+        // RIGHT COLUMN - Picture Preview and Thumbnails
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              // Resolution warning (if applicable)
+              _buildResolutionWarning(),
+
+              // Picture preview
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onQuickNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+
+              // Divider line
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+              ),
+
+              // Thumbnail grid
+              Expanded(
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  exifTimes: _exifTimes,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Helper method to get team abbreviation
+  String? _getTeamAbbreviation(String? teamName) {
+    if (teamName == null) return null;
+
+    final abbreviations = {
+      'Edmonton Oilers': 'EDM',
+      'Toronto Maple Leafs': 'TOR',
+      'Calgary Flames': 'CGY',
+      'Vancouver Canucks': 'VAN',
+      'Montreal Canadiens': 'MTL',
+      'Ottawa Senators': 'OTT',
+      'Winnipeg Jets': 'WPG',
+      'Boston Bruins': 'BOS',
+      'Buffalo Sabres': 'BUF',
+      'Detroit Red Wings': 'DET',
+      'Florida Panthers': 'FLA',
+      'Tampa Bay Lightning': 'TBL',
+      'Carolina Hurricanes': 'CAR',
+      'Columbus Blue Jackets': 'CBJ',
+      'New Jersey Devils': 'NJD',
+      'New York Islanders': 'NYI',
+      'New York Rangers': 'NYR',
+      'Philadelphia Flyers': 'PHI',
+      'Pittsburgh Penguins': 'PIT',
+      'Washington Capitals': 'WSH',
+      'Chicago Blackhawks': 'CHI',
+      'Colorado Avalanche': 'COL',
+      'Dallas Stars': 'DAL',
+      'Minnesota Wild': 'MIN',
+      'Nashville Predators': 'NSH',
+      'St. Louis Blues': 'STL',
+      'Anaheim Ducks': 'ANA',
+      'Arizona Coyotes': 'ARI',
+      'Las Vegas Golden Knights': 'VGK',
+      'Los Angeles Kings': 'LAK',
+      'San Jose Sharks': 'SJS',
+      'Seattle Kraken': 'SEA',
+      // MLB teams
+      'Arizona Diamondbacks': 'ARI',
+      'Atlanta Braves': 'ATL',
+      'Baltimore Orioles': 'BAL',
+      'Boston Red Sox': 'BOS',
+      'Chicago Cubs': 'CHC',
+      'Chicago White Sox': 'CHW',
+      'Cincinnati Reds': 'CIN',
+      'Cleveland Guardians': 'CLE',
+      'Colorado Rockies': 'COL',
+      'Detroit Tigers': 'DET',
+      'Houston Astros': 'HOU',
+      'Kansas City Royals': 'KC',
+      'Los Angeles Angels': 'LAA',
+      'Los Angeles Dodgers': 'LAD',
+      'Miami Marlins': 'MIA',
+      'Milwaukee Brewers': 'MIL',
+      'Minnesota Twins': 'MIN',
+      'New York Mets': 'NYM',
+      'New York Yankees': 'NYY',
+      'Oakland Athletics': 'OAK',
+      'Philadelphia Phillies': 'PHI',
+      'Pittsburgh Pirates': 'PIT',
+      'San Diego Padres': 'SD',
+      'San Francisco Giants': 'SF',
+      'Seattle Mariners': 'SEA',
+      'St. Louis Cardinals': 'STL',
+      'Tampa Bay Rays': 'TB',
+      'Texas Rangers': 'TEX',
+      'Toronto Blue Jays': 'TOR',
+      'Washington Nationals': 'WSH',
+    };
+
+    return abbreviations[teamName];
+  }
+
+  // Helper method to get photo date from metadata
+  DateTime? _getPhotoDate() {
+    if (currentMetadata == null) return DateTime.now();
+
+    final dateTimeOriginal = currentMetadata!['DateTimeOriginal']?.toString();
+    final createDate = currentMetadata!['CreateDate']?.toString();
+    final modifyDate = currentMetadata!['ModifyDate']?.toString();
+
+    final dateString = dateTimeOriginal ?? createDate ?? modifyDate;
+    if (dateString != null && dateString.isNotEmpty) {
+      try {
+        final parts = dateString.split(' ');
+        if (parts.isNotEmpty) {
+          final datePart = parts[0];
+          final dateComponents = datePart.split(':');
+          if (dateComponents.length >= 3) {
+            final year = int.parse(dateComponents[0]);
+            final month = int.parse(dateComponents[1]);
+            final day = int.parse(dateComponents[2]);
+            return DateTime(year, month, day);
+          }
+        }
+      } catch (e) {
+        print('Error parsing photo date: $e');
+      }
+    }
+
+    return DateTime.now();
+  }
+
+  // Player Popup Layout - Content at top, full player picker at bottom
+  Widget _buildPlayerPopupLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // LEFT COLUMN - Picture Preview and Thumbnails
+        Expanded(
+          flex: 4,
+          child: Column(
+            children: [
+              // Resolution warning (if applicable)
+              _buildResolutionWarning(),
+
+              // Picture preview - 50% of screen height
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: PicturePreviewWidget(
+                  key: _picturePreviewKey2,
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onQuickNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        currentIndex = currentIndex + 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onQuickPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        currentIndex = currentIndex - 1;
+                      });
+                      _loadMetadata();
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageDeleted: _onImageDeleted,
+                  onImageRenamed: _onImageRenamed,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                ),
+              ),
+
+              // Horizontal divider line
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+              ),
+
+              // Thumbnail grid - remaining space
+              Expanded(
+                child: ThumbnailGridWidget(
+                  imagePaths: imagePaths,
+                  currentIndex: currentIndex,
+                  onImageSelected: _onImageSelected,
+                  uploadedImages: _uploadedImages,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
+                  uploadProgress: _uploadProgress,
+                  xmpRatings: _xmpRatings,
+                  xmpLabels: _xmpLabels,
+                  xmpTagged: _xmpTagged,
+                  lockedPaths: _lockedPaths,
+                  centerRequestId: _thumbCenterRequestId,
+                  onImageDeleted: _onImageDeleted,
+                  onCopyMetadata: _onCopyMetadata,
+                  onPasteMetadata: _onPasteMetadata,
+                  onApplyIptcTemplate: _onApplyIptcTemplate,
+                  onFtpImage: _onFtpImage,
+                  onImageRenamed: _onImageRenamed,
+                  exifTimes: _exifTimes,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Vertical divider
+        Container(
+          width: 1,
+          color: Colors.grey.shade300,
+        ),
+
+        // RIGHT COLUMN - Caption Fields and Player Picker
+        Expanded(
+          flex: 6,
+          child: Column(
+            children: [
+              // Caption Fields Widget (top portion) - fixed height
+              SizedBox(
+                height: 220,
+                child: CaptionFieldsWidget(
+                  key: _captionFieldsKey2,
+                  metadata: currentMetadata,
+                  cameraService: _cameraService,
+                  onMetadataUpdated: (metadata) {
+                    setState(() {
+                      currentMetadata = metadata;
+                    });
+                  },
+                  getCurrentMetadataValues: () {
+                    return {};
+                  },
+                  homeTeam: selectedHomeTeam,
+                  awayTeam: selectedAwayTeam,
+                  sport: _selectedSport,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onPreviousImage: () {
+                    if (currentIndex > 0) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex - 1);
+                    }
+                  },
+                  onReset: _handleReset,
+                  personalityOverride: _personalityOverride,
+                  onImagesLoaded: (files) {
+                    setState(() {
+                      imagePaths = files;
+                      currentIndex = 0;
+                    });
+                  },
+                  preloadedHomeRoster: _cachedHomeRoster,
+                  preloadedAwayRoster: _cachedAwayRoster,
+                  hidePlayerPicker:
+                      true, // Hide old player picker for this layout
+                ),
+              ),
+              // Divider
+              Container(
+                height: 1,
+                color: Colors.grey.shade300,
+              ),
+              // Player picker with popup verbs (remaining space)
+              Expanded(
+                child: PlayerPopupCaptionBoard(
+                  homeTeamName: selectedHomeTeam,
+                  awayTeamName: selectedAwayTeam,
+                  homeRoster: _cachedHomeRoster,
+                  awayRoster: _cachedAwayRoster,
+                  venue: currentMetadata?['Headline']?.toString(),
+                  gameDate: _getPhotoDate(),
+                  period: 'the first period',
+                  metadata: currentMetadata,
+                  onCaptionGenerated:
+                      (Player player, String verb, bool isHome) {
+                    // Use the existing Getty caption generation system
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        if (state.mounted) {
+                          // Call the public method to select player and verb
+                          state.selectPlayerAndVerb(player, verb, isHome);
+                        }
+                      } catch (e) {
+                        print('Error triggering caption generation: $e');
+                      }
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Build compact player picker with numbers only
+  Widget _buildCompactPlayerPicker() {
+    return Container(
+      height: 120, // Fixed height for compact picker
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        children: [
+          // Team headers
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  selectedHomeTeam ?? 'Home Team',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 20,
+                color: Colors.grey.shade400,
+              ),
+              Expanded(
+                child: Text(
+                  selectedAwayTeam ?? 'Away Team',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Player number grids
+          Expanded(
+            child: Row(
+              children: [
+                // Home team players
+                Expanded(
+                  child: _buildCompactPlayerGrid(true),
+                ),
+                Container(
+                  width: 1,
+                  color: Colors.grey.shade400,
+                ),
+                // Away team players
+                Expanded(
+                  child: _buildCompactPlayerGrid(false),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  // Build compact player grid for one team
+  Widget _buildCompactPlayerGrid(bool isHomeTeam) {
+    final players = isHomeTeam ? _cachedHomeRoster : _cachedAwayRoster;
+    final selectedPlayers =
+        isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+
+    if (players.isEmpty) {
+      return Center(
+        child: Text(
+          'No players loaded',
+          style: TextStyle(
+            fontSize: 9,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 6, // 6 columns for compact layout
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+      ),
+      itemCount: players.length,
+      itemBuilder: (context, index) {
+        final player = players[index];
+        final playerName = player.fullName;
+        final isSelected =
+            selectedPlayers.any((p) => p.fullName == player.fullName);
+        final isMainPlayer = _firstPlayerSelected == playerName;
+
+        return GestureDetector(
+          onTap: () => _onPlayerSelected(player, isHomeTeam),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isMainPlayer
+                  ? Colors.red.shade100
+                  : isSelected
+                      ? Colors.blue.shade100
+                      : Colors.white,
+              border: Border.all(
+                color: isMainPlayer
+                    ? Colors.red.shade400
+                    : isSelected
+                        ? Colors.blue.shade400
+                        : Colors.grey.shade300,
+                width: isMainPlayer || isSelected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Center(
+              child: Text(
+                player.jerseyNumber ?? '?',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isMainPlayer || isSelected
+                      ? FontWeight.w600
+                      : FontWeight.w500,
+                  color: isMainPlayer
+                      ? Colors.red.shade700
+                      : isSelected
+                          ? Colors.blue.shade700
+                          : Colors.black87,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Extract jersey number from player name
+  String _extractJerseyNumber(String playerName) {
+    final match = RegExp(r'#(\d+)').firstMatch(playerName);
+    return match?.group(1) ?? '?';
+  }
+
+  // Handle player selection in compact picker
+  void _onPlayerSelected(Player player, bool isHomeTeam) {
+    setState(() {
+      if (isHomeTeam) {
+        final existingIndex = selectedHomePlayers
+            .indexWhere((p) => p.fullName == player.fullName);
+        if (existingIndex != -1) {
+          selectedHomePlayers.removeAt(existingIndex);
+        } else {
+          selectedHomePlayers.add(player);
+        }
+      } else {
+        final existingIndex = selectedAwayPlayers
+            .indexWhere((p) => p.fullName == player.fullName);
+        if (existingIndex != -1) {
+          selectedAwayPlayers.removeAt(existingIndex);
+        } else {
+          selectedAwayPlayers.add(player);
+        }
+      }
+
+      // Set first player selected for caption generation
+      if (_firstPlayerSelected == null) {
+        _firstPlayerSelected = player.fullName;
+        _firstTeamSelected = isHomeTeam;
+      }
+    });
+
+    // Update caption with new player selection
+    _updateCaption();
+  }
+
+  // Remove jersey number from player name
+  String _removeJerseyNumberFromName(String playerName) {
+    return playerName.replaceAll(RegExp(r'#\d+\s*'), '').trim();
+  }
+
+  // Update caption based on current selections
+  void _updateCaption() {
+    // This method would be implemented to update the caption
+    // For now, it's a placeholder that can be expanded
+    print(
+        'DEBUG: Updating caption with players: ${selectedHomePlayers.length} home, ${selectedAwayPlayers.length} away');
+  }
+
+  // Check image resolution and update warning state
+  void _checkImageResolution(Map<String, dynamic> metadata) {
+    // Try to get image dimensions from various EXIF fields
+    int? width;
+    int? height;
+
+    // Try different possible field names for image dimensions
+    width = _parseIntFromMetadata(metadata, ['ImageWidth', 'ExifImageWidth']);
+    height =
+        _parseIntFromMetadata(metadata, ['ImageHeight', 'ExifImageHeight']);
+
+    if (width != null && height != null) {
+      // Use the larger dimension for comparison
+      final maxDimension = width > height ? width : height;
+      _showResolutionWarning = maxDimension < _resolutionWarningThreshold;
+
+      print(
+          'DEBUG: Image resolution: ${width}x${height}, max dimension: $maxDimension, threshold: $_resolutionWarningThreshold, warning: $_showResolutionWarning');
+    } else {
+      _showResolutionWarning = false;
+      print('DEBUG: Could not determine image resolution from metadata');
+    }
+  }
+
+  // Helper method to parse integer from metadata with fallback field names
+  int? _parseIntFromMetadata(
+      Map<String, dynamic> metadata, List<String> fieldNames) {
+    for (final fieldName in fieldNames) {
+      final value = metadata[fieldName];
+      if (value != null) {
+        if (value is int) {
+          return value;
+        } else if (value is String) {
+          final parsed = int.tryParse(value);
+          if (parsed != null) {
+            return parsed;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // Build resolution warning widget
+  Widget _buildResolutionWarning() {
+    if (!_showResolutionWarning) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        border: Border.all(color: Colors.red.shade300, width: 1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.warning,
+            color: Colors.red.shade600,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Low Resolution Warning: Image resolution is below ${_resolutionWarningThreshold}px threshold',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Launch Photoshop with the specified image
+  Future<void> _launchPhotoshop(String imagePath) async {
+    if (_photoshopPath == null || _photoshopPath!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Photoshop path not configured. Please set it in Preferences.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Launch Photoshop with the image file
+      final result =
+          await Process.run('open', ['-a', _photoshopPath!, imagePath]);
+
+      if (result.exitCode == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Opening ${p.basename(imagePath)} in Photoshop...'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception('Failed to launch Photoshop: ${result.stderr}');
+      }
+    } catch (e) {
+      print('Error launching Photoshop: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to launch Photoshop: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

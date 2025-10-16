@@ -40,6 +40,8 @@ class ThumbnailGridWidget extends StatefulWidget {
   final Function(List<String>)? onMultiSelect;
   // Callback for editing metadata
   final VoidCallback? onEditMetadata;
+  // Callback for editing in Photoshop
+  final Function(String)? onEditInPhotoshop;
 
   const ThumbnailGridWidget({
     super.key,
@@ -66,6 +68,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.onImageRenamed,
     this.onMultiSelect,
     this.onEditMetadata,
+    this.onEditInPhotoshop,
   });
 
   @override
@@ -1162,6 +1165,13 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             if (widget.onEditMetadata != null)
                               _buildMenuItem('edit_iptc', 'Edit IPTC',
                                   Icons.edit, imagePath, tapPosition),
+                            if (widget.onEditInPhotoshop != null)
+                              _buildMenuItem(
+                                  'edit_photoshop',
+                                  'Edit in Photoshop',
+                                  Icons.brush,
+                                  imagePath,
+                                  tapPosition),
                             const Divider(height: 1),
                             if (widget.uploadedImages.contains(imagePath))
                               _buildMenuItem('remove_ftp', 'Remove FTP Status',
@@ -1232,6 +1242,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         } else {
           widget.onEditMetadata?.call();
         }
+        break;
+      case 'edit_photoshop':
+        widget.onEditInPhotoshop?.call(imagePath);
         break;
       case 'select':
         final originalIndex = widget.imagePaths.indexOf(imagePath);

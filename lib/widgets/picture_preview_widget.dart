@@ -29,6 +29,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function(String)? onFtpImage;
   final Function(String)? onImageDeleted;
   final Function(String, String)? onImageRenamed;
+  final Function(String)? onEditInPhotoshop;
   final Set<String>? uploadedImages;
   final Set<String>? queuedUploads;
   final Set<String>? currentlyUploading;
@@ -57,6 +58,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onFtpImage,
     this.onImageDeleted,
     this.onImageRenamed,
+    this.onEditInPhotoshop,
     this.uploadedImages,
     this.queuedUploads,
     this.currentlyUploading,
@@ -910,6 +912,9 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       if (widget.onEditMetadata != null)
                         _buildMenuItem('edit_iptc', 'Edit IPTC', Icons.edit,
                             imagePath, tapPosition),
+                      if (widget.onEditInPhotoshop != null)
+                        _buildMenuItem('edit_photoshop', 'Edit in Photoshop',
+                            Icons.brush, imagePath, tapPosition),
                       const Divider(height: 1),
                       if (widget.uploadedImages?.contains(imagePath) ?? false)
                         _buildMenuItem('remove_ftp', 'Remove FTP Status',
@@ -978,6 +983,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
       case 'edit_iptc':
         // Open metadata editor for current image (already selected)
         Future.microtask(() => widget.onEditMetadata?.call());
+        break;
+      case 'edit_photoshop':
+        // Edit in Photoshop
+        widget.onEditInPhotoshop?.call(imagePath);
         break;
       case 'apply_iptc_template':
         // Apply IPTC template to this image
