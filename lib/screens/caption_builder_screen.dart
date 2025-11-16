@@ -101,6 +101,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   final GlobalKey _captionFieldsKey2 = GlobalKey();
   final GlobalKey _picturePreviewKey2 = GlobalKey();
+  final GlobalKey _playerPopupKey = GlobalKey();
 
   // Scroll controller for thumbnail grid
   final ScrollController _thumbnailScrollController = ScrollController();
@@ -436,6 +437,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     setState(() {
       _personalityOverride = '';
     });
+
+    _clearPopupSelections();
+  }
+
+  void _clearPopupSelections() {
+    final popupState = _playerPopupKey.currentState;
+    if (popupState != null) {
+      try {
+        final dynamic state = popupState;
+        state.resetSelections();
+      } catch (e) {
+        print('Error resetting player popup: $e');
+      }
+    }
   }
 
   // Start watching the selected folder for new images
@@ -1352,6 +1367,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       } else {
         print('No metadata values to save');
       }
+      
+      // Clear player selections and custom verb after successful save
+      _clearPopupSelections();
     } catch (e) {
       print('Error saving IPTC metadata: $e');
     }
@@ -4342,6 +4360,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   homeTeam: selectedHomeTeam,
                   awayTeam: selectedAwayTeam,
                   sport: _selectedSport,
+                  currentImagePath: imagePaths.isNotEmpty && currentIndex >= 0 && currentIndex < imagePaths.length
+                      ? imagePaths[currentIndex]
+                      : null,
+                  currentIndex: currentIndex,
+                  totalImages: imagePaths.length,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
                       setState(() {
@@ -4370,6 +4393,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   preloadedAwayRoster: _cachedAwayRoster,
                   hidePlayerPicker:
                       true, // Hide old player picker for this layout
+                  onSaveIptc: _saveIptcMetadata,
+                  onSaveIptcBackground: _saveIptcMetadataBackground,
+                  onCopyMetadata: () => _onCopyMetadata(imagePaths[currentIndex]),
                 ),
               ),
               // Divider
@@ -4380,6 +4406,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Player picker with popup verbs (remaining space)
               Expanded(
                 child: PlayerPopupCaptionBoard(
+                  key: _playerPopupKey,
                   homeTeamName: selectedHomeTeam,
                   awayTeamName: selectedAwayTeam,
                   homeRoster: _cachedHomeRoster,
@@ -4404,6 +4431,67 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       }
                     }
                   },
+                  onSelectionChanged: (
+                    Set<Player> homePlayers,
+                    Set<Player> awayPlayers,
+                    Player? firstPlayer,
+                    bool? firstIsHome,
+                  ) {
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        if (state.mounted) {
+                          state.updatePlayersFromPopup(
+                            homePlayers,
+                            awayPlayers,
+                            firstPlayer,
+                            firstIsHome,
+                          );
+                        }
+                      } catch (e) {
+                        print('Error updating players from popup: $e');
+                      }
+                    }
+                  },
+                  onCustomVerbChanged: (String verb) {
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        if (state.mounted) {
+                          state.updateCustomVerbFromPopup(verb);
+                        }
+                      } catch (e) {
+                        print('Error updating custom verb: $e');
+                      }
+                    }
+                  },
+                  onPeriodChanged: (String period) {
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        if (state.mounted) {
+                          state.updatePeriodFromPopup(period);
+                        }
+                      } catch (e) {
+                        print('Error updating period from popup: $e');
+                      }
+                    }
+                  },
+                  onSaveIptc: _saveIptcMetadata,
+                  onNextImage: () {
+                    if (currentIndex < imagePaths.length - 1) {
+                      setState(() {
+                        _thumbCenterRequestId++;
+                      });
+                      _onImageSelected(currentIndex + 1);
+                    }
+                  },
+                  onCopyMetadata: () => _onCopyMetadata(imagePaths[currentIndex]),
+                  onFtp: () => _onFtpImage(imagePaths[currentIndex]),
+                  isFtpDisabled: false,
                 ),
               ),
             ],

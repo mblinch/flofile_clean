@@ -19,14 +19,11 @@ class PreferencesService {
   static const String _keyCustomVerbWordings = 'custom_verb_wordings';
   static const String _keyCustomVerbWordingsBaseball =
       'custom_verb_wordings_baseball';
-  static const String _keySerialNumberBylines =
-      'serial_number_bylines'; // Enable/disable automatic bylines from camera serial numbers
+  static const String _keySerialNumberBylines = 'serial_number_bylines';
   static const String _keyResolutionWarningThreshold =
-      'resolution_warning_threshold'; // Minimum resolution threshold for warning
-  static const String _keyPhotoshopPath =
-      'photoshop_path'; // Path to Photoshop application
-  static const String _keyCurrentLayout =
-      'current_layout'; // Current layout preference
+      'resolution_warning_threshold';
+  static const String _keyPhotoshopPath = 'photoshop_path';
+  static const String _keyCurrentLayout = 'current_layout';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -256,56 +253,6 @@ class PreferencesService {
     await prefs.setBool(_keyPlaceFirebarOnRight, placeOnRight);
   }
 
-  // Serial Number Bylines Preference
-  Future<bool> getSerialNumberBylines() async {
-    final prefs = await _getPrefs();
-    return prefs.getBool(_keySerialNumberBylines) ?? true; // Default to enabled
-  }
-
-  Future<void> saveSerialNumberBylines(bool enabled) async {
-    final prefs = await _getPrefs();
-    await prefs.setBool(_keySerialNumberBylines, enabled);
-  }
-
-  // Resolution Warning Threshold Preference
-  Future<int> getResolutionWarningThreshold() async {
-    final prefs = await _getPrefs();
-    return prefs.getInt(_keyResolutionWarningThreshold) ??
-        3000; // Default to 3000px
-  }
-
-  Future<void> saveResolutionWarningThreshold(int threshold) async {
-    final prefs = await _getPrefs();
-    await prefs.setInt(_keyResolutionWarningThreshold, threshold);
-  }
-
-  // Photoshop Path Preference
-  Future<String?> getPhotoshopPath() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyPhotoshopPath);
-  }
-
-  Future<void> savePhotoshopPath(String? path) async {
-    final prefs = await _getPrefs();
-    if (path != null && path.isNotEmpty) {
-      await prefs.setString(_keyPhotoshopPath, path);
-    } else {
-      await prefs.remove(_keyPhotoshopPath);
-    }
-  }
-
-  // Layout Preference
-  Future<String> getCurrentLayout() async {
-    final prefs = await _getPrefs();
-    return prefs.getString(_keyCurrentLayout) ??
-        'players_list_left'; // Default layout
-  }
-
-  Future<void> saveCurrentLayout(String layout) async {
-    final prefs = await _getPrefs();
-    await prefs.setString(_keyCurrentLayout, layout);
-  }
-
   // Last Saved Metadata
   Future<Map<String, dynamic>?> getLastSavedMetadata() async {
     final prefs = await _getPrefs();
@@ -371,6 +318,54 @@ class PreferencesService {
     }
   }
 
+  // Serial Number Bylines Preference
+  Future<bool> getSerialNumberBylines() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keySerialNumberBylines) ?? false;
+  }
+
+  Future<void> saveSerialNumberBylines(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keySerialNumberBylines, enabled);
+  }
+
+  // Resolution Warning Threshold Preference
+  Future<int> getResolutionWarningThreshold() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(_keyResolutionWarningThreshold) ?? 3000;
+  }
+
+  Future<void> saveResolutionWarningThreshold(int threshold) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyResolutionWarningThreshold, threshold);
+  }
+
+  // Photoshop Path Preference
+  Future<String?> getPhotoshopPath() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyPhotoshopPath);
+  }
+
+  Future<void> savePhotoshopPath(String? path) async {
+    final prefs = await _getPrefs();
+    if (path != null && path.isNotEmpty) {
+      await prefs.setString(_keyPhotoshopPath, path);
+    } else {
+      await prefs.remove(_keyPhotoshopPath);
+    }
+  }
+
+  // Current Layout Preference
+  Future<String> getCurrentLayout() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyCurrentLayout) ?? 'Matrix';
+  }
+
+  Future<void> saveCurrentLayout(String layout) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyCurrentLayout, layout);
+  }
+
   // Export all preferences as JSON
   Future<Map<String, dynamic>> exportAllPreferences() async {
     return {
@@ -380,10 +375,6 @@ class PreferencesService {
       'ftpProfiles': await getFtpProfiles(),
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
-      'serialNumberBylines': await getSerialNumberBylines(),
-      'resolutionWarningThreshold': await getResolutionWarningThreshold(),
-      'photoshopPath': await getPhotoshopPath(),
-      'currentLayout': await getCurrentLayout(),
       'lastSavedMetadata': await getLastSavedMetadata(),
     };
   }
@@ -410,19 +401,6 @@ class PreferencesService {
     }
     if (preferences.containsKey('placeFirebarOnRight')) {
       await savePlaceFirebarOnRight(preferences['placeFirebarOnRight']);
-    }
-    if (preferences.containsKey('serialNumberBylines')) {
-      await saveSerialNumberBylines(preferences['serialNumberBylines']);
-    }
-    if (preferences.containsKey('resolutionWarningThreshold')) {
-      await saveResolutionWarningThreshold(
-          preferences['resolutionWarningThreshold']);
-    }
-    if (preferences.containsKey('photoshopPath')) {
-      await savePhotoshopPath(preferences['photoshopPath']);
-    }
-    if (preferences.containsKey('currentLayout')) {
-      await saveCurrentLayout(preferences['currentLayout']);
     }
     if (preferences.containsKey('lastSavedMetadata')) {
       await saveLastSavedMetadata(

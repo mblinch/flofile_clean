@@ -56,6 +56,7 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
   final List<VerbDef> _verbs = [
     VerbDef(key: 'scores', label: 'Scores', wantsOpponent: true),
     VerbDef(key: 'skates', label: 'Skates', wantsOpponent: false),
+    VerbDef(key: 'shoots', label: 'Shoots', wantsOpponent: false),
     VerbDef(key: 'celebrates', label: 'Celebrates', wantsOpponent: false),
     VerbDef(key: 'looks_on', label: 'Looks On', wantsOpponent: false),
     VerbDef(key: 'saves', label: 'Saves', wantsOpponent: true),
@@ -291,8 +292,14 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
       case 'skates':
         verbPhrase = 'skates';
         break;
+      case 'shoots':
+        verbPhrase = 'shoots';
+        break;
       case 'celebrates':
         verbPhrase = 'celebrates';
+        break;
+      case 'celebrates_a_goal':
+        verbPhrase = 'celebrates a goal';
         break;
       case 'looks_on':
         verbPhrase = 'looks on';

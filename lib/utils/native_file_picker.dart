@@ -7,7 +7,16 @@ class NativeFilePicker {
       String script = 'set chosenFolder to choose folder';
 
       if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        script += ' default location "$initialDirectory"';
+        // Normalize the path to ensure it's a valid POSIX path
+        String normalizedPath = _normalizePath(initialDirectory);
+
+        // Verify the path exists before using it
+        if (Directory(normalizedPath).existsSync()) {
+          // AppleScript expects an alias/file spec, not a raw string path
+          script += ' default location POSIX file "$normalizedPath"';
+        } else {
+          print('Initial directory does not exist, ignoring: $normalizedPath');
+        }
       }
 
       script += '\nreturn POSIX path of chosenFolder';
@@ -39,7 +48,16 @@ class NativeFilePicker {
       }
 
       if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        script += ' default location "$initialDirectory"';
+        // Normalize the path to ensure it's a valid POSIX path
+        String normalizedPath = _normalizePath(initialDirectory);
+
+        // Verify the path exists before using it
+        if (Directory(normalizedPath).existsSync()) {
+          // AppleScript expects an alias/file spec, not a raw string path
+          script += ' default location POSIX file "$normalizedPath"';
+        } else {
+          print('Initial directory does not exist, ignoring: $normalizedPath');
+        }
       }
 
       script += '\nreturn POSIX path of chosenFile';
@@ -57,5 +75,35 @@ class NativeFilePicker {
       print('File picker exception: $e');
       return null;
     }
+  }
+
+  /// Normalize a path to ensure it's a valid POSIX path
+  /// Converts HFS+ style paths (colon-separated) to POSIX (slash-separated)
+  static String _normalizePath(String path) {
+    // If the path contains colons and no slashes, it's likely an HFS+ path
+    if (path.contains(':') && !path.contains('/')) {
+      // Convert HFS+ path to POSIX
+      // HFS+ format: "VolumeName:folder:subfolder:"
+      // POSIX format: "/Volumes/VolumeName/folder/subfolder/"
+
+      List<String> parts = path.split(':');
+      parts = parts.where((part) => part.isNotEmpty).toList();
+
+      if (parts.isNotEmpty) {
+        // First part is the volume name
+        String volumeName = parts[0];
+        List<String> subdirs = parts.sublist(1);
+
+        // Construct POSIX path
+        if (subdirs.isEmpty) {
+          return '/Volumes/$volumeName';
+        } else {
+          return '/Volumes/$volumeName/${subdirs.join('/')}';
+        }
+      }
+    }
+
+    // Already a POSIX path or empty, return as-is
+    return path;
   }
 }
