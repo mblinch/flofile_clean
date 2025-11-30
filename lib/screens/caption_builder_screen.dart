@@ -851,14 +851,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   times[sourceFile] = dt;
                   print(
                       'DEBUG: Parsed EXIF time for $sourceFile: $dateStr + $subSecTime = $dt');
-                  // format to 12h as per preference, including milliseconds
+                  // format to 12h as per preference
                   final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
                   final minute = dt.minute.toString().padLeft(2, '0');
                   final second = dt.second.toString().padLeft(2, '0');
-                  final millisecond = dt.millisecond.toString().padLeft(3, '0');
                   final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-                  formatted[sourceFile] =
-                      '$hour:$minute:$second.$millisecond $ampm';
+                  formatted[sourceFile] = '$hour:$minute:$second $ampm';
                 } catch (_) {}
               }
               if (sourceFile != null) {
@@ -897,13 +895,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           // Only use file modification time if we don't have EXIF data
           final fileTime = await File(path).lastModified();
           times[path] = fileTime;
-          // Format file time to 12h as per preference, including milliseconds
+          // Format file time to 12h as per preference
           final hour = fileTime.hour % 12 == 0 ? 12 : fileTime.hour % 12;
           final minute = fileTime.minute.toString().padLeft(2, '0');
           final second = fileTime.second.toString().padLeft(2, '0');
-          final millisecond = fileTime.millisecond.toString().padLeft(3, '0');
           final ampm = fileTime.hour >= 12 ? 'PM' : 'AM';
-          formatted[path] = '$hour:$minute:$second.$millisecond $ampm';
+          formatted[path] = '$hour:$minute:$second $ampm';
         }
         formatted[path] ??= '';
       }
@@ -1367,7 +1364,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       } else {
         print('No metadata values to save');
       }
-      
+
       // Clear player selections and custom verb after successful save
       _clearPopupSelections();
     } catch (e) {
@@ -2604,9 +2601,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       return;
     }
 
-    // Add to queue
+    // Add to queue and initialize progress
     setState(() {
       _queuedUploads.add(imagePath);
+      _uploadProgress[imagePath] =
+          0.0; // Initialize progress so monitor shows immediately
     });
 
     // Try to process queue
@@ -2632,13 +2631,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       print('DEBUG: Currently uploading: ${_currentlyUploading.length}/2');
       print('DEBUG: Queued: ${_queuedUploads.length}');
 
+      // Initialize progress to 0.0 when upload starts
+      setState(() {
+        _uploadProgress[imagePath] = 0.0;
+      });
+
       // Start the upload
       captionState.uploadImageViaFtp(imagePath).then((_) {
         // Upload successful
         setState(() {
           _uploadedImages.add(imagePath);
           _currentlyUploading.remove(imagePath);
-          _uploadProgress.remove(imagePath); // Clear progress
+          _uploadProgress[imagePath] =
+              1.0; // Set to 1.0 to show "Upload complete"
         });
         print('DEBUG: Successfully FTPd and marked: $imagePath');
 
@@ -3182,7 +3187,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
                     _uploadedImages.add(imagePath);
-                    _uploadProgress.remove(imagePath);
+                    _uploadProgress[imagePath] =
+                        1.0; // Set to 1.0 to show "Upload complete"
                   });
                 }
               },
@@ -3263,7 +3269,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
                     _uploadedImages.add(imagePath);
-                    _uploadProgress.remove(imagePath);
+                    _uploadProgress[imagePath] =
+                        1.0; // Set to 1.0 to show "Upload complete"
                   });
                 }
               },
@@ -4360,7 +4367,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   homeTeam: selectedHomeTeam,
                   awayTeam: selectedAwayTeam,
                   sport: _selectedSport,
-                  currentImagePath: imagePaths.isNotEmpty && currentIndex >= 0 && currentIndex < imagePaths.length
+                  currentImagePath: imagePaths.isNotEmpty &&
+                          currentIndex >= 0 &&
+                          currentIndex < imagePaths.length
                       ? imagePaths[currentIndex]
                       : null,
                   currentIndex: currentIndex,
@@ -4395,7 +4404,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       true, // Hide old player picker for this layout
                   onSaveIptc: _saveIptcMetadata,
                   onSaveIptcBackground: _saveIptcMetadataBackground,
-                  onCopyMetadata: () => _onCopyMetadata(imagePaths[currentIndex]),
+                  onCopyMetadata: () =>
+                      _onCopyMetadata(imagePaths[currentIndex]),
+                  onImageUploaded: (imagePath) {
+                    if (!_currentlyUploading.contains(imagePath)) {
+                      setState(() {
+                        _uploadedImages.add(imagePath);
+                        _uploadProgress[imagePath] =
+                            1.0; // Set to 1.0 to show "Upload complete"
+                      });
+                    }
+                  },
+                  onUploadProgress: (imagePath, progress) {
+                    setState(() {
+                      _uploadProgress[imagePath] = progress;
+                    });
+                  },
                 ),
               ),
               // Divider
@@ -4411,6 +4435,18 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   awayTeamName: selectedAwayTeam,
                   homeRoster: _cachedHomeRoster,
                   awayRoster: _cachedAwayRoster,
+                  homeOnLeft: () {
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        return state.homeOnLeft ?? true;
+                      } catch (e) {
+                        return true;
+                      }
+                    }
+                    return true;
+                  }(),
                   venue: currentMetadata?['Headline']?.toString(),
                   gameDate: _getPhotoDate(),
                   period: 'the first period',
@@ -4467,7 +4503,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       }
                     }
                   },
-                  onPeriodChanged: (String period) {
+                  onPeriodChanged: (String? period) {
                     final captionState = _captionFieldsKey2.currentState;
                     if (captionState != null) {
                       try {
@@ -4480,6 +4516,30 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       }
                     }
                   },
+                  onSwitchTeams: () {
+                    print('DEBUG: onSwitchTeams callback triggered');
+                    final captionState = _captionFieldsKey2.currentState;
+                    print(
+                        'DEBUG: captionState is null: ${captionState == null}');
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        print('DEBUG: state.mounted: ${state.mounted}');
+                        if (state.mounted) {
+                          state.switchTeams();
+                          // Force rebuild of this widget to update PlayerPopupCaptionBoard with new homeOnLeft
+                          setState(() {});
+                        } else {
+                          print(
+                              'DEBUG: State not mounted, cannot switch teams');
+                        }
+                      } catch (e) {
+                        print('Error switching teams: $e');
+                      }
+                    } else {
+                      print('DEBUG: captionState is null, cannot switch teams');
+                    }
+                  },
                   onSaveIptc: _saveIptcMetadata,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
@@ -4489,9 +4549,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       _onImageSelected(currentIndex + 1);
                     }
                   },
-                  onCopyMetadata: () => _onCopyMetadata(imagePaths[currentIndex]),
+                  onCopyMetadata: () =>
+                      _onCopyMetadata(imagePaths[currentIndex]),
                   onFtp: () => _onFtpImage(imagePaths[currentIndex]),
                   isFtpDisabled: false,
+                  uploadProgress: _uploadProgress,
+                  currentImagePath:
+                      imagePaths.isNotEmpty && currentIndex < imagePaths.length
+                          ? imagePaths[currentIndex]
+                          : null,
+                  queuedUploads: _queuedUploads,
+                  currentlyUploading: _currentlyUploading,
                 ),
               ),
             ],

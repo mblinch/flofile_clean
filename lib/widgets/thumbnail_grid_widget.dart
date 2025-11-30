@@ -870,7 +870,10 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                   borderRadius: BorderRadius.circular(4),
                                   child: Container(
                                     padding: const EdgeInsets.all(4),
-                                    child: _buildThumbnail(imagePath),
+                                    child: Opacity(
+                                      opacity: widget.uploadedImages.contains(imagePath) ? 0.5 : 1.0,
+                                      child: _buildThumbnail(imagePath),
+                                    ),
                                   ),
                                 ),
                               ),

@@ -18,12 +18,18 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     bool? firstIsHome,
   )? onSelectionChanged;
   final ValueChanged<String>? onCustomVerbChanged;
-  final ValueChanged<String>? onPeriodChanged;
+  final ValueChanged<String?>? onPeriodChanged;
+  final VoidCallback? onSwitchTeams;
+  final bool homeOnLeft; // Which team is on the left
   final VoidCallback? onSaveIptc;
   final VoidCallback? onNextImage;
   final VoidCallback? onCopyMetadata;
   final VoidCallback? onFtp;
   final bool isFtpDisabled;
+  final Map<String, double>? uploadProgress;
+  final String? currentImagePath;
+  final Set<String>? queuedUploads;
+  final Set<String>? currentlyUploading;
 
   const PlayerPopupCaptionBoard({
     super.key,
@@ -39,11 +45,17 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     this.onSelectionChanged,
     this.onCustomVerbChanged,
     this.onPeriodChanged,
+    this.onSwitchTeams,
+    this.homeOnLeft = true,
     this.onSaveIptc,
     this.onNextImage,
     this.onCopyMetadata,
     this.onFtp,
     this.isFtpDisabled = false,
+    this.uploadProgress,
+    this.currentImagePath,
+    this.queuedUploads,
+    this.currentlyUploading,
   });
 
   @override
@@ -57,22 +69,31 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   final Set<Player> _selectedAwayPlayers = {};
   Player? _firstPlayerSelected;
   bool? _firstTeamSelectedIsHome;
-  bool _showOvertimePeriods = false;
-  bool _showPlayoffOvertimes = false; // Track whether playoff OT periods are visible
-  Offset? _lastTapPosition;
-  String? _selectedPeriodInDialog; // Track selected period in dialog
+  bool _showPlayoffOvertimes =
+      false; // Track whether playoff OT periods are visible
   String? _selectedHeaderPeriod; // Track period selected from header bar
-  final Set<String> _expandedCategories = {}; // Track which categories are expanded
+  final Set<String> _expandedCategories =
+      {}; // Track which categories are expanded
+  String?
+      _expandedVerb; // Track which verb is expanded (format: "category_verb")
+  VerbOption? _pendingVerb; // Store verb selected before players
   final Map<String, TextEditingController> _customVerbControllers = {};
+  bool _showCustomVerbButtons =
+      false; // Track if custom verb buttons should be shown
+  // Search controllers for each team
+  final TextEditingController _homeSearchController = TextEditingController();
+  final TextEditingController _awaySearchController = TextEditingController();
+  String _homeSearchText = '';
+  String _awaySearchText = '';
 
   // Verb categories matching the existing system
   final Map<String, List<VerbOption>> _verbCategories = {
     'Offense': [
-      VerbOption('Skates', 'skates with the puck'),
+      VerbOption('Skates', 'skates'),
       VerbOption('Shoots', 'shoots'),
-      VerbOption('Battles', 'battles for the puck', wantsOpponent: true),
+      VerbOption('Battles', 'battles against', wantsOpponent: true),
       VerbOption('Scores', 'scores', wantsOpponent: true),
-      VerbOption('Goes to the Net Against', 'goes to the net against',
+      VerbOption('Goes to the Net', 'goes to the net against',
           wantsOpponent: true),
       VerbOption('Faceoff', 'takes a faceoff', wantsOpponent: true),
     ],
@@ -110,6 +131,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   };
 
   void _selectPlayer(Player player, bool isHome) {
+    final bool wasSelecting =
+        !(isHome ? _selectedHomePlayers : _selectedAwayPlayers)
+            .contains(player);
+
     setState(() {
       final Set<Player> targetSet =
           isHome ? _selectedHomePlayers : _selectedAwayPlayers;
@@ -145,6 +170,16 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         }
       }
     });
+
+    // If a verb was pending and we just selected a player, generate caption
+    // This ensures the verb is set when players are selected after a verb
+    if (_pendingVerb != null && wasSelecting && _firstPlayerSelected != null) {
+      final periodLabel = _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
+      _confirmCaptionGeneration(_pendingVerb!, periodLabel);
+      // Clear pending verb after using it so it doesn't interfere with future selections
+      _pendingVerb = null;
+    }
+
     widget.onSelectionChanged?.call(
       Set<Player>.from(_selectedHomePlayers),
       Set<Player>.from(_selectedAwayPlayers),
@@ -162,9 +197,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         _selectedHomePlayers.isNotEmpty || _selectedAwayPlayers.isNotEmpty;
     return TextField(
       controller: controller,
-      enabled: hasPlayersSelected,
+      enabled:
+          true, // Always enabled, but caption only generated if players selected
       decoration: InputDecoration(
-        hintText: 'Type custom verb...',
+        hintText: '',
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         border: OutlineInputBorder(
@@ -175,44 +211,33 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
-        disabledBorder: OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+          borderSide: BorderSide(color: Colors.grey.shade400),
         ),
       ),
       style: const TextStyle(fontSize: 11),
       onChanged: (value) {
         if (!hasPlayersSelected) return;
+        final hasText = value.trim().isNotEmpty;
+        setState(() {
+          _showCustomVerbButtons = hasText;
+          // Collapse any expanded verb and clear pending verb when typing custom verb
+          if (hasText) {
+            _expandedVerb = null;
+            _pendingVerb =
+                null; // Clear pending category verb when using custom verb
+          }
+        });
         widget.onCustomVerbChanged?.call(value.trim());
+        // Generate caption with custom verb when text is entered
+        if (hasText) {
+          final periodLabel =
+              _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
+          final customVerb = VerbOption(value.trim(), value.trim());
+          _confirmCaptionGeneration(customVerb, periodLabel);
+        }
       },
-    );
-  }
-
-  Widget _buildPeriodQuickBar() {
-    final List<String> quickPeriods = ['1st', '2nd', '3rd', 'OT', 'SO'];
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: quickPeriods.map((label) {
-        return OutlinedButton(
-          onPressed: () => _handlePeriodQuickSelect(label),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            side: BorderSide(color: Colors.grey.shade400),
-            minimumSize: const Size(0, 32),
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 
@@ -239,48 +264,48 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         Expanded(
           child: Row(
             children: displayPeriods.map(
-          (label) {
-            final bool isSelected = _selectedHeaderPeriod == label;
+              (label) {
+                final bool isSelected = _selectedHeaderPeriod == label;
 
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: SizedBox(
-                  height: 22,
-                  child: OutlinedButton(
-                  onPressed: () => _handleHeaderPeriodSelect(label),
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 0),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    side: BorderSide(
-                      color: isSelected
-                          ? Colors.blue.shade500
-                          : Colors.grey.shade400,
-                    ),
-                    backgroundColor:
-                        isSelected ? Colors.blue.shade50 : Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: SizedBox(
+                      height: 22,
+                      child: OutlinedButton(
+                        onPressed: () => _handleHeaderPeriodSelect(label),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(
+                            color: isSelected
+                                ? Colors.blue.shade500
+                                : Colors.grey.shade400,
+                          ),
+                          backgroundColor:
+                              isSelected ? Colors.blue.shade50 : Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected
+                                ? Colors.blue.shade700
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected
-                          ? Colors.blue.shade700
-                          : Colors.grey.shade700,
-                    ),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ).toList(),
+                );
+              },
+            ).toList(),
           ),
         ),
         const SizedBox(width: 4),
@@ -327,38 +352,39 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
   void _handleHeaderPeriodSelect(String period) {
     setState(() {
-      _selectedHeaderPeriod = period;
+      // Toggle: if clicking the same period, deselect it (set to null)
+      _selectedHeaderPeriod = _selectedHeaderPeriod == period ? null : period;
     });
     // Notify parent so CaptionFieldsWidget can track the hockey period
-    widget.onPeriodChanged?.call(period);
+    // Pass null if deselecting, otherwise pass the period
+    widget.onPeriodChanged?.call(_selectedHeaderPeriod);
   }
 
-  void _handlePeriodQuickSelect(String label) {
-    final hasPlayersSelected =
-        _selectedHomePlayers.isNotEmpty || _selectedAwayPlayers.isNotEmpty;
-    if (!hasPlayersSelected) return;
-
-    final controller = _customVerbControllers['GLOBAL'];
-    final text = controller?.text.trim() ?? '';
-    if (text.isEmpty) {
-      return;
-    }
-
-    _selectedPeriodInDialog = _mapQuickLabelToPeriod(label);
-    _generateCaption(VerbOption(text, text));
-  }
-
-  String _mapQuickLabelToPeriod(String label) {
-    switch (label) {
-      case '1st':
-        return '1';
-      case '2nd':
-        return '2';
-      case '3rd':
-        return '3';
-      default:
-        return label;
-    }
+  Widget _buildSwitchTeamsButton() {
+    return SizedBox(
+      height: 24,
+      child: OutlinedButton(
+        onPressed: () {
+          print('DEBUG: Switch teams button pressed');
+          widget.onSwitchTeams?.call();
+        },
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          minimumSize: const Size(0, 0),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(color: Colors.grey.shade400),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        child: Icon(
+          Icons.swap_horiz,
+          size: 14,
+          color: Colors.grey.shade700,
+        ),
+      ),
+    );
   }
 
   void resetSelections() {
@@ -370,6 +396,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       for (final controller in _customVerbControllers.values) {
         controller.clear();
       }
+      _showCustomVerbButtons = false;
+      _pendingVerb = null; // Clear pending verb
     });
     // Don't call onCustomVerbChanged here - it would trigger a caption rebuild
     // and overwrite the saved caption from metadata
@@ -410,149 +438,197 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               padding: EdgeInsets.zero,
               children: [
                 ..._verbCategories.entries.map((entry) {
-                final isExpanded = _expandedCategories.contains(entry.key);
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    dividerColor: Colors.transparent,
-                  ),
-                  child: ExpansionTile(
-                    key: ValueKey('${entry.key}_$isExpanded'),
-                    initiallyExpanded: isExpanded,
-                    onExpansionChanged: (expanding) {
-                      setState(() {
-                        if (expanding) {
-                          // If expanding, check if we already have 2 open
-                          if (_expandedCategories.length >= 2) {
-                            // Remove the first (oldest) expanded category
-                            _expandedCategories.remove(_expandedCategories.first);
+                  final isExpanded = _expandedCategories.contains(entry.key);
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      key: ValueKey('${entry.key}_$isExpanded'),
+                      initiallyExpanded: isExpanded,
+                      onExpansionChanged: (expanding) {
+                        setState(() {
+                          if (expanding) {
+                            // If expanding, check if we already have 1 open
+                            if (_expandedCategories.length >= 1) {
+                              // Remove the first (oldest) expanded category
+                              _expandedCategories
+                                  .remove(_expandedCategories.first);
+                            }
+                            _expandedCategories.add(entry.key);
+                          } else {
+                            // If collapsing, just remove it
+                            _expandedCategories.remove(entry.key);
                           }
-                          _expandedCategories.add(entry.key);
-                        } else {
-                          // If collapsing, just remove it
-                          _expandedCategories.remove(entry.key);
-                        }
-                      });
-                    },
-                    tilePadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 0,
-                    ),
-                    minTileHeight: 24,
-                    childrenPadding: EdgeInsets.zero,
-                    title: Text(
-                      entry.key,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
-                        height: 1.0,
+                        });
+                      },
+                      tilePadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 0,
                       ),
-                    ),
-                    trailing: Icon(
-                      Icons.expand_more,
-                      size: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                    backgroundColor: Colors.grey.shade50,
-                    collapsedBackgroundColor: Colors.white,
-                    children: entry.value.asMap().entries.map((verbEntry) {
-                      final index = verbEntry.key;
-                      final verb = verbEntry.value;
-                      return InkWell(
-                        onTapDown: (details) {
-                          _lastTapPosition = details.globalPosition;
-                        },
-                        onTap: (_selectedHomePlayers.isNotEmpty ||
-                                _selectedAwayPlayers.isNotEmpty)
-                            ? () => _generateCaption(verb)
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (_selectedHomePlayers.isNotEmpty ||
-                                    _selectedAwayPlayers.isNotEmpty)
-                                ? Colors.white
-                                : Colors.grey.shade50,
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 0.5,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 12),
-                              Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(3),
+                      minTileHeight: 24,
+                      childrenPadding: EdgeInsets.zero,
+                      title: Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                          height: 1.0,
+                        ),
+                      ),
+                      trailing: Icon(
+                        Icons.expand_more,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      backgroundColor: Colors.grey.shade50,
+                      collapsedBackgroundColor: Colors.grey.shade50,
+                      children: entry.value.map((verb) {
+                        final verbKey = '${entry.key}_${verb.label}';
+                        final isExpanded = _expandedVerb == verbKey;
+
+                        return Column(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  // Store verb as pending
+                                  _pendingVerb = verb;
+                                  // Clear custom verb buttons when selecting a category verb
+                                  _showCustomVerbButtons = false;
+
+                                  // If players are already selected, generate caption immediately
+                                  if (_selectedHomePlayers.isNotEmpty ||
+                                      _selectedAwayPlayers.isNotEmpty) {
+                                    _generateCaption(verb);
+                                    // Clear pending verb after generating caption
+                                    _pendingVerb = null;
+                                  }
+
+                                  // Toggle expansion/collapse
+                                  if (_expandedVerb == verbKey) {
+                                    _expandedVerb =
+                                        null; // Collapse if already expanded
+                                  } else {
+                                    _expandedVerb =
+                                        verbKey; // Expand this verb (closes any other)
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 9,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey.shade200,
+                                      width: 0.5,
                                     ),
                                   ),
                                 ),
+                                child: Row(
+                                  children: [
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        verb.label,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 11,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      isExpanded
+                                          ? Icons.expand_less
+                                          : Icons.expand_more,
+                                      size: 14,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  verb.label,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 11,
-                                    color: (_selectedHomePlayers.isNotEmpty ||
-                                            _selectedAwayPlayers.isNotEmpty)
-                                        ? Colors.grey.shade700
-                                        : Colors.grey.shade400,
+                            ),
+                            // Show action buttons when expanded
+                            if (isExpanded &&
+                                (_selectedHomePlayers.isNotEmpty ||
+                                    _selectedAwayPlayers.isNotEmpty))
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey.shade200,
+                                      width: 0.5,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (_selectedHomePlayers.isNotEmpty ||
-                                  _selectedAwayPlayers.isNotEmpty)
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  size: 10,
-                                  color: Colors.grey.shade400,
+                                child: Row(
+                                  children: [
+                                    const SizedBox(
+                                        width: 24), // Indent to match verb text
+                                    Expanded(
+                                      child: _buildActionButtonsRow(
+                                          collapseOnAction: true),
+                                    ),
+                                  ],
                                 ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                );
-              }).toList(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Custom Verb',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
+                              ),
+                          ],
+                        );
+                      }).toList(),
                     ),
-                    const SizedBox(height: 4),
-                    _buildGlobalCustomVerbInput(),
-                    const SizedBox(height: 12),
-                    _buildPeriodQuickBar(),
-                  ],
+                  );
+                }).toList(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Custom Verb',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      _buildGlobalCustomVerbInput(),
+                      const SizedBox(height: 8),
+                      const SizedBox(height: 8),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 8),
+                      // Upload progress monitor
+                      _buildUploadMonitor(),
+                      // Show action buttons when custom verb has text
+                      if (_showCustomVerbButtons &&
+                          (_selectedHomePlayers.isNotEmpty ||
+                              _selectedAwayPlayers.isNotEmpty)) ...[
+                        const SizedBox(height: 8),
+                        _buildActionButtonsRow(),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
               ],
             ),
           ),
@@ -561,379 +637,261 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     );
   }
 
-  void _generateCaption(VerbOption verb) {
-    // Show period selection dialog
-    _showPeriodSelector(verb, _lastTapPosition);
+  Widget _buildActionButtonsRow({bool collapseOnAction = false}) {
+    return Row(
+      children: [
+        // Save button
+        Expanded(
+          child: SizedBox(
+            height: 28,
+            child: ElevatedButton(
+              onPressed: () {
+                widget.onSaveIptc?.call();
+                widget.onNextImage?.call();
+                // Always collapse the expanded verb menu and custom verb buttons when saving
+                setState(() {
+                  _expandedVerb = null;
+                  _showCustomVerbButtons = false;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                elevation: 0,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                side: BorderSide(color: Colors.grey.shade400),
+              ),
+              child: Text(
+                'Save →',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        // Copy button
+        Expanded(
+          child: SizedBox(
+            height: 28,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                widget.onCopyMetadata?.call();
+                // Always collapse the expanded verb menu and custom verb buttons when copying
+                if (collapseOnAction) {
+                  setState(() {
+                    _expandedVerb = null;
+                    _showCustomVerbButtons = false;
+                  });
+                }
+              },
+              icon: Icon(
+                Icons.copy,
+                size: 12,
+                color: Colors.grey.shade700,
+              ),
+              label: Text(
+                'Copy',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.shade100,
+                elevation: 0,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                side: BorderSide(color: Colors.grey.shade400),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        // FTP button
+        Expanded(
+          child: SizedBox(
+            height: 28,
+            child: ElevatedButton.icon(
+              onPressed: widget.isFtpDisabled
+                  ? null
+                  : () {
+                      widget.onFtp?.call();
+                      // Always collapse the expanded verb menu and custom verb buttons when FTPing
+                      if (collapseOnAction) {
+                        setState(() {
+                          _expandedVerb = null;
+                          _showCustomVerbButtons = false;
+                        });
+                      }
+                    },
+              icon: Icon(
+                Icons.cloud_upload,
+                size: 12,
+                color:
+                    widget.isFtpDisabled ? Colors.grey.shade400 : Colors.white,
+              ),
+              label: Text(
+                'FTP',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: widget.isFtpDisabled
+                      ? Colors.grey.shade400
+                      : Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.isFtpDisabled
+                    ? Colors.grey.shade300
+                    : Colors.blue.shade600,
+                elevation: 0,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
-  void _showPeriodSelector(VerbOption verb, Offset? position) {
-    _showOvertimePeriods = false;
-    _selectedPeriodInDialog = null; // Reset period selection when dialog opens
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      barrierDismissible: true,
-      builder: (BuildContext dialogContext) {
-        final mediaQuery = MediaQuery.of(context);
-        const double padding = 10;
-        const double estimatedWidth = 190;
-        final double estimatedHeight =
-            _showOvertimePeriods ? 240 : 170; // rough estimate
-        double left =
-            (position?.dx ?? mediaQuery.size.width / 2) - estimatedWidth / 2;
-        double top =
-            (position?.dy ?? mediaQuery.size.height / 2) - estimatedHeight / 2;
+  Widget _buildUploadMonitor() {
+    // Always show the monitor section, but with different states
+    final isQueued = widget.currentImagePath != null &&
+        (widget.queuedUploads?.contains(widget.currentImagePath) ?? false);
+    final isUploading = widget.currentImagePath != null &&
+        (widget.currentlyUploading?.contains(widget.currentImagePath) ?? false);
 
-        if (left < padding) left = padding;
-        if (left + estimatedWidth > mediaQuery.size.width - padding) {
-          left = mediaQuery.size.width - estimatedWidth - padding;
-        }
-        if (top < padding) top = padding;
-        if (top + estimatedHeight > mediaQuery.size.height - padding) {
-          top = mediaQuery.size.height - estimatedHeight - padding;
-        }
+    // Get progress value
+    double? progress;
+    String statusText = 'Not uploaded';
+    bool showProgress = false;
 
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(dialogContext).pop(),
-                    child: Container(color: Colors.transparent),
-                  ),
+    if (widget.currentImagePath != null && widget.uploadProgress != null) {
+      progress = widget.uploadProgress![widget.currentImagePath];
+    }
+
+    if (isQueued && !isUploading) {
+      statusText = 'Queued...';
+      showProgress = true;
+      progress = progress ?? 0.0;
+    } else if (isUploading ||
+        (progress != null && progress > 0 && progress < 1.0)) {
+      statusText = 'Uploading...';
+      showProgress = true;
+      progress = progress ?? 0.0;
+    } else if (progress != null && progress >= 1.0) {
+      statusText = 'Upload complete';
+      showProgress = false;
+    } else {
+      statusText = 'Not uploaded';
+      showProgress = false;
+    }
+
+    // Determine colors based on state
+    Color containerColor;
+    Color borderColor;
+    Color textColor;
+    Color iconColor;
+
+    if (statusText == 'Upload complete') {
+      containerColor = Colors.green.shade50;
+      borderColor = Colors.green.shade200;
+      textColor = Colors.green.shade700;
+      iconColor = Colors.green.shade700;
+    } else if (statusText == 'Not uploaded') {
+      containerColor = Colors.grey.shade50;
+      borderColor = Colors.grey.shade300;
+      textColor = Colors.grey.shade600;
+      iconColor = Colors.grey.shade600;
+    } else {
+      containerColor = Colors.blue.shade50;
+      borderColor = Colors.blue.shade200;
+      textColor = Colors.blue.shade700;
+      iconColor = Colors.blue.shade700;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: containerColor,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(
+                statusText == 'Upload complete'
+                    ? Icons.check_circle
+                    : statusText == 'Not uploaded'
+                        ? Icons.cloud_upload_outlined
+                        : Icons.cloud_upload,
+                size: 12,
+                color: iconColor,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
                 ),
-                Positioned(
-                  left: left,
-                  top: top,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(4),
-                    child: IntrinsicWidth(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(4),
-                                topRight: Radius.circular(4),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Period',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () => Navigator.of(dialogContext).pop(),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    width: 20,
-                                    height: 20,
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 14,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Period buttons column
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        _buildPeriodButton('1', verb, setDialogState),
-                                        const SizedBox(width: 4),
-                                        _buildPeriodButton('2', verb, setDialogState),
-                                        const SizedBox(width: 4),
-                                        _buildPeriodButton('3', verb, setDialogState),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        _buildPeriodButton('OT', verb, setDialogState),
-                                        const SizedBox(width: 4),
-                                        _buildPeriodButton('SO', verb, setDialogState),
-                                        const SizedBox(width: 4),
-                                        _buildPriorButton(verb, setDialogState),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    _buildOvertimeToggleButton(setDialogState),
-                                    if (_showOvertimePeriods) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          _buildPeriodButton('1OT', verb, setDialogState),
-                                          const SizedBox(width: 4),
-                                          _buildPeriodButton('2OT', verb, setDialogState),
-                                          const SizedBox(width: 4),
-                                          _buildPeriodButton('3OT', verb, setDialogState),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          _buildPeriodButton('4OT', verb, setDialogState),
-                                          const SizedBox(width: 4),
-                                          _buildPeriodButton('5OT', verb, setDialogState),
-                                          const SizedBox(width: 4),
-                                          _buildPeriodButton('6OT', verb, setDialogState),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(width: 8),
-                                // Action buttons column
-                                SizedBox(
-                                  width: 100,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      // Save button
-                                      SizedBox(
-                                        height: 49,
-                                        child: ElevatedButton(
-                                          onPressed: () {
-                                            widget.onSaveIptc?.call();
-                                            Navigator.of(dialogContext).pop();
-                                            widget.onNextImage?.call();
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.grey.shade100,
-                                            elevation: 0,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            side: BorderSide(color: Colors.grey.shade400),
-                                          ),
-                                          child: Text(
-                                            'Save →',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Copy button
-                                      SizedBox(
-                                        height: 49,
-                                        child: ElevatedButton.icon(
-                                          onPressed: widget.onCopyMetadata,
-                                          icon: Icon(
-                                            Icons.copy,
-                                            size: 16,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                          label: Text(
-                                            'Copy',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.grey.shade100,
-                                            elevation: 0,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            side: BorderSide(color: Colors.grey.shade400),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // FTP button
-                                      SizedBox(
-                                        height: 49,
-                                        child: ElevatedButton.icon(
-                                          onPressed: widget.isFtpDisabled ? null : widget.onFtp,
-                                          icon: Icon(
-                                            Icons.cloud_upload,
-                                            size: 16,
-                                            color: widget.isFtpDisabled
-                                                ? Colors.grey.shade400
-                                                : Colors.white,
-                                          ),
-                                          label: Text(
-                                            'FTP',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: widget.isFtpDisabled
-                                                  ? Colors.grey.shade400
-                                                  : Colors.white,
-                                            ),
-                                          ),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: widget.isFtpDisabled
-                                                ? Colors.grey.shade300
-                                                : Colors.blue.shade600,
-                                            elevation: 0,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      ),
-                    ),
+              ),
+              if (showProgress && progress != null) ...[
+                const Spacer(),
+                Text(
+                  '${(progress * 100).toInt()}%',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
                   ),
                 ),
               ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildPeriodButton(String period, VerbOption verb, Function setDialogState) {
-    final isSelected = _selectedPeriodInDialog == period;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () {
-          setDialogState(() {
-            _handlePeriodSelection(verb, period);
-          });
-        },
-        child: Container(
-          width: 44,
-          height: 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(
-              color: Colors.grey.shade300,
-              width: 0.5,
-            ),
+            ],
           ),
-          child: Text(
-            period,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey.shade700,
+          if (showProgress) ...[
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: progress != null && progress > 0
+                  ? progress
+                  : null, // Indeterminate if queued
+              backgroundColor: Colors.blue.shade100,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                  statusText == 'Upload complete'
+                      ? Colors.green.shade600
+                      : Colors.blue.shade600),
+              minHeight: 4,
             ),
-          ),
-        ),
+          ],
+        ],
       ),
     );
   }
 
-  Widget _buildPriorButton(VerbOption verb, Function setDialogState) {
-    final isSelected = _selectedPeriodInDialog == 'PRIOR';
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () {
-          setDialogState(() {
-            _handlePeriodSelection(verb, 'PRIOR');
-          });
-        },
-        child: Container(
-          width: 44,
-          height: 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(
-              color: Colors.grey.shade300,
-              width: 0.5,
-            ),
-          ),
-          child: Text(
-            'Prior',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey.shade700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOvertimeToggleButton(
-    void Function(void Function()) setDialogState,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        setDialogState(() {
-          _showOvertimePeriods = !_showOvertimePeriods;
-        });
-      },
-      child: Container(
-        width: 44,
-        height: 38,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color:
-              _showOvertimePeriods ? Colors.grey.shade400 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: Colors.grey.shade300,
-            width: 0.5,
-          ),
-        ),
-        child: Icon(
-          _showOvertimePeriods ? Icons.expand_less : Icons.expand_more,
-          size: 18,
-          color: _showOvertimePeriods ? Colors.white : Colors.grey.shade700,
-        ),
-      ),
-    );
-  }
-
-  void _handlePeriodSelection(VerbOption verb, String selection) {
-    setState(() {
-      _selectedPeriodInDialog = selection;
-    });
-    // Don't close dialog - let user click Save or close manually
-    final periodLabel = _getPeriodDisplayText(selection);
+  void _generateCaption(VerbOption verb) {
+    // Generate caption immediately (period is already selected in header)
+    final periodLabel = _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
     _confirmCaptionGeneration(verb, periodLabel);
   }
 
@@ -953,8 +911,17 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   }
 
   void _confirmCaptionGeneration(VerbOption verb, String period) {
-    // Pass the first selected player, verb, and period to the parent
-    if (_firstPlayerSelected != null && widget.onCaptionGenerated != null) {
+    // If players are already selected, update verb via onCustomVerbChanged to preserve all selections
+    final playerCount =
+        _selectedHomePlayers.length + _selectedAwayPlayers.length;
+    if (playerCount > 0 && widget.onCustomVerbChanged != null) {
+      // Use custom verb callback to preserve all selected players
+      // Pass the label (e.g., "Goes to the Net Against") instead of verbPhrase
+      // so the switch statement in caption_fields_widget can match it correctly
+      widget.onCustomVerbChanged!(verb.label);
+    } else if (_firstPlayerSelected != null &&
+        widget.onCaptionGenerated != null) {
+      // Only use onCaptionGenerated if no players are selected yet (legacy behavior)
       widget.onCaptionGenerated!(
         _firstPlayerSelected!,
         verb.label,
@@ -963,8 +930,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     }
 
     // Show brief confirmation
-    final playerCount =
-        _selectedHomePlayers.length + _selectedAwayPlayers.length;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -985,15 +950,27 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     final homePlayers = widget.homeRoster ?? _getMockHomePlayers();
     final awayPlayers = widget.awayRoster ?? _getMockAwayPlayers();
 
+    // Determine which team goes on left and right based on homeOnLeft
+    final leftTeamPlayers = widget.homeOnLeft ? homePlayers : awayPlayers;
+    final rightTeamPlayers = widget.homeOnLeft ? awayPlayers : homePlayers;
+    final leftTeamName = widget.homeOnLeft
+        ? (widget.homeTeamName ?? 'Home Team')
+        : (widget.awayTeamName ?? 'Away Team');
+    final rightTeamName = widget.homeOnLeft
+        ? (widget.awayTeamName ?? 'Away Team')
+        : (widget.homeTeamName ?? 'Home Team');
+    final leftIsHome = widget.homeOnLeft;
+    final rightIsHome = !widget.homeOnLeft;
+
     return Row(
       children: [
-        // Home team
+        // Left team (home or away depending on homeOnLeft)
         Expanded(
           flex: 3,
           child: _buildPlayerList(
-            homePlayers,
-            widget.homeTeamName ?? 'Home Team',
-            true,
+            leftTeamPlayers,
+            leftTeamName,
+            leftIsHome,
             Colors.grey,
           ),
         ),
@@ -1002,13 +979,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           width: 250,
           child: _buildVerbMenu(),
         ),
-        // Away team
+        // Right team (away or home depending on homeOnLeft)
         Expanded(
           flex: 3,
           child: _buildPlayerList(
-            awayPlayers,
-            widget.awayTeamName ?? 'Away Team',
-            false,
+            rightTeamPlayers,
+            rightTeamName,
+            rightIsHome,
             Colors.grey,
           ),
         ),
@@ -1035,12 +1012,90 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             ),
           ),
           alignment: Alignment.centerLeft,
-          child: Text(
-            teamName,
-            style: TextStyle(
-              color: Colors.grey.shade800,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          child: Row(
+            children: [
+              Icon(
+                isHome ? Icons.home : Icons.flight,
+                size: 14,
+                color: Colors.grey.shade800,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  teamName,
+                  style: TextStyle(
+                    color: Colors.grey.shade800,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              // Switch teams button on the right
+              _buildSwitchTeamsButton(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: SizedBox(
+            height: 28,
+            child: TextField(
+              controller:
+                  isHome ? _homeSearchController : _awaySearchController,
+              onChanged: (value) {
+                setState(() {
+                  if (isHome) {
+                    _homeSearchText = value.toLowerCase();
+                  } else {
+                    _awaySearchText = value.toLowerCase();
+                  }
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search players...',
+                hintStyle: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                prefixIcon:
+                    Icon(Icons.search, size: 14, color: Colors.grey.shade600),
+                suffixIcon:
+                    (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear, size: 14),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () {
+                              setState(() {
+                                if (isHome) {
+                                  _homeSearchController.clear();
+                                  _homeSearchText = '';
+                                } else {
+                                  _awaySearchController.clear();
+                                  _awaySearchText = '';
+                                }
+                              });
+                            },
+                          )
+                        : null,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: Colors.blue.shade400),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              style: const TextStyle(fontSize: 10),
             ),
           ),
         ),
@@ -1053,11 +1108,28 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               const double buttonHeight = 38;
               const double spacing = 8;
               const double padding = 10;
-              
+
               // Calculate how many buttons fit in the available width
               final availableWidth = constraints.maxWidth - (2 * padding);
-              final crossAxisCount = ((availableWidth + spacing) / (buttonWidth + spacing)).floor().clamp(1, 20);
-              
+              final crossAxisCount =
+                  ((availableWidth + spacing) / (buttonWidth + spacing))
+                      .floor()
+                      .clamp(1, 20);
+
+              // Filter players based on search text
+              final searchText = isHome ? _homeSearchText : _awaySearchText;
+              final filteredPlayers = searchText.isEmpty
+                  ? players
+                  : players.where((player) {
+                      final name = player.fullName?.toLowerCase() ?? '';
+                      final jersey = player.jerseyNumber?.toLowerCase() ?? '';
+                      final displayName =
+                          player.displayName?.toLowerCase() ?? '';
+                      return name.contains(searchText) ||
+                          jersey.contains(searchText) ||
+                          displayName.contains(searchText);
+                    }).toList();
+
               return GridView.builder(
                 padding: const EdgeInsets.all(padding),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -1066,87 +1138,90 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                   crossAxisSpacing: spacing,
                   mainAxisSpacing: spacing,
                 ),
-                itemCount: players.length,
+                itemCount: filteredPlayers.length,
                 itemBuilder: (context, index) {
-              final player = players[index];
-              final isSelected =
-                  (isHome ? _selectedHomePlayers : _selectedAwayPlayers)
-                      .contains(player);
-              final isFirstPlayer = player == _firstPlayerSelected;
+                  final player = filteredPlayers[index];
+                  final isSelected =
+                      (isHome ? _selectedHomePlayers : _selectedAwayPlayers)
+                          .contains(player);
+                  final isFirstPlayer = player == _firstPlayerSelected;
 
-              return InkWell(
-                onTap: () => _selectPlayer(player, isHome),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Container(
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.blue.shade50 : Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.blue.shade400
-                              : Colors.grey.shade300,
-                          width: isSelected ? 2 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              player.jerseyNumber ?? '0',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
+                  return InkWell(
+                    onTap: () => _selectPlayer(player, isHome),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? Colors.blue.shade50
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
                                 color: isSelected
-                                    ? Colors.blue.shade700
-                                    : Colors.grey.shade700,
-                                height: 1.0,
+                                    ? Colors.blue.shade400
+                                    : Colors.grey.shade300,
+                                width: isSelected ? 2 : 1,
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 2),
-                              child: Text(
-                                _getLastName(player.fullName),
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: isSelected
-                                      ? Colors.blue.shade600
-                                      : Colors.grey.shade600,
-                                  height: 1.0,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 2,
+                                  offset: const Offset(0, 1),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                              ),
+                              ],
                             ),
-                          ],
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  player.jerseyNumber ?? '0',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.blue.shade700
+                                        : Colors.grey.shade700,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 2),
+                                  child: Text(
+                                    _getLastName(player.fullName),
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      color: isSelected
+                                          ? Colors.blue.shade600
+                                          : Colors.grey.shade600,
+                                      height: 1.0,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        // Red star for first player
+                        if (isFirstPlayer)
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: Icon(
+                              Icons.star,
+                              size: 12,
+                              color: Colors.red.shade700,
+                            ),
+                          ),
+                      ],
                     ),
-                    // Red star for first player
-                    if (isFirstPlayer)
-                      Positioned(
-                        top: 2,
-                        right: 2,
-                        child: Icon(
-                          Icons.star,
-                          size: 12,
-                          color: Colors.red.shade700,
-                        ),
-                      ),
-                  ],
-                ),
+                  );
+                },
               );
-            },
-          );
             },
           ),
         ),
@@ -1250,10 +1325,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   }
 
   @override
+  @override
   void dispose() {
     for (final controller in _customVerbControllers.values) {
       controller.dispose();
     }
+    _homeSearchController.dispose();
+    _awaySearchController.dispose();
     super.dispose();
   }
 }

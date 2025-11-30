@@ -322,63 +322,6 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             ),
           ),
         ),
-        // Layout dropdown
-        Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-          ),
-          child: DropdownButton<String>(
-            value: widget.currentLayout ?? 'players_list_left',
-            underline: const SizedBox(),
-            icon: const Icon(Icons.view_quilt, size: 14),
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade800,
-              fontWeight: FontWeight.w500,
-            ),
-            dropdownColor: Colors.white,
-            isDense: true,
-            items: const [
-              DropdownMenuItem(
-                value: 'players_list_left',
-                child: Text('Players List Left'),
-              ),
-              DropdownMenuItem(
-                value: 'players_list_right',
-                child: Text('Players List Right'),
-              ),
-              DropdownMenuItem(
-                value: 'players_list_top',
-                child: Text('Players List Top'),
-              ),
-              DropdownMenuItem(
-                value: 'players_list_bottom',
-                child: Text('Players List Bottom'),
-              ),
-              DropdownMenuItem(
-                value: 'compact_players_above',
-                child: Text('Compact Players Above'),
-              ),
-              DropdownMenuItem(
-                value: 'matrix_board',
-                child: Text('Matrix Board'),
-              ),
-              DropdownMenuItem(
-                value: 'player_popup_board',
-                child: Text('Player Popup'),
-              ),
-            ],
-            onChanged: (String? newValue) {
-              if (newValue != null && widget.onLayoutChanged != null) {
-                widget.onLayoutChanged!(newValue);
-              }
-            },
-          ),
-        ),
         IconButton(
           onPressed: () {
             showDialog(

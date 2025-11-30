@@ -358,7 +358,7 @@ class PreferencesService {
   // Current Layout Preference
   Future<String> getCurrentLayout() async {
     final prefs = await _getPrefs();
-    return prefs.getString(_keyCurrentLayout) ?? 'Matrix';
+    return prefs.getString(_keyCurrentLayout) ?? 'player_popup_board';
   }
 
   Future<void> saveCurrentLayout(String layout) async {

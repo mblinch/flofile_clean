@@ -20,10 +20,10 @@ ICON_DIR="macos/Runner/Assets.xcassets/AppIcon.appiconset"
 # Create the icon directory if it doesn't exist
 mkdir -p "$ICON_DIR"
 
-# Generate each icon size
+# Generate each icon size from the white rocket on blue background SVG
 for size in "${SIZES[@]}"; do
     echo "Generating ${size}x${size} icon..."
-    rsvg-convert -w $size -h $size rocket_icon.svg -o "$ICON_DIR/app_icon_${size}.png"
+    rsvg-convert -w $size -h $size assets/images/rocket_icon_white_blue.svg -o "$ICON_DIR/app_icon_${size}.png"
 done
 
 echo "📱 Creating DMG background..."

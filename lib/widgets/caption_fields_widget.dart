@@ -1768,7 +1768,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return 'celebrates';
       case 'Celebrates a Goal':
         return 'celebrates a goal';
-      case 'Goes to the Net Against':
+      case 'Goes to the Net':
         return 'goes to the net against';
       case 'Guards the Net':
         return 'guards the net';
@@ -4711,13 +4711,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: isHome ? Colors.white : Colors.black87,
-                ),
+              Row(
+                children: [
+                  Icon(
+                    isHome ? Icons.home : Icons.flight,
+                    size: 12,
+                    color: isHome ? Colors.white : Colors.black87,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: isHome ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 2),
               Text(
@@ -13880,28 +13890,80 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Public method to update the hockey period from the PlayerPopupCaptionBoard
   // This keeps the selected period persistent across images and applies it
   // to the caption whenever players are selected.
-  void updatePeriodFromPopup(String period) {
+  // Pass null to deselect the period.
+  void updatePeriodFromPopup(String? period) {
     setState(() {
       _selectedPeriod = period;
-      _isPriorToGame = false;
+      if (period != null) {
+        _isPriorToGame = false;
+      }
     });
 
     // If there are already players selected, immediately rebuild the caption
-    // so the chosen period appears in the text.
+    // so the chosen period appears in the text (or is removed if period is null).
     if (selectedHomePlayers.isNotEmpty || selectedAwayPlayers.isNotEmpty) {
       _updateCaption();
     }
   }
 
+  // Getter for homeOnLeft to allow parent to access it
+  bool get homeOnLeft => _homeOnLeft;
+
   // Update custom verb text live from player popup
+  void switchTeams() {
+    print('DEBUG: switchTeams called, _homeOnLeft was: $_homeOnLeft');
+    setState(() {
+      _homeOnLeft = !_homeOnLeft;
+    });
+    print('DEBUG: switchTeams completed, _homeOnLeft is now: $_homeOnLeft');
+  }
+
   void updateCustomVerbFromPopup(String verbText) {
     setState(() {
       if (verbText.isEmpty) {
         _popupCustomVerb = null;
+        _selectedVerb = null;
+        _selectedActionVerb = null;
       } else {
-        _popupCustomVerb = verbText;
-        _selectedVerb = verbText;
-        _selectedActionVerb = verbText;
+        // List of category verbs that need to go through the switch statement
+        // to properly handle opposing players and other logic
+        // This includes ALL verbs from player_popup_caption_board that have switch cases
+        // that handle opposing players via _getOpposingPlayers()
+        final categoryVerbs = {
+          // Offense verbs
+          'Skates',
+          'Shoots',
+          'Battles',
+          'Scores',
+          'Goes to the Net',
+          'Faceoff',
+          // Defense verbs
+          'Blocks',
+          'Clears',
+          'Checks',
+          'Defends',
+          'Penalty Kill',
+          // Goalie verbs
+          'Saves',
+          'Handles the Puck',
+          'Stands in Net',
+          'Guards the Net',
+          // Other verbs that handle opposing players
+          'Power Play',
+          'Breakaway',
+        };
+
+        // If this is a category verb, don't set _popupCustomVerb so it goes through switch statement
+        if (categoryVerbs.contains(verbText)) {
+          _popupCustomVerb = null;
+          _selectedVerb = verbText;
+          _selectedActionVerb = verbText;
+        } else {
+          // For custom typed verbs, set _popupCustomVerb to return directly
+          _popupCustomVerb = verbText;
+          _selectedVerb = verbText;
+          _selectedActionVerb = verbText;
+        }
       }
     });
     _updateCaption();
@@ -18260,7 +18322,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final activePlayerCount =
             selectedHomePlayers.length + selectedAwayPlayers.length;
         if (activePlayerCount > 1) {
-          return 'celebrate after their team defeated the $opposingTeam';
+          return 'celebrates after their team defeated the $opposingTeam';
         } else {
           return 'celebrates their team defeating the $opposingTeam';
         }
@@ -18348,7 +18410,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return hasCustomWording
             ? '$customWording against the ${_getOpposingTeamName()}'
             : 'skates against the ${_getOpposingTeamName()}';
-      case 'Goes to the Net Against':
+      case 'Goes to the Net':
         final opposingPlayersNet = _getOpposingPlayers();
         if (opposingPlayersNet.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayersNet);
