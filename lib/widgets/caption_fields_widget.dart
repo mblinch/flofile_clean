@@ -236,6 +236,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final Function(String)? onImageUploaded; // Callback when image is uploaded
   final Function(String, double)?
       onUploadProgress; // Callback for upload progress
+  final bool Function(String)? isImageUploaded; // Check if image is uploaded
+  final Function(String)? onClearUploadStatus; // Clear upload status for re-upload
   final Map<String, String> Function()? getCurrentMetadataValues;
   final VoidCallback? onCopyMetadata; // Callback to copy metadata to clipboard
   final String? sport; // Current sport mode (baseball, hockey, basketball)
@@ -264,6 +266,8 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onSaveIptcBackground,
     this.onImageUploaded,
     this.onUploadProgress,
+    this.isImageUploaded,
+    this.onClearUploadStatus,
     this.getCurrentMetadataValues,
     this.onCopyMetadata,
     this.sport,
@@ -14110,7 +14114,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Check if an image is selected
-
     if (widget.currentImagePath == null || widget.currentImagePath!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -14120,6 +14123,112 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         ),
       );
       return;
+    }
+
+    // Check if already uploaded and prompt user
+    if (widget.isImageUploaded != null && 
+        widget.isImageUploaded!(widget.currentImagePath!)) {
+      final shouldUpload = await showDialog<bool>(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: const BorderSide(color: Colors.black, width: 1),
+          ),
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            constraints: const BoxConstraints(maxWidth: 400),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.black, width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Already Uploaded',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${p.basename(widget.currentImagePath!)} has already been uploaded. Do you want to upload again?',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          'Upload Again',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      
+      if (shouldUpload != true) {
+        return; // User cancelled
+      }
+      
+      // Notify parent to remove from uploaded images so it can be uploaded again
+      if (widget.onClearUploadStatus != null) {
+        widget.onClearUploadStatus!(widget.currentImagePath!);
+      }
     }
 
     // Use original filename

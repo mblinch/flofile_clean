@@ -64,7 +64,8 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
 }
 
 class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
-  static const double _headerHeight = 44;
+  // Height calculation: 2 rows of buttons (22px each) + spacing (2px) + vertical padding (4px) + 3px buffer = 53px
+  static const double _periodSelectorHeight = 53;
   final Set<Player> _selectedHomePlayers = {};
   final Set<Player> _selectedAwayPlayers = {};
   Player? _firstPlayerSelected;
@@ -85,6 +86,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   final TextEditingController _awaySearchController = TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
+  
+  // Sort options (shared for both teams)
+  String _sortBy = 'number'; // 'number', 'lastName', 'firstName'
+  bool _sortAscending = true;
+  
+  // View style (shared for both teams)
+  String _viewStyle = 'grid'; // 'grid' or 'list'
 
   // Verb categories matching the existing system
   final Map<String, List<VerbOption>> _verbCategories = {
@@ -244,107 +252,174 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   /// Compact period selector for the header area (always visible)
   Widget _buildHeaderPeriodSelector() {
     // Toggle between regular periods and playoff OT periods
-    final List<String> displayPeriods = _showPlayoffOvertimes
+    final List<String> firstRowPeriods = _showPlayoffOvertimes
         ? ['1OT', '2OT', '3OT', '4OT', '5OT']
         : ['1', '2', '3', 'OT', 'SO'];
+    
+    // Second row always has Pre-Game and Post Game
+    final List<String> secondRowPeriods = ['Pre-Game', 'Post Game'];
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // "Period:" label
-        Text(
-          'Period:',
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade800,
-          ),
-        ),
-        const SizedBox(width: 6),
-        // Square buttons for periods (regular or playoff OT)
-        Expanded(
-          child: Row(
-            children: displayPeriods.map(
-              (label) {
-                final bool isSelected = _selectedHeaderPeriod == label;
+        Row(
+          children: [
+            // "Period:" label
+            Text(
+              'Period:',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(width: 6),
+            // First row of period buttons (1, 2, 3, OT, SO or playoff OTs)
+            Expanded(
+              child: Row(
+                children: firstRowPeriods.map(
+                  (label) {
+                    final bool isSelected = _selectedHeaderPeriod == label;
 
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1),
-                    child: SizedBox(
-                      height: 22,
-                      child: OutlinedButton(
-                        onPressed: () => _handleHeaderPeriodSelect(label),
-                        style: OutlinedButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(0, 0),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          side: BorderSide(
-                            color: isSelected
-                                ? Colors.blue.shade500
-                                : Colors.grey.shade400,
-                          ),
-                          backgroundColor:
-                              isSelected ? Colors.blue.shade50 : Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w500,
-                            color: isSelected
-                                ? Colors.blue.shade700
-                                : Colors.grey.shade700,
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        child: SizedBox(
+                          height: 22,
+                          child: OutlinedButton(
+                            onPressed: () => _handleHeaderPeriodSelect(label),
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Colors.blue.shade500
+                                    : Colors.grey.shade400,
+                              ),
+                              backgroundColor:
+                                  isSelected ? Colors.blue.shade50 : Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight:
+                                    isSelected ? FontWeight.w600 : FontWeight.w500,
+                                color: isSelected
+                                    ? Colors.blue.shade700
+                                    : Colors.grey.shade700,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ).toList(),
-          ),
-        ),
-        const SizedBox(width: 4),
-        // Plus button to toggle playoff overtime periods
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: SizedBox(
-            width: 24,
-            height: 22,
-            child: OutlinedButton(
-              onPressed: () {
-                setState(() {
-                  _showPlayoffOvertimes = !_showPlayoffOvertimes;
-                });
-              },
-              style: OutlinedButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 0),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                side: BorderSide(
-                  color: _showPlayoffOvertimes
-                      ? Colors.blue.shade500
-                      : Colors.grey.shade400,
-                ),
-                backgroundColor:
-                    _showPlayoffOvertimes ? Colors.blue.shade50 : Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              child: Icon(
-                _showPlayoffOvertimes ? Icons.remove : Icons.add,
-                size: 12,
-                color: _showPlayoffOvertimes
-                    ? Colors.blue.shade700
-                    : Colors.grey.shade700,
+                    );
+                  },
+                ).toList(),
               ),
             ),
-          ),
+            const SizedBox(width: 4),
+            // Plus button to toggle playoff overtime periods (on first row)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: SizedBox(
+                width: 24,
+                height: 22,
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _showPlayoffOvertimes = !_showPlayoffOvertimes;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide(
+                      color: _showPlayoffOvertimes
+                          ? Colors.blue.shade500
+                          : Colors.grey.shade400,
+                    ),
+                    backgroundColor:
+                        _showPlayoffOvertimes ? Colors.blue.shade50 : Colors.white,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  child: Icon(
+                    _showPlayoffOvertimes ? Icons.remove : Icons.add,
+                    size: 12,
+                    color: _showPlayoffOvertimes
+                        ? Colors.blue.shade700
+                        : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        // Second row of period buttons (Pre-Game, Post Game)
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            // Spacer to align with first row (accounting for "Period:" label width)
+            SizedBox(
+              width: 48, // Approximate width of "Period:" label + spacing
+            ),
+            Expanded(
+              child: Row(
+                children: secondRowPeriods.map(
+                  (label) {
+                    final bool isSelected = _selectedHeaderPeriod == label;
+
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        child: SizedBox(
+                          height: 22,
+                          child: OutlinedButton(
+                            onPressed: () => _handleHeaderPeriodSelect(label),
+                            style: OutlinedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Colors.blue.shade500
+                                    : Colors.grey.shade400,
+                              ),
+                              backgroundColor:
+                                  isSelected ? Colors.blue.shade50 : Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight:
+                                    isSelected ? FontWeight.w600 : FontWeight.w500,
+                                color: isSelected
+                                    ? Colors.blue.shade700
+                                    : Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ).toList(),
+              ),
+            ),
+            // Spacer to match the plus button width on first row
+            const SizedBox(width: 28),
+          ],
         ),
       ],
     );
@@ -362,14 +437,15 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
   Widget _buildSwitchTeamsButton() {
     return SizedBox(
-      height: 24,
+      height: 18,
+      width: 18,
       child: OutlinedButton(
         onPressed: () {
           print('DEBUG: Switch teams button pressed');
           widget.onSwitchTeams?.call();
         },
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: EdgeInsets.zero,
           minimumSize: const Size(0, 0),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           side: BorderSide(color: Colors.grey.shade400),
@@ -380,7 +456,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         ),
         child: Icon(
           Icons.swap_horiz,
-          size: 14,
+          size: 12,
           color: Colors.grey.shade700,
         ),
       ),
@@ -422,8 +498,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         children: [
           // Header for verb list - now contains a permanent period selector
           Container(
-            height: _headerHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: _periodSelectorHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               border: Border(
@@ -778,7 +854,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
     // Get progress value
     double? progress;
-    String statusText = 'Not uploaded';
+    String statusText = 'This picture has not been uploaded';
     bool showProgress = false;
 
     if (widget.currentImagePath != null && widget.uploadProgress != null) {
@@ -795,10 +871,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       showProgress = true;
       progress = progress ?? 0.0;
     } else if (progress != null && progress >= 1.0) {
-      statusText = 'Upload complete';
+      statusText = 'This picture has been uploaded.';
       showProgress = false;
     } else {
-      statusText = 'Not uploaded';
+      statusText = 'This picture has not been uploaded';
       showProgress = false;
     }
 
@@ -808,12 +884,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     Color textColor;
     Color iconColor;
 
-    if (statusText == 'Upload complete') {
+    if (statusText == 'This picture has been uploaded.') {
       containerColor = Colors.green.shade50;
       borderColor = Colors.green.shade200;
       textColor = Colors.green.shade700;
       iconColor = Colors.green.shade700;
-    } else if (statusText == 'Not uploaded') {
+    } else if (statusText == 'This picture has not been uploaded') {
       containerColor = Colors.grey.shade50;
       borderColor = Colors.grey.shade300;
       textColor = Colors.grey.shade600;
@@ -840,9 +916,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           Row(
             children: [
               Icon(
-                statusText == 'Upload complete'
-                    ? Icons.check_circle
-                    : statusText == 'Not uploaded'
+                statusText == 'This picture has been uploaded.' 
+                    ? Icons.check_circle 
+                    : statusText == 'This picture has not been uploaded'
                         ? Icons.cloud_upload_outlined
                         : Icons.cloud_upload,
                 size: 12,
@@ -878,7 +954,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                   : null, // Indeterminate if queued
               backgroundColor: Colors.blue.shade100,
               valueColor: AlwaysStoppedAnimation<Color>(
-                  statusText == 'Upload complete'
+                  statusText == 'This picture has been uploaded.'
                       ? Colors.green.shade600
                       : Colors.blue.shade600),
               minHeight: 4,
@@ -1003,100 +1079,231 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       children: [
         // Team header
         Container(
-          height: _headerHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          height: _periodSelectorHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
             border: Border(
               bottom: BorderSide(color: Colors.grey.shade300),
             ),
           ),
-          alignment: Alignment.centerLeft,
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                isHome ? Icons.home : Icons.flight,
-                size: 14,
-                color: Colors.grey.shade800,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  teamName,
-                  style: TextStyle(
+              Row(
+                children: [
+                  Icon(
+                    isHome ? Icons.home : Icons.flight,
+                    size: 14,
                     color: Colors.grey.shade800,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      teamName,
+                      style: TextStyle(
+                        color: Colors.grey.shade800,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  // Switch teams button on the right
+                  _buildSwitchTeamsButton(),
+                ],
               ),
-              // Switch teams button on the right
-              _buildSwitchTeamsButton(),
+              const SizedBox(height: 4),
+              // View style toggle, sort direction, and sort dropdown under team name
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  // View style toggle (first) - shows "Grid" or "List" text with icon
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _viewStyle = _viewStyle == 'grid' ? 'list' : 'grid';
+                      });
+                    },
+                    child: Container(
+                      height: 22,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _viewStyle == 'grid'
+                                ? Icons.view_module
+                                : Icons.view_list,
+                            size: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            _viewStyle == 'grid' ? 'Grid' : 'List',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Sort direction toggle (always visible, after grid/list)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _sortAscending = !_sortAscending;
+                      });
+                    },
+                    child: Container(
+                      height: 22,
+                      width: 22,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Icon(
+                        _sortAscending
+                            ? Icons.arrow_upward
+                            : Icons.arrow_downward,
+                        size: 13,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                  // Sort dropdown (only show in list mode)
+                  if (_viewStyle == 'list') ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      height: 22,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: DropdownButton<String>(
+                        value: _sortBy,
+                        isDense: true,
+                        underline: const SizedBox(),
+                        icon: Icon(Icons.arrow_drop_down, size: 13, color: Colors.grey.shade700),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                        items: ['number', 'lastName', 'firstName'].map((String value) {
+                          String label;
+                          switch (value) {
+                            case 'number':
+                              label = 'Number';
+                              break;
+                            case 'lastName':
+                              label = 'Last Name';
+                              break;
+                            case 'firstName':
+                              label = 'First Name';
+                              break;
+                            default:
+                              label = value;
+                          }
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(label),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _sortBy = newValue;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
         const SizedBox(height: 8),
-        // Search bar
+        // Search bar and options row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: SizedBox(
-            height: 28,
-            child: TextField(
-              controller:
-                  isHome ? _homeSearchController : _awaySearchController,
-              onChanged: (value) {
-                setState(() {
-                  if (isHome) {
-                    _homeSearchText = value.toLowerCase();
-                  } else {
-                    _awaySearchText = value.toLowerCase();
-                  }
-                });
-              },
-              decoration: InputDecoration(
-                hintText: 'Search players...',
-                hintStyle: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                prefixIcon:
-                    Icon(Icons.search, size: 14, color: Colors.grey.shade600),
-                suffixIcon:
-                    (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.clear, size: 14),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () {
-                              setState(() {
-                                if (isHome) {
-                                  _homeSearchController.clear();
-                                  _homeSearchText = '';
-                                } else {
-                                  _awaySearchController.clear();
-                                  _awaySearchText = '';
-                                }
-                              });
-                            },
-                          )
-                        : null,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+          child: Row(
+            children: [
+              // Search bar (half width)
+              Expanded(
+                flex: 1,
+                child: SizedBox(
+                  height: 28,
+                  child: TextField(
+                    controller:
+                        isHome ? _homeSearchController : _awaySearchController,
+                    onChanged: (value) {
+                      setState(() {
+                        if (isHome) {
+                          _homeSearchText = value.toLowerCase();
+                        } else {
+                          _awaySearchText = value.toLowerCase();
+                        }
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search players...',
+                      hintStyle: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      prefixIcon:
+                          Icon(Icons.search, size: 14, color: Colors.grey.shade600),
+                      suffixIcon:
+                          (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(Icons.clear, size: 14),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () {
+                                    setState(() {
+                                      if (isHome) {
+                                        _homeSearchController.clear();
+                                        _homeSearchText = '';
+                                      } else {
+                                        _awaySearchController.clear();
+                                        _awaySearchText = '';
+                                      }
+                                    });
+                                  },
+                                )
+                              : null,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(color: Colors.blue.shade400),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
+                    style: const TextStyle(fontSize: 10),
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(color: Colors.blue.shade400),
-                ),
-                filled: true,
-                fillColor: Colors.white,
               ),
-              style: const TextStyle(fontSize: 10),
-            ),
+            ],
           ),
         ),
         // Player grid
@@ -1118,17 +1325,110 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
               // Filter players based on search text
               final searchText = isHome ? _homeSearchText : _awaySearchText;
-              final filteredPlayers = searchText.isEmpty
-                  ? players
+              List<Player> filteredPlayers = searchText.isEmpty
+                  ? List.from(players)
                   : players.where((player) {
                       final name = player.fullName?.toLowerCase() ?? '';
                       final jersey = player.jerseyNumber?.toLowerCase() ?? '';
                       final displayName =
                           player.displayName?.toLowerCase() ?? '';
+                      
+                      // Check if search text is numeric - if so, do exact match on jersey number
+                      final isNumeric = int.tryParse(searchText) != null;
+                      if (isNumeric) {
+                        return jersey == searchText;
+                      }
+                      
+                      // For non-numeric searches, use contains for names
                       return name.contains(searchText) ||
-                          jersey.contains(searchText) ||
                           displayName.contains(searchText);
                     }).toList();
+
+              // Apply sorting (shared for both teams)
+              final sortBy = _sortBy;
+              final sortAscending = _sortAscending;
+              final viewStyle = _viewStyle;
+              
+              filteredPlayers.sort((a, b) {
+                int comparison = 0;
+                switch (sortBy) {
+                  case 'number':
+                    final aNum = int.tryParse(a.jerseyNumber ?? '999') ?? 999;
+                    final bNum = int.tryParse(b.jerseyNumber ?? '999') ?? 999;
+                    comparison = aNum.compareTo(bNum);
+                    break;
+                  case 'lastName':
+                    final aLastName = _getLastName(a.fullName ?? '');
+                    final bLastName = _getLastName(b.fullName ?? '');
+                    comparison = aLastName.compareTo(bLastName);
+                    break;
+                  case 'firstName':
+                    final aFirstName = _getFirstName(a.fullName ?? '');
+                    final bFirstName = _getFirstName(b.fullName ?? '');
+                    comparison = aFirstName.compareTo(bFirstName);
+                    break;
+                }
+                return sortAscending ? comparison : -comparison;
+              });
+
+              // Return grid or list view based on view style
+              if (viewStyle == 'list') {
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: padding, vertical: 4),
+                  itemCount: filteredPlayers.length,
+                  itemBuilder: (context, index) {
+                    final player = filteredPlayers[index];
+                    final isSelected =
+                        (isHome ? _selectedHomePlayers : _selectedAwayPlayers)
+                            .contains(player);
+                    final isFirstPlayer = player == _firstPlayerSelected;
+
+                    // Format player name based on sort option
+                    String displayName;
+                    final jerseyNumber = player.jerseyNumber ?? '0';
+                    final fullName = player.fullName ?? '';
+                    final firstName = _getFirstName(fullName);
+                    final lastName = _getLastName(fullName);
+                    
+                    if (sortBy == 'lastName') {
+                      displayName = '$lastName, $firstName #$jerseyNumber';
+                    } else if (sortBy == 'firstName') {
+                      displayName = '$firstName $lastName #$jerseyNumber';
+                    } else {
+                      // number sort - show number first
+                      displayName = '#$jerseyNumber $fullName';
+                    }
+
+                    return InkWell(
+                      onTap: () => _selectPlayer(player, isHome),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                displayName,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isSelected
+                                      ? Colors.blue.shade600
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                            if (isFirstPlayer)
+                              Icon(
+                                Icons.star,
+                                size: 12,
+                                color: Colors.orange,
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
 
               return GridView.builder(
                 padding: const EdgeInsets.all(padding),
@@ -1324,7 +1624,11 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     return parts.length > 1 ? parts.last : fullName;
   }
 
-  @override
+  String _getFirstName(String fullName) {
+    final parts = fullName.split(' ');
+    return parts.isNotEmpty ? parts.first : fullName;
+  }
+
   @override
   void dispose() {
     for (final controller in _customVerbControllers.values) {

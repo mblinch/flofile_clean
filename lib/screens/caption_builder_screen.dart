@@ -2564,19 +2564,114 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   // Handle FTP image - Add to queue and process
-  void _onFtpImage(String imagePath) {
+  Future<void> _onFtpImage(String imagePath) async {
     print('DEBUG: _onFtpImage called for: $imagePath');
 
     // Check if already uploaded, uploading, or queued
     if (_uploadedImages.contains(imagePath)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${p.basename(imagePath)} already uploaded'),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 2),
+      // Show dialog asking if user wants to upload again
+      final shouldUpload = await showDialog<bool>(
+        context: context,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: const BorderSide(color: Colors.black, width: 1),
+          ),
+          backgroundColor: Colors.white,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            constraints: const BoxConstraints(maxWidth: 400),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.black, width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Already Uploaded',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${p.basename(imagePath)} has already been uploaded. Do you want to upload again?',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Text(
+                          'Upload Again',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       );
-      return;
+      
+      if (shouldUpload != true) {
+        return; // User cancelled
+      }
+      
+      // Remove from uploaded images so it can be uploaded again
+      setState(() {
+        _uploadedImages.remove(imagePath);
+        _uploadProgress.remove(imagePath);
+      });
     }
 
     if (_currentlyUploading.contains(imagePath)) {
@@ -4418,6 +4513,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onUploadProgress: (imagePath, progress) {
                     setState(() {
                       _uploadProgress[imagePath] = progress;
+                    });
+                  },
+                  isImageUploaded: (imagePath) {
+                    return _uploadedImages.contains(imagePath);
+                  },
+                  onClearUploadStatus: (imagePath) {
+                    setState(() {
+                      _uploadedImages.remove(imagePath);
+                      _uploadProgress.remove(imagePath);
                     });
                   },
                 ),
