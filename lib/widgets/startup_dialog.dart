@@ -269,7 +269,8 @@ class _StartupDialogState extends State<StartupDialog> {
     try {
       final teams = await _apiManager.fetchTeams();
       setState(() {
-        availableTeams = teams.map((team) => team.name).toList()..sort();
+        // Remove duplicates by converting to Set, then back to List and sort
+        availableTeams = teams.map((team) => team.name).toSet().toList()..sort();
         print('DEBUG _loadTeams: Loaded ${availableTeams.length} teams');
         // Restore favorite teams if they exist and are in the team list
         print('DEBUG _loadTeams: Checking home favorite: $_favoriteHomeTeam');

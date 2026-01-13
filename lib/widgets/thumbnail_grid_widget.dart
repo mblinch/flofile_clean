@@ -518,13 +518,13 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       children: [
                         const SizedBox(width: 8),
                         Container(
+                          height: 22,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
                           child: DropdownButton<String>(
                             value: _ftpFilterMode == null
                                 ? 'all'
@@ -532,9 +532,9 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                     ? 'hide'
                                     : 'show',
                             isDense: true,
-                            underline: Container(),
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.black),
+                            underline: const SizedBox(),
+                            icon: Icon(Icons.arrow_drop_down, size: 13, color: Colors.grey.shade700),
+                            style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
                             items: const [
                               DropdownMenuItem(
                                 value: 'all',
@@ -600,23 +600,26 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         // See All Thumbnails button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              _showThumbnailPopup();
-                            },
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                        GestureDetector(
+                          onTap: () {
+                            _showThumbnailPopup();
+                          },
+                          child: Container(
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Center(
                               child: Text(
                                 'See All Thumbnails',
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.black),
+                                  fontSize: 10,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
@@ -637,15 +640,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(4),
                             border: Border.all(color: Colors.grey.shade300),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 2,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -665,18 +661,18 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                   _ensureVisibleAfterLayout();
                                 },
                                 child: Container(
-                                  width: 20,
-                                  height: 20,
+                                  width: 22,
+                                  height: 22,
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(4),
                                     border:
-                                        Border.all(color: Colors.grey.shade400),
+                                        Border.all(color: Colors.grey.shade300),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.remove,
-                                    size: 12,
-                                    color: Colors.black,
+                                    size: 13,
+                                    color: Colors.grey.shade700,
                                   ),
                                 ),
                               ),
@@ -684,10 +680,10 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               // Size text
                               Text(
                                 '${_thumbSize.toInt()}px',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
-                                  color: Colors.black87,
+                                  color: Colors.grey.shade700,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -706,18 +702,18 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                   _ensureVisibleAfterLayout();
                                 },
                                 child: Container(
-                                  width: 20,
-                                  height: 20,
+                                  width: 22,
+                                  height: 22,
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(4),
                                     border:
-                                        Border.all(color: Colors.grey.shade400),
+                                        Border.all(color: Colors.grey.shade300),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.add,
-                                    size: 12,
-                                    color: Colors.black,
+                                    size: 13,
+                                    color: Colors.grey.shade700,
                                   ),
                                 ),
                               ),

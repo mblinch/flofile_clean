@@ -4446,7 +4446,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             children: [
               // Caption Fields Widget (top portion) - fixed height
               SizedBox(
-                height: 220,
+                height: 175,
                 child: CaptionFieldsWidget(
                   key: _captionFieldsKey2,
                   metadata: currentMetadata,
@@ -4525,11 +4525,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     });
                   },
                 ),
-              ),
-              // Divider
-              Container(
-                height: 1,
-                color: Colors.grey.shade300,
               ),
               // Player picker with popup verbs (remaining space)
               Expanded(

@@ -24,6 +24,9 @@ class PreferencesService {
       'resolution_warning_threshold';
   static const String _keyPhotoshopPath = 'photoshop_path';
   static const String _keyCurrentLayout = 'current_layout';
+  static const String _keyCustomVerbs = 'custom_verbs';
+  static const String _keyVerbOverrides = 'verb_overrides'; // For editing built-in verbs
+  static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -364,6 +367,123 @@ class PreferencesService {
   Future<void> saveCurrentLayout(String layout) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyCurrentLayout, layout);
+  }
+
+  // Custom Verbs (user-created verbs)
+  String _getCustomVerbsKey(String sport) {
+    return '${_keyCustomVerbs}_${sport.toLowerCase()}';
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomVerbs({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getCustomVerbsKey(sport);
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return [];
+    try {
+      final List<dynamic> decoded = json.decode(jsonString);
+      return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (e) {
+      print('Error parsing custom verbs for $sport: $e');
+      return [];
+    }
+  }
+
+  Future<void> saveCustomVerbs(List<Map<String, dynamic>> verbs, {String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getCustomVerbsKey(sport);
+    await prefs.setString(key, json.encode(verbs));
+  }
+
+  Future<void> addCustomVerb(Map<String, dynamic> verb, {String sport = 'hockey'}) async {
+    final verbs = await getCustomVerbs(sport: sport);
+    verbs.add(verb);
+    await saveCustomVerbs(verbs, sport: sport);
+  }
+
+  Future<void> removeCustomVerb(String verbPhrase, {String sport = 'hockey'}) async {
+    final verbs = await getCustomVerbs(sport: sport);
+    verbs.removeWhere((v) => v['verbPhrase'] == verbPhrase);
+    await saveCustomVerbs(verbs, sport: sport);
+  }
+
+  // Verb Overrides (modifications to built-in verbs)
+  String _getVerbOverridesKey(String sport) {
+    return '${_keyVerbOverrides}_${sport.toLowerCase()}';
+  }
+
+  Future<Map<String, Map<String, dynamic>>> getVerbOverrides({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbOverridesKey(sport);
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return {};
+    try {
+      final Map<String, dynamic> decoded = json.decode(jsonString);
+      return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+    } catch (e) {
+      print('Error parsing verb overrides for $sport: $e');
+      return {};
+    }
+  }
+
+  Future<void> saveVerbOverride(String originalVerbPhrase, Map<String, dynamic> override, {String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbOverridesKey(sport);
+    final overrides = await getVerbOverrides(sport: sport);
+    overrides[originalVerbPhrase] = override;
+    await prefs.setString(key, json.encode(overrides));
+  }
+
+  Future<void> removeVerbOverride(String originalVerbPhrase, {String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbOverridesKey(sport);
+    final overrides = await getVerbOverrides(sport: sport);
+    overrides.remove(originalVerbPhrase);
+    if (overrides.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(overrides));
+    }
+  }
+
+  // Deleted Verbs (for tracking deleted built-in verbs during reorganization)
+  String _getDeletedVerbsKey(String sport) {
+    return '${_keyDeletedVerbs}_${sport.toLowerCase()}';
+  }
+
+  Future<Set<String>> getDeletedVerbs({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getDeletedVerbsKey(sport);
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return <String>{};
+    try {
+      final List<dynamic> decoded = json.decode(jsonString);
+      return decoded.cast<String>().toSet();
+    } catch (e) {
+      print('Error parsing deleted verbs for $sport: $e');
+      return <String>{};
+    }
+  }
+
+  Future<void> saveDeletedVerbs(Set<String> deletedVerbs, {String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final key = _getDeletedVerbsKey(sport);
+    if (deletedVerbs.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(deletedVerbs.toList()));
+    }
+  }
+
+  Future<void> addDeletedVerb(String verbPhrase, {String sport = 'hockey'}) async {
+    final deletedVerbs = await getDeletedVerbs(sport: sport);
+    deletedVerbs.add(verbPhrase);
+    await saveDeletedVerbs(deletedVerbs, sport: sport);
+  }
+
+  Future<void> removeDeletedVerb(String verbPhrase, {String sport = 'hockey'}) async {
+    final deletedVerbs = await getDeletedVerbs(sport: sport);
+    deletedVerbs.remove(verbPhrase);
+    await saveDeletedVerbs(deletedVerbs, sport: sport);
   }
 
   // Export all preferences as JSON
