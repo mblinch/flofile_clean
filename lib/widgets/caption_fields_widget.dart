@@ -305,6 +305,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _awaySearchText = '';
   String _unifiedSearchText = '';
   String _managerName = '';
+  String? _originalCaptionFromMetadata;
+  String? _originalPersonalityFromMetadata;
 
   // Preferences service
   late PreferencesService _preferencesService;
@@ -2583,6 +2585,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Creator field is now handled by metadata widget only
 
     setState(() {
+      _originalCaptionFromMetadata = extractedCaption;
+      _originalPersonalityFromMetadata = personInImageText;
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
 
@@ -14006,12 +14010,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     });
 
-    // Only update caption if there are players selected
-    // This prevents clearing the caption when we reset after save
     if (homePlayers.isNotEmpty || awayPlayers.isNotEmpty) {
-      // Re-evaluate custom verb plural phrase if a custom verb is active
       await _reEvaluateCustomVerbPhrase();
       _updateCaption();
+    } else {
+      // Revert to original caption/personality for this image.
+      captionController.text = _originalCaptionFromMetadata ?? '';
+      personalityController.text = _originalPersonalityFromMetadata ?? '';
     }
   }
 

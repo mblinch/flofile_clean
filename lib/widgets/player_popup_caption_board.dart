@@ -66,8 +66,8 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
 }
 
 class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
-  // Height calculation: 2 rows of buttons (22px each) + spacing (2px) + vertical padding (4px) + 3px buffer = 53px
-  static const double _periodSelectorHeight = 53;
+  // Height calculation: 2 rows of buttons (22px each) + spacing (2px) + vertical padding (8px) + 3px buffer = 57px
+  static const double _periodSelectorHeight = 57;
   final Set<Player> _selectedHomePlayers = {};
   final Set<Player> _selectedAwayPlayers = {};
   final Set<Player> _stickyHomePlayers = {}; // Sticky players that persist
@@ -82,8 +82,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   String?
       _expandedVerb; // Track which verb is expanded (format: "category_verb")
   VerbOption? _pendingVerb; // Store verb selected before players
-  VerbOption? _stickyVerb; // Store verb that stays on until turned off (Cmd+click)
-  String? _lastUsedVerbLabel; // Track the last verb that was used (for highlighting after save)
+  VerbOption?
+      _stickyVerb; // Store verb that stays on until turned off (Cmd+click)
+  String?
+      _lastUsedVerbLabel; // Track the last verb that was used (for highlighting after save)
   final Map<String, TextEditingController> _customVerbControllers = {};
   bool _showCustomVerbButtons =
       false; // Track if custom verb buttons should be shown
@@ -92,15 +94,17 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   final TextEditingController _awaySearchController = TextEditingController();
   String _homeSearchText = '';
   String _awaySearchText = '';
-  
+
   // Number input controllers for quick player selection
   final TextEditingController _homeNumberController = TextEditingController();
   final TextEditingController _awayNumberController = TextEditingController();
-  
+  final List<String> _enteredHomeNumbers = [];
+  final List<String> _enteredAwayNumbers = [];
+
   // Sort options (shared for both teams)
   String _sortBy = 'number'; // 'number', 'lastName', 'firstName'
   bool _sortAscending = true;
-  
+
   // View style (shared for both teams)
   String _viewStyle = 'grid'; // 'grid' or 'list'
 
@@ -112,7 +116,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   List<VerbOption> _customVerbs = [];
   Map<String, Map<String, dynamic>> _verbOverrides = {};
   Set<String> _deletedVerbs = {}; // Track deleted built-in verbs
-  
+
   // Category order for drag-to-reorder
   List<String> _categoryOrder = [];
 
@@ -161,16 +165,22 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     // Check if Cmd/Ctrl key is pressed
     final isMetaPressed = RawKeyboard.instance.keysPressed
             .contains(LogicalKeyboardKey.metaLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.metaRight) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlRight);
 
-    final Set<Player> stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
-    final Set<Player> selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
-    
+    final Set<Player> stickySet =
+        isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+    final Set<Player> selectedSet =
+        isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+
     // Check if player was selected before (including sticky)
-    final wasSelectingBefore = !selectedSet.contains(player) && !stickySet.contains(player);
-    
+    final wasSelectingBefore =
+        !selectedSet.contains(player) && !stickySet.contains(player);
+
     setState(() {
       if (isMetaPressed) {
         // Cmd+click: toggle sticky state
@@ -205,15 +215,19 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         ..._stickyHomePlayers,
         ..._stickyAwayPlayers,
       };
-      
+
       if (allSelected.isEmpty) {
         _firstPlayerSelected = null;
         _firstTeamSelectedIsHome = null;
-      } else if (_firstPlayerSelected == null || !allSelected.contains(_firstPlayerSelected)) {
+      } else if (_firstPlayerSelected == null ||
+          !allSelected.contains(_firstPlayerSelected)) {
         _firstPlayerSelected = allSelected.first;
-        _firstTeamSelectedIsHome = _selectedHomePlayers.contains(_firstPlayerSelected) ||
-            _stickyHomePlayers.contains(_firstPlayerSelected);
+        _firstTeamSelectedIsHome =
+            _selectedHomePlayers.contains(_firstPlayerSelected) ||
+                _stickyHomePlayers.contains(_firstPlayerSelected);
       }
+
+      _syncEnteredNumbersFromSelection();
     });
 
     // Get merged selection (selected + sticky)
@@ -222,13 +236,17 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     final mergedAllSelected = {...mergedHomePlayers, ...mergedAwayPlayers};
 
     // If a sticky verb is set and we just selected a player, generate caption with sticky verb
-    if (_stickyVerb != null && wasSelectingBefore && mergedAllSelected.isNotEmpty) {
+    if (_stickyVerb != null &&
+        wasSelectingBefore &&
+        mergedAllSelected.isNotEmpty) {
       final periodLabel = _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
       _confirmCaptionGeneration(_stickyVerb!, periodLabel);
     }
     // If a verb was pending and we just selected a player, generate caption
     // This ensures the verb is set when players are selected after a verb
-    else if (_pendingVerb != null && wasSelectingBefore && mergedAllSelected.isNotEmpty) {
+    else if (_pendingVerb != null &&
+        wasSelectingBefore &&
+        mergedAllSelected.isNotEmpty) {
       final periodLabel = _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
       _confirmCaptionGeneration(_pendingVerb!, periodLabel);
       // Clear pending verb after using it so it doesn't interfere with future selections
@@ -244,12 +262,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   }
 
   Player? _findPlayerByNumber(String number, bool isHome) {
-    final roster = isHome 
+    final roster = isHome
         ? (widget.homeRoster ?? _getMockHomePlayers())
         : (widget.awayRoster ?? _getMockAwayPlayers());
-    
+
     if (roster.isEmpty) return null;
-    
+
     try {
       final jerseyNum = int.parse(number.trim());
       try {
@@ -280,12 +298,257 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
   void _handleNumberInput(String value, bool isHome) {
     if (value.trim().isEmpty) return;
-    
+
     final player = _findPlayerByNumber(value, isHome);
     if (player != null) {
       // _selectPlayer handles toggling selection automatically
       _selectPlayer(player, isHome);
     }
+  }
+
+  void _handleNumberInputList(String value, bool isHome) {
+    final raw = value.trim();
+    if (raw.isEmpty) return;
+
+    final parts = raw.split(RegExp(r'[,\s]+')).where((p) => p.isNotEmpty);
+    for (final part in parts) {
+      _handleNumberInput(part, isHome);
+    }
+  }
+
+  void _syncEnteredNumbersFromSelection() {
+    _enteredHomeNumbers
+      ..clear()
+      ..addAll(_collectUniqueNumbers(
+          {..._selectedHomePlayers, ..._stickyHomePlayers}));
+    _enteredAwayNumbers
+      ..clear()
+      ..addAll(_collectUniqueNumbers(
+          {..._selectedAwayPlayers, ..._stickyAwayPlayers}));
+  }
+
+  List<String> _collectUniqueNumbers(Set<Player> players) {
+    final numbers = <String>[];
+    for (final player in players) {
+      final jersey = (player.jerseyNumber ?? '').trim();
+      if (jersey.isNotEmpty && !numbers.contains(jersey)) {
+        numbers.add(jersey);
+      }
+    }
+    return numbers;
+  }
+
+  Widget _buildNumberChips(bool isHome, {bool isCenter = false}) {
+    final numbers = isHome ? _enteredHomeNumbers : _enteredAwayNumbers;
+    return Wrap(
+      spacing: 3,
+      runSpacing: 3,
+      children: numbers.map((number) {
+        return GestureDetector(
+          onTap: () => _removePlayerByNumber(number, isHome),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 24),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 5,
+              vertical: 2,
+            ),
+            decoration: BoxDecoration(
+              color: isHome ? Colors.grey.shade100 : Colors.white,
+              borderRadius: BorderRadius.circular(2),
+              border: Border.all(
+                color: Colors.grey.shade300,
+                width: 1,
+              ),
+            ),
+            child: Text(
+              number,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _handleSearchSubmit(bool isHome) {
+    final controller = isHome ? _homeSearchController : _awaySearchController;
+    final value = controller.text;
+    if (value.trim().isEmpty) return;
+
+    final tokens = value
+        .toLowerCase()
+        .split(RegExp(r'[,\s]+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return;
+
+    final roster = isHome
+        ? (widget.homeRoster ?? _getMockHomePlayers())
+        : (widget.awayRoster ?? _getMockAwayPlayers());
+
+    bool hadAmbiguousName = false;
+
+    setState(() {
+      final selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+      final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+
+      for (final token in tokens) {
+        final isNumeric = int.tryParse(token) != null;
+        if (isNumeric) {
+          _handleNumberInputList(token, isHome);
+          continue;
+        }
+
+        final matches = roster
+            .where((player) => _isPlayerSearchMatch(player, token))
+            .toList();
+        if (matches.isEmpty) continue;
+        if (matches.length > 1) {
+          hadAmbiguousName = true;
+          continue;
+        }
+
+        final player = matches.first;
+        if (!selectedSet.contains(player) && !stickySet.contains(player)) {
+          selectedSet.add(player);
+        }
+      }
+
+      final allSelected = {
+        ..._selectedHomePlayers,
+        ..._selectedAwayPlayers,
+        ..._stickyHomePlayers,
+        ..._stickyAwayPlayers,
+      };
+
+      if (allSelected.isEmpty) {
+        _firstPlayerSelected = null;
+        _firstTeamSelectedIsHome = null;
+      } else if (_firstPlayerSelected == null ||
+          !allSelected.contains(_firstPlayerSelected)) {
+        _firstPlayerSelected = allSelected.first;
+        _firstTeamSelectedIsHome =
+            _selectedHomePlayers.contains(_firstPlayerSelected) ||
+                _stickyHomePlayers.contains(_firstPlayerSelected);
+      }
+
+      _syncEnteredNumbersFromSelection();
+      controller.clear();
+      if (isHome) {
+        _homeSearchText = '';
+      } else {
+        _awaySearchText = '';
+      }
+    });
+
+    if (hadAmbiguousName) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('More than one player selected in search term'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    final mergedHomePlayers = {..._selectedHomePlayers, ..._stickyHomePlayers};
+    final mergedAwayPlayers = {..._selectedAwayPlayers, ..._stickyAwayPlayers};
+    widget.onSelectionChanged?.call(
+      mergedHomePlayers,
+      mergedAwayPlayers,
+      _firstPlayerSelected,
+      _firstTeamSelectedIsHome,
+    );
+  }
+
+  bool _matchesJerseyNumber(Player player, String number) {
+    final trimmed = number.trim();
+    if (trimmed.isEmpty) return false;
+
+    final jersey = (player.jerseyNumber ?? '').trim();
+    if (jersey.isNotEmpty && jersey == trimmed) return true;
+
+    final parsedInput = int.tryParse(trimmed);
+    final parsedJersey = int.tryParse(jersey);
+    if (parsedInput != null &&
+        parsedJersey != null &&
+        parsedInput == parsedJersey) {
+      return true;
+    }
+
+    // Fallback: match against display name token like "#12"
+    return player.displayName.contains('#$trimmed');
+  }
+
+  bool _isPlayerSearchMatch(Player player, String searchText) {
+    if (searchText.isEmpty) return false;
+    final tokens = searchText
+        .toLowerCase()
+        .split(RegExp(r'[,\s]+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return false;
+
+    final name = (player.fullName ?? '').toLowerCase();
+    final jersey = (player.jerseyNumber ?? '').toLowerCase();
+    final display = player.displayName.toLowerCase();
+
+    for (final token in tokens) {
+      final isNumeric = int.tryParse(token) != null;
+      if (isNumeric) {
+        if (jersey == token) return true;
+      } else {
+        if (name.contains(token) || display.contains(token)) return true;
+      }
+    }
+
+    return false;
+  }
+
+  void _removePlayerByNumber(String number, bool isHome) {
+    final trimmed = number.trim();
+    if (trimmed.isEmpty) return;
+
+    setState(() {
+      final selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+      final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+
+      selectedSet
+          .removeWhere((player) => _matchesJerseyNumber(player, trimmed));
+      stickySet.removeWhere((player) => _matchesJerseyNumber(player, trimmed));
+      _syncEnteredNumbersFromSelection();
+
+      final allSelected = {
+        ..._selectedHomePlayers,
+        ..._selectedAwayPlayers,
+        ..._stickyHomePlayers,
+        ..._stickyAwayPlayers,
+      };
+
+      if (allSelected.isEmpty) {
+        _firstPlayerSelected = null;
+        _firstTeamSelectedIsHome = null;
+      } else if (_firstPlayerSelected != null &&
+          !allSelected.contains(_firstPlayerSelected)) {
+        _firstPlayerSelected = allSelected.first;
+        _firstTeamSelectedIsHome =
+            _selectedHomePlayers.contains(_firstPlayerSelected) ||
+                _stickyHomePlayers.contains(_firstPlayerSelected);
+      }
+    });
+
+    final mergedHomePlayers = {..._selectedHomePlayers, ..._stickyHomePlayers};
+    final mergedAwayPlayers = {..._selectedAwayPlayers, ..._stickyAwayPlayers};
+    widget.onSelectionChanged?.call(
+      mergedHomePlayers,
+      mergedAwayPlayers,
+      _firstPlayerSelected,
+      _firstTeamSelectedIsHome,
+    );
   }
 
   Widget _buildGlobalCustomVerbInput() {
@@ -335,7 +598,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           final periodLabel =
               _getPeriodDisplayText(_selectedHeaderPeriod ?? '');
           final customVerb = VerbOption(value.trim(), value.trim());
-          _confirmCaptionGeneration(customVerb, periodLabel, showSnackBar: false);
+          _confirmCaptionGeneration(customVerb, periodLabel,
+              showSnackBar: false);
         }
       },
     );
@@ -347,7 +611,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     final List<String> firstRowPeriods = _showPlayoffOvertimes
         ? ['1OT', '2OT', '3OT', '4OT', '5OT']
         : ['1', '2', '3', 'OT', 'SO'];
-    
+
     // Second row always has Pre-Game and Post Game
     final List<String> secondRowPeriods = ['Pre-Game', 'Post Game'];
 
@@ -389,8 +653,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     ? Colors.blue.shade500
                                     : Colors.grey.shade400,
                               ),
-                              backgroundColor:
-                                  isSelected ? Colors.blue.shade50 : Colors.white,
+                              backgroundColor: isSelected
+                                  ? Colors.blue.shade50
+                                  : Colors.white,
                               shape: const RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
                               ),
@@ -399,8 +664,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               label,
                               style: TextStyle(
                                 fontSize: 9,
-                                fontWeight:
-                                    isSelected ? FontWeight.w600 : FontWeight.w500,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
                                 color: isSelected
                                     ? Colors.blue.shade700
                                     : Colors.grey.shade700,
@@ -436,8 +702,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           ? Colors.blue.shade500
                           : Colors.grey.shade400,
                     ),
-                    backgroundColor:
-                        _showPlayoffOvertimes ? Colors.blue.shade50 : Colors.white,
+                    backgroundColor: _showPlayoffOvertimes
+                        ? Colors.blue.shade50
+                        : Colors.white,
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.zero,
                     ),
@@ -484,8 +751,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     ? Colors.blue.shade500
                                     : Colors.grey.shade400,
                               ),
-                              backgroundColor:
-                                  isSelected ? Colors.blue.shade50 : Colors.white,
+                              backgroundColor: isSelected
+                                  ? Colors.blue.shade50
+                                  : Colors.white,
                               shape: const RoundedRectangleBorder(
                                 borderRadius: BorderRadius.zero,
                               ),
@@ -494,8 +762,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               label,
                               style: TextStyle(
                                 fontSize: 9,
-                                fontWeight:
-                                    isSelected ? FontWeight.w600 : FontWeight.w500,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
                                 color: isSelected
                                     ? Colors.blue.shade700
                                     : Colors.grey.shade700,
@@ -562,6 +831,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       // Note: sticky players persist - they are not cleared
       _firstPlayerSelected = null;
       _firstTeamSelectedIsHome = null;
+      _enteredHomeNumbers.clear();
+      _enteredAwayNumbers.clear();
       for (final controller in _customVerbControllers.values) {
         controller.clear();
       }
@@ -574,7 +845,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     widget.onSelectionChanged?.call(
       Set<Player>.from(_stickyHomePlayers),
       Set<Player>.from(_stickyAwayPlayers),
-      _stickyHomePlayers.isNotEmpty ? _stickyHomePlayers.first : (_stickyAwayPlayers.isNotEmpty ? _stickyAwayPlayers.first : null),
+      _stickyHomePlayers.isNotEmpty
+          ? _stickyHomePlayers.first
+          : (_stickyAwayPlayers.isNotEmpty ? _stickyAwayPlayers.first : null),
       _stickyHomePlayers.isNotEmpty ? true : null,
     );
   }
@@ -593,7 +866,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           // Header for verb list - now contains a permanent period selector
           Container(
             height: _periodSelectorHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               border: Border(
@@ -602,9 +875,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             ),
             child: _buildHeaderPeriodSelector(),
           ),
-          // Number input boxes for quick player selection
+          // Player chips (moved to center)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               border: Border(
@@ -612,84 +885,16 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Home team number input
-                Expanded(
-                  child: TextField(
-                    controller: _homeNumberController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      hintText: widget.homeTeamName != null 
-                          ? '${widget.homeTeamName} #'
-                          : 'Home #',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade400),
-                      ),
-                    ),
-                    style: const TextStyle(fontSize: 11),
-                    onChanged: (value) {
-                      if (value.trim().isNotEmpty) {
-                        _handleNumberInput(value, true);
-                        // Clear after a short delay to allow re-entry
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          if (_homeNumberController.text == value) {
-                            _homeNumberController.clear();
-                          }
-                        });
-                      }
-                    },
-                  ),
+                Expanded(child: _buildNumberChips(true, isCenter: true)),
+                Container(
+                  width: 1,
+                  height: 36,
+                  color: Colors.grey.shade300,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                const SizedBox(width: 8),
-                // Away team number input
-                Expanded(
-                  child: TextField(
-                    controller: _awayNumberController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      hintText: widget.awayTeamName != null 
-                          ? '${widget.awayTeamName} #'
-                          : 'Away #',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade400),
-                      ),
-                    ),
-                    style: const TextStyle(fontSize: 11),
-                    onChanged: (value) {
-                      if (value.trim().isNotEmpty) {
-                        _handleNumberInput(value, false);
-                        // Clear after a short delay to allow re-entry
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          if (_awayNumberController.text == value) {
-                            _awayNumberController.clear();
-                          }
-                        });
-                      }
-                    },
-                  ),
-                ),
+                Expanded(child: _buildNumberChips(false, isCenter: true)),
               ],
             ),
           ),
@@ -703,11 +908,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     onReorder: (oldIndex, newIndex) {
                       // Don't allow moving Favorites (index 0)
                       if (oldIndex == 0 || newIndex == 0) return;
-                      
+
                       // Adjust indices to account for Favorites at index 0
                       final adjustedOldIndex = oldIndex - 1;
-                      final adjustedNewIndex = newIndex > oldIndex ? newIndex - 1 : newIndex - 1;
-                      
+                      final adjustedNewIndex =
+                          newIndex > oldIndex ? newIndex - 1 : newIndex - 1;
+
                       setState(() {
                         final item = _categoryOrder.removeAt(adjustedOldIndex);
                         _categoryOrder.insert(adjustedNewIndex, item);
@@ -722,8 +928,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           dividerColor: Colors.transparent,
                         ),
                         child: ExpansionTile(
-                          key: ValueKey('Favorites_${_expandedCategories.contains('Favorites')}'),
-                          initiallyExpanded: _expandedCategories.contains('Favorites'),
+                          key: ValueKey(
+                              'Favorites_${_expandedCategories.contains('Favorites')}'),
+                          initiallyExpanded:
+                              _expandedCategories.contains('Favorites'),
                           onExpansionChanged: (expanding) {
                             setState(() {
                               if (expanding) {
@@ -772,201 +980,236 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           ),
                           backgroundColor: Colors.grey.shade50,
                           collapsedBackgroundColor: Colors.grey.shade50,
-                    children: _getFavoriteVerbs().isEmpty
-                        ? [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: Colors.grey.shade200,
-                                    width: 0.5,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                'No favorites yet. Right-click any verb to add it to favorites.',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                          ]
-                        : _getFavoriteVerbs().map((verb) {
-                        final verbKey = 'Favorites_${verb.label}';
-                        final isExpanded = _expandedVerb == verbKey;
-                        final isLastUsed = _lastUsedVerbLabel == verb.label;
-                        final isSticky = _stickyVerb?.label == verb.label;
-
-                        return Column(
-                          children: [
-                            GestureDetector(
-                              onSecondaryTapDown: (details) {
-                                _showVerbContextMenu(context, details.globalPosition, verb);
-                              },
-                              child: InkWell(
-                                onTap: () => _handleVerbTap(verb, verbKey),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSticky ? Colors.orange.shade50 : Colors.white,
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: Colors.grey.shade200,
-                                        width: 0.5,
+                          children: _getFavoriteVerbs().isEmpty
+                              ? [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 0.5,
+                                        ),
                                       ),
-                                      left: isSticky
-                                          ? BorderSide(
-                                              color: Colors.orange.shade400,
-                                              width: 3,
-                                            )
-                                          : BorderSide.none,
+                                    ),
+                                    child: Text(
+                                      'No favorites yet. Right-click any verb to add it to favorites.',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade600,
+                                      ),
                                     ),
                                   ),
-                                  child: Row(
+                                ]
+                              : _getFavoriteVerbs().map((verb) {
+                                  final verbKey = 'Favorites_${verb.label}';
+                                  final isExpanded = _expandedVerb == verbKey;
+                                  final isLastUsed =
+                                      _lastUsedVerbLabel == verb.label;
+                                  final isSticky =
+                                      _stickyVerb?.label == verb.label;
+
+                                  return Column(
                                     children: [
-                                      const SizedBox(width: 12),
-                                      if (isSticky)
-                                        Padding(
-                                          padding: const EdgeInsets.only(right: 4),
-                                          child: Icon(
-                                            Icons.push_pin,
-                                            size: 12,
-                                            color: Colors.orange.shade700,
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: Text(
-                                          verb.label,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 11,
-                                            color: isSticky
-                                                ? Colors.orange.shade700
-                                                : Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                      if (isLastUsed)
-                                        Padding(
-                                          padding: const EdgeInsets.only(right: 4),
-                                          child: Text(
-                                            '<- Last Used',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              color: Colors.red,
+                                      GestureDetector(
+                                        onSecondaryTapDown: (details) {
+                                          _showVerbContextMenu(context,
+                                              details.globalPosition, verb);
+                                        },
+                                        child: InkWell(
+                                          onTap: () =>
+                                              _handleVerbTap(verb, verbKey),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isSticky
+                                                  ? Colors.orange.shade50
+                                                  : Colors.white,
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                  color: Colors.grey.shade200,
+                                                  width: 0.5,
+                                                ),
+                                                left: isSticky
+                                                    ? BorderSide(
+                                                        color: Colors
+                                                            .orange.shade400,
+                                                        width: 3,
+                                                      )
+                                                    : BorderSide.none,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const SizedBox(width: 12),
+                                                if (isSticky)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 4),
+                                                    child: Icon(
+                                                      Icons.push_pin,
+                                                      size: 12,
+                                                      color: Colors
+                                                          .orange.shade700,
+                                                    ),
+                                                  ),
+                                                Expanded(
+                                                  child: Text(
+                                                    verb.label,
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      fontSize: 11,
+                                                      color: isSticky
+                                                          ? Colors
+                                                              .orange.shade700
+                                                          : Colors
+                                                              .grey.shade700,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (isLastUsed)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 4),
+                                                    child: Text(
+                                                      '<- Last Used',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: Colors.red,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                Icon(
+                                                  isExpanded
+                                                      ? Icons.expand_less
+                                                      : Icons.expand_more,
+                                                  size: 14,
+                                                  color: Colors.grey.shade400,
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
-                                      Icon(
-                                        isExpanded
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
-                                        size: 14,
-                                        color: Colors.grey.shade400,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Show action buttons when expanded OR when sticky verb is active
-                            if ((isExpanded || isSticky) &&
-                                (_selectedHomePlayers.isNotEmpty ||
-                                    _selectedAwayPlayers.isNotEmpty))
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: Colors.grey.shade200,
-                                      width: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (widget.onFtp != null)
-                                      TextButton(
-                                        onPressed: widget.isFtpDisabled
-                                            ? null
-                                            : () {
-                                                widget.onFtp?.call();
-                                                // Collapse expanded verb after FTP
-                                                setState(() {
-                                                  _expandedVerb = null;
-                                                  _showCustomVerbButtons = false;
-                                                });
-                                              },
-                                        style: TextButton.styleFrom(
+                                      // Show action buttons when expanded OR when sticky verb is active
+                                      // Check both regular selected players and sticky players
+                                      if ((isExpanded || isSticky) &&
+                                          (_selectedHomePlayers.isNotEmpty ||
+                                              _selectedAwayPlayers.isNotEmpty ||
+                                              _stickyHomePlayers.isNotEmpty ||
+                                              _stickyAwayPlayers.isNotEmpty))
+                                        Container(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
+                                            horizontal: 12,
                                             vertical: 4,
                                           ),
-                                          minimumSize: const Size(0, 24),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        child: const Text(
-                                          'FTP',
-                                          style: TextStyle(fontSize: 10),
-                                        ),
-                                      ),
-                                    if (widget.onSaveIptc != null) ...[
-                                      const SizedBox(width: 4),
-                                      TextButton(
-                                        onPressed: () {
-                                          widget.onSaveIptc?.call();
-                                          // Collapse expanded verb after Save
-                                          setState(() {
-                                            _expandedVerb = null;
-                                            _showCustomVerbButtons = false;
-                                          });
-                                        },
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade50,
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.grey.shade200,
+                                                width: 0.5,
+                                              ),
+                                            ),
                                           ),
-                                          minimumSize: const Size(0, 24),
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.end,
+                                            children: [
+                                              if (widget.onFtp != null)
+                                                TextButton(
+                                                  onPressed: widget
+                                                          .isFtpDisabled
+                                                      ? null
+                                                      : () {
+                                                          widget.onFtp?.call();
+                                                          // Collapse expanded verb after FTP
+                                                          setState(() {
+                                                            _expandedVerb =
+                                                                null;
+                                                            _showCustomVerbButtons =
+                                                                false;
+                                                          });
+                                                        },
+                                                  style: TextButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                    minimumSize:
+                                                        const Size(0, 24),
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                  ),
+                                                  child: const Text(
+                                                    'FTP',
+                                                    style:
+                                                        TextStyle(fontSize: 10),
+                                                  ),
+                                                ),
+                                              if (widget.onSaveIptc !=
+                                                  null) ...[
+                                                const SizedBox(width: 4),
+                                                TextButton(
+                                                  onPressed: () {
+                                                    widget.onSaveIptc?.call();
+                                                    // Collapse expanded verb after Save
+                                                    setState(() {
+                                                      _expandedVerb = null;
+                                                      _showCustomVerbButtons =
+                                                          false;
+                                                    });
+                                                  },
+                                                  style: TextButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                    minimumSize:
+                                                        const Size(0, 24),
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                  ),
+                                                  child: const Text(
+                                                    'Save',
+                                                    style:
+                                                        TextStyle(fontSize: 10),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         ),
-                                        child: const Text(
-                                          'Save',
-                                          style: TextStyle(fontSize: 10),
-                                        ),
-                                      ),
                                     ],
-                                  ],
-                                ),
-                              ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                                  );
+                                }).toList(),
+                        ),
+                      ),
                       ..._categoryOrder.map((categoryName) {
                         if (!_verbCategories.containsKey(categoryName)) {
-                          return SizedBox.shrink(key: ValueKey('missing_$categoryName'));
+                          return SizedBox.shrink(
+                              key: ValueKey('missing_$categoryName'));
                         }
-                        final isExpanded = _expandedCategories.contains(categoryName);
+                        final isExpanded =
+                            _expandedCategories.contains(categoryName);
                         return ReorderableDragStartListener(
                           key: ValueKey(categoryName),
-                          index: _categoryOrder.indexOf(categoryName) + 1, // +1 for Favorites
+                          index: _categoryOrder.indexOf(categoryName) +
+                              1, // +1 for Favorites
                           child: Theme(
                             data: Theme.of(context).copyWith(
                               dividerColor: Colors.transparent,
@@ -1012,205 +1255,229 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               ),
                               backgroundColor: Colors.grey.shade50,
                               collapsedBackgroundColor: Colors.grey.shade50,
-                            children: [
-                        ..._getVerbsForCategory(categoryName).map((verb) {
-                        final verbKey = '${categoryName}_${verb.label}';
-                        final isExpanded = _expandedVerb == verbKey;
-                        final isLastUsed = _lastUsedVerbLabel == verb.label;
-                        final isSticky = _stickyVerb?.label == verb.label;
+                              children: [
+                                ..._getVerbsForCategory(categoryName)
+                                    .map((verb) {
+                                  final verbKey =
+                                      '${categoryName}_${verb.label}';
+                                  final isExpanded = _expandedVerb == verbKey;
+                                  final isLastUsed =
+                                      _lastUsedVerbLabel == verb.label;
+                                  final isSticky =
+                                      _stickyVerb?.label == verb.label;
 
-                        return Column(
-                          children: [
-                            GestureDetector(
-                              onSecondaryTapDown: (details) {
-                                _showVerbContextMenu(context, details.globalPosition, verb);
-                              },
-                              child: InkWell(
-                                onTap: () => _handleVerbTap(verb, verbKey),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSticky ? Colors.orange.shade50 : Colors.white,
-                                    border: Border(
-                                      bottom: BorderSide(
-                                        color: Colors.grey.shade200,
-                                        width: 0.5,
-                                      ),
-                                      left: isSticky
-                                          ? BorderSide(
-                                              color: Colors.orange.shade400,
-                                              width: 3,
-                                            )
-                                          : BorderSide.none,
-                                    ),
-                                  ),
-                                  child: Row(
+                                  return Column(
                                     children: [
-                                      const SizedBox(width: 12),
-                                      if (isSticky)
-                                        Padding(
-                                          padding: const EdgeInsets.only(right: 4),
-                                          child: Icon(
-                                            Icons.push_pin,
-                                            size: 12,
-                                            color: Colors.orange.shade700,
-                                          ),
-                                        ),
-                                      Expanded(
-                                        child: Text(
-                                          verb.label,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 11,
-                                            color: isSticky
-                                                ? Colors.orange.shade700
-                                                : Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                      if (isLastUsed)
-                                        Padding(
-                                          padding: const EdgeInsets.only(right: 4),
-                                          child: Text(
-                                            '<- Last Used',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              color: Colors.red,
+                                      GestureDetector(
+                                        onSecondaryTapDown: (details) {
+                                          _showVerbContextMenu(context,
+                                              details.globalPosition, verb);
+                                        },
+                                        child: InkWell(
+                                          onTap: () =>
+                                              _handleVerbTap(verb, verbKey),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isSticky
+                                                  ? Colors.orange.shade50
+                                                  : Colors.white,
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                  color: Colors.grey.shade200,
+                                                  width: 0.5,
+                                                ),
+                                                left: isSticky
+                                                    ? BorderSide(
+                                                        color: Colors
+                                                            .orange.shade400,
+                                                        width: 3,
+                                                      )
+                                                    : BorderSide.none,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const SizedBox(width: 12),
+                                                if (isSticky)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 4),
+                                                    child: Icon(
+                                                      Icons.push_pin,
+                                                      size: 12,
+                                                      color: Colors
+                                                          .orange.shade700,
+                                                    ),
+                                                  ),
+                                                Expanded(
+                                                  child: Text(
+                                                    verb.label,
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      fontSize: 11,
+                                                      color: isSticky
+                                                          ? Colors
+                                                              .orange.shade700
+                                                          : Colors
+                                                              .grey.shade700,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (isLastUsed)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            right: 4),
+                                                    child: Text(
+                                                      '<- Last Used',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: Colors.red,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                Icon(
+                                                  isExpanded
+                                                      ? Icons.expand_less
+                                                      : Icons.expand_more,
+                                                  size: 14,
+                                                  color: Colors.grey.shade400,
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),
-                                      Icon(
-                                        isExpanded
-                                            ? Icons.expand_less
-                                            : Icons.expand_more,
-                                        size: 14,
-                                        color: Colors.grey.shade400,
                                       ),
+                                      // Show action buttons when expanded OR when sticky verb is active
+                                      // Check both regular selected players and sticky players
+                                      if ((isExpanded || isSticky) &&
+                                          (_selectedHomePlayers.isNotEmpty ||
+                                              _selectedAwayPlayers.isNotEmpty ||
+                                              _stickyHomePlayers.isNotEmpty ||
+                                              _stickyAwayPlayers.isNotEmpty))
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade50,
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.grey.shade200,
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const SizedBox(
+                                                  width:
+                                                      24), // Indent to match verb text
+                                              Expanded(
+                                                child: _buildActionButtonsRow(
+                                                    collapseOnAction: true),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                     ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Show action buttons when expanded OR when sticky verb is active
-                            if ((isExpanded || isSticky) &&
-                                (_selectedHomePlayers.isNotEmpty ||
-                                    _selectedAwayPlayers.isNotEmpty))
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: Colors.grey.shade200,
-                                      width: 0.5,
+                                  );
+                                }),
+                                // Add Verb button
+                                InkWell(
+                                  onTap: () => _showAddVerbDialog(categoryName),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
                                     ),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const SizedBox(
-                                        width: 24), // Indent to match verb text
-                                    Expanded(
-                                      child: _buildActionButtonsRow(
-                                          collapseOnAction: true),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                          width: 0.5,
+                                        ),
+                                      ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        );
-                      }),
-                        // Add Verb button
-                        InkWell(
-                          onTap: () => _showAddVerbDialog(categoryName),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: Colors.grey.shade200,
-                                  width: 0.5,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  size: 14,
-                                  color: Colors.blue.shade600,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Add New Verb',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.blue.shade600,
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.add,
+                                          size: 14,
+                                          color: Colors.blue.shade600,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Add New Verb',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.blue.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                      ],
-                            ),
-                          ),
                         );
                       }).toList(),
-                Padding(
-                  key: const ValueKey('bottom_padding'),
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 8),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Custom Verb',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                      Padding(
+                        key: const ValueKey('bottom_padding'),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: Colors.grey.shade300,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Custom Verb',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            _buildGlobalCustomVerbInput(),
+                            const SizedBox(height: 8),
+                            const SizedBox(height: 8),
+                            Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: Colors.grey.shade300,
+                            ),
+                            const SizedBox(height: 8),
+                            // Upload progress monitor
+                            _buildUploadMonitor(),
+                            // Show action buttons when custom verb has text
+                            // Check both regular selected players and sticky players
+                            if (_showCustomVerbButtons &&
+                                (_selectedHomePlayers.isNotEmpty ||
+                                    _selectedAwayPlayers.isNotEmpty ||
+                                    _stickyHomePlayers.isNotEmpty ||
+                                    _stickyAwayPlayers.isNotEmpty)) ...[
+                              const SizedBox(height: 8),
+                              _buildActionButtonsRow(),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      _buildGlobalCustomVerbInput(),
-                      const SizedBox(height: 8),
-                      const SizedBox(height: 8),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 8),
-                      // Upload progress monitor
-                      _buildUploadMonitor(),
-                      // Show action buttons when custom verb has text
-                      if (_showCustomVerbButtons &&
-                          (_selectedHomePlayers.isNotEmpty ||
-                              _selectedAwayPlayers.isNotEmpty)) ...[
-                        const SizedBox(height: 8),
-                        _buildActionButtonsRow(),
-                      ],
                     ],
                   ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -1420,8 +1687,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           Row(
             children: [
               Icon(
-                statusText == 'This picture has been uploaded.' 
-                    ? Icons.check_circle 
+                statusText == 'This picture has been uploaded.'
+                    ? Icons.check_circle
                     : statusText == 'This picture has not been uploaded'
                         ? Icons.cloud_upload_outlined
                         : Icons.cloud_upload,
@@ -1473,9 +1740,18 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     // Check if Cmd/Ctrl key is pressed
     final isMetaPressed = RawKeyboard.instance.keysPressed
             .contains(LogicalKeyboardKey.metaLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
-        RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.controlRight);
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.metaRight) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        RawKeyboard.instance.keysPressed
+            .contains(LogicalKeyboardKey.controlRight);
+
+    // Check if any players are selected (including sticky players)
+    final hasAnyPlayers = _selectedHomePlayers.isNotEmpty ||
+        _selectedAwayPlayers.isNotEmpty ||
+        _stickyHomePlayers.isNotEmpty ||
+        _stickyAwayPlayers.isNotEmpty;
 
     setState(() {
       if (isMetaPressed) {
@@ -1486,9 +1762,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         } else {
           // Set as sticky verb
           _stickyVerb = verb;
-          // Also generate caption if players are selected
-          if (_selectedHomePlayers.isNotEmpty ||
-              _selectedAwayPlayers.isNotEmpty) {
+          // Also generate caption if players are selected (including sticky players)
+          if (hasAnyPlayers) {
             _generateCaption(verb);
           }
         }
@@ -1499,9 +1774,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         // Clear custom verb buttons when selecting a category verb
         _showCustomVerbButtons = false;
 
-        // If players are already selected, generate caption immediately
-        if (_selectedHomePlayers.isNotEmpty ||
-            _selectedAwayPlayers.isNotEmpty) {
+        // If players are already selected (including sticky players), generate caption immediately
+        if (hasAnyPlayers) {
           _generateCaption(verb);
           // Clear pending verb after generating caption
           _pendingVerb = null;
@@ -1538,12 +1812,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     }
   }
 
-  void _confirmCaptionGeneration(VerbOption verb, String period, {bool showSnackBar = true}) {
+  void _confirmCaptionGeneration(VerbOption verb, String period,
+      {bool showSnackBar = true}) {
     // Track the last used verb for highlighting after save
     setState(() {
       _lastUsedVerbLabel = verb.label;
     });
-    
+
     // If players are already selected, update verb via onCustomVerbChanged to preserve all selections
     final playerCount =
         _selectedHomePlayers.length + _selectedAwayPlayers.length;
@@ -1585,7 +1860,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     super.initState();
     _initializeData();
   }
-  
+
   Future<void> _initializeData() async {
     // Load custom verbs first, then favorites (which needs custom verbs for migration)
     await _loadCustomVerbs();
@@ -1594,7 +1869,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     await _resetFavorites();
     await _loadFavorites();
   }
-  
+
   Future<void> _loadCategoryOrder() async {
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
@@ -1603,31 +1878,32 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     // Ensure all categories from _verbCategories are in the order
     final allCategories = _verbCategories.keys.toList();
     final orderedCategories = <String>[];
-    
+
     // Add categories in saved order
     for (final cat in order) {
       if (allCategories.contains(cat) && !orderedCategories.contains(cat)) {
         orderedCategories.add(cat);
       }
     }
-    
+
     // Add any missing categories at the end
     for (final cat in allCategories) {
       if (!orderedCategories.contains(cat)) {
         orderedCategories.add(cat);
       }
     }
-    
+
     setState(() {
       _categoryOrder = orderedCategories;
     });
   }
-  
+
   Future<void> _saveCategoryOrder() async {
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
     }
-    await _preferencesService!.saveCategoryOrder(_categoryOrder, sport: 'hockey');
+    await _preferencesService!
+        .saveCategoryOrder(_categoryOrder, sport: 'hockey');
   }
 
   Future<void> _resetFavorites() async {
@@ -1642,21 +1918,22 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
   Future<void> _loadFavorites() async {
     _preferencesService = await PreferencesService.getInstance();
-    final favorites = await _preferencesService!.getFavoriteVerbs(sport: 'hockey');
-    
+    final favorites =
+        await _preferencesService!.getFavoriteVerbs(sport: 'hockey');
+
     // Migrate favorites from verbPhrase to label if needed
     final migratedFavorites = <String>{};
     final allVerbs = <VerbOption>[];
     for (final category in _verbCategories.values) {
       allVerbs.addAll(category);
     }
-    
+
     // Also include custom verbs and overridden verbs
     allVerbs.addAll(_customVerbs);
     for (final override in _verbOverrides.values) {
       allVerbs.add(VerbOption.fromJson(override));
     }
-    
+
     // Try to match each favorite by verbPhrase and convert to label
     for (final favorite in favorites) {
       // Check if it's already a label (by checking if any verb has this label)
@@ -1676,12 +1953,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         // If not found, skip it (verb might have been deleted)
       }
     }
-    
+
     // Save migrated favorites if they changed
     if (migratedFavorites != favorites) {
-      await _preferencesService!.saveFavoriteVerbs(migratedFavorites, sport: 'hockey');
+      await _preferencesService!
+          .saveFavoriteVerbs(migratedFavorites, sport: 'hockey');
     }
-    
+
     setState(() {
       _favoriteVerbs = migratedFavorites;
     });
@@ -1692,8 +1970,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
     }
-    
-    final verbKey = verb.label; // Use label as unique identifier (more stable than verbPhrase)
+
+    final verbKey = verb
+        .label; // Use label as unique identifier (more stable than verbPhrase)
     setState(() {
       if (_favoriteVerbs.contains(verbKey)) {
         _favoriteVerbs.remove(verbKey);
@@ -1701,28 +1980,32 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         _favoriteVerbs.add(verbKey);
       }
     });
-    
+
     // Save favorites
-    await _preferencesService!.saveFavoriteVerbs(_favoriteVerbs, sport: 'hockey');
+    await _preferencesService!
+        .saveFavoriteVerbs(_favoriteVerbs, sport: 'hockey');
   }
 
   List<VerbOption> _getFavoriteVerbs() {
     // Get all verbs from all categories, applying overrides like _getVerbsForCategory does
     final allVerbs = <VerbOption>[];
-    
+
     // Process each category to apply overrides
     for (final category in _verbCategories.keys) {
       final categoryVerbs = _getVerbsForCategory(category);
       allVerbs.addAll(categoryVerbs);
     }
-    
+
     // Filter to only favorite verbs (using label as identifier)
-    return allVerbs.where((verb) => _favoriteVerbs.contains(verb.label)).toList();
+    return allVerbs
+        .where((verb) => _favoriteVerbs.contains(verb.label))
+        .toList();
   }
 
-  void _showVerbContextMenu(BuildContext context, Offset position, VerbOption verb) {
+  void _showVerbContextMenu(
+      BuildContext context, Offset position, VerbOption verb) {
     final isFavorite = _favoriteVerbs.contains(verb.label);
-    
+
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -1812,38 +2095,42 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     VerbOption effectiveVerb = verb;
     if (!verb.isCustom) {
       // For built-in verbs, check if there's an override saved
-      final overrideData = _verbOverrides[verb.label] ?? _verbOverrides[verb.verbPhrase];
+      final overrideData =
+          _verbOverrides[verb.label] ?? _verbOverrides[verb.verbPhrase];
       if (overrideData != null) {
         effectiveVerb = VerbOption.fromJson(overrideData);
       }
     }
-    
+
     final labelController = TextEditingController(text: effectiveVerb.label);
-    final singularController = TextEditingController(text: effectiveVerb.verbPhrase);
-    final pluralController = TextEditingController(text: effectiveVerb.pluralPhrase ?? effectiveVerb.verbPhrase);
+    final singularController =
+        TextEditingController(text: effectiveVerb.verbPhrase);
+    final pluralController = TextEditingController(
+        text: effectiveVerb.pluralPhrase ?? effectiveVerb.verbPhrase);
     bool wantsOpponent = effectiveVerb.wantsOpponent;
     bool omitAgainst = effectiveVerb.omitAgainst;
     bool removePlayerFromExample = false;
-    String selectedCategory = targetCategory ?? verb.category ?? _verbCategories.keys.first;
-    
+    String selectedCategory =
+        targetCategory ?? verb.category ?? _verbCategories.keys.first;
+
     // Get random players for example captions
     final homePlayers = widget.homeRoster ?? _getMockHomePlayers();
     final awayPlayers = widget.awayRoster ?? _getMockAwayPlayers();
     final homeTeamName = widget.homeTeamName ?? 'Home Team';
     final awayTeamName = widget.awayTeamName ?? 'Away Team';
-    
+
     // Pick random players
     final random = DateTime.now().millisecondsSinceEpoch;
-    final homePlayer1 = homePlayers.isNotEmpty 
-        ? homePlayers[random % homePlayers.length] 
+    final homePlayer1 = homePlayers.isNotEmpty
+        ? homePlayers[random % homePlayers.length]
         : null;
-    final homePlayer2 = homePlayers.length > 1 
-        ? homePlayers[(random + 1) % homePlayers.length] 
+    final homePlayer2 = homePlayers.length > 1
+        ? homePlayers[(random + 1) % homePlayers.length]
         : null;
-    final awayPlayer = awayPlayers.isNotEmpty 
-        ? awayPlayers[random % awayPlayers.length] 
+    final awayPlayer = awayPlayers.isNotEmpty
+        ? awayPlayers[random % awayPlayers.length]
         : null;
-    
+
     // Helper to build example caption
     // Uses omitAgainst setting to conditionally include "against"
     // Uses removePlayerFromExample to conditionally remove opposing player
@@ -1852,7 +2139,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       final player2Name = homePlayer2?.fullName ?? 'Player Two';
       final opponentName = awayPlayer?.fullName ?? 'Opponent';
       final againstText = omitAgainst ? '' : ' against';
-      
+
       if (removePlayerFromExample) {
         // Remove opposing player, just show "against the [team]"
         if (playerCount == 1) {
@@ -1869,7 +2156,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         }
       }
     }
-    
+
     showDialog(
       context: context,
       builder: (context) {
@@ -1895,273 +2182,298 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                    // Title
-                    Text(
-                      verb.isCustom ? 'Edit Custom Verb' : 'Edit Verb',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                      // Title
+                      Text(
+                        verb.isCustom ? 'Edit Custom Verb' : 'Edit Verb',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Label field
-                    Text(
-                      'Display Name',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: labelController,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: 'e.g., Skates',
-                        border: OutlineInputBorder(
+                      const SizedBox(height: 16),
+
+                      // Label field
+                      Text(
+                        'Display Name',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: labelController,
+                        style: const TextStyle(fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Skates',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Singular phrase field
+                      Text(
+                        'Singular Phrase (1 player)',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: singularController,
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., skates, battles, shoots',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Example with 1 player
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Example (1 player):',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              buildExampleCaption(singularController.text, 1),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.blue.shade900),
+                              softWrap: true,
+                              overflow: TextOverflow.visible,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Plural phrase field
+                      Text(
+                        'Plural Phrase (2+ players)',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: pluralController,
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., skate, battle, shoot',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // Example with 2+ players
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Example (2+ players):',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              buildExampleCaption(pluralController.text, 2),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.green.shade900),
+                              softWrap: true,
+                              overflow: TextOverflow.visible,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Category dropdown
+                      Text(
+                        'Category',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Singular phrase field
-                    Text(
-                      'Singular Phrase (1 player)',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: singularController,
-                      style: const TextStyle(fontSize: 12),
-                      onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'e.g., skates, battles, shoots',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedCategory,
+                            isExpanded: true,
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade800),
+                            items: _verbCategories.keys.map((cat) {
+                              return DropdownMenuItem(
+                                value: cat,
+                                child: Text(cat),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() {
+                                  selectedCategory = value;
+                                });
+                              }
+                            },
+                          ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        isDense: true,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Example with 1 player
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Column(
+                      const SizedBox(height: 12),
+
+                      // Omit "against" checkbox
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Example (1 player):',
-                            style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            buildExampleCaption(singularController.text, 1),
-                            style: TextStyle(fontSize: 10, color: Colors.blue.shade900),
-                            softWrap: true,
-                            overflow: TextOverflow.visible,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Plural phrase field
-                    Text(
-                      'Plural Phrase (2+ players)',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: pluralController,
-                      style: const TextStyle(fontSize: 12),
-                      onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'e.g., skate, battle, shoot',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Example with 2+ players
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.green.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Example (2+ players):',
-                            style: TextStyle(fontSize: 9, color: Colors.green.shade700, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            buildExampleCaption(pluralController.text, 2),
-                            style: TextStyle(fontSize: 10, color: Colors.green.shade900),
-                            softWrap: true,
-                            overflow: TextOverflow.visible,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Category dropdown
-                    Text(
-                      'Category',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedCategory,
-                          isExpanded: true,
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-                          items: _verbCategories.keys.map((cat) {
-                            return DropdownMenuItem(
-                              value: cat,
-                              child: Text(cat),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setDialogState(() {
-                                selectedCategory = value;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Omit "against" checkbox
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: Checkbox(
-                            value: omitAgainst,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                omitAgainst = value ?? false;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Remove opposing player from example checkbox
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: Checkbox(
-                            value: removePlayerFromExample,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                removePlayerFromExample = value ?? false;
-                              });
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Remove opposing player from caption',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    // Buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (verb.isCustom)
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                              _deleteCustomVerb(verb);
-                            },
-                            child: Text(
-                              'Delete',
-                              style: TextStyle(fontSize: 11, color: Colors.red.shade600),
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: omitAgainst,
+                              onChanged: (value) {
+                                setDialogState(() {
+                                  omitAgainst = value ?? false;
+                                });
+                              },
                             ),
                           ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
+                              softWrap: true,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: () async {
-                            print('DEBUG: ========== SAVE BUTTON PRESSED ==========');
-                            // First save, then close dialog
-                            await _saveVerbEdit(
-                              verb,
-                              labelController.text,
-                              singularController.text,
-                              pluralController.text.isEmpty ? null : pluralController.text,
-                              wantsOpponent,
-                              omitAgainst,
-                              selectedCategory,
-                            );
-                            print('DEBUG: Save completed, closing dialog');
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0052CC),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Remove opposing player from example checkbox
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: removePlayerFromExample,
+                              onChanged: (value) {
+                                setDialogState(() {
+                                  removePlayerFromExample = value ?? false;
+                                });
+                              },
+                            ),
                           ),
-                          child: const Text(
-                            'Save',
-                            style: TextStyle(fontSize: 11, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Remove opposing player from caption',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
+                              softWrap: true,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (verb.isCustom)
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                _deleteCustomVerb(verb);
+                              },
+                              child: Text(
+                                'Delete',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.red.shade600),
+                              ),
+                            ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              print(
+                                  'DEBUG: ========== SAVE BUTTON PRESSED ==========');
+                              // First save, then close dialog
+                              await _saveVerbEdit(
+                                verb,
+                                labelController.text,
+                                singularController.text,
+                                pluralController.text.isEmpty
+                                    ? null
+                                    : pluralController.text,
+                                wantsOpponent,
+                                omitAgainst,
+                                selectedCategory,
+                              );
+                              print('DEBUG: Save completed, closing dialog');
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0052CC),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                            ),
+                            child: const Text(
+                              'Save',
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -2191,12 +2503,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     print('DEBUG: newPlural = "$newPlural"');
     print('DEBUG: omitAgainst = $omitAgainst');
     print('DEBUG: category = "$category"');
-    
+
     if (newLabel.isEmpty || newSingular.isEmpty) {
       print('DEBUG: RETURNING EARLY - newLabel or newSingular is empty!');
       return;
     }
-    
+
     final newVerb = VerbOption(
       newLabel,
       newSingular,
@@ -2206,14 +2518,14 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       isCustom: originalVerb.isCustom,
       category: category,
     );
-    
+
     print('DEBUG: Created newVerb with verbPhrase = "${newVerb.verbPhrase}"');
 
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
       print('DEBUG: Initialized _preferencesService');
     }
-    
+
     // Check if label changed - if so, update favorites
     final labelChanged = originalVerb.label != newLabel;
     String? oldLabel;
@@ -2221,16 +2533,19 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       oldLabel = originalVerb.label;
       print('DEBUG: Label changed from "$oldLabel" to "$newLabel"');
     }
-    
+
     // Use the original label as the key for built-in verbs (more reliable than verbPhrase)
-    final overrideKey = originalVerb.isCustom ? originalVerb.verbPhrase : originalVerb.label;
+    final overrideKey =
+        originalVerb.isCustom ? originalVerb.verbPhrase : originalVerb.label;
     print('DEBUG: overrideKey = "$overrideKey"');
-    
+
     if (originalVerb.isCustom) {
       // Update custom verb
       print('DEBUG: Updating custom verb...');
-      await _preferencesService!.removeCustomVerb(originalVerb.verbPhrase, sport: 'hockey');
-      await _preferencesService!.addCustomVerb(newVerb.toJson(), sport: 'hockey');
+      await _preferencesService!
+          .removeCustomVerb(originalVerb.verbPhrase, sport: 'hockey');
+      await _preferencesService!
+          .addCustomVerb(newVerb.toJson(), sport: 'hockey');
       print('DEBUG: Custom verb updated');
     } else {
       // Save as override for built-in verb
@@ -2242,25 +2557,28 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         newVerb.toJson(),
         sport: 'hockey',
       );
-      
+
       // Verify it was saved
-      final savedOverrides = await _preferencesService!.getVerbOverrides(sport: 'hockey');
+      final savedOverrides =
+          await _preferencesService!.getVerbOverrides(sport: 'hockey');
       print('DEBUG: Verification - all saved overrides: $savedOverrides');
-      print('DEBUG: Verification - override for "$overrideKey": ${savedOverrides[overrideKey]}');
+      print(
+          'DEBUG: Verification - override for "$overrideKey": ${savedOverrides[overrideKey]}');
     }
-    
+
     // Update favorites if label changed
     if (labelChanged && oldLabel != null) {
       if (_favoriteVerbs.contains(oldLabel)) {
         _favoriteVerbs.remove(oldLabel);
         _favoriteVerbs.add(newLabel);
-        await _preferencesService!.saveFavoriteVerbs(_favoriteVerbs, sport: 'hockey');
+        await _preferencesService!
+            .saveFavoriteVerbs(_favoriteVerbs, sport: 'hockey');
       }
     }
-    
+
     await _loadCustomVerbs();
     setState(() {});
-    
+
     // If players are selected and this verb is currently being used, trigger caption update
     // Check if we have players selected and if the verb label matches what might be in use
     if ((_selectedHomePlayers.isNotEmpty || _selectedAwayPlayers.isNotEmpty) &&
@@ -2270,12 +2588,14 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     }
   }
 
-  Future<void> _showDeleteVerbConfirmation(BuildContext context, VerbOption verb) async {
+  Future<void> _showDeleteVerbConfirmation(
+      BuildContext context, VerbOption verb) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Verb'),
-        content: Text('Are you sure you want to delete "${verb.label}"? This action cannot be undone.'),
+        content: Text(
+            'Are you sure you want to delete "${verb.label}"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -2291,7 +2611,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       await _deleteCustomVerb(verb);
     }
@@ -2301,21 +2621,23 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
     }
-    
+
     if (verb.isCustom) {
       // Delete custom verb - try both verbPhrase and label to find it
-      final customVerbs = await _preferencesService!.getCustomVerbs(sport: 'hockey');
+      final customVerbs =
+          await _preferencesService!.getCustomVerbs(sport: 'hockey');
       Map<String, dynamic>? verbToDelete;
       try {
         verbToDelete = customVerbs.firstWhere(
-          (v) => (v['verbPhrase'] as String?) == verb.verbPhrase || 
-                 (v['label'] as String?) == verb.label,
+          (v) =>
+              (v['verbPhrase'] as String?) == verb.verbPhrase ||
+              (v['label'] as String?) == verb.label,
         );
       } catch (e) {
         // Verb not found, will try alternative deletion method
         verbToDelete = null;
       }
-      
+
       if (verbToDelete != null && verbToDelete.isNotEmpty) {
         await _preferencesService!.removeCustomVerb(
           verbToDelete['verbPhrase'] as String,
@@ -2341,12 +2663,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           // Continue searching
         }
       }
-      
+
       // If we found the original, use it; otherwise try verbPhrase, then label
       final deleteKey = originalVerbPhrase ?? verb.verbPhrase ?? verb.label;
       await _preferencesService!.addDeletedVerb(deleteKey, sport: 'hockey');
     }
-    
+
     await _loadCustomVerbs();
     setState(() {});
   }
@@ -2356,19 +2678,23 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     if (_preferencesService == null) {
       _preferencesService = await PreferencesService.getInstance();
     }
-    
+
     // Load custom verbs from preferences
-    final customVerbsJson = await _preferencesService!.getCustomVerbs(sport: 'hockey');
-    _customVerbs = customVerbsJson.map((json) => VerbOption.fromJson(json)).toList();
+    final customVerbsJson =
+        await _preferencesService!.getCustomVerbs(sport: 'hockey');
+    _customVerbs =
+        customVerbsJson.map((json) => VerbOption.fromJson(json)).toList();
     print('DEBUG: Loaded ${_customVerbs.length} custom verbs');
-    
+
     // Load verb overrides
-    _verbOverrides = await _preferencesService!.getVerbOverrides(sport: 'hockey');
-    print('DEBUG: Loaded ${_verbOverrides.length} verb overrides: ${_verbOverrides.keys.toList()}');
+    _verbOverrides =
+        await _preferencesService!.getVerbOverrides(sport: 'hockey');
+    print(
+        'DEBUG: Loaded ${_verbOverrides.length} verb overrides: ${_verbOverrides.keys.toList()}');
     for (final entry in _verbOverrides.entries) {
       print('DEBUG:   Override "${entry.key}": ${entry.value}');
     }
-    
+
     // Load deleted verbs
     _deletedVerbs = await _preferencesService!.getDeletedVerbs(sport: 'hockey');
     print('DEBUG: Loaded ${_deletedVerbs.length} deleted verbs');
@@ -2387,41 +2713,45 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   // Get all verbs for a category, including custom verbs and applying overrides
   List<VerbOption> _getVerbsForCategory(String category) {
     final builtInVerbs = _verbCategories[category] ?? [];
-    
+
     // Apply overrides to built-in verbs and filter out deleted verbs
     // Check deletion by original verbPhrase, label, and overridden verbPhrase/label
     final processedBuiltIn = builtInVerbs
-        .where((verb) => !_deletedVerbs.contains(verb.verbPhrase) && 
-                        !_deletedVerbs.contains(verb.label))
+        .where((verb) =>
+            !_deletedVerbs.contains(verb.verbPhrase) &&
+            !_deletedVerbs.contains(verb.label))
         .map((verb) {
-      // Check for override by BOTH verbPhrase AND label (to handle both key types)
-      Map<String, dynamic>? overrideData;
-      if (_verbOverrides.containsKey(verb.verbPhrase)) {
-        overrideData = _verbOverrides[verb.verbPhrase];
-      } else if (_verbOverrides.containsKey(verb.label)) {
-        overrideData = _verbOverrides[verb.label];
-      }
-      
-      if (overrideData != null) {
-        final overriddenVerb = VerbOption.fromJson(overrideData);
-        // Also check if the overridden verb's label or new verbPhrase is deleted
-        if (_deletedVerbs.contains(overriddenVerb.verbPhrase) || 
-            _deletedVerbs.contains(overriddenVerb.label)) {
-          return null; // Skip this verb
-        }
-        return overriddenVerb;
-      }
-      return verb;
-    }).whereType<VerbOption>().toList();
-    
+          // Check for override by BOTH verbPhrase AND label (to handle both key types)
+          Map<String, dynamic>? overrideData;
+          if (_verbOverrides.containsKey(verb.verbPhrase)) {
+            overrideData = _verbOverrides[verb.verbPhrase];
+          } else if (_verbOverrides.containsKey(verb.label)) {
+            overrideData = _verbOverrides[verb.label];
+          }
+
+          if (overrideData != null) {
+            final overriddenVerb = VerbOption.fromJson(overrideData);
+            // Also check if the overridden verb's label or new verbPhrase is deleted
+            if (_deletedVerbs.contains(overriddenVerb.verbPhrase) ||
+                _deletedVerbs.contains(overriddenVerb.label)) {
+              return null; // Skip this verb
+            }
+            return overriddenVerb;
+          }
+          return verb;
+        })
+        .whereType<VerbOption>()
+        .toList();
+
     // Add custom verbs for this category (also filter out deleted custom verbs)
     // Check by both verbPhrase and label
     final customForCategory = _customVerbs
-        .where((v) => v.category == category && 
-                      !_deletedVerbs.contains(v.verbPhrase) &&
-                      !_deletedVerbs.contains(v.label))
+        .where((v) =>
+            v.category == category &&
+            !_deletedVerbs.contains(v.verbPhrase) &&
+            !_deletedVerbs.contains(v.label))
         .toList();
-    
+
     return [...processedBuiltIn, ...customForCategory];
   }
 
@@ -2487,7 +2817,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         // Team header
         Container(
           height: _periodSelectorHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
             border: Border(
@@ -2498,31 +2828,67 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
-                children: [
-                  Icon(
-                    isHome ? Icons.home : Icons.flight,
-                    size: 14,
-                    color: Colors.grey.shade800,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      teamName,
-                      style: TextStyle(
-                        color: Colors.grey.shade800,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  // Switch teams button on the right
-                  _buildSwitchTeamsButton(),
-                ],
+                mainAxisAlignment: isLeftSide
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
+                children: isLeftSide
+                    ? [
+                        _buildSwitchTeamsButton(),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isHome ? Icons.home : Icons.flight,
+                                size: 14,
+                                color: Colors.grey.shade800,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  teamName,
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade800,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ]
+                    : [
+                        Icon(
+                          isHome ? Icons.home : Icons.flight,
+                          size: 14,
+                          color: Colors.grey.shade800,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            teamName,
+                            textAlign: TextAlign.left,
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        // Switch teams button on the right
+                        _buildSwitchTeamsButton(),
+                      ],
               ),
               const SizedBox(height: 4),
               // View style toggle, sort direction, and sort dropdown under team name
               Row(
-                mainAxisAlignment: MainAxisAlignment.start,
+                mainAxisAlignment: isLeftSide
+                    ? MainAxisAlignment.end
+                    : MainAxisAlignment.start,
                 children: [
                   // View style toggle (first) - shows "Grid" or "List" text with icon
                   GestureDetector(
@@ -2604,9 +2970,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         value: _sortBy,
                         isDense: true,
                         underline: const SizedBox(),
-                        icon: Icon(Icons.arrow_drop_down, size: 13, color: Colors.grey.shade700),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
-                        items: ['number', 'lastName', 'firstName'].map((String value) {
+                        icon: Icon(Icons.arrow_drop_down,
+                            size: 13, color: Colors.grey.shade700),
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade700),
+                        items: ['number', 'lastName', 'firstName']
+                            .map((String value) {
                           String label;
                           switch (value) {
                             case 'number':
@@ -2643,71 +3012,78 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         ),
         const SizedBox(height: 8),
         // Search bar and options row
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Search bar (half width)
-              Expanded(
-                flex: 1,
-                child: SizedBox(
-                  height: 28,
-                  child: TextField(
-                    controller:
-                        isHome ? _homeSearchController : _awaySearchController,
-                    onChanged: (value) {
-                      setState(() {
-                        if (isHome) {
-                          _homeSearchText = value.toLowerCase();
-                        } else {
-                          _awaySearchText = value.toLowerCase();
-                        }
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Search players...',
-                      hintStyle: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                      prefixIcon:
-                          Icon(Icons.search, size: 14, color: Colors.grey.shade600),
-                      suffixIcon:
-                          (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(Icons.clear, size: 14),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () {
-                                    setState(() {
-                                      if (isHome) {
-                                        _homeSearchController.clear();
-                                        _homeSearchText = '';
-                                      } else {
-                                        _awaySearchController.clear();
-                                        _awaySearchText = '';
-                                      }
-                                    });
-                                  },
-                                )
-                              : null,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: BorderSide(color: Colors.blue.shade400),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
+              SizedBox(
+                height: 28,
+                child: TextField(
+                  controller:
+                      isHome ? _homeSearchController : _awaySearchController,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (value) {
+                    setState(() {
+                      if (isHome) {
+                        _homeSearchText = value.toLowerCase();
+                      } else {
+                        _awaySearchText = value.toLowerCase();
+                      }
+                    });
+                  },
+                  onSubmitted: (_) => _handleSearchSubmit(isHome),
+                  onEditingComplete: () => _handleSearchSubmit(isHome),
+                  decoration: InputDecoration(
+                    hintText: 'Type name(s) or number(s) followed by Enter',
+                    hintStyle:
+                        TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                    prefixIcon: Icon(Icons.dialpad_outlined,
+                        size: 14, color: Colors.grey.shade600),
+                    suffixIcon:
+                        (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.clear, size: 14),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () {
+                                  setState(() {
+                                    if (isHome) {
+                                      _homeSearchController.clear();
+                                      _homeSearchText = '';
+                                    } else {
+                                      _awaySearchController.clear();
+                                      _awaySearchText = '';
+                                    }
+                                  });
+                                },
+                              )
+                            : null,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
-                    style: const TextStyle(fontSize: 10),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      borderSide: BorderSide(color: Colors.blue.shade400),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
                   ),
+                  style: const TextStyle(fontSize: 10),
                 ),
               ),
             ],
@@ -2720,38 +3096,21 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               // Match period button dimensions (44x38)
               const double buttonWidth = 44;
               const double buttonHeight = 38;
-              const double spacing = 8;
+              const double spacing = 4;
               const double padding = 10;
 
               // Note: crossAxisCount no longer needed - using Wrap for automatic layout
 
-              // Filter players based on search text
+              // Search text for highlighting (do not filter the list)
               final searchText = isHome ? _homeSearchText : _awaySearchText;
-              List<Player> filteredPlayers = searchText.isEmpty
-                  ? List.from(players)
-                  : players.where((player) {
-                      final name = player.fullName?.toLowerCase() ?? '';
-                      final jersey = player.jerseyNumber?.toLowerCase() ?? '';
-                      final displayName =
-                          player.displayName?.toLowerCase() ?? '';
-                      
-                      // Check if search text is numeric - if so, do exact match on jersey number
-                      final isNumeric = int.tryParse(searchText) != null;
-                      if (isNumeric) {
-                        return jersey == searchText;
-                      }
-                      
-                      // For non-numeric searches, use contains for names
-                      return name.contains(searchText) ||
-                          displayName.contains(searchText);
-                    }).toList();
+              final displayPlayers = List<Player>.from(players);
 
               // Apply sorting (shared for both teams)
               final sortBy = _sortBy;
               final sortAscending = _sortAscending;
               final viewStyle = _viewStyle;
-              
-              filteredPlayers.sort((a, b) {
+
+              displayPlayers.sort((a, b) {
                 int comparison = 0;
                 switch (sortBy) {
                   case 'number':
@@ -2776,15 +3135,20 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               // Return grid or list view based on view style
               if (viewStyle == 'list') {
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: padding, vertical: 4),
-                  itemCount: filteredPlayers.length,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: padding, vertical: 4),
+                  itemCount: displayPlayers.length,
                   itemBuilder: (context, index) {
-                    final player = filteredPlayers[index];
-                    final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
-                    final selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+                    final player = displayPlayers[index];
+                    final stickySet =
+                        isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+                    final selectedSet =
+                        isHome ? _selectedHomePlayers : _selectedAwayPlayers;
                     final isSticky = stickySet.contains(player);
                     final isSelected = selectedSet.contains(player) || isSticky;
                     final isFirstPlayer = player == _firstPlayerSelected;
+                    final isSearchMatch =
+                        _isPlayerSearchMatch(player, searchText);
 
                     // Format player name based on sort option
                     String displayName;
@@ -2792,7 +3156,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     final fullName = player.fullName ?? '';
                     final firstName = _getFirstName(fullName);
                     final lastName = _getLastName(fullName);
-                    
+
                     if (sortBy == 'lastName') {
                       displayName = '$lastName, $firstName #$jerseyNumber';
                     } else if (sortBy == 'firstName') {
@@ -2802,57 +3166,75 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       displayName = '#$jerseyNumber $fullName';
                     }
 
+                    final shouldDim = searchText.isNotEmpty &&
+                        !isSearchMatch &&
+                        !isSelected &&
+                        !isSticky;
                     return InkWell(
                       onTap: () => _selectPlayer(player, isHome),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        child: Row(
-                          children: [
-                            // First player indicator on left for left side
-                            if (isFirstPlayer && isLeftSide)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 8,
-                                  color: Colors.blue.shade700,
+                      child: Opacity(
+                        opacity: shouldDim ? 0.5 : 1,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: isSearchMatch && !isSelected && !isSticky
+                              ? BoxDecoration(
+                                  color: Colors.blueGrey.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                )
+                              : null,
+                          child: Row(
+                            children: [
+                              // First player indicator on left for left side
+                              if (isFirstPlayer && isLeftSide)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 8,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              // Sticky player pin icon
+                              if (isSticky)
+                                Padding(
+                                  padding: EdgeInsets.only(right: 4),
+                                  child: Icon(
+                                    Icons.push_pin,
+                                    size: 10,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                ),
+                              Expanded(
+                                child: Text(
+                                  displayName,
+                                  textAlign: isLeftSide
+                                      ? TextAlign.right
+                                      : TextAlign.left,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isSticky
+                                        ? Colors.orange.shade700
+                                        : (isSelected
+                                            ? Colors.grey.shade700
+                                            : (isSearchMatch
+                                                ? Colors.blueGrey.shade700
+                                                : Colors.grey.shade600)),
+                                  ),
                                 ),
                               ),
-                            // Sticky player pin icon
-                            if (isSticky)
-                              Padding(
-                                padding: EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.push_pin,
-                                  size: 10,
-                                  color: Colors.orange.shade700,
+                              // First player indicator on right for right side
+                              if (isFirstPlayer && !isLeftSide)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Icon(
+                                    Icons.circle,
+                                    size: 8,
+                                    color: Colors.grey.shade700,
+                                  ),
                                 ),
-                              ),
-                            Expanded(
-                              child: Text(
-                                displayName,
-                                textAlign: isLeftSide ? TextAlign.right : TextAlign.left,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: isSticky
-                                      ? Colors.orange.shade700
-                                      : (isSelected
-                                          ? Colors.blue.shade600
-                                          : Colors.grey.shade600),
-                                ),
-                              ),
-                            ),
-                            // First player indicator on right for right side
-                            if (isFirstPlayer && !isLeftSide)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 8,
-                                  color: Colors.blue.shade700,
-                                ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -2862,12 +3244,14 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
               // Group players by jersey number ranges (0-9, 10-19, 20-29, etc.)
               final Map<int, List<Player>> groupedPlayers = {};
-              for (final player in filteredPlayers) {
-                final jerseyNum = int.tryParse(player.jerseyNumber ?? '999') ?? 999;
-                final range = (jerseyNum ~/ 10) * 10; // Group by tens (0, 10, 20, 30, etc.)
+              for (final player in displayPlayers) {
+                final jerseyNum =
+                    int.tryParse(player.jerseyNumber ?? '999') ?? 999;
+                final range = (jerseyNum ~/ 10) *
+                    10; // Group by tens (0, 10, 20, 30, etc.)
                 groupedPlayers.putIfAbsent(range, () => []).add(player);
               }
-              
+
               // Sort ranges and players within each range
               final sortedRanges = groupedPlayers.keys.toList()..sort();
               for (final range in sortedRanges) {
@@ -2884,117 +3268,149 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                 itemBuilder: (context, rangeIndex) {
                   final range = sortedRanges[rangeIndex];
                   final playersInRange = groupedPlayers[range]!;
-                  
+
                   return Column(
-                    crossAxisAlignment: isLeftSide ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    crossAxisAlignment: isLeftSide
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                     children: [
                       // Players in this range
                       Wrap(
-                        alignment: isLeftSide ? WrapAlignment.end : WrapAlignment.start,
+                        alignment: isLeftSide
+                            ? WrapAlignment.end
+                            : WrapAlignment.start,
                         spacing: spacing,
                         runSpacing: spacing,
                         children: playersInRange.map((player) {
-                          final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
-                          final selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+                          final stickySet =
+                              isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+                          final selectedSet = isHome
+                              ? _selectedHomePlayers
+                              : _selectedAwayPlayers;
                           final isSticky = stickySet.contains(player);
-                          final isSelected = selectedSet.contains(player) || isSticky;
+                          final isSelected =
+                              selectedSet.contains(player) || isSticky;
                           final isFirstPlayer = player == _firstPlayerSelected;
+                          final isSearchMatch =
+                              _isPlayerSearchMatch(player, searchText);
+                          final shouldDim = searchText.isNotEmpty &&
+                              !isSearchMatch &&
+                              !isSelected &&
+                              !isSticky;
 
                           return SizedBox(
                             width: buttonWidth,
                             height: buttonHeight,
                             child: InkWell(
                               onTap: () => _selectPlayer(player, isHome),
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: isSticky
-                                            ? Colors.orange.shade50
-                                            : (isSelected
-                                                ? Colors.blue.shade50
-                                                : Colors.white),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
+                              child: Opacity(
+                                opacity: shouldDim ? 0.5 : 1,
+                                child: Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
                                           color: isSticky
-                                              ? Colors.orange.shade400
+                                              ? Colors.orange.shade50
                                               : (isSelected
-                                                  ? Colors.blue.shade400
-                                                  : Colors.grey.shade300),
-                                          width: (isSelected || isSticky) ? 2 : 1,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.05),
-                                            blurRadius: 2,
-                                            offset: const Offset(0, 1),
+                                                  ? (isHome
+                                                      ? Colors.grey.shade100
+                                                      : Colors.white)
+                                                  : (isSearchMatch
+                                                      ? Colors.blueGrey.shade50
+                                                      : Colors.white)),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: isSticky
+                                                ? Colors.orange.shade400
+                                                : (isSelected
+                                                    ? Colors.grey.shade400
+                                                    : (isSearchMatch
+                                                        ? Colors
+                                                            .blueGrey.shade200
+                                                        : Colors
+                                                            .grey.shade300)),
+                                            width: (isSelected || isSticky)
+                                                ? 2
+                                                : 1,
                                           ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            player.jerseyNumber ?? '0',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: isSticky
-                                                  ? Colors.orange.shade700
-                                                  : (isSelected
-                                                      ? Colors.blue.shade700
-                                                      : Colors.grey.shade700),
-                                              height: 1.0,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black
+                                                  .withOpacity(0.05),
+                                              blurRadius: 2,
+                                              offset: const Offset(0, 1),
                                             ),
-                                          ),
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.symmetric(horizontal: 2),
-                                            child: Text(
-                                              _getLastName(player.fullName),
+                                          ],
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              player.jerseyNumber ?? '0',
                                               textAlign: TextAlign.center,
                                               style: TextStyle(
-                                                fontSize: 8,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
                                                 color: isSticky
-                                                    ? Colors.orange.shade600
+                                                    ? Colors.orange.shade700
                                                     : (isSelected
-                                                        ? Colors.blue.shade600
-                                                        : Colors.grey.shade600),
+                                                        ? Colors.grey.shade700
+                                                        : Colors.grey.shade700),
                                                 height: 1.0,
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                          ),
-                                        ],
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 2),
+                                              child: Text(
+                                                _getLastName(player.fullName),
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  fontSize: 8,
+                                                  color: isSticky
+                                                      ? Colors.orange.shade600
+                                                      : (isSelected
+                                                          ? Colors.grey.shade700
+                                                          : Colors
+                                                              .grey.shade600),
+                                                  height: 1.0,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  // Blue circle for first player
-                                  if (isFirstPlayer)
-                                    Positioned(
-                                      top: 2,
-                                      right: 2,
-                                      child: Icon(
-                                        Icons.circle,
-                                        size: 8,
-                                        color: Colors.blue.shade700,
+                                    // Blue circle for first player
+                                    if (isFirstPlayer)
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: Icon(
+                                          Icons.circle,
+                                          size: 8,
+                                          color: Colors.grey.shade700,
+                                        ),
                                       ),
-                                    ),
-                                  // Pin icon for sticky player
-                                  if (isSticky)
-                                    Positioned(
-                                      top: 2,
-                                      left: 2,
-                                      child: Icon(
-                                        Icons.push_pin,
-                                        size: 10,
-                                        color: Colors.orange.shade700,
+                                    // Pin icon for sticky player
+                                    if (isSticky)
+                                      Positioned(
+                                        top: 2,
+                                        left: 2,
+                                        child: Icon(
+                                          Icons.push_pin,
+                                          size: 10,
+                                          color: Colors.orange.shade700,
+                                        ),
                                       ),
-                                    ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -3130,7 +3546,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 class VerbOption {
   final String label;
   final String verbPhrase; // Used as singular phrase
-  final String? pluralPhrase; // Phrase for multiple players (null = same as singular)
+  final String?
+      pluralPhrase; // Phrase for multiple players (null = same as singular)
   final bool wantsOpponent;
   final bool omitAgainst; // If true, don't include "against" in caption
   final bool isCustom;
@@ -3201,4 +3618,3 @@ class VerbOption {
     );
   }
 }
-
