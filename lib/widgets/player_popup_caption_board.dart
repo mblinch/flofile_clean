@@ -392,59 +392,83 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         : (widget.awayRoster ?? _getMockAwayPlayers());
 
     bool hadAmbiguousName = false;
+    bool processedAny = false;
+    final nameSelections = <Player>[];
 
-    setState(() {
-      final selectedSet = isHome ? _selectedHomePlayers : _selectedAwayPlayers;
-      final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
-
-      for (final token in tokens) {
-        final isNumeric = int.tryParse(token) != null;
-        if (isNumeric) {
-          _handleNumberInputList(token, isHome);
-          continue;
-        }
-
-        final matches = roster
-            .where((player) => _isPlayerSearchMatch(player, token))
-            .toList();
-        if (matches.isEmpty) continue;
-        if (matches.length > 1) {
-          hadAmbiguousName = true;
-          continue;
-        }
-
-        final player = matches.first;
-        if (!selectedSet.contains(player) && !stickySet.contains(player)) {
-          selectedSet.add(player);
-        }
+    for (final token in tokens) {
+      final isNumeric = int.tryParse(token) != null;
+      if (isNumeric) {
+        _handleNumberInputList(token, isHome);
+        processedAny = true;
+        continue;
       }
 
-      final allSelected = {
-        ..._selectedHomePlayers,
-        ..._selectedAwayPlayers,
-        ..._stickyHomePlayers,
-        ..._stickyAwayPlayers,
-      };
-
-      if (allSelected.isEmpty) {
-        _firstPlayerSelected = null;
-        _firstTeamSelectedIsHome = null;
-      } else if (_firstPlayerSelected == null ||
-          !allSelected.contains(_firstPlayerSelected)) {
-        _firstPlayerSelected = allSelected.first;
-        _firstTeamSelectedIsHome =
-            _selectedHomePlayers.contains(_firstPlayerSelected) ||
-                _stickyHomePlayers.contains(_firstPlayerSelected);
+      final matches = roster
+          .where((player) => _isPlayerSearchMatch(player, token))
+          .toList();
+      if (matches.isEmpty) continue;
+      processedAny = true;
+      if (matches.length > 1) {
+        hadAmbiguousName = true;
+        continue;
       }
 
-      _syncEnteredNumbersFromSelection();
-      controller.clear();
-      if (isHome) {
-        _homeSearchText = '';
-      } else {
-        _awaySearchText = '';
-      }
-    });
+      nameSelections.add(matches.first);
+    }
+
+    if (nameSelections.isNotEmpty) {
+      setState(() {
+        final selectedSet =
+            isHome ? _selectedHomePlayers : _selectedAwayPlayers;
+        final stickySet = isHome ? _stickyHomePlayers : _stickyAwayPlayers;
+
+        for (final player in nameSelections) {
+          if (!selectedSet.contains(player) && !stickySet.contains(player)) {
+            selectedSet.add(player);
+          }
+        }
+
+        final allSelected = {
+          ..._selectedHomePlayers,
+          ..._selectedAwayPlayers,
+          ..._stickyHomePlayers,
+          ..._stickyAwayPlayers,
+        };
+
+        if (allSelected.isEmpty) {
+          _firstPlayerSelected = null;
+          _firstTeamSelectedIsHome = null;
+        } else if (_firstPlayerSelected == null ||
+            !allSelected.contains(_firstPlayerSelected)) {
+          _firstPlayerSelected = allSelected.first;
+          _firstTeamSelectedIsHome =
+              _selectedHomePlayers.contains(_firstPlayerSelected) ||
+                  _stickyHomePlayers.contains(_firstPlayerSelected);
+        }
+
+        _syncEnteredNumbersFromSelection();
+      });
+
+      final mergedHomePlayers = {..._selectedHomePlayers, ..._stickyHomePlayers};
+      final mergedAwayPlayers = {..._selectedAwayPlayers, ..._stickyAwayPlayers};
+      widget.onSelectionChanged?.call(
+        mergedHomePlayers,
+        mergedAwayPlayers,
+        _firstPlayerSelected,
+        _firstTeamSelectedIsHome,
+      );
+    }
+
+    if (processedAny) {
+      setState(() {
+        controller.clear();
+        if (isHome) {
+          _homeSearchText = '';
+        } else {
+          _awaySearchText = '';
+        }
+      });
+    }
 
     if (hadAmbiguousName) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -454,15 +478,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         ),
       );
     }
-
-    final mergedHomePlayers = {..._selectedHomePlayers, ..._stickyHomePlayers};
-    final mergedAwayPlayers = {..._selectedAwayPlayers, ..._stickyAwayPlayers};
-    widget.onSelectionChanged?.call(
-      mergedHomePlayers,
-      mergedAwayPlayers,
-      _firstPlayerSelected,
-      _firstTeamSelectedIsHome,
-    );
   }
 
   bool _matchesJerseyNumber(Player player, String number) {
@@ -1649,6 +1664,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       showProgress = false;
     }
 
+    if (statusText == 'This picture has been uploaded.') {
+      return const SizedBox.shrink();
+    }
+
     // Determine colors based on state
     Color containerColor;
     Color borderColor;
@@ -1769,6 +1788,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         }
       } else {
         // Normal click: use existing behavior
+        // Clear any pinned verb when selecting a new verb normally
+        if (_stickyVerb != null) {
+          _stickyVerb = null;
+        }
         // Store verb as pending
         _pendingVerb = verb;
         // Clear custom verb buttons when selecting a category verb

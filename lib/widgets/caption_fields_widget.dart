@@ -15655,6 +15655,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  /// Public entry for Cmd+Shift+V (paste previous caption).
+  void pasteLastCaption() {
+    _pasteLastCaption();
+  }
+
   void _resetCaption() {
     setState(() {
       captionController.clear();

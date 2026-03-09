@@ -24,6 +24,11 @@ import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
 
+/// Intent for Cmd+Shift+V — paste previous caption.
+class _PastePreviousCaptionIntent extends Intent {
+  const _PastePreviousCaptionIntent();
+}
+
 class CaptionBuilderScreen extends StatefulWidget {
   const CaptionBuilderScreen({super.key});
 
@@ -957,10 +962,23 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  bool _handlePastePreviousKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyV) return false;
+    final k = HardwareKeyboard.instance;
+    if (!(k.isMetaPressed || k.isControlPressed) || !k.isShiftPressed) {
+      return false;
+    }
+    final state = _captionFieldsKey2.currentState;
+    (state as dynamic)?.pasteLastCaption();
+    return true; // consume event to prevent system beep
+  }
+
   @override
   void initState() {
     super.initState();
     _initializeServices();
+    HardwareKeyboard.instance.addHandler(_handlePastePreviousKeyEvent);
   }
 
   Future<void> _initializeServices() async {
@@ -2844,6 +2862,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePastePreviousKeyEvent);
     _thumbnailScrollController.dispose();
     _stopFolderWatcher();
     super.dispose();
@@ -3081,9 +3100,27 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           await preferencesService.saveCurrentLayout(newLayout);
         },
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
-        child: _buildLayout(),
+      body: Shortcuts(
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
+              _PastePreviousCaptionIntent(),
+        },
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            _PastePreviousCaptionIntent:
+                CallbackAction<_PastePreviousCaptionIntent>(
+              onInvoke: (_) {
+                final state = _captionFieldsKey2.currentState;
+                (state as dynamic)?.pasteLastCaption();
+                return null;
+              },
+            ),
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
+            child: _buildLayout(),
+          ),
+        ),
       ),
     );
   }

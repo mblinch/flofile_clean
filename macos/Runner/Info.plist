@@ -34,5 +34,9 @@
 	<string>This app needs access to desktop folder to select image folders.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>This app needs access to downloads folder to select image folders.</string>
+	<key>SUFeedURL</key>
+	<string>https://mblinch.github.io/flofile_clean/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>4yqvvc7eAvcggD6+srm+dBvCpwIaaYHZyaDoMc9mfVs=</string>
 </dict>
 </plist>
