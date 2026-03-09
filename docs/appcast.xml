@@ -15,10 +15,10 @@
       <sparkle:version>1</sparkle:version>
       <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
       <enclosure
-        url="https://github.com/mblinch/flofile_clean/releases/download/v1.0.0/FlofileClean.zip"
+        url="https://github.com/mblinch/flofile_clean/releases/download/v1.0.0/FloFileBeta.zip"
         type="application/octet-stream"
-        length="0"
-        sparkle:edSignature="REPLACE_WITH_REAL_SIGNATURE" />
+        length="24370678"
+        sparkle:edSignature="yAMe4Tlui6Hk+JvwL1xzcU8V6+vzaAtx5Uiug4BQ4YNNuvO8c5ixv2LI9kcp+apK6SwmWa6Mvg4GRb8FtgiQDA==" />
     </item>
   </channel>
 </rss>
