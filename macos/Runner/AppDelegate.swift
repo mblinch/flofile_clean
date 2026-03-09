@@ -14,6 +14,14 @@ class AppDelegate: FlutterAppDelegate {
     updaterController.checkForUpdates(sender)
   }
 
+  override func applicationDidFinishLaunching(_ notification: Notification) {
+    super.applicationDidFinishLaunching(notification)
+    // Check for updates shortly after launch so the window is up first
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+      self?.updaterController.checkForUpdates(nil)
+    }
+  }
+
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
   }
