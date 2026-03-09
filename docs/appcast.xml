@@ -1,1 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss
+  xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  version="2.0">
+  <channel>
+    <title>Flofile Clean Updates</title>
+    <link>https://mblinch.github.io/flofile_clean/appcast.xml</link>
+    <description>Updates for Flofile Clean</description>
+    <language>en</language>
 
+    <item>
+      <title>Version 1.0.0</title>
+      <pubDate>Sun, 09 Mar 2026 12:00:00 -0400</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/mblinch/flofile_clean/releases/download/v1.0.0/FlofileClean.zip"
+        type="application/octet-stream"
+        length="0"
+        sparkle:edSignature="REPLACE_WITH_REAL_SIGNATURE" />
+    </item>
+  </channel>
+</rss>
