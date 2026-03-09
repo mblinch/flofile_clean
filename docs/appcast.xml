@@ -8,6 +8,16 @@
     <link>https://mblinch.github.io/flofile_clean/appcast.xml</link>
     <description>Updates for Flofile Clean</description>
     <language>en</language>
+    <item>
+      <title>Version 1.0.2</title>
+      <pubDate>Mon, 09 Mar 2026 19:06:30 +0000</pubDate>
+      <sparkle:version>102</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.2/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="38191832" />
+    </item>
 
     <item>
       <title>Version 1.0.1</title>
