@@ -16,6 +16,7 @@ import '../widgets/player_popup_caption_board.dart';
 
 import '../widgets/startup_dialog.dart';
 import '../widgets/sport_selection_dialog.dart';
+import '../widgets/keyboard_fire_dialog.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
@@ -27,6 +28,26 @@ import '../utils/exiftool_helper.dart';
 /// Intent for Cmd+Shift+V — paste previous caption.
 class _PastePreviousCaptionIntent extends Intent {
   const _PastePreviousCaptionIntent();
+}
+
+class _SaveAndNextIntent extends Intent {
+  const _SaveAndNextIntent();
+}
+
+class _PreviousImageIntent extends Intent {
+  const _PreviousImageIntent();
+}
+
+class _NextImageIntent extends Intent {
+  const _NextImageIntent();
+}
+
+class _PreviousRowIntent extends Intent {
+  const _PreviousRowIntent();
+}
+
+class _NextRowIntent extends Intent {
+  const _NextRowIntent();
 }
 
 class CaptionBuilderScreen extends StatefulWidget {
@@ -125,6 +146,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
+  // Column count from ThumbnailGridWidget (updated when thumb size or layout changes)
+  int _lastThumbColumns = 4;
+  // Focus for thumbnail area so arrow keys (incl. Up/Down) work when clicking there
+  late FocusNode _thumbnailAreaFocusNode;
+
+  // Option+digit shortcut: first digit = category (1-6), second = verb (0-9). No focus needed.
+  String? _optionVerbBuffer;
+  Timer? _optionVerbBufferTimer;
+  // Key to ask the visible thumbnail grid for next index when moving up/down (keeps same column in visible grid)
+  final GlobalKey<ThumbnailGridWidgetState> _thumbnailGridKey =
+      GlobalKey<ThumbnailGridWidgetState>();
 
   // Show metadata popup dialog
   void _showMetadataPopup() async {
@@ -974,11 +1006,66 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return true; // consume event to prevent system beep
   }
 
+  /// Cmd+Shift+K: open Keyboard Fire dialog (global, no focus needed).
+  bool _handleKeyboardFireShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyK) return false;
+    final k = HardwareKeyboard.instance;
+    if (!(k.isMetaPressed || k.isControlPressed) || !k.isShiftPressed) {
+      return false;
+    }
+    _showKeyboardFireDialog();
+    return true;
+  }
+
+  /// Option (Alt) + digit: no focus needed. First digit 1-6 = category, second 0-9 = verb.
+  bool _handleOptionVerbShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final k = HardwareKeyboard.instance;
+    if (!k.isAltPressed) {
+      return false;
+    }
+    final logical = event.logicalKey;
+    int? digit;
+    if (logical == LogicalKeyboardKey.digit1 || logical == LogicalKeyboardKey.numpad1) digit = 1;
+    else if (logical == LogicalKeyboardKey.digit2 || logical == LogicalKeyboardKey.numpad2) digit = 2;
+    else if (logical == LogicalKeyboardKey.digit3 || logical == LogicalKeyboardKey.numpad3) digit = 3;
+    else if (logical == LogicalKeyboardKey.digit4 || logical == LogicalKeyboardKey.numpad4) digit = 4;
+    else if (logical == LogicalKeyboardKey.digit5 || logical == LogicalKeyboardKey.numpad5) digit = 5;
+    else if (logical == LogicalKeyboardKey.digit6 || logical == LogicalKeyboardKey.numpad6) digit = 6;
+    else if (logical == LogicalKeyboardKey.digit7 || logical == LogicalKeyboardKey.numpad7) digit = 7;
+    else if (logical == LogicalKeyboardKey.digit8 || logical == LogicalKeyboardKey.numpad8) digit = 8;
+    else if (logical == LogicalKeyboardKey.digit9 || logical == LogicalKeyboardKey.numpad9) digit = 9;
+    else if (logical == LogicalKeyboardKey.digit0 || logical == LogicalKeyboardKey.numpad0) digit = 0;
+    if (digit == null) return false;
+
+    _optionVerbBufferTimer?.cancel();
+    if (_optionVerbBuffer == null) {
+      if (digit >= 1 && digit <= 6) {
+        setState(() => _optionVerbBuffer = digit.toString());
+        _optionVerbBufferTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted) setState(() => _optionVerbBuffer = null);
+        });
+        return true;
+      }
+      return false;
+    }
+    final cat = int.tryParse(_optionVerbBuffer!) ?? 0;
+    final verbNum = digit == 0 ? 10 : digit;
+    setState(() => _optionVerbBuffer = null);
+    final state = _captionFieldsKey2.currentState;
+    (state as dynamic)?.selectVerbByCategoryAndIndex(cat, verbNum);
+    return true;
+  }
+
   @override
   void initState() {
     super.initState();
+    _thumbnailAreaFocusNode = FocusNode();
     _initializeServices();
     HardwareKeyboard.instance.addHandler(_handlePastePreviousKeyEvent);
+    HardwareKeyboard.instance.addHandler(_handleKeyboardFireShortcut);
+    HardwareKeyboard.instance.addHandler(_handleOptionVerbShortcut);
   }
 
   Future<void> _initializeServices() async {
@@ -1708,6 +1795,33 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     }
     return true;
+  }
+
+  void _showKeyboardFireDialog() {
+    final state = _captionFieldsKey2.currentState;
+    if (state == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Switch to a caption layout (not matrix or player popup) to use Keyboard Fire.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => KeyboardFireDialog(
+        homeRoster: _cachedHomeRoster,
+        awayRoster: _cachedAwayRoster,
+        homeTeamName: selectedHomeTeam,
+        awayTeamName: selectedAwayTeam,
+        captionState: state,
+      ),
+    );
   }
 
   // Show save changes confirmation dialog
@@ -2863,7 +2977,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handlePastePreviousKeyEvent);
+    HardwareKeyboard.instance.removeHandler(_handleKeyboardFireShortcut);
+    HardwareKeyboard.instance.removeHandler(_handleOptionVerbShortcut);
+    _optionVerbBufferTimer?.cancel();
     _thumbnailScrollController.dispose();
+    _thumbnailAreaFocusNode.dispose();
     _stopFolderWatcher();
     super.dispose();
   }
@@ -2983,6 +3101,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               child: StartupDialog(
                 onConfigurationComplete: _handleStartupComplete,
                 sport: _selectedSport,
+                onBackToSportSelection: () {
+                  setState(() => _isSportSelected = false);
+                },
               ),
             ),
           ),
@@ -3100,10 +3221,29 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           await preferencesService.saveCurrentLayout(newLayout);
         },
       ),
-      body: Shortcuts(
+      body: Focus(
+        canRequestFocus: false,
+        onKeyEvent: (node, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event.logicalKey == LogicalKeyboardKey.keyK &&
+              (HardwareKeyboard.instance.isMetaPressed ||
+                  HardwareKeyboard.instance.isControlPressed) &&
+              HardwareKeyboard.instance.isShiftPressed) {
+            _showKeyboardFireDialog();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Shortcuts(
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
               _PastePreviousCaptionIntent(),
+          SingleActivator(LogicalKeyboardKey.enter, meta: true):
+              _SaveAndNextIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): _PreviousImageIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
         },
         child: Actions(
           actions: <Type, Action<Intent>>{
@@ -3115,12 +3255,116 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 return null;
               },
             ),
+            _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
+              onInvoke: (_) async {
+                await _saveCurrentMetadata();
+                if (!mounted) return null;
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    currentIndex = currentIndex + 1;
+                  });
+                  _loadMetadata();
+                }
+                return null;
+              },
+            ),
+            _PreviousImageIntent: CallbackAction<_PreviousImageIntent>(
+              onInvoke: (_) {
+                if (imagePaths.isEmpty) return null;
+                if (currentIndex > 0) {
+                  setState(() => _thumbCenterRequestId++);
+                  _onImageSelected(currentIndex - 1);
+                }
+                return null;
+              },
+            ),
+            _NextImageIntent: CallbackAction<_NextImageIntent>(
+              onInvoke: (_) {
+                if (imagePaths.isEmpty) return null;
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() => _thumbCenterRequestId++);
+                  _onImageSelected(currentIndex + 1);
+                }
+                return null;
+              },
+            ),
+            _PreviousRowIntent: CallbackAction<_PreviousRowIntent>(
+              onInvoke: (_) => _handleArrowUpDownByRow(up: true),
+            ),
+            _NextRowIntent: CallbackAction<_NextRowIntent>(
+              onInvoke: (_) => _handleArrowUpDownByRow(up: false),
+            ),
           },
           child: Padding(
             padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
             child: _buildLayout(),
           ),
         ),
+      ),
+      ), // Focus
+    );
+  }
+
+  Object? _handleArrowUpDownByRow({required bool up}) {
+    if (imagePaths.isEmpty || !mounted) return null;
+    final direction = up ? -1 : 1;
+    final nextIndex = _thumbnailGridKey.currentState
+        ?.getNextIndexVertical(direction);
+    if (nextIndex != null && nextIndex != currentIndex) {
+      setState(() => _thumbCenterRequestId++);
+      _onImageSelected(nextIndex);
+    }
+    return null;
+  }
+
+  void _handleThumbnailAreaKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+    final k = event.logicalKey;
+    if (imagePaths.isEmpty || !mounted) return;
+
+    if (k == LogicalKeyboardKey.arrowLeft) {
+      if (currentIndex > 0) {
+        setState(() => _thumbCenterRequestId++);
+        _onImageSelected(currentIndex - 1);
+      }
+      return;
+    }
+    if (k == LogicalKeyboardKey.arrowRight) {
+      if (currentIndex < imagePaths.length - 1) {
+        setState(() => _thumbCenterRequestId++);
+        _onImageSelected(currentIndex + 1);
+      }
+      return;
+    }
+    // Up/Down: move one row in the visible grid (same column) so it doesn't go diagonal
+    if (k == LogicalKeyboardKey.arrowUp) {
+      final nextIndex =
+          _thumbnailGridKey.currentState?.getNextIndexVertical(-1);
+      if (nextIndex != null && nextIndex != currentIndex) {
+        setState(() => _thumbCenterRequestId++);
+        _onImageSelected(nextIndex);
+      }
+      return;
+    }
+    if (k == LogicalKeyboardKey.arrowDown) {
+      final nextIndex =
+          _thumbnailGridKey.currentState?.getNextIndexVertical(1);
+      if (nextIndex != null && nextIndex != currentIndex) {
+        setState(() => _thumbCenterRequestId++);
+        _onImageSelected(nextIndex);
+      }
+    }
+  }
+
+  /// Wraps the thumbnail+preview column so a click there focuses it and arrow keys (incl. Up/Down) move selection.
+  Widget _wrapThumbnailAreaWithFocus(Widget child) {
+    return Listener(
+      onPointerDown: (_) => _thumbnailAreaFocusNode.requestFocus(),
+      child: KeyboardListener(
+        focusNode: _thumbnailAreaFocusNode,
+        autofocus: true,
+        onKeyEvent: _handleThumbnailAreaKey,
+        child: child,
       ),
     );
   }
@@ -3155,72 +3399,73 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // LEFT COLUMN - Picture Preview and Thumbnails
         Expanded(
           flex: 4,
-          child: Column(
-            children: [
-              // Resolution warning (if applicable)
-              _buildResolutionWarning(),
+          child: _wrapThumbnailAreaWithFocus(
+            Column(
+              children: [
+                // Resolution warning (if applicable)
+                _buildResolutionWarning(),
 
-              // Picture preview - 50% of screen height
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: PicturePreviewWidget(
-                  key: _picturePreviewKey2,
-                  imagePaths: imagePaths,
-                  currentIndex: currentIndex,
-                  onImageSelected: _onImageSelected,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onPreviousImage: () {
-                    if (currentIndex > 0) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex - 1);
-                    }
-                  },
-                  onQuickNextImage: () {
-                    print('DEBUG: Quick next image called');
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        currentIndex = currentIndex + 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onQuickPreviousImage: () {
-                    if (currentIndex > 0) {
-                      setState(() {
-                        currentIndex = currentIndex - 1;
-                      });
-                      _loadMetadata();
-                    }
-                  },
-                  onSaveIptc: _saveIptcMetadata,
-                  onSaveIptcBackground: _saveIptcMetadataBackground,
-                  onCopyMetadata: _onCopyMetadata,
-                  onPasteMetadata: _onPasteMetadata,
-                  onApplyIptcTemplate: _onApplyIptcTemplate,
-                  onFtpImage: _onFtpImage,
-                  onImageDeleted: _onImageDeleted,
-                  onImageRenamed: _onImageRenamed,
-                  uploadedImages: _uploadedImages,
-                  queuedUploads: _queuedUploads,
-                  currentlyUploading: _currentlyUploading,
-                  uploadProgress: _uploadProgress,
-                  xmpRatings: _xmpRatings,
-                  xmpLabels: _xmpLabels,
-                  xmpTagged: _xmpTagged,
-                  lockedPaths: _lockedPaths,
-                  onEditMetadata: _showMetadataPopup,
-                  onEditInPhotoshop: _launchPhotoshop,
+                // Picture preview - 50% of screen height
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  child: PicturePreviewWidget(
+                    key: _picturePreviewKey2,
+                    imagePaths: imagePaths,
+                    currentIndex: currentIndex,
+                    onImageSelected: _onImageSelected,
+                    onNextImage: () {
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex + 1);
+                      }
+                    },
+                    onPreviousImage: () {
+                      if (currentIndex > 0) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex - 1);
+                      }
+                    },
+                    onQuickNextImage: () {
+                      print('DEBUG: Quick next image called');
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          currentIndex = currentIndex + 1;
+                        });
+                        _loadMetadata();
+                      }
+                    },
+                    onQuickPreviousImage: () {
+                      if (currentIndex > 0) {
+                        setState(() {
+                          currentIndex = currentIndex - 1;
+                        });
+                        _loadMetadata();
+                      }
+                    },
+                    onSaveIptc: _saveIptcMetadata,
+                    onSaveIptcBackground: _saveIptcMetadataBackground,
+                    onCopyMetadata: _onCopyMetadata,
+                    onPasteMetadata: _onPasteMetadata,
+                    onApplyIptcTemplate: _onApplyIptcTemplate,
+                    onFtpImage: _onFtpImage,
+                    onImageDeleted: _onImageDeleted,
+                    onImageRenamed: _onImageRenamed,
+                    uploadedImages: _uploadedImages,
+                    queuedUploads: _queuedUploads,
+                    currentlyUploading: _currentlyUploading,
+                    uploadProgress: _uploadProgress,
+                    xmpRatings: _xmpRatings,
+                    xmpLabels: _xmpLabels,
+                    xmpTagged: _xmpTagged,
+                    lockedPaths: _lockedPaths,
+                    onEditMetadata: _showMetadataPopup,
+                    onEditInPhotoshop: _launchPhotoshop,
+                  ),
                 ),
-              ),
 
               // Divider line between picture preview and thumbnails
               Container(
@@ -3232,6 +3477,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Thumbnail grid - takes remaining space
               Expanded(
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -3253,9 +3499,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onMultiSelect: _onMultiSelect,
                   onEditMetadata: _showMetadataPopup,
                   onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                 ),
               ),
             ],
+          ),
           ),
         ),
 
@@ -3495,6 +3747,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Thumbnail grid - takes remaining space
               Expanded(
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -3516,6 +3769,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onMultiSelect: _onMultiSelect,
                   onEditMetadata: _showMetadataPopup,
                   onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                 ),
               ),
             ],
@@ -3691,6 +3949,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               Expanded(
                 flex: 1,
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -3712,6 +3971,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onMultiSelect: _onMultiSelect,
                   onEditMetadata: _showMetadataPopup,
                   onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                 ),
               ),
             ],
@@ -3811,6 +4075,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               Expanded(
                 flex: 1,
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -3832,6 +4097,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onMultiSelect: _onMultiSelect,
                   onEditMetadata: _showMetadataPopup,
                   onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                 ),
               ),
             ],
@@ -4002,6 +4272,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Thumbnail grid - takes remaining space
               Expanded(
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -4023,6 +4294,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onMultiSelect: _onMultiSelect,
                   onEditMetadata: _showMetadataPopup,
                   onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                 ),
               ),
             ],
@@ -4231,6 +4507,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Thumbnail grid
               Expanded(
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
@@ -4445,6 +4722,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               // Thumbnail grid - remaining space
               Expanded(
                 child: ThumbnailGridWidget(
+                  key: _thumbnailGridKey,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,

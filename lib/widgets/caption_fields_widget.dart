@@ -284,6 +284,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Controllers
   final HighlightingTextEditingController captionController =
       HighlightingTextEditingController();
+  final ValueNotifier<String> _keyboardFireCaptionNotifier = ValueNotifier('');
   final TextEditingController personalityController = TextEditingController();
   final TextEditingController _homeSearchController = TextEditingController();
   final TextEditingController _awaySearchController = TextEditingController();
@@ -436,6 +437,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final TextEditingController _magicBarController = TextEditingController();
   // Focus node for Firebar to control when verb bolding is visible
   final FocusNode _magicBarFocusNode = FocusNode();
+  // Focus for "caption by numbers": when focused, digit keys select category+verb
+  final FocusNode _verbNumbersFocusNode = FocusNode();
+  String _numberBuffer = '';
+  Timer? _numberBufferTimer;
+  /// Cmd+digit (1-6) sets this; next digit selects verb in that category
+  int? _pendingCategoryFromCmd;
 
   bool _shouldShowRbiInlineHint() {
     const verbsWithRbi = {
@@ -2218,6 +2225,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void initState() {
     super.initState();
+    // Use sport-appropriate category order immediately so hockey shows 1. Offense, 2. Defense, 3. Goalie... from first paint
+    _categoryOrder = List.from(categoryOrder);
     _initializePreferences();
     // Rebuild when magic bar focus changes to toggle verb bolding and switch to list mode
     _magicBarFocusNode.addListener(() {
@@ -2247,6 +2256,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _unifiedSearchText = _unifiedSearchController.text;
       });
     });
+    _keyboardFireCaptionNotifier.value = captionController.text;
+    captionController.addListener(_syncKeyboardFireCaptionNotifier);
     _initializeSampleData();
     if (widget.personalityOverride != null) {
       personalityController.text = widget.personalityOverride!;
@@ -2254,8 +2265,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _loadFtpProfiles();
   }
 
+  void _syncKeyboardFireCaptionNotifier() {
+    _keyboardFireCaptionNotifier.value = captionController.text;
+  }
+
   @override
   void dispose() {
+    captionController.removeListener(_syncKeyboardFireCaptionNotifier);
     // Store current metadata before disposing
     _storeCurrentMetadata();
 
@@ -2267,6 +2283,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _unifiedSearchController.dispose();
     _magicBarController.dispose();
     _magicBarFocusNode.dispose();
+    _verbNumbersFocusNode.dispose();
+    _numberBufferTimer?.cancel();
     super.dispose();
   }
 
@@ -2503,6 +2521,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Check if sport has changed and reload preferences
     if (oldWidget.sport != widget.sport) {
+      // Show correct category order immediately for the new sport (e.g. hockey -> 1. Offense, 2. Defense, 3. Goalie...)
+      _categoryOrder = List.from(categoryOrder);
       _loadPreferences();
     }
 
@@ -7524,7 +7544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         'Two-Run',
                                                                                         'Three-Run',
                                                                                         'Grand Slam',
-                                                                                      ]),
+                                                                                      ], 1),
 
                                                                                     // Inning only (when simple verbs are selected)
                                                                                     if (_selectedVerb == 'At Bat' || _selectedVerb == 'Pitching' || _selectedVerb == 'Swings' || _selectedVerb == 'Catches' || _selectedVerb == 'Throws' || _selectedVerb == 'Groundball' || _selectedVerb == 'Fielding Position') ...[
@@ -7718,13 +7738,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     List<String> firstRow = _categoryOrder.take(3).toList();
     List<String> secondRow = _categoryOrder.skip(3).toList();
 
-    return Column(
+    final column = Column(
       children: [
         // First row: 3 columns
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: firstRow.map((categoryName) {
-            return Expanded(child: _buildDraggableCategoryCard(categoryName));
+            final index = _categoryOrder.indexOf(categoryName);
+            return Expanded(
+              key: ValueKey('cat_${categoryName}_$index'),
+              child: _buildDraggableCategoryCard(categoryName),
+            );
           }).toList(),
         ),
         const SizedBox(height: 2),
@@ -7732,10 +7756,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: secondRow.map((categoryName) {
-            return Expanded(child: _buildDraggableCategoryCard(categoryName));
+            final index = _categoryOrder.indexOf(categoryName);
+            return Expanded(
+              key: ValueKey('cat_${categoryName}_$index'),
+              child: _buildDraggableCategoryCard(categoryName),
+            );
           }).toList(),
         ),
       ],
+    );
+    // "Caption by numbers": click verb area then type two digits (category, verb) to select
+    return Listener(
+      onPointerDown: (_) => _verbNumbersFocusNode.requestFocus(),
+      child: Focus(
+        focusNode: _verbNumbersFocusNode,
+        onKeyEvent: (node, event) {
+          final handled = _handleVerbNumberKey(event);
+          return handled ? KeyEventResult.handled : KeyEventResult.ignored;
+        },
+        child: column,
+      ),
     );
   }
 
@@ -7768,12 +7808,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 elevation: 4,
                 child: Container(
                   width: constraints.maxWidth,
-                  child: categoryName == 'Favorites'
-                      ? _buildFavoritesCategory()
-                      : _buildVerbCategory(
-                          categoryName,
-                          verbCategories[categoryName] ?? [],
-                        ),
+                  child: _buildCategoryContent(categoryName),
                 ),
               ),
               childWhenDragging: Container(
@@ -7793,12 +7828,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
               child: Container(
                 margin: const EdgeInsets.only(right: 1),
-                child: categoryName == 'Favorites'
-                    ? _buildFavoritesCategory()
-                    : _buildVerbCategory(
-                        categoryName,
-                        verbCategories[categoryName] ?? [],
-                      ),
+                child: _buildCategoryContent(categoryName),
               ),
             );
           },
@@ -7807,13 +7837,171 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  Widget _buildVerbCategory(String title, List<String> verbs) {
+  Widget _buildCategoryContent(String categoryName) {
+    final categoryNumber = _categoryOrder.indexOf(categoryName) + 1;
+    if (categoryName == 'Favorites') {
+      return _buildFavoritesCategory(categoryNumber);
+    }
+    return _buildVerbCategory(
+      categoryName,
+      verbCategories[categoryName] ?? [],
+      categoryNumber,
+    );
+  }
+
+  bool _handleVerbNumberKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final k = event.logicalKey;
+    int? digit;
+    if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1) digit = 1;
+    else if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2) digit = 2;
+    else if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3) digit = 3;
+    else if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4) digit = 4;
+    else if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5) digit = 5;
+    else if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6) digit = 6;
+    else if (k == LogicalKeyboardKey.digit7 || k == LogicalKeyboardKey.numpad7) digit = 7;
+    else if (k == LogicalKeyboardKey.digit8 || k == LogicalKeyboardKey.numpad8) digit = 8;
+    else if (k == LogicalKeyboardKey.digit9 || k == LogicalKeyboardKey.numpad9) digit = 9;
+    else if (k == LogicalKeyboardKey.digit0 || k == LogicalKeyboardKey.numpad0) digit = 0;
+    if (digit == null) return false;
+
+    final isCmd = HardwareKeyboard.instance.isMetaPressed;
+
+    // Cmd+digit 1-6: set category; next digit will pick verb in that category
+    if (isCmd && digit >= 1 && digit <= 6) {
+      _numberBufferTimer?.cancel();
+      _numberBuffer = '';
+      setState(() => _pendingCategoryFromCmd = digit);
+      return true;
+    }
+
+    // After Cmd+category: single digit = verb in that category
+    if (_pendingCategoryFromCmd != null && !isCmd) {
+      final verbNum = digit == 0 ? 10 : digit;
+      final cat = _pendingCategoryFromCmd!;
+      setState(() => _pendingCategoryFromCmd = null);
+      _numberBuffer = '';
+      _selectVerbByCategoryAndIndex(cat, verbNum);
+      return true;
+    }
+
+    _numberBufferTimer?.cancel();
+    _numberBuffer += digit.toString();
+    if (_numberBuffer.length >= 2) {
+      final cat = int.tryParse(_numberBuffer[0]) ?? 0;
+      final verbNum = _numberBuffer[1] == '0' ? 10 : int.tryParse(_numberBuffer[1]) ?? 0;
+      _numberBuffer = '';
+      _selectVerbByCategoryAndIndex(cat, verbNum);
+      return true;
+    }
+    _numberBufferTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _numberBuffer = '');
+    });
+    return true;
+  }
+
+  /// Called from caption builder screen when Option+digit shortcut is used (no focus needed).
+  void selectVerbByCategoryAndIndex(int category1Based, int verb1Based) {
+    _selectVerbByCategoryAndIndex(category1Based, verb1Based);
+  }
+
+  /// Keyboard fire mode: clear player selection for a fresh start.
+  void clearPlayersForKeyboardFire() {
+    setState(() {
+      selectedHomePlayers.clear();
+      selectedAwayPlayers.clear();
+      _firstTeamSelected = null;
+      _firstPlayerSelected = null;
+      _autoSelectedHomeJersey = null;
+      _autoSelectedAwayJersey = null;
+    });
+  }
+
+  /// Keyboard fire mode: add one player by jersey number.
+  void addPlayerByJersey(bool isHomeTeam, String jerseyNumber) {
+    _selectPlayerChipByNumber(
+      isHomeTeam: isHomeTeam,
+      jerseyNumber: jerseyNumber.trim(),
+      isProgressive: true,
+      affectFirstStar: true,
+    );
+  }
+
+  /// Keyboard fire mode: refresh caption text from current selection.
+  void updateCaptionFromKeyboardFire() {
+    _updateCaption().then((_) {
+      if (mounted) {
+        _keyboardFireCaptionNotifier.value = captionController.text;
+      }
+    });
+  }
+
+  /// Current caption text (for keyboard fire dialog preview).
+  String get currentCaptionText => captionController.text;
+
+  /// Notifier for keyboard fire dialog so caption preview updates live.
+  ValueNotifier<String> get keyboardFireCaptionNotifier => _keyboardFireCaptionNotifier;
+
+  /// Verb list for keyboard fire dialog: category number, name, and ordered verb strings.
+  List<Map<String, dynamic>> get keyboardFireVerbList {
+    final list = <Map<String, dynamic>>[];
+    for (var i = 0; i < _categoryOrder.length; i++) {
+      final cat = _categoryOrder[i];
+      final catNum = i + 1;
+      final verbs = cat == 'Favorites'
+          ? _favoriteVerbs.toList()
+          : (verbCategories[cat] ?? <String>[]);
+      list.add(<String, dynamic>{'number': catNum, 'name': cat, 'verbs': verbs});
+    }
+    return list;
+  }
+
+  void _selectVerbByCategoryAndIndex(int category1Based, int verb1Based) {
+    if (category1Based < 1 || category1Based > _categoryOrder.length) return;
+    final categoryName = _categoryOrder[category1Based - 1];
+    final List<String> verbList = categoryName == 'Favorites'
+        ? _favoriteVerbs.toList()
+        : (verbCategories[categoryName] ?? []);
+    final verbIndex = verb1Based == 0 ? 9 : verb1Based - 1; // 0 means 10th verb
+    if (verbIndex < 0 || verbIndex >= verbList.length) return;
+    final verb = verbList[verbIndex];
+    if (verb.isEmpty) return;
+
+    final size = MediaQuery.of(context).size;
+    final position = Offset(size.width * 0.5, size.height * 0.4);
+
+    final needsInningSelector = !(_selectedVerb == verb) && _shouldShowInningSelector(verb);
+    final needsFullPopup = !(_selectedVerb == verb) && _shouldShowFullPopupInterface(verb);
+
+    if (needsInningSelector) {
+      _showCompactInningSelector(position, verb);
+    } else if (needsFullPopup) {
+      _showHittingPopup(position, verb);
+    } else {
+      if (_selectedVerb == verb) {
+        setState(() {
+          _selectedVerb = null;
+          _selectedActionVerb = null;
+          _selectedHomeRunType = null;
+          _selectedTagsAction = null;
+          _selectedBase = null;
+          _rbiCount = null;
+          _selectedRbiInning = null;
+        });
+        _updateCaption();
+      } else {
+        _showSimpleVerbPopup(position, verb);
+      }
+    }
+  }
+
+  Widget _buildVerbCategory(String title, List<String> verbs, int categoryNumber) {
     return Container(
       // Removed debug background for cleaner appearance
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with background span
+          // Title with category number for "caption by numbers"
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -7822,7 +8010,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
-              title,
+              '$categoryNumber. $title',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -7830,19 +8018,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
             ),
           ),
-          // Verb options
-          ...verbs.map((verb) => _buildVerbOption(verb)).toList(),
+          // Verb options (each with its own number 1, 2, 3...)
+          ...verbs.asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
         ],
       ),
     );
   }
 
-  Widget _buildFavoritesCategory() {
+  Widget _buildFavoritesCategory(int categoryNumber) {
     return Container(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with background span
+          // Title with category number for "caption by numbers"
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -7850,17 +8038,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               color: Colors.amber.shade200,
               borderRadius: BorderRadius.circular(3),
             ),
-            child: const Text(
-              'Favorites',
-              style: TextStyle(
+            child: Text(
+              '$categoryNumber. Favorites',
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
             ),
           ),
-          // Favorite verb options
-          ..._favoriteVerbs.map((verb) => _buildVerbOption(verb)).toList(),
+          // Favorite verb options (each with its own number)
+          ..._favoriteVerbs.toList().asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
           // Add empty chips to fill remaining space
           ...List.generate(
             10 - _favoriteVerbs.length,
@@ -7891,7 +8079,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return verb; // Fallback to full verb if no unique prefix found
   }
 
-  Widget _buildVerbOption(String verb) {
+  Widget _buildVerbOption(String verb, {int? verbNumber}) {
     // Show blank chip for empty placeholder verbs
     if (verb.isEmpty) {
       return Container(
@@ -8046,8 +8234,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         child: Center(
-          child: Builder(
-            builder: (context) {
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (verbNumber != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade500,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      '$verbNumber',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              Flexible(
+                child: Builder(
+                  builder: (context) {
               String typed = _magicBarVerbInput;
               // Only use trailing letters for verb matching (ignore digits like in "h27")
               final RegExpMatch? lettersMatch = RegExp(
@@ -8269,6 +8480,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 }
               }
             },
+          ),
+        ),
+            ],
           ),
         ),
       ),
@@ -13520,10 +13734,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  void _updateCaption() async {
+  Future<void> _updateCaption() async {
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
+      _keyboardFireCaptionNotifier.value = '';
       return;
     }
 
@@ -13610,12 +13825,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       // No players selected
       captionController.clear();
+      _keyboardFireCaptionNotifier.value = '';
       _updatePersonalityField(); // Clear personality field when no players selected
       return;
     }
 
     if (activePlayers.isEmpty) {
       captionController.clear();
+      _keyboardFireCaptionNotifier.value = '';
       return;
     }
 
@@ -13929,6 +14146,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     captionController.text = caption;
+    _keyboardFireCaptionNotifier.value = caption;
 
     // Update personality field with all selected players (always call to handle empty case)
     _updatePersonalityField();
@@ -20402,7 +20620,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                        ]),
+                        ], 1),
                       ),
                     ),
                   ),
@@ -20421,7 +20639,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                        ]),
+                        ], 2),
                       ),
                     ),
                   ),
@@ -20440,7 +20658,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                        ]),
+                        ], 3),
                       ),
                     ),
                   ),
@@ -20469,7 +20687,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           '',
                           '',
                           '',
-                        ]),
+                        ], 4),
                       ),
                     ),
                   ),
@@ -20488,7 +20706,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'Stretching',
                           'Warm Ups',
                           'Pitching Change',
-                        ]),
+                        ], 5),
                       ),
                     ),
                   ),

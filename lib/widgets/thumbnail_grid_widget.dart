@@ -42,6 +42,8 @@ class ThumbnailGridWidget extends StatefulWidget {
   final VoidCallback? onEditMetadata;
   // Callback for editing in Photoshop
   final Function(String)? onEditInPhotoshop;
+  // Called when computed column count changes (for arrow Up/Down row navigation)
+  final void Function(int columns)? onColumnsComputed;
 
   const ThumbnailGridWidget({
     super.key,
@@ -69,17 +71,19 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.onMultiSelect,
     this.onEditMetadata,
     this.onEditInPhotoshop,
+    this.onColumnsComputed,
   });
 
   @override
-  State<ThumbnailGridWidget> createState() => _ThumbnailGridWidgetState();
+  State<ThumbnailGridWidget> createState() => ThumbnailGridWidgetState();
 }
 
-class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
+class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   // Thumbnail size control
   double _thumbSize = 110.0; // Start at second smallest size (110px)
   double _thumbSpacing = 14.0;
   int _lastComputedColumns = 4;
+  int _lastReportedColumns = 4;
   int _lastCenterRequestId = 0;
   String? _ftpFilterMode; // null, 'hide_ftpd', 'show_ftpd'
   List<String> _visiblePaths = [];
@@ -296,6 +300,22 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     return '';
   }
 
+  /// Returns the next image index when moving one row up (direction -1) or down (direction 1) in the visible grid. Keeps same column.
+  int? getNextIndexVertical(int direction) {
+    if (widget.imagePaths.isEmpty || _visiblePaths.isEmpty) return null;
+    final currentIndex =
+        widget.currentIndex.clamp(0, widget.imagePaths.length - 1);
+    final currentPath = widget.imagePaths[currentIndex];
+    final visibleIndex = _visiblePaths.indexOf(currentPath);
+    if (visibleIndex < 0) return null;
+    final cols = _lastComputedColumns > 0 ? _lastComputedColumns : 4;
+    final nextVisible = visibleIndex + direction * cols;
+    if (nextVisible < 0 || nextVisible >= _visiblePaths.length) return null;
+    final nextPath = _visiblePaths[nextVisible];
+    final nextIndex = widget.imagePaths.indexOf(nextPath);
+    return nextIndex >= 0 ? nextIndex : null;
+  }
+
   void _maybeCenterSelection(BuildContext context, {bool force = false}) {
     if (widget.scrollController == null) return;
     if (!force && widget.centerRequestId == _lastCenterRequestId) return;
@@ -308,18 +328,18 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
-    // Account for GridView padding (8 on each side)
+    // Account for GridView padding (8 on each side); same formula as LayoutBuilder
     const double gridPaddingHorizontal = 16.0; // 8 left + 8 right
     const double gridPaddingVertical = 16.0; // 8 top + 8 bottom
-    final availableWidth = renderBox.size.width - gridPaddingHorizontal;
+    final double crossAxisExtent = renderBox.size.width - gridPaddingHorizontal;
     final columnsCalc =
-        ((availableWidth - _thumbSpacing) / (_thumbSize + _thumbSpacing))
+        ((crossAxisExtent + _thumbSpacing) / (_thumbSize + _thumbSpacing))
             .floor();
     final columns = columnsCalc > 0 ? columnsCalc : 4;
 
     // Compute actual row height using current layout parameters
     final totalSpacing = (columns - 1) * _thumbSpacing;
-    final cellWidth = (availableWidth - totalSpacing) / columns; // aspect 1.0
+    final cellWidth = (crossAxisExtent - totalSpacing) / columns; // aspect 1.0
     final rowHeight = cellWidth; // childAspectRatio is 1.0
     final rowExtent = rowHeight + _thumbSpacing; // include spacing between rows
 
@@ -474,19 +494,37 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       );
     }
 
-    // Calculate grid parameters based on container size
-    final containerWidth =
-        MediaQuery.of(context).size.width * 0.4; // Approximate width
-    final columns =
-        ((containerWidth - _thumbSpacing) / (_thumbSize + _thumbSpacing))
-            .floor();
-    _lastComputedColumns = columns > 0 ? columns : _lastComputedColumns;
-
     // Determine visible list based on filter mode
     final List<String> visiblePaths = _getVisiblePaths();
     _visiblePaths = visiblePaths;
 
-    return Container(
+    // Use actual layout width: count thumbs across so Up/Down arrows move by row.
+    // Updates when window is resized or thumbnail size slider changes.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const double containerMarginH = 6.0; // Container margin 3 * 2
+        const double gridPaddingH = 16.0; // GridView padding 8 * 2
+        final double crossAxisExtent =
+            constraints.maxWidth - containerMarginH - gridPaddingH;
+        // Same formula as SliverGridDelegate: count * size + (count-1) * spacing <= extent => count <= (extent + spacing) / (size + spacing)
+        final int columns = ((crossAxisExtent + _thumbSpacing) /
+                (_thumbSize + _thumbSpacing))
+            .floor();
+        final int cols = columns > 0 ? columns : 4;
+        _lastComputedColumns = cols;
+
+        // Report when column count changes (window resize or thumb size change).
+        if (widget.onColumnsComputed != null &&
+            cols > 0 &&
+            cols != _lastReportedColumns) {
+          _lastReportedColumns = cols;
+          final colsToReport = cols;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onColumnsComputed!(colsToReport);
+          });
+        }
+
+        return Container(
       margin: const EdgeInsets.all(3.0),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
@@ -735,7 +773,7 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               controller: widget.scrollController,
               padding: const EdgeInsets.all(8),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns > 0 ? columns : 4,
+                crossAxisCount: cols,
                 mainAxisSpacing: _thumbSpacing,
                 crossAxisSpacing: _thumbSpacing,
                 childAspectRatio: 1.0,
@@ -1019,6 +1057,8 @@ class _ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           ),
         ],
       ),
+    );
+    },
     );
   }
 

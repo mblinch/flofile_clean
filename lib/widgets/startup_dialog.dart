@@ -42,11 +42,13 @@ class StartupDialog extends StatefulWidget {
   final Function(String folderPath, String? homeTeam, String? awayTeam)
       onConfigurationComplete;
   final String? sport; // Current sport mode
+  final VoidCallback? onBackToSportSelection;
 
   const StartupDialog({
     Key? key,
     required this.onConfigurationComplete,
     this.sport,
+    this.onBackToSportSelection,
   }) : super(key: key);
 
   @override
@@ -679,15 +681,32 @@ class _StartupDialogState extends State<StartupDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
-                const Text(
-                  'FLO FILE',
-                  style: TextStyle(
-                    fontSize: 24, // Increased from 20
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                    letterSpacing: -0.5,
-                  ),
+                // Header with optional back to sport
+                Row(
+                  children: [
+                    const Text(
+                      'FLO FILE',
+                      style: TextStyle(
+                        fontSize: 24, // Increased from 20
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    if (widget.onBackToSportSelection != null) ...[
+                      const Spacer(),
+                      TextButton(
+                        onPressed: widget.onBackToSportSelection,
+                        child: Text(
+                          '← Back to sports selection',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 8), // Small spacing
                 Container(

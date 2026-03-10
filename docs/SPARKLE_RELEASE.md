@@ -1,5 +1,18 @@
 # Sparkle release and Apple signing
 
+## One-time setup (Keychain signing)
+
+1. **Sparkle signing tools** – If you don’t have `tools/bin/sign_update` yet:
+   ```bash
+   mkdir -p tools
+   curl -L -o /tmp/Sparkle-2.9.0.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.0/Sparkle-2.9.0.tar.xz
+   tar -xf /tmp/Sparkle-2.9.0.tar.xz -C tools --strip-components=1
+   ```
+2. Signing uses your **Keychain** (no key file). The script runs `sign_update -p` on the zip; it reads the private key from the Keychain. If Keychain prompts for "Private key for signing Sparkle updates", allow it.
+3. When you ask for a release, the script signs the zip via Keychain and puts `sparkle:edSignature` in the appcast so the app accepts the update.
+
+---
+
 ## 1. Version values Sparkle uses
 
 | Source | Key | Example |
@@ -45,7 +58,7 @@ What it does:
 1. Build macOS app: `flutter build macos --release --build-name=VERSION --build-number=SPARKLE_VERSION`
 2. Bundle ExifTool libs into the app.
 3. Zip the `.app`: `ditto -c -k --sequesterRsrc --keepParent "FloFile Beta.app" build/release/FloFileBeta.zip`
-4. If `SPARKLE_PRIVATE_KEY` is set: run `tools/sparkle/bin/sign_update` on the zip and put `sparkle:edSignature` in the appcast.
+4. Run `sign_update -p` on the zip; it reads the private key from the Keychain and prints the EdDSA signature. The script puts that in the appcast as `sparkle:edSignature` (required when the app has `SUPublicEDKey` set).
 5. Insert a new item into `docs/appcast.xml` (after `</language>`) with the versioned Pages URL, `length`, and optional `edSignature`.
 6. Copy the zip to `docs/releases/vVERSION/FloFileBeta.zip` for GitHub Pages.
 7. If `gh` is available and release doesn’t exist: `gh release create vVERSION ...` (tag + notes; zip is still served from Pages).
@@ -95,9 +108,8 @@ ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/Flo
 **5) Sign for Sparkle (optional but recommended):**
 
 ```bash
-# Set your Sparkle private key (from when you ran generate_keys)
-export SPARKLE_PRIVATE_KEY="your_private_key_here"
-tools/sparkle/bin/sign_update build/release/FloFileBeta.zip "$SPARKLE_PRIVATE_KEY"
+# Keychain: no key file. sign_update reads the private key from the Keychain.
+tools/bin/sign_update -p build/release/FloFileBeta.zip
 # Use the printed signature in appcast as sparkle:edSignature
 ```
 

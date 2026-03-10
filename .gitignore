@@ -4,6 +4,7 @@
 *.pyc
 *.swp
 .DS_Store
+.sparkle_private_key
 .atom/
 .build/
 .buildlog/
@@ -67,6 +68,8 @@ macos/build/
 *.mp4
 *.mov
 *.zip
+# Allow Sparkle release zips for GitHub Pages
+!docs/releases/**/*.zip
 *.dmg
 
 # Build artifacts - NEVER commit these

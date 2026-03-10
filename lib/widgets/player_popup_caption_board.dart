@@ -120,6 +120,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   // Category order for drag-to-reorder
   List<String> _categoryOrder = [];
 
+  final FocusNode _verbListFocusNode = FocusNode();
+
   // Verb categories matching the existing system
   final Map<String, List<VerbOption>> _verbCategories = {
     'Offense': [
@@ -913,11 +915,39 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               ],
             ),
           ),
-          // Expandable verb categories
+          // Expandable verb categories (Cmd+1..6 to expand category)
           Expanded(
-            child: _categoryOrder.isEmpty
-                ? const SizedBox() // Show nothing while loading
-                : ReorderableListView(
+            child: Listener(
+              onPointerDown: (_) => _verbListFocusNode.requestFocus(),
+              child: Focus(
+                focusNode: _verbListFocusNode,
+                onKeyEvent: (node, event) {
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final k = event.logicalKey;
+                  int? digit;
+                  if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1) digit = 1;
+                  else if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2) digit = 2;
+                  else if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3) digit = 3;
+                  else if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4) digit = 4;
+                  else if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5) digit = 5;
+                  else if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6) digit = 6;
+                  if (digit == null) return KeyEventResult.ignored;
+                  final isCmd = HardwareKeyboard.instance.isMetaPressed;
+                  if (!isCmd) return KeyEventResult.ignored;
+                  final d = digit!;
+                  setState(() {
+                    _expandedCategories.clear();
+                    if (d == 1) {
+                      _expandedCategories.add('Favorites');
+                    } else if (d >= 2 && d <= 6 && _categoryOrder.length >= d - 1) {
+                      _expandedCategories.add(_categoryOrder[d - 2]);
+                    }
+                  });
+                  return KeyEventResult.handled;
+                },
+                child: _categoryOrder.isEmpty
+                    ? const SizedBox() // Show nothing while loading
+                    : ReorderableListView(
                     padding: EdgeInsets.zero,
                     buildDefaultDragHandles: false,
                     onReorder: (oldIndex, newIndex) {
@@ -972,7 +1002,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           title: Row(
                             children: [
                               Text(
-                                'Favorites',
+                                '1. Favorites',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -1020,7 +1050,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     ),
                                   ),
                                 ]
-                              : _getFavoriteVerbs().map((verb) {
+                              : _getFavoriteVerbs().toList().asMap().entries.map((e) {
+                                  final verb = e.value;
+                                  final verbNumber = e.key + 1;
                                   final verbKey = 'Favorites_${verb.label}';
                                   final isExpanded = _expandedVerb == verbKey;
                                   final isLastUsed =
@@ -1064,6 +1096,24 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                             child: Row(
                                               children: [
                                                 const SizedBox(width: 12),
+                                                Padding(
+                                                  padding: const EdgeInsets.only(right: 6),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey.shade500,
+                                                      borderRadius: BorderRadius.circular(3),
+                                                    ),
+                                                    child: Text(
+                                                      '$verbNumber',
+                                                      style: const TextStyle(
+                                                        fontSize: 9,
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                                 if (isSticky)
                                                   Padding(
                                                     padding:
@@ -1221,10 +1271,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         }
                         final isExpanded =
                             _expandedCategories.contains(categoryName);
+                        final categoryIndex = _categoryOrder.indexOf(categoryName);
                         return ReorderableDragStartListener(
-                          key: ValueKey(categoryName),
-                          index: _categoryOrder.indexOf(categoryName) +
-                              1, // +1 for Favorites
+                          key: ValueKey('${categoryName}_$categoryIndex'),
+                          index: categoryIndex + 1, // +1 for Favorites
                           child: Theme(
                             data: Theme.of(context).copyWith(
                               dividerColor: Colors.transparent,
@@ -1255,7 +1305,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               minTileHeight: 24,
                               childrenPadding: EdgeInsets.zero,
                               title: Text(
-                                categoryName,
+                                '${categoryIndex + 2}. $categoryName',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -1272,7 +1322,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               collapsedBackgroundColor: Colors.grey.shade50,
                               children: [
                                 ..._getVerbsForCategory(categoryName)
-                                    .map((verb) {
+                                    .toList()
+                                    .asMap()
+                                    .entries
+                                    .map((e) {
+                                  final verb = e.value;
+                                  final verbNumber = e.key + 1;
                                   final verbKey =
                                       '${categoryName}_${verb.label}';
                                   final isExpanded = _expandedVerb == verbKey;
@@ -1317,6 +1372,24 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                             child: Row(
                                               children: [
                                                 const SizedBox(width: 12),
+                                                Padding(
+                                                  padding: const EdgeInsets.only(right: 6),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey.shade500,
+                                                      borderRadius: BorderRadius.circular(3),
+                                                    ),
+                                                    child: Text(
+                                                      '$verbNumber',
+                                                      style: const TextStyle(
+                                                        fontSize: 9,
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                                 if (isSticky)
                                                   Padding(
                                                     padding:
@@ -1493,6 +1566,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       ),
                     ],
                   ),
+                ),
+              ),
           ),
         ],
       ),
@@ -3562,6 +3637,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     _awaySearchController.dispose();
     _homeNumberController.dispose();
     _awayNumberController.dispose();
+    _verbListFocusNode.dispose();
     super.dispose();
   }
 }
