@@ -660,7 +660,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
-  // Hockey verb categories
+  // Hockey verb categories (aligned with classic verb list / player popup)
   final Map<String, List<String>> hockeyVerbCategories = {
     'Offense': [
       'Skates',
@@ -669,32 +669,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Scores',
       'Goes to the Net Against',
       'Faceoff',
-      '',
-      '',
-      '',
-      '',
+      'Celebrates a Goal',
+      'Celebrates',
     ],
     'Defense': [
       'Blocks',
       'Clears',
       'Checks',
       'Defends',
-      '',
-      '',
-      '',
-      '',
-      '',
     ],
     'Goalie': [
       'Saves',
       'Handles the Puck',
       'Stands in Net',
       'Guards the Net',
-      '',
-      '',
-      '',
-      '',
-      '',
     ],
     'Non Game-Action': [
       'Looks On',
@@ -705,7 +693,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'National Anthem',
       'Stretching',
       'Bench',
-      '',
+      'Post Game Win',
+      'Post Game Loss',
+      'Dejection',
     ],
     'Reactions': [
       'Celebrates',
@@ -713,10 +703,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Dejection',
       'Post Game Win',
       'Post Game Loss',
-      '',
-      '',
-      '',
-      '',
     ],
   };
 
@@ -7905,6 +7891,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _selectVerbByCategoryAndIndex(category1Based, verb1Based);
   }
 
+  /// Keyboard Fire: set verb and update caption without showing any dialog.
+  /// Use this when the verb is picked from the Keyboard Fire panel so only the panel’s Save/Copy/FTP popup appears.
+  void selectVerbByCategoryAndIndexFromKeyboardFire(int category1Based, int verb1Based) {
+    if (category1Based < 1 || category1Based > _categoryOrder.length) return;
+    final categoryName = _categoryOrder[category1Based - 1];
+    final List<String> verbList = categoryName == 'Favorites'
+        ? _favoriteVerbs.toList()
+        : (verbCategories[categoryName] ?? []);
+    final verbIndex = verb1Based == 0 ? 9 : verb1Based - 1;
+    if (verbIndex < 0 || verbIndex >= verbList.length) return;
+    final verb = verbList[verbIndex];
+    if (verb.isEmpty) return;
+
+    if (_selectedVerb == verb) {
+      setState(() {
+        _selectedVerb = null;
+        _selectedActionVerb = null;
+        _selectedHomeRunType = null;
+        _selectedTagsAction = null;
+        _selectedBase = null;
+        _rbiCount = null;
+        _selectedRbiInning = null;
+      });
+      _updateCaption();
+    } else {
+      setState(() {
+        _selectedVerb = verb;
+        _selectedActionVerb = verb;
+      });
+      _updateCaption();
+    }
+  }
+
   /// Keyboard fire mode: clear player selection for a fresh start.
   void clearPlayersForKeyboardFire() {
     setState(() {
@@ -7927,6 +7946,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  /// Keyboard fire mode: remove one player by jersey number (toggle off).
+  void removePlayerByJersey(bool isHomeTeam, String jerseyNumber) {
+    _unselectAutoSelectedByToken(
+      isHomeTeam: isHomeTeam,
+      jerseyNumber: jerseyNumber.trim(),
+    );
+  }
+
   /// Keyboard fire mode: refresh caption text from current selection.
   void updateCaptionFromKeyboardFire() {
     _updateCaption().then((_) {
@@ -7942,11 +7969,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Notifier for keyboard fire dialog so caption preview updates live.
   ValueNotifier<String> get keyboardFireCaptionNotifier => _keyboardFireCaptionNotifier;
 
+  /// Builds the exact same verb categories grid as shown in the main app.
+  /// Call from the KeyboardFireDialog to embed the real verb menu.
+  Widget buildVerbCategoriesWidget() => _buildDraggableCategories();
+
+  /// Called from keyboard fire panel: show edit-wording dialog for a verb.
+  void showEditVerbDialogForKeyboardFire(String verb) {
+    _showEditVerbDialog(verb);
+  }
+
+  /// Called from keyboard fire panel: toggle favorite and persist.
+  Future<void> toggleFavoriteVerbFromKeyboardFire(String verb) async {
+    if (_favoriteVerbs.contains(verb)) {
+      _favoriteVerbs.remove(verb);
+    } else {
+      _favoriteVerbs.add(verb);
+    }
+    await _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
+        sport: _currentSport);
+    if (mounted) setState(() {});
+  }
+
+  /// Called from keyboard fire panel: whether a verb is in favorites.
+  bool isFavoriteVerbFromKeyboardFire(String verb) =>
+      _favoriteVerbs.contains(verb);
+
   /// Verb list for keyboard fire dialog: category number, name, and ordered verb strings.
+  /// Uses sport-aware category order (filters _categoryOrder to valid categories, else default).
+  /// Favorites is always included so it appears in the Keyboard Fire panel.
   List<Map<String, dynamic>> get keyboardFireVerbList {
+    final order = _categoryOrder
+        .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
+        .toList();
+    List<String> effectiveOrder =
+        order.isNotEmpty ? List<String>.from(order) : List<String>.from(categoryOrder);
+    if (!effectiveOrder.contains('Favorites')) {
+      effectiveOrder = [...effectiveOrder, 'Favorites'];
+    }
     final list = <Map<String, dynamic>>[];
-    for (var i = 0; i < _categoryOrder.length; i++) {
-      final cat = _categoryOrder[i];
+    for (var i = 0; i < effectiveOrder.length; i++) {
+      final cat = effectiveOrder[i];
       final catNum = i + 1;
       final verbs = cat == 'Favorites'
           ? _favoriteVerbs.toList()
@@ -7955,6 +8017,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
     return list;
   }
+
+  // ── Public helpers for KeyboardFirePanel action bar ──────────────────────
+
+  void copyCaption() => _copyMetadataFromCaptionWidget();
+  Future<void> pasteCaption() async => _pasteMetadataToCaptionWidget();
+  Future<void> pastePreviousCaption() async => _pasteLastCaption();
+  void resetCaption() => _fullReset();
+  Future<void> triggerFtp() async => _onFtpPressed();
+  void showFtpSettings() => _showFtpSettings();
+
+  bool get isFtpDisabled => _disableFtp;
+  String? get currentFtpProfile => _currentFtpProfile;
+
+  /// Exposes the personality controller so the KeyboardFirePanel can embed it.
+  TextEditingController get personalityTextController => personalityController;
+
+  /// Exposes the caption controller so the KeyboardFirePanel can show an editable caption field.
+  TextEditingController get captionTextController => captionController;
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   void _selectVerbByCategoryAndIndex(int category1Based, int verb1Based) {
     if (category1Based < 1 || category1Based > _categoryOrder.length) return;
@@ -14265,6 +14347,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _updateCaption();
     }
   }
+
+  /// Current hockey period selection (for Keyboard Fire panel / popup).
+  String? get selectedPeriod => _selectedPeriod;
 
   // Getter for homeOnLeft to allow parent to access it
   bool get homeOnLeft => _homeOnLeft;

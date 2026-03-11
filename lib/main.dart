@@ -1,7 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
+import 'intents.dart';
 import 'screens/caption_builder_screen.dart';
+
+// Global navigator key so the pre-focus keyboard handler can dispatch to the app.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Intercepts Cmd+Shift+K at the ServicesBinding level, before Flutter's focus
+/// system (and any MenuAnchor / Shortcuts widget) gets a chance to beep.
+/// Returns true to consume the event; false to let it propagate normally.
+bool _globalKeyboardFireInterceptor(KeyEvent event) {
+  if (event is! KeyDownEvent) return false;
+  if (event.logicalKey != LogicalKeyboardKey.keyK) return false;
+  final hw = HardwareKeyboard.instance;
+  if (!(hw.isMetaPressed || hw.isControlPressed) || !hw.isShiftPressed) {
+    return false;
+  }
+  // Dispatch an intent via the navigator's overlay context so Actions can find
+  // the CaptionBuilderScreen's action.
+  final ctx = appNavigatorKey.currentContext;
+  if (ctx != null) {
+    Actions.maybeInvoke(ctx, const KeyboardFireIntent());
+  }
+  return true; // consume — prevents macOS beep regardless of focus
+}
 
 void main() {
   // Suppress debug output in console
@@ -9,13 +33,15 @@ void main() {
     // Suppress all debug output
   };
 
+  // Register the Cmd+Shift+K interceptor before any widget is built.
+  WidgetsFlutterBinding.ensureInitialized();
+  HardwareKeyboard.instance.addHandler(_globalKeyboardFireInterceptor);
+
   // Check if running from a mounted volume (DMG) and warn user
   final executablePath = Platform.resolvedExecutable;
   if (executablePath.contains('/Volumes/')) {
     print(
         'WARNING: App is running from a mounted volume. Please copy to Applications first.');
-    // Show a dialog warning the user
-    WidgetsFlutterBinding.ensureInitialized();
     runApp(const DmgWarningApp());
     return;
   }
@@ -93,6 +119,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Caption Writer',
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -103,8 +130,6 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const CaptionBuilderScreen(),
-      // home: const ApiTestWidget(), // Temporarily show API test
-      // home: const FtpUploadWidget(), // Show FTP test interface
     );
   }
 }

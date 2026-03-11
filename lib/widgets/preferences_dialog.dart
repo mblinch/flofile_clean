@@ -246,6 +246,14 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                             onTap: () => _editCurrentLayout(),
                             icon: Icons.view_quilt,
                           ),
+                          _buildModernPreferenceItem(
+                            'Caption Entry',
+                            _currentPreferences?['captionEntryMode'] == 'classic'
+                                ? 'Classic'
+                                : 'Keyboard Fire (default)',
+                            onTap: () => _editCaptionEntryMode(),
+                            icon: Icons.keyboard,
+                          ),
 
                           const SizedBox(height: 16),
 
@@ -904,6 +912,21 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     }
   }
 
+  Future<void> _editCaptionEntryMode() async {
+    final currentValue =
+        _currentPreferences?['captionEntryMode'] ?? 'keyboard_fire';
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => _CaptionEntryModeDialog(initialValue: currentValue),
+    );
+
+    if (result != null) {
+      await _preferencesService.saveCaptionEntryMode(result);
+      await _loadCurrentPreferences();
+    }
+  }
+
   String _selectedLayout = 'players_list_left';
 
   Widget _buildLayoutOption(
@@ -958,6 +981,77 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CaptionEntryModeDialog extends StatefulWidget {
+  final String initialValue;
+
+  const _CaptionEntryModeDialog({required this.initialValue});
+
+  @override
+  State<_CaptionEntryModeDialog> createState() => _CaptionEntryModeDialogState();
+}
+
+class _CaptionEntryModeDialogState extends State<_CaptionEntryModeDialog> {
+  late String _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initialValue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Caption Entry'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Choose how you write captions. You can switch back anytime.',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          RadioListTile<String>(
+            title: const Text('Keyboard Fire (default)'),
+            subtitle: const Text(
+              'Number-first flow: home → away → category → verb',
+              style: TextStyle(fontSize: 11),
+            ),
+            value: 'keyboard_fire',
+            groupValue: _selected,
+            onChanged: (v) {
+              if (v != null) setState(() => _selected = v);
+            },
+          ),
+          RadioListTile<String>(
+            title: const Text('Classic'),
+            subtitle: const Text(
+              'Original player picker and verb list layout',
+              style: TextStyle(fontSize: 11),
+            ),
+            value: 'classic',
+            groupValue: _selected,
+            onChanged: (v) {
+              if (v != null) setState(() => _selected = v);
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _selected),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

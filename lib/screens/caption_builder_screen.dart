@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers.dart';
+import '../intents.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
@@ -88,6 +89,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Layout preference
   String _currentLayout = 'players_list_left';
+  /// When true, caption entry uses Keyboard Fire panel; when false, classic CaptionFieldsWidget.
+  bool _useKeyboardFireAsDefault = true;
 
   // Player selection state
   List<Player> selectedHomePlayers = [];
@@ -1027,16 +1030,35 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
     final logical = event.logicalKey;
     int? digit;
-    if (logical == LogicalKeyboardKey.digit1 || logical == LogicalKeyboardKey.numpad1) digit = 1;
-    else if (logical == LogicalKeyboardKey.digit2 || logical == LogicalKeyboardKey.numpad2) digit = 2;
-    else if (logical == LogicalKeyboardKey.digit3 || logical == LogicalKeyboardKey.numpad3) digit = 3;
-    else if (logical == LogicalKeyboardKey.digit4 || logical == LogicalKeyboardKey.numpad4) digit = 4;
-    else if (logical == LogicalKeyboardKey.digit5 || logical == LogicalKeyboardKey.numpad5) digit = 5;
-    else if (logical == LogicalKeyboardKey.digit6 || logical == LogicalKeyboardKey.numpad6) digit = 6;
-    else if (logical == LogicalKeyboardKey.digit7 || logical == LogicalKeyboardKey.numpad7) digit = 7;
-    else if (logical == LogicalKeyboardKey.digit8 || logical == LogicalKeyboardKey.numpad8) digit = 8;
-    else if (logical == LogicalKeyboardKey.digit9 || logical == LogicalKeyboardKey.numpad9) digit = 9;
-    else if (logical == LogicalKeyboardKey.digit0 || logical == LogicalKeyboardKey.numpad0) digit = 0;
+    if (logical == LogicalKeyboardKey.digit1 ||
+        logical == LogicalKeyboardKey.numpad1)
+      digit = 1;
+    else if (logical == LogicalKeyboardKey.digit2 ||
+        logical == LogicalKeyboardKey.numpad2)
+      digit = 2;
+    else if (logical == LogicalKeyboardKey.digit3 ||
+        logical == LogicalKeyboardKey.numpad3)
+      digit = 3;
+    else if (logical == LogicalKeyboardKey.digit4 ||
+        logical == LogicalKeyboardKey.numpad4)
+      digit = 4;
+    else if (logical == LogicalKeyboardKey.digit5 ||
+        logical == LogicalKeyboardKey.numpad5)
+      digit = 5;
+    else if (logical == LogicalKeyboardKey.digit6 ||
+        logical == LogicalKeyboardKey.numpad6)
+      digit = 6;
+    else if (logical == LogicalKeyboardKey.digit7 ||
+        logical == LogicalKeyboardKey.numpad7)
+      digit = 7;
+    else if (logical == LogicalKeyboardKey.digit8 ||
+        logical == LogicalKeyboardKey.numpad8)
+      digit = 8;
+    else if (logical == LogicalKeyboardKey.digit9 ||
+        logical == LogicalKeyboardKey.numpad9)
+      digit = 9;
+    else if (logical == LogicalKeyboardKey.digit0 ||
+        logical == LogicalKeyboardKey.numpad0) digit = 0;
     if (digit == null) return false;
 
     _optionVerbBufferTimer?.cancel();
@@ -1078,6 +1100,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         await preferencesService.getResolutionWarningThreshold();
     _photoshopPath = await preferencesService.getPhotoshopPath();
     _currentLayout = await preferencesService.getCurrentLayout();
+    final captionMode = await preferencesService.getCaptionEntryMode();
+    _useKeyboardFireAsDefault = captionMode == 'keyboard_fire';
   }
 
   // Load metadata from the current image
@@ -2794,11 +2818,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           ),
         ),
       );
-      
+
       if (shouldUpload != true) {
         return; // User cancelled
       }
-      
+
       // Remove from uploaded images so it can be uploaded again
       setState(() {
         _uploadedImages.remove(imagePath);
@@ -3220,6 +3244,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           final preferencesService = await PreferencesService.getInstance();
           await preferencesService.saveCurrentLayout(newLayout);
         },
+        onPreferencesClosed: () async {
+          final preferencesService = await PreferencesService.getInstance();
+          final mode = await preferencesService.getCaptionEntryMode();
+          if (mounted) {
+            setState(() {
+              _useKeyboardFireAsDefault = mode == 'keyboard_fire';
+            });
+          }
+        },
       ),
       body: Focus(
         canRequestFocus: false,
@@ -3235,72 +3268,79 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           return KeyEventResult.ignored;
         },
         child: Shortcuts(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
-              _PastePreviousCaptionIntent(),
-          SingleActivator(LogicalKeyboardKey.enter, meta: true):
-              _SaveAndNextIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowLeft): _PreviousImageIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
-        },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            _PastePreviousCaptionIntent:
-                CallbackAction<_PastePreviousCaptionIntent>(
-              onInvoke: (_) {
-                final state = _captionFieldsKey2.currentState;
-                (state as dynamic)?.pasteLastCaption();
-                return null;
-              },
-            ),
-            _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
-              onInvoke: (_) async {
-                await _saveCurrentMetadata();
-                if (!mounted) return null;
-                if (currentIndex < imagePaths.length - 1) {
-                  setState(() {
-                    currentIndex = currentIndex + 1;
-                  });
-                  _loadMetadata();
-                }
-                return null;
-              },
-            ),
-            _PreviousImageIntent: CallbackAction<_PreviousImageIntent>(
-              onInvoke: (_) {
-                if (imagePaths.isEmpty) return null;
-                if (currentIndex > 0) {
-                  setState(() => _thumbCenterRequestId++);
-                  _onImageSelected(currentIndex - 1);
-                }
-                return null;
-              },
-            ),
-            _NextImageIntent: CallbackAction<_NextImageIntent>(
-              onInvoke: (_) {
-                if (imagePaths.isEmpty) return null;
-                if (currentIndex < imagePaths.length - 1) {
-                  setState(() => _thumbCenterRequestId++);
-                  _onImageSelected(currentIndex + 1);
-                }
-                return null;
-              },
-            ),
-            _PreviousRowIntent: CallbackAction<_PreviousRowIntent>(
-              onInvoke: (_) => _handleArrowUpDownByRow(up: true),
-            ),
-            _NextRowIntent: CallbackAction<_NextRowIntent>(
-              onInvoke: (_) => _handleArrowUpDownByRow(up: false),
-            ),
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
+                _PastePreviousCaptionIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                _SaveAndNextIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowLeft):
+                _PreviousImageIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
+            SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
           },
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
-            child: _buildLayout(),
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              _PastePreviousCaptionIntent:
+                  CallbackAction<_PastePreviousCaptionIntent>(
+                onInvoke: (_) {
+                  final state = _captionFieldsKey2.currentState;
+                  (state as dynamic)?.pasteLastCaption();
+                  return null;
+                },
+              ),
+              _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
+                onInvoke: (_) async {
+                  await _saveCurrentMetadata();
+                  if (!mounted) return null;
+                  if (currentIndex < imagePaths.length - 1) {
+                    setState(() {
+                      currentIndex = currentIndex + 1;
+                    });
+                    _loadMetadata();
+                  }
+                  return null;
+                },
+              ),
+              _PreviousImageIntent: CallbackAction<_PreviousImageIntent>(
+                onInvoke: (_) {
+                  if (imagePaths.isEmpty) return null;
+                  if (currentIndex > 0) {
+                    setState(() => _thumbCenterRequestId++);
+                    _onImageSelected(currentIndex - 1);
+                  }
+                  return null;
+                },
+              ),
+              _NextImageIntent: CallbackAction<_NextImageIntent>(
+                onInvoke: (_) {
+                  if (imagePaths.isEmpty) return null;
+                  if (currentIndex < imagePaths.length - 1) {
+                    setState(() => _thumbCenterRequestId++);
+                    _onImageSelected(currentIndex + 1);
+                  }
+                  return null;
+                },
+              ),
+              _PreviousRowIntent: CallbackAction<_PreviousRowIntent>(
+                onInvoke: (_) => _handleArrowUpDownByRow(up: true),
+              ),
+              _NextRowIntent: CallbackAction<_NextRowIntent>(
+                onInvoke: (_) => _handleArrowUpDownByRow(up: false),
+              ),
+              KeyboardFireIntent: CallbackAction<KeyboardFireIntent>(
+                onInvoke: (_) {
+                  _showKeyboardFireDialog();
+                  return null;
+                },
+              ),
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
+              child: _buildLayout(),
+            ),
           ),
         ),
-      ),
       ), // Focus
     );
   }
@@ -3308,8 +3348,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Object? _handleArrowUpDownByRow({required bool up}) {
     if (imagePaths.isEmpty || !mounted) return null;
     final direction = up ? -1 : 1;
-    final nextIndex = _thumbnailGridKey.currentState
-        ?.getNextIndexVertical(direction);
+    final nextIndex =
+        _thumbnailGridKey.currentState?.getNextIndexVertical(direction);
     if (nextIndex != null && nextIndex != currentIndex) {
       setState(() => _thumbCenterRequestId++);
       _onImageSelected(nextIndex);
@@ -3347,8 +3387,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       return;
     }
     if (k == LogicalKeyboardKey.arrowDown) {
-      final nextIndex =
-          _thumbnailGridKey.currentState?.getNextIndexVertical(1);
+      final nextIndex = _thumbnailGridKey.currentState?.getNextIndexVertical(1);
       if (nextIndex != null && nextIndex != currentIndex) {
         setState(() => _thumbCenterRequestId++);
         _onImageSelected(nextIndex);
@@ -3389,6 +3428,51 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       default:
         return _buildPlayersListLeftLayout();
     }
+  }
+
+  /// Wraps caption UI: when [Keyboard Fire] is default, shows panel with classic widget offstage for state; otherwise shows classic only.
+  /// Uses StackFit.expand so the Stack expands to fill whatever space it is given.
+  Widget _buildCaptionEntryWidget(Widget captionWidget) {
+    if (!_useKeyboardFireAsDefault) return captionWidget;
+    final cs = _captionFieldsKey2.currentState;
+    final dynamic state = cs;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(offstage: true, child: captionWidget),
+        KeyboardFirePanel(
+          homeRoster: _cachedHomeRoster,
+          awayRoster: _cachedAwayRoster,
+          homeTeamName: selectedHomeTeam,
+          awayTeamName: selectedAwayTeam,
+          captionState: cs,
+          showDialogActions: false,
+          currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+          totalImages: imagePaths.length,
+          onPreviousImage: () {
+            if (currentIndex > 0) {
+              setState(() => _thumbCenterRequestId++);
+              _onImageSelected(currentIndex - 1);
+            }
+          },
+          onNextImage: () {
+            if (currentIndex < imagePaths.length - 1) {
+              setState(() => _thumbCenterRequestId++);
+              _onImageSelected(currentIndex + 1);
+            }
+          },
+          onSaveIptc: _saveIptcMetadata,
+          onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
+          onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
+          onReset: _handleReset,
+          onCopy: () => _onCopyMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+          onPaste: () => _onPasteMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+          onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
+          ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
+          currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
+        ),
+      ],
+    );
   }
 
   // Current layout: Players List Left (default)
@@ -3467,47 +3551,47 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   ),
                 ),
 
-              // Divider line between picture preview and thumbnails
-              Container(
-                height: 1,
-                color: Colors.grey.shade300,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-              ),
-
-              // Thumbnail grid - takes remaining space
-              Expanded(
-                child: ThumbnailGridWidget(
-                  key: _thumbnailGridKey,
-                  imagePaths: imagePaths,
-                  currentIndex: currentIndex,
-                  onImageSelected: _onImageSelected,
-                  uploadedImages: _uploadedImages,
-                  queuedUploads: _queuedUploads,
-                  currentlyUploading: _currentlyUploading,
-                  uploadProgress: _uploadProgress,
-                  xmpRatings: _xmpRatings,
-                  xmpLabels: _xmpLabels,
-                  xmpTagged: _xmpTagged,
-                  lockedPaths: _lockedPaths,
-                  centerRequestId: _thumbCenterRequestId,
-                  onImageDeleted: _onImageDeleted,
-                  onCopyMetadata: _onCopyMetadata,
-                  onPasteMetadata: _onPasteMetadata,
-                  onApplyIptcTemplate: _onApplyIptcTemplate,
-                  onFtpImage: _onFtpImage,
-                  onImageRenamed: _onImageRenamed,
-                  onMultiSelect: _onMultiSelect,
-                  onEditMetadata: _showMetadataPopup,
-                  onEditInPhotoshop: _launchPhotoshop,
-                  onColumnsComputed: (cols) {
-                    if (_lastThumbColumns != cols) {
-                      setState(() => _lastThumbColumns = cols);
-                    }
-                  },
+                // Divider line between picture preview and thumbnails
+                Container(
+                  height: 1,
+                  color: Colors.grey.shade300,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
                 ),
-              ),
-            ],
-          ),
+
+                // Thumbnail grid - takes remaining space
+                Expanded(
+                  child: ThumbnailGridWidget(
+                    key: _thumbnailGridKey,
+                    imagePaths: imagePaths,
+                    currentIndex: currentIndex,
+                    onImageSelected: _onImageSelected,
+                    uploadedImages: _uploadedImages,
+                    queuedUploads: _queuedUploads,
+                    currentlyUploading: _currentlyUploading,
+                    uploadProgress: _uploadProgress,
+                    xmpRatings: _xmpRatings,
+                    xmpLabels: _xmpLabels,
+                    xmpTagged: _xmpTagged,
+                    lockedPaths: _lockedPaths,
+                    centerRequestId: _thumbCenterRequestId,
+                    onImageDeleted: _onImageDeleted,
+                    onCopyMetadata: _onCopyMetadata,
+                    onPasteMetadata: _onPasteMetadata,
+                    onApplyIptcTemplate: _onApplyIptcTemplate,
+                    onFtpImage: _onFtpImage,
+                    onImageRenamed: _onImageRenamed,
+                    onMultiSelect: _onMultiSelect,
+                    onEditMetadata: _showMetadataPopup,
+                    onEditInPhotoshop: _launchPhotoshop,
+                    onColumnsComputed: (cols) {
+                      if (_lastThumbColumns != cols) {
+                        setState(() => _lastThumbColumns = cols);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
 
@@ -3516,71 +3600,73 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           flex: 6,
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: CaptionFieldsWidget(
-              key: _captionFieldsKey2,
-              metadata: currentMetadata,
-              cameraService: _cameraService,
-              onMetadataUpdated: (metadata) {
-                setState(() {
-                  currentMetadata = metadata;
-                });
-              },
-              getCurrentMetadataValues: () {
-                return {};
-              },
-              homeTeam: selectedHomeTeam,
-              awayTeam: selectedAwayTeam,
-              sport: _selectedSport,
-              onNextImage: () {
-                if (currentIndex < imagePaths.length - 1) {
+            child: _buildCaptionEntryWidget(
+              CaptionFieldsWidget(
+                key: _captionFieldsKey2,
+                metadata: currentMetadata,
+                cameraService: _cameraService,
+                onMetadataUpdated: (metadata) {
                   setState(() {
-                    _thumbCenterRequestId++;
+                    currentMetadata = metadata;
                   });
-                  _onImageSelected(currentIndex + 1);
-                }
-              },
-              onPreviousImage: () {
-                if (currentIndex > 0) {
+                },
+                getCurrentMetadataValues: () {
+                  return {};
+                },
+                homeTeam: selectedHomeTeam,
+                awayTeam: selectedAwayTeam,
+                sport: _selectedSport,
+                onNextImage: () {
+                  if (currentIndex < imagePaths.length - 1) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex + 1);
+                  }
+                },
+                onPreviousImage: () {
+                  if (currentIndex > 0) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex - 1);
+                  }
+                },
+                onReset: _handleReset,
+                personalityOverride: _personalityOverride,
+                onImagesLoaded: (files) {
+                  print(
+                      'DEBUG: onImagesLoaded called with ${files.length} files');
                   setState(() {
-                    _thumbCenterRequestId++;
+                    imagePaths = files;
+                    currentIndex = 0;
                   });
-                  _onImageSelected(currentIndex - 1);
-                }
-              },
-              onReset: _handleReset,
-              personalityOverride: _personalityOverride,
-              onImagesLoaded: (files) {
-                print(
-                    'DEBUG: onImagesLoaded called with ${files.length} files');
-                setState(() {
-                  imagePaths = files;
-                  currentIndex = 0;
-                });
-              },
-              onStartFolderWatcher: _startFolderWatcher,
-              preloadedHomeRoster:
-                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-              preloadedAwayRoster:
-                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-              currentImagePath:
-                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-              totalImages: imagePaths.length,
-              onSaveIptc: _saveIptcMetadata,
-              onImageUploaded: (imagePath) {
-                if (!_currentlyUploading.contains(imagePath)) {
+                },
+                onStartFolderWatcher: _startFolderWatcher,
+                preloadedHomeRoster:
+                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                preloadedAwayRoster:
+                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                currentImagePath:
+                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                totalImages: imagePaths.length,
+                onSaveIptc: _saveIptcMetadata,
+                onImageUploaded: (imagePath) {
+                  if (!_currentlyUploading.contains(imagePath)) {
+                    setState(() {
+                      _uploadedImages.add(imagePath);
+                      _uploadProgress[imagePath] =
+                          1.0; // Set to 1.0 to show "Upload complete"
+                    });
+                  }
+                },
+                onUploadProgress: (imagePath, progress) {
                   setState(() {
-                    _uploadedImages.add(imagePath);
-                    _uploadProgress[imagePath] =
-                        1.0; // Set to 1.0 to show "Upload complete"
+                    _uploadProgress[imagePath] = progress;
                   });
-                }
-              },
-              onUploadProgress: (imagePath, progress) {
-                setState(() {
-                  _uploadProgress[imagePath] = progress;
-                });
-              },
+                },
+              ),
             ),
           ),
         ),
@@ -3598,71 +3684,73 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           flex: 6,
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: CaptionFieldsWidget(
-              key: _captionFieldsKey2,
-              metadata: currentMetadata,
-              cameraService: _cameraService,
-              onMetadataUpdated: (metadata) {
-                setState(() {
-                  currentMetadata = metadata;
-                });
-              },
-              getCurrentMetadataValues: () {
-                return {};
-              },
-              homeTeam: selectedHomeTeam,
-              awayTeam: selectedAwayTeam,
-              sport: _selectedSport,
-              onNextImage: () {
-                if (currentIndex < imagePaths.length - 1) {
+            child: _buildCaptionEntryWidget(
+              CaptionFieldsWidget(
+                key: _captionFieldsKey2,
+                metadata: currentMetadata,
+                cameraService: _cameraService,
+                onMetadataUpdated: (metadata) {
                   setState(() {
-                    _thumbCenterRequestId++;
+                    currentMetadata = metadata;
                   });
-                  _onImageSelected(currentIndex + 1);
-                }
-              },
-              onPreviousImage: () {
-                if (currentIndex > 0) {
+                },
+                getCurrentMetadataValues: () {
+                  return {};
+                },
+                homeTeam: selectedHomeTeam,
+                awayTeam: selectedAwayTeam,
+                sport: _selectedSport,
+                onNextImage: () {
+                  if (currentIndex < imagePaths.length - 1) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex + 1);
+                  }
+                },
+                onPreviousImage: () {
+                  if (currentIndex > 0) {
+                    setState(() {
+                      _thumbCenterRequestId++;
+                    });
+                    _onImageSelected(currentIndex - 1);
+                  }
+                },
+                onReset: _handleReset,
+                personalityOverride: _personalityOverride,
+                onImagesLoaded: (files) {
+                  print(
+                      'DEBUG: onImagesLoaded called with ${files.length} files');
                   setState(() {
-                    _thumbCenterRequestId++;
+                    imagePaths = files;
+                    currentIndex = 0;
                   });
-                  _onImageSelected(currentIndex - 1);
-                }
-              },
-              onReset: _handleReset,
-              personalityOverride: _personalityOverride,
-              onImagesLoaded: (files) {
-                print(
-                    'DEBUG: onImagesLoaded called with ${files.length} files');
-                setState(() {
-                  imagePaths = files;
-                  currentIndex = 0;
-                });
-              },
-              onStartFolderWatcher: _startFolderWatcher,
-              preloadedHomeRoster:
-                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-              preloadedAwayRoster:
-                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-              currentImagePath:
-                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-              totalImages: imagePaths.length,
-              onSaveIptc: _saveIptcMetadata,
-              onImageUploaded: (imagePath) {
-                if (!_currentlyUploading.contains(imagePath)) {
+                },
+                onStartFolderWatcher: _startFolderWatcher,
+                preloadedHomeRoster:
+                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                preloadedAwayRoster:
+                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                currentImagePath:
+                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                totalImages: imagePaths.length,
+                onSaveIptc: _saveIptcMetadata,
+                onImageUploaded: (imagePath) {
+                  if (!_currentlyUploading.contains(imagePath)) {
+                    setState(() {
+                      _uploadedImages.add(imagePath);
+                      _uploadProgress[imagePath] =
+                          1.0; // Set to 1.0 to show "Upload complete"
+                    });
+                  }
+                },
+                onUploadProgress: (imagePath, progress) {
                   setState(() {
-                    _uploadedImages.add(imagePath);
-                    _uploadProgress[imagePath] =
-                        1.0; // Set to 1.0 to show "Upload complete"
+                    _uploadProgress[imagePath] = progress;
                   });
-                }
-              },
-              onUploadProgress: (imagePath, progress) {
-                setState(() {
-                  _uploadProgress[imagePath] = progress;
-                });
-              },
+                },
+              ),
             ),
           ),
         ),
@@ -3790,69 +3878,71 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // TOP ROW - Player picker, firebar, verbs
         Expanded(
           flex: 6,
-          child: CaptionFieldsWidget(
-            key: _captionFieldsKey2,
-            metadata: currentMetadata,
-            cameraService: _cameraService,
-            onMetadataUpdated: (metadata) {
-              setState(() {
-                currentMetadata = metadata;
-              });
-            },
-            getCurrentMetadataValues: () {
-              return {};
-            },
-            homeTeam: selectedHomeTeam,
-            awayTeam: selectedAwayTeam,
-            sport: _selectedSport,
-            onNextImage: () {
-              if (currentIndex < imagePaths.length - 1) {
+          child: _buildCaptionEntryWidget(
+            CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
                 setState(() {
-                  _thumbCenterRequestId++;
+                  currentMetadata = metadata;
                 });
-                _onImageSelected(currentIndex + 1);
-              }
-            },
-            onPreviousImage: () {
-              if (currentIndex > 0) {
+              },
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print('DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
-                  _thumbCenterRequestId++;
+                  imagePaths = files;
+                  currentIndex = 0;
                 });
-                _onImageSelected(currentIndex - 1);
-              }
-            },
-            onReset: _handleReset,
-            personalityOverride: _personalityOverride,
-            onImagesLoaded: (files) {
-              print('DEBUG: onImagesLoaded called with ${files.length} files');
-              setState(() {
-                imagePaths = files;
-                currentIndex = 0;
-              });
-            },
-            onStartFolderWatcher: _startFolderWatcher,
-            preloadedHomeRoster:
-                _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-            preloadedAwayRoster:
-                _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-            currentImagePath:
-                imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-            currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-            totalImages: imagePaths.length,
-            onSaveIptc: _saveIptcMetadata,
-            onImageUploaded: (imagePath) {
-              if (!_currentlyUploading.contains(imagePath)) {
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
+                  setState(() {
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress.remove(imagePath);
+                  });
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
                 setState(() {
-                  _uploadedImages.add(imagePath);
-                  _uploadProgress.remove(imagePath);
+                  _uploadProgress[imagePath] = progress;
                 });
-              }
-            },
-            onUploadProgress: (imagePath, progress) {
-              setState(() {
-                _uploadProgress[imagePath] = progress;
-              });
-            },
+              },
+            ),
           ),
         ),
 
@@ -4118,69 +4208,71 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // BOTTOM ROW - Player picker, firebar, verbs
         Expanded(
           flex: 6,
-          child: CaptionFieldsWidget(
-            key: _captionFieldsKey2,
-            metadata: currentMetadata,
-            cameraService: _cameraService,
-            onMetadataUpdated: (metadata) {
-              setState(() {
-                currentMetadata = metadata;
-              });
-            },
-            getCurrentMetadataValues: () {
-              return {};
-            },
-            homeTeam: selectedHomeTeam,
-            awayTeam: selectedAwayTeam,
-            sport: _selectedSport,
-            onNextImage: () {
-              if (currentIndex < imagePaths.length - 1) {
+          child: _buildCaptionEntryWidget(
+            CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
                 setState(() {
-                  _thumbCenterRequestId++;
+                  currentMetadata = metadata;
                 });
-                _onImageSelected(currentIndex + 1);
-              }
-            },
-            onPreviousImage: () {
-              if (currentIndex > 0) {
+              },
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
+                  setState(() {
+                    _thumbCenterRequestId++;
+                  });
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print('DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
-                  _thumbCenterRequestId++;
+                  imagePaths = files;
+                  currentIndex = 0;
                 });
-                _onImageSelected(currentIndex - 1);
-              }
-            },
-            onReset: _handleReset,
-            personalityOverride: _personalityOverride,
-            onImagesLoaded: (files) {
-              print('DEBUG: onImagesLoaded called with ${files.length} files');
-              setState(() {
-                imagePaths = files;
-                currentIndex = 0;
-              });
-            },
-            onStartFolderWatcher: _startFolderWatcher,
-            preloadedHomeRoster:
-                _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-            preloadedAwayRoster:
-                _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-            currentImagePath:
-                imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-            currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-            totalImages: imagePaths.length,
-            onSaveIptc: _saveIptcMetadata,
-            onImageUploaded: (imagePath) {
-              if (!_currentlyUploading.contains(imagePath)) {
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
+                  setState(() {
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress.remove(imagePath);
+                  });
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
                 setState(() {
-                  _uploadedImages.add(imagePath);
-                  _uploadProgress.remove(imagePath);
+                  _uploadProgress[imagePath] = progress;
                 });
-              }
-            },
-            onUploadProgress: (imagePath, progress) {
-              setState(() {
-                _uploadProgress[imagePath] = progress;
-              });
-            },
+              },
+            ),
           ),
         ),
       ],
@@ -4322,70 +4414,72 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
               // Verb Picker (takes remaining space)
               Expanded(
-                child: CaptionFieldsWidget(
-                  key: _captionFieldsKey2,
-                  metadata: currentMetadata,
-                  cameraService: _cameraService,
-                  onMetadataUpdated: (metadata) {
-                    setState(() {
-                      currentMetadata = metadata;
-                    });
-                  },
-                  getCurrentMetadataValues: () {
-                    return {};
-                  },
-                  homeTeam: selectedHomeTeam,
-                  awayTeam: selectedAwayTeam,
-                  sport: _selectedSport,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
+                child: _buildCaptionEntryWidget(
+                  CaptionFieldsWidget(
+                    key: _captionFieldsKey2,
+                    metadata: currentMetadata,
+                    cameraService: _cameraService,
+                    onMetadataUpdated: (metadata) {
                       setState(() {
-                        _thumbCenterRequestId++;
+                        currentMetadata = metadata;
                       });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onPreviousImage: () {
-                    if (currentIndex > 0) {
+                    },
+                    getCurrentMetadataValues: () {
+                      return {};
+                    },
+                    homeTeam: selectedHomeTeam,
+                    awayTeam: selectedAwayTeam,
+                    sport: _selectedSport,
+                    onNextImage: () {
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex + 1);
+                      }
+                    },
+                    onPreviousImage: () {
+                      if (currentIndex > 0) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex - 1);
+                      }
+                    },
+                    onReset: _handleReset,
+                    personalityOverride: _personalityOverride,
+                    onImagesLoaded: (files) {
+                      print(
+                          'DEBUG: onImagesLoaded called with ${files.length} files');
                       setState(() {
-                        _thumbCenterRequestId++;
+                        imagePaths = files;
+                        currentIndex = 0;
                       });
-                      _onImageSelected(currentIndex - 1);
-                    }
-                  },
-                  onReset: _handleReset,
-                  personalityOverride: _personalityOverride,
-                  onImagesLoaded: (files) {
-                    print(
-                        'DEBUG: onImagesLoaded called with ${files.length} files');
-                    setState(() {
-                      imagePaths = files;
-                      currentIndex = 0;
-                    });
-                  },
-                  onStartFolderWatcher: _startFolderWatcher,
-                  preloadedHomeRoster:
-                      _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-                  preloadedAwayRoster:
-                      _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-                  currentImagePath:
-                      imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-                  currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                  totalImages: imagePaths.length,
-                  onSaveIptc: _saveIptcMetadata,
-                  onImageUploaded: (imagePath) {
-                    if (!_currentlyUploading.contains(imagePath)) {
+                    },
+                    onStartFolderWatcher: _startFolderWatcher,
+                    preloadedHomeRoster:
+                        _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                    preloadedAwayRoster:
+                        _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                    currentImagePath:
+                        imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                    currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                    totalImages: imagePaths.length,
+                    onSaveIptc: _saveIptcMetadata,
+                    onImageUploaded: (imagePath) {
+                      if (!_currentlyUploading.contains(imagePath)) {
+                        setState(() {
+                          _uploadedImages.add(imagePath);
+                          _uploadProgress.remove(imagePath);
+                        });
+                      }
+                    },
+                    onUploadProgress: (imagePath, progress) {
                       setState(() {
-                        _uploadedImages.add(imagePath);
-                        _uploadProgress.remove(imagePath);
+                        _uploadProgress[imagePath] = progress;
                       });
-                    }
-                  },
-                  onUploadProgress: (imagePath, progress) {
-                    setState(() {
-                      _uploadProgress[imagePath] = progress;
-                    });
-                  },
+                    },
+                  ),
                 ),
               ),
             ],
@@ -4757,92 +4851,159 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // RIGHT COLUMN - Caption Fields and Player Picker
         Expanded(
           flex: 6,
-          child: Column(
-            children: [
-              // Caption Fields Widget (top portion) - fixed height
-              SizedBox(
-                height: 175,
-                child: CaptionFieldsWidget(
-                  key: _captionFieldsKey2,
-                  metadata: currentMetadata,
-                  cameraService: _cameraService,
-                  onMetadataUpdated: (metadata) {
-                    setState(() {
-                      currentMetadata = metadata;
-                    });
-                  },
-                  getCurrentMetadataValues: () {
-                    return {};
-                  },
-                  homeTeam: selectedHomeTeam,
-                  awayTeam: selectedAwayTeam,
-                  sport: _selectedSport,
-                  currentImagePath: imagePaths.isNotEmpty &&
-                          currentIndex >= 0 &&
-                          currentIndex < imagePaths.length
-                      ? imagePaths[currentIndex]
-                      : null,
-                  currentIndex: currentIndex,
-                  totalImages: imagePaths.length,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
+          child: _useKeyboardFireAsDefault
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Keep CaptionFieldsWidget alive offstage so its state is preserved
+                    Offstage(
+                      offstage: true,
+                      child: SizedBox(
+                        height: 1,
+                        child: CaptionFieldsWidget(
+                          key: _captionFieldsKey2,
+                          metadata: currentMetadata,
+                          cameraService: _cameraService,
+                          onMetadataUpdated: (_) {},
+                          getCurrentMetadataValues: () => {},
+                          homeTeam: selectedHomeTeam,
+                          awayTeam: selectedAwayTeam,
+                          sport: _selectedSport,
+                          onNextImage: () {},
+                          onPreviousImage: () {},
+                          onReset: _handleReset,
+                          preloadedHomeRoster: _cachedHomeRoster,
+                          preloadedAwayRoster: _cachedAwayRoster,
+                          hidePlayerPicker: true,
+                          onSaveIptc: _saveIptcMetadata,
+                          onSaveIptcBackground: _saveIptcMetadataBackground,
+                        ),
+                      ),
+                    ),
+                    Builder(builder: (context) {
+                      final cs = _captionFieldsKey2.currentState;
+                      final dynamic state = cs;
+                      return KeyboardFirePanel(
+                        homeRoster: _cachedHomeRoster,
+                        awayRoster: _cachedAwayRoster,
+                        homeTeamName: selectedHomeTeam,
+                        awayTeamName: selectedAwayTeam,
+                        captionState: cs,
+                        showDialogActions: false,
+                        currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                        totalImages: imagePaths.length,
+                        onPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() => _thumbCenterRequestId++);
+                            _onImageSelected(currentIndex - 1);
+                          }
+                        },
+                        onNextImage: () {
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() => _thumbCenterRequestId++);
+                            _onImageSelected(currentIndex + 1);
+                          }
+                        },
+                        onSaveIptc: _saveIptcMetadata,
+                        onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
+                        onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
+                        onReset: _handleReset,
+                        onCopy: () => _onCopyMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+                        onPaste: () => _onPasteMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+                        onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
+                        ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
+                        currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
+                      );
+                    }),
+                  ],
+                )
+              : Column(
+                  children: [
+                    // Caption Fields Widget (top portion) - fixed height
+                    SizedBox(
+                      height: 175,
+                      child:
+                  CaptionFieldsWidget(
+                    key: _captionFieldsKey2,
+                    metadata: currentMetadata,
+                    cameraService: _cameraService,
+                    onMetadataUpdated: (metadata) {
                       setState(() {
-                        _thumbCenterRequestId++;
+                        currentMetadata = metadata;
                       });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onPreviousImage: () {
-                    if (currentIndex > 0) {
+                    },
+                    getCurrentMetadataValues: () {
+                      return {};
+                    },
+                    homeTeam: selectedHomeTeam,
+                    awayTeam: selectedAwayTeam,
+                    sport: _selectedSport,
+                    currentImagePath: imagePaths.isNotEmpty &&
+                            currentIndex >= 0 &&
+                            currentIndex < imagePaths.length
+                        ? imagePaths[currentIndex]
+                        : null,
+                    currentIndex: currentIndex,
+                    totalImages: imagePaths.length,
+                    onNextImage: () {
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex + 1);
+                      }
+                    },
+                    onPreviousImage: () {
+                      if (currentIndex > 0) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex - 1);
+                      }
+                    },
+                    onReset: _handleReset,
+                    personalityOverride: _personalityOverride,
+                    onImagesLoaded: (files) {
                       setState(() {
-                        _thumbCenterRequestId++;
+                        imagePaths = files;
+                        currentIndex = 0;
                       });
-                      _onImageSelected(currentIndex - 1);
-                    }
-                  },
-                  onReset: _handleReset,
-                  personalityOverride: _personalityOverride,
-                  onImagesLoaded: (files) {
-                    setState(() {
-                      imagePaths = files;
-                      currentIndex = 0;
-                    });
-                  },
-                  preloadedHomeRoster: _cachedHomeRoster,
-                  preloadedAwayRoster: _cachedAwayRoster,
-                  hidePlayerPicker:
-                      true, // Hide old player picker for this layout
-                  onSaveIptc: _saveIptcMetadata,
-                  onSaveIptcBackground: _saveIptcMetadataBackground,
-                  onCopyMetadata: () =>
-                      _onCopyMetadata(imagePaths[currentIndex]),
-                  onImageUploaded: (imagePath) {
-                    if (!_currentlyUploading.contains(imagePath)) {
+                    },
+                    preloadedHomeRoster: _cachedHomeRoster,
+                    preloadedAwayRoster: _cachedAwayRoster,
+                    hidePlayerPicker:
+                        true, // Hide old player picker for this layout
+                    onSaveIptc: _saveIptcMetadata,
+                    onSaveIptcBackground: _saveIptcMetadataBackground,
+                    onCopyMetadata: () =>
+                        _onCopyMetadata(imagePaths[currentIndex]),
+                    onImageUploaded: (imagePath) {
+                      if (!_currentlyUploading.contains(imagePath)) {
+                        setState(() {
+                          _uploadedImages.add(imagePath);
+                          _uploadProgress[imagePath] =
+                              1.0; // Set to 1.0 to show "Upload complete"
+                        });
+                      }
+                    },
+                    onUploadProgress: (imagePath, progress) {
                       setState(() {
-                        _uploadedImages.add(imagePath);
-                        _uploadProgress[imagePath] =
-                            1.0; // Set to 1.0 to show "Upload complete"
+                        _uploadProgress[imagePath] = progress;
                       });
-                    }
-                  },
-                  onUploadProgress: (imagePath, progress) {
-                    setState(() {
-                      _uploadProgress[imagePath] = progress;
-                    });
-                  },
-                  isImageUploaded: (imagePath) {
-                    return _uploadedImages.contains(imagePath);
-                  },
-                  onClearUploadStatus: (imagePath) {
-                    setState(() {
-                      _uploadedImages.remove(imagePath);
-                      _uploadProgress.remove(imagePath);
-                    });
-                  },
-                ),
-              ),
-              // Player picker with popup verbs (remaining space)
-              Expanded(
+                    },
+                    isImageUploaded: (imagePath) {
+                      return _uploadedImages.contains(imagePath);
+                    },
+                    onClearUploadStatus: (imagePath) {
+                      setState(() {
+                        _uploadedImages.remove(imagePath);
+                        _uploadProgress.remove(imagePath);
+                      });
+                    },
+                  ), // end CaptionFieldsWidget
+                ), // end SizedBox(height:175)
+                    // Player picker with popup verbs (remaining space)
+                    Expanded(
                 child: PlayerPopupCaptionBoard(
                   key: _playerPopupKey,
                   homeTeamName: selectedHomeTeam,
@@ -4976,9 +5137,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentlyUploading: _currentlyUploading,
                 ),
               ),
-            ],
-          ),
-        ),
+            ], // end classic Column children
+          ), // end classic Column
+        ), // end Expanded(flex:6) / ternary
       ],
     );
   }

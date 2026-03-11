@@ -451,8 +451,14 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         _syncEnteredNumbersFromSelection();
       });
 
-      final mergedHomePlayers = {..._selectedHomePlayers, ..._stickyHomePlayers};
-      final mergedAwayPlayers = {..._selectedAwayPlayers, ..._stickyAwayPlayers};
+      final mergedHomePlayers = {
+        ..._selectedHomePlayers,
+        ..._stickyHomePlayers
+      };
+      final mergedAwayPlayers = {
+        ..._selectedAwayPlayers,
+        ..._stickyAwayPlayers
+      };
       widget.onSelectionChanged?.call(
         mergedHomePlayers,
         mergedAwayPlayers,
@@ -880,19 +886,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       ),
       child: Column(
         children: [
-          // Header for verb list - now contains a permanent period selector
-          Container(
-            height: _periodSelectorHeight,
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade300),
-              ),
-            ),
-            child: _buildHeaderPeriodSelector(),
-          ),
-          // Player chips (moved to center)
+          // Player chips (row of buttons) first
           Container(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             decoration: BoxDecoration(
@@ -915,6 +909,18 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               ],
             ),
           ),
+          // Period picker under the row of buttons
+          Container(
+            height: _periodSelectorHeight,
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+            child: _buildHeaderPeriodSelector(),
+          ),
           // Expandable verb categories (Cmd+1..6 to expand category)
           Expanded(
             child: Listener(
@@ -925,12 +931,23 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final k = event.logicalKey;
                   int? digit;
-                  if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1) digit = 1;
-                  else if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2) digit = 2;
-                  else if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3) digit = 3;
-                  else if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4) digit = 4;
-                  else if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5) digit = 5;
-                  else if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6) digit = 6;
+                  if (k == LogicalKeyboardKey.digit1 ||
+                      k == LogicalKeyboardKey.numpad1)
+                    digit = 1;
+                  else if (k == LogicalKeyboardKey.digit2 ||
+                      k == LogicalKeyboardKey.numpad2)
+                    digit = 2;
+                  else if (k == LogicalKeyboardKey.digit3 ||
+                      k == LogicalKeyboardKey.numpad3)
+                    digit = 3;
+                  else if (k == LogicalKeyboardKey.digit4 ||
+                      k == LogicalKeyboardKey.numpad4)
+                    digit = 4;
+                  else if (k == LogicalKeyboardKey.digit5 ||
+                      k == LogicalKeyboardKey.numpad5)
+                    digit = 5;
+                  else if (k == LogicalKeyboardKey.digit6 ||
+                      k == LogicalKeyboardKey.numpad6) digit = 6;
                   if (digit == null) return KeyEventResult.ignored;
                   final isCmd = HardwareKeyboard.instance.isMetaPressed;
                   if (!isCmd) return KeyEventResult.ignored;
@@ -939,7 +956,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     _expandedCategories.clear();
                     if (d == 1) {
                       _expandedCategories.add('Favorites');
-                    } else if (d >= 2 && d <= 6 && _categoryOrder.length >= d - 1) {
+                    } else if (d >= 2 &&
+                        d <= 6 &&
+                        _categoryOrder.length >= d - 1) {
                       _expandedCategories.add(_categoryOrder[d - 2]);
                     }
                   });
@@ -948,340 +967,36 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                 child: _categoryOrder.isEmpty
                     ? const SizedBox() // Show nothing while loading
                     : ReorderableListView(
-                    padding: EdgeInsets.zero,
-                    buildDefaultDragHandles: false,
-                    onReorder: (oldIndex, newIndex) {
-                      // Don't allow moving Favorites (index 0)
-                      if (oldIndex == 0 || newIndex == 0) return;
+                        padding: EdgeInsets.zero,
+                        buildDefaultDragHandles: false,
+                        onReorder: (oldIndex, newIndex) {
+                          // Don't allow moving Favorites (index 0)
+                          if (oldIndex == 0 || newIndex == 0) return;
 
-                      // Adjust indices to account for Favorites at index 0
-                      final adjustedOldIndex = oldIndex - 1;
-                      final adjustedNewIndex =
-                          newIndex > oldIndex ? newIndex - 1 : newIndex - 1;
+                          // Adjust indices to account for Favorites at index 0
+                          final adjustedOldIndex = oldIndex - 1;
+                          final adjustedNewIndex =
+                              newIndex > oldIndex ? newIndex - 1 : newIndex - 1;
 
-                      setState(() {
-                        final item = _categoryOrder.removeAt(adjustedOldIndex);
-                        _categoryOrder.insert(adjustedNewIndex, item);
-                      });
-                      _saveCategoryOrder();
-                    },
-                    children: [
-                      // Favorites category (always show first, not draggable)
-                      Theme(
-                        key: const ValueKey('Favorites'),
-                        data: Theme.of(context).copyWith(
-                          dividerColor: Colors.transparent,
-                        ),
-                        child: ExpansionTile(
-                          key: ValueKey(
-                              'Favorites_${_expandedCategories.contains('Favorites')}'),
-                          initiallyExpanded:
-                              _expandedCategories.contains('Favorites'),
-                          onExpansionChanged: (expanding) {
-                            setState(() {
-                              if (expanding) {
-                                // If expanding, check if we already have 1 open
-                                if (_expandedCategories.length >= 1) {
-                                  // Remove the first (oldest) expanded category
-                                  _expandedCategories
-                                      .remove(_expandedCategories.first);
-                                }
-                                _expandedCategories.add('Favorites');
-                              } else {
-                                // If collapsing, just remove it
-                                _expandedCategories.remove('Favorites');
-                              }
-                            });
-                          },
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 0,
-                          ),
-                          minTileHeight: 24,
-                          childrenPadding: EdgeInsets.zero,
-                          title: Row(
-                            children: [
-                              Text(
-                                '1. Favorites',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800,
-                                  height: 1.0,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.star,
-                                size: 14,
-                                color: Colors.amber,
-                              ),
-                            ],
-                          ),
-                          trailing: Icon(
-                            Icons.expand_more,
-                            size: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                          backgroundColor: Colors.grey.shade50,
-                          collapsedBackgroundColor: Colors.grey.shade50,
-                          children: _getFavoriteVerbs().isEmpty
-                              ? [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      border: Border(
-                                        bottom: BorderSide(
-                                          color: Colors.grey.shade200,
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'No favorites yet. Right-click any verb to add it to favorites.',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ),
-                                ]
-                              : _getFavoriteVerbs().toList().asMap().entries.map((e) {
-                                  final verb = e.value;
-                                  final verbNumber = e.key + 1;
-                                  final verbKey = 'Favorites_${verb.label}';
-                                  final isExpanded = _expandedVerb == verbKey;
-                                  final isLastUsed =
-                                      _lastUsedVerbLabel == verb.label;
-                                  final isSticky =
-                                      _stickyVerb?.label == verb.label;
-
-                                  return Column(
-                                    children: [
-                                      GestureDetector(
-                                        onSecondaryTapDown: (details) {
-                                          _showVerbContextMenu(context,
-                                              details.globalPosition, verb);
-                                        },
-                                        child: InkWell(
-                                          onTap: () =>
-                                              _handleVerbTap(verb, verbKey),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isSticky
-                                                  ? Colors.orange.shade50
-                                                  : Colors.white,
-                                              border: Border(
-                                                bottom: BorderSide(
-                                                  color: Colors.grey.shade200,
-                                                  width: 0.5,
-                                                ),
-                                                left: isSticky
-                                                    ? BorderSide(
-                                                        color: Colors
-                                                            .orange.shade400,
-                                                        width: 3,
-                                                      )
-                                                    : BorderSide.none,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                const SizedBox(width: 12),
-                                                Padding(
-                                                  padding: const EdgeInsets.only(right: 6),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.grey.shade500,
-                                                      borderRadius: BorderRadius.circular(3),
-                                                    ),
-                                                    child: Text(
-                                                      '$verbNumber',
-                                                      style: const TextStyle(
-                                                        fontSize: 9,
-                                                        color: Colors.white,
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isSticky)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 4),
-                                                    child: Icon(
-                                                      Icons.push_pin,
-                                                      size: 12,
-                                                      color: Colors
-                                                          .orange.shade700,
-                                                    ),
-                                                  ),
-                                                Expanded(
-                                                  child: Text(
-                                                    verb.label,
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontSize: 11,
-                                                      color: isSticky
-                                                          ? Colors
-                                                              .orange.shade700
-                                                          : Colors
-                                                              .grey.shade700,
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isLastUsed)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 4),
-                                                    child: Text(
-                                                      '<- Last Used',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: Colors.red,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                Icon(
-                                                  isExpanded
-                                                      ? Icons.expand_less
-                                                      : Icons.expand_more,
-                                                  size: 14,
-                                                  color: Colors.grey.shade400,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      // Show action buttons when expanded OR when sticky verb is active
-                                      // Check both regular selected players and sticky players
-                                      if ((isExpanded || isSticky) &&
-                                          (_selectedHomePlayers.isNotEmpty ||
-                                              _selectedAwayPlayers.isNotEmpty ||
-                                              _stickyHomePlayers.isNotEmpty ||
-                                              _stickyAwayPlayers.isNotEmpty))
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade50,
-                                            border: Border(
-                                              bottom: BorderSide(
-                                                color: Colors.grey.shade200,
-                                                width: 0.5,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.end,
-                                            children: [
-                                              if (widget.onFtp != null)
-                                                TextButton(
-                                                  onPressed: widget
-                                                          .isFtpDisabled
-                                                      ? null
-                                                      : () {
-                                                          widget.onFtp?.call();
-                                                          // Collapse expanded verb after FTP
-                                                          setState(() {
-                                                            _expandedVerb =
-                                                                null;
-                                                            _showCustomVerbButtons =
-                                                                false;
-                                                          });
-                                                        },
-                                                  style: TextButton.styleFrom(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                    minimumSize:
-                                                        const Size(0, 24),
-                                                    tapTargetSize:
-                                                        MaterialTapTargetSize
-                                                            .shrinkWrap,
-                                                  ),
-                                                  child: const Text(
-                                                    'FTP',
-                                                    style:
-                                                        TextStyle(fontSize: 10),
-                                                  ),
-                                                ),
-                                              if (widget.onSaveIptc !=
-                                                  null) ...[
-                                                const SizedBox(width: 4),
-                                                TextButton(
-                                                  onPressed: () {
-                                                    widget.onSaveIptc?.call();
-                                                    // Collapse expanded verb after Save
-                                                    setState(() {
-                                                      _expandedVerb = null;
-                                                      _showCustomVerbButtons =
-                                                          false;
-                                                    });
-                                                  },
-                                                  style: TextButton.styleFrom(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                    minimumSize:
-                                                        const Size(0, 24),
-                                                    tapTargetSize:
-                                                        MaterialTapTargetSize
-                                                            .shrinkWrap,
-                                                  ),
-                                                  child: const Text(
-                                                    'Save',
-                                                    style:
-                                                        TextStyle(fontSize: 10),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                }).toList(),
-                        ),
-                      ),
-                      ..._categoryOrder.map((categoryName) {
-                        if (!_verbCategories.containsKey(categoryName)) {
-                          return SizedBox.shrink(
-                              key: ValueKey('missing_$categoryName'));
-                        }
-                        final isExpanded =
-                            _expandedCategories.contains(categoryName);
-                        final categoryIndex = _categoryOrder.indexOf(categoryName);
-                        return ReorderableDragStartListener(
-                          key: ValueKey('${categoryName}_$categoryIndex'),
-                          index: categoryIndex + 1, // +1 for Favorites
-                          child: Theme(
+                          setState(() {
+                            final item =
+                                _categoryOrder.removeAt(adjustedOldIndex);
+                            _categoryOrder.insert(adjustedNewIndex, item);
+                          });
+                          _saveCategoryOrder();
+                        },
+                        children: [
+                          // Favorites category (always show first, not draggable)
+                          Theme(
+                            key: const ValueKey('Favorites'),
                             data: Theme.of(context).copyWith(
                               dividerColor: Colors.transparent,
                             ),
                             child: ExpansionTile(
-                              key: ValueKey('${categoryName}_$isExpanded'),
-                              initiallyExpanded: isExpanded,
+                              key: ValueKey(
+                                  'Favorites_${_expandedCategories.contains('Favorites')}'),
+                              initiallyExpanded:
+                                  _expandedCategories.contains('Favorites'),
                               onExpansionChanged: (expanding) {
                                 setState(() {
                                   if (expanding) {
@@ -1291,10 +1006,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                       _expandedCategories
                                           .remove(_expandedCategories.first);
                                     }
-                                    _expandedCategories.add(categoryName);
+                                    _expandedCategories.add('Favorites');
                                   } else {
                                     // If collapsing, just remove it
-                                    _expandedCategories.remove(categoryName);
+                                    _expandedCategories.remove('Favorites');
                                   }
                                 });
                               },
@@ -1304,14 +1019,24 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               ),
                               minTileHeight: 24,
                               childrenPadding: EdgeInsets.zero,
-                              title: Text(
-                                '${categoryIndex + 2}. $categoryName',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800,
-                                  height: 1.0,
-                                ),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    '1. Favorites',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Colors.amber,
+                                  ),
+                                ],
                               ),
                               trailing: Icon(
                                 Icons.expand_more,
@@ -1320,254 +1045,607 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               ),
                               backgroundColor: Colors.grey.shade50,
                               collapsedBackgroundColor: Colors.grey.shade50,
-                              children: [
-                                ..._getVerbsForCategory(categoryName)
-                                    .toList()
-                                    .asMap()
-                                    .entries
-                                    .map((e) {
-                                  final verb = e.value;
-                                  final verbNumber = e.key + 1;
-                                  final verbKey =
-                                      '${categoryName}_${verb.label}';
-                                  final isExpanded = _expandedVerb == verbKey;
-                                  final isLastUsed =
-                                      _lastUsedVerbLabel == verb.label;
-                                  final isSticky =
-                                      _stickyVerb?.label == verb.label;
-
-                                  return Column(
-                                    children: [
-                                      GestureDetector(
-                                        onSecondaryTapDown: (details) {
-                                          _showVerbContextMenu(context,
-                                              details.globalPosition, verb);
-                                        },
-                                        child: InkWell(
-                                          onTap: () =>
-                                              _handleVerbTap(verb, verbKey),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: isSticky
-                                                  ? Colors.orange.shade50
-                                                  : Colors.white,
-                                              border: Border(
-                                                bottom: BorderSide(
-                                                  color: Colors.grey.shade200,
-                                                  width: 0.5,
-                                                ),
-                                                left: isSticky
-                                                    ? BorderSide(
-                                                        color: Colors
-                                                            .orange.shade400,
-                                                        width: 3,
-                                                      )
-                                                    : BorderSide.none,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                const SizedBox(width: 12),
-                                                Padding(
-                                                  padding: const EdgeInsets.only(right: 6),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.grey.shade500,
-                                                      borderRadius: BorderRadius.circular(3),
-                                                    ),
-                                                    child: Text(
-                                                      '$verbNumber',
-                                                      style: const TextStyle(
-                                                        fontSize: 9,
-                                                        color: Colors.white,
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isSticky)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 4),
-                                                    child: Icon(
-                                                      Icons.push_pin,
-                                                      size: 12,
-                                                      color: Colors
-                                                          .orange.shade700,
-                                                    ),
-                                                  ),
-                                                Expanded(
-                                                  child: Text(
-                                                    verb.label,
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontSize: 11,
-                                                      color: isSticky
-                                                          ? Colors
-                                                              .orange.shade700
-                                                          : Colors
-                                                              .grey.shade700,
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isLastUsed)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                            right: 4),
-                                                    child: Text(
-                                                      '<- Last Used',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: Colors.red,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                Icon(
-                                                  isExpanded
-                                                      ? Icons.expand_less
-                                                      : Icons.expand_more,
-                                                  size: 14,
-                                                  color: Colors.grey.shade400,
-                                                ),
-                                              ],
+                              children: _getFavoriteVerbs().isEmpty
+                                  ? [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 12,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Colors.grey.shade200,
+                                              width: 0.5,
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      // Show action buttons when expanded OR when sticky verb is active
-                                      // Check both regular selected players and sticky players
-                                      if ((isExpanded || isSticky) &&
-                                          (_selectedHomePlayers.isNotEmpty ||
-                                              _selectedAwayPlayers.isNotEmpty ||
-                                              _stickyHomePlayers.isNotEmpty ||
-                                              _stickyAwayPlayers.isNotEmpty))
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade50,
-                                            border: Border(
-                                              bottom: BorderSide(
-                                                color: Colors.grey.shade200,
-                                                width: 0.5,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const SizedBox(
-                                                  width:
-                                                      24), // Indent to match verb text
-                                              Expanded(
-                                                child: _buildActionButtonsRow(
-                                                    collapseOnAction: true),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                }),
-                                // Add Verb button
-                                InkWell(
-                                  onTap: () => _showAddVerbDialog(categoryName),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      border: Border(
-                                        bottom: BorderSide(
-                                          color: Colors.grey.shade200,
-                                          width: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.add,
-                                          size: 14,
-                                          color: Colors.blue.shade600,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Add New Verb',
+                                        child: Text(
+                                          'No favorites yet. Right-click any verb to add it to favorites.',
                                           style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.blue.shade600,
+                                            fontSize: 10,
+                                            color: Colors.grey.shade600,
                                           ),
                                         ),
-                                      ],
+                                      ),
+                                    ]
+                                  : _getFavoriteVerbs()
+                                      .toList()
+                                      .asMap()
+                                      .entries
+                                      .map((e) {
+                                      final verb = e.value;
+                                      final verbNumber = e.key + 1;
+                                      final verbKey = 'Favorites_${verb.label}';
+                                      final isExpanded =
+                                          _expandedVerb == verbKey;
+                                      final isLastUsed =
+                                          _lastUsedVerbLabel == verb.label;
+                                      final isSticky =
+                                          _stickyVerb?.label == verb.label;
+
+                                      return Column(
+                                        children: [
+                                          GestureDetector(
+                                            onSecondaryTapDown: (details) {
+                                              _showVerbContextMenu(context,
+                                                  details.globalPosition, verb);
+                                            },
+                                            child: InkWell(
+                                              onTap: () =>
+                                                  _handleVerbTap(verb, verbKey),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 6,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: isSticky
+                                                      ? Colors.orange.shade50
+                                                      : Colors.white,
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color:
+                                                          Colors.grey.shade200,
+                                                      width: 0.5,
+                                                    ),
+                                                    left: isSticky
+                                                        ? BorderSide(
+                                                            color: Colors.orange
+                                                                .shade400,
+                                                            width: 3,
+                                                          )
+                                                        : BorderSide.none,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const SizedBox(width: 12),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              right: 6),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 4,
+                                                                vertical: 1),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(3),
+                                                        ),
+                                                        child: Text(
+                                                          '$verbNumber',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isSticky)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 4),
+                                                        child: Icon(
+                                                          Icons.push_pin,
+                                                          size: 12,
+                                                          color: Colors
+                                                              .orange.shade700,
+                                                        ),
+                                                      ),
+                                                    Expanded(
+                                                      child: Text(
+                                                        verb.label,
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          fontSize: 11,
+                                                          color: isSticky
+                                                              ? Colors.orange
+                                                                  .shade700
+                                                              : Colors.grey
+                                                                  .shade700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isLastUsed)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 4),
+                                                        child: Text(
+                                                          '<- Last Used',
+                                                          style: TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors.red,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    Icon(
+                                                      isExpanded
+                                                          ? Icons.expand_less
+                                                          : Icons.expand_more,
+                                                      size: 14,
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          // Show action buttons when expanded OR when sticky verb is active
+                                          // Check both regular selected players and sticky players
+                                          if ((isExpanded || isSticky) &&
+                                              (_selectedHomePlayers
+                                                      .isNotEmpty ||
+                                                  _selectedAwayPlayers
+                                                      .isNotEmpty ||
+                                                  _stickyHomePlayers
+                                                      .isNotEmpty ||
+                                                  _stickyAwayPlayers
+                                                      .isNotEmpty))
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade50,
+                                                border: Border(
+                                                  bottom: BorderSide(
+                                                    color: Colors.grey.shade200,
+                                                    width: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.end,
+                                                children: [
+                                                  if (widget.onFtp != null)
+                                                    TextButton(
+                                                      onPressed:
+                                                          widget.isFtpDisabled
+                                                              ? null
+                                                              : () {
+                                                                  widget.onFtp
+                                                                      ?.call();
+                                                                  // Collapse expanded verb after FTP
+                                                                  setState(() {
+                                                                    _expandedVerb =
+                                                                        null;
+                                                                    _showCustomVerbButtons =
+                                                                        false;
+                                                                  });
+                                                                },
+                                                      style:
+                                                          TextButton.styleFrom(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                        minimumSize:
+                                                            const Size(0, 24),
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                      child: const Text(
+                                                        'FTP',
+                                                        style: TextStyle(
+                                                            fontSize: 10),
+                                                      ),
+                                                    ),
+                                                  if (widget.onSaveIptc !=
+                                                      null) ...[
+                                                    const SizedBox(width: 4),
+                                                    TextButton(
+                                                      onPressed: () {
+                                                        widget.onSaveIptc
+                                                            ?.call();
+                                                        // Collapse expanded verb after Save
+                                                        setState(() {
+                                                          _expandedVerb = null;
+                                                          _showCustomVerbButtons =
+                                                              false;
+                                                        });
+                                                      },
+                                                      style:
+                                                          TextButton.styleFrom(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                        minimumSize:
+                                                            const Size(0, 24),
+                                                        tapTargetSize:
+                                                            MaterialTapTargetSize
+                                                                .shrinkWrap,
+                                                      ),
+                                                      child: const Text(
+                                                        'Save',
+                                                        style: TextStyle(
+                                                            fontSize: 10),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    }).toList(),
+                            ),
+                          ),
+                          ..._categoryOrder.map((categoryName) {
+                            if (!_verbCategories.containsKey(categoryName)) {
+                              return SizedBox.shrink(
+                                  key: ValueKey('missing_$categoryName'));
+                            }
+                            final isExpanded =
+                                _expandedCategories.contains(categoryName);
+                            final categoryIndex =
+                                _categoryOrder.indexOf(categoryName);
+                            return ReorderableDragStartListener(
+                              key: ValueKey('${categoryName}_$categoryIndex'),
+                              index: categoryIndex + 1, // +1 for Favorites
+                              child: Theme(
+                                data: Theme.of(context).copyWith(
+                                  dividerColor: Colors.transparent,
+                                ),
+                                child: ExpansionTile(
+                                  key: ValueKey('${categoryName}_$isExpanded'),
+                                  initiallyExpanded: isExpanded,
+                                  onExpansionChanged: (expanding) {
+                                    setState(() {
+                                      if (expanding) {
+                                        // If expanding, check if we already have 1 open
+                                        if (_expandedCategories.length >= 1) {
+                                          // Remove the first (oldest) expanded category
+                                          _expandedCategories.remove(
+                                              _expandedCategories.first);
+                                        }
+                                        _expandedCategories.add(categoryName);
+                                      } else {
+                                        // If collapsing, just remove it
+                                        _expandedCategories
+                                            .remove(categoryName);
+                                      }
+                                    });
+                                  },
+                                  tilePadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 0,
+                                  ),
+                                  minTileHeight: 24,
+                                  childrenPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    '${categoryIndex + 2}. $categoryName',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                      height: 1.0,
                                     ),
                                   ),
+                                  trailing: Icon(
+                                    Icons.expand_more,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  backgroundColor: Colors.grey.shade50,
+                                  collapsedBackgroundColor: Colors.grey.shade50,
+                                  children: [
+                                    ..._getVerbsForCategory(categoryName)
+                                        .toList()
+                                        .asMap()
+                                        .entries
+                                        .map((e) {
+                                      final verb = e.value;
+                                      final verbNumber = e.key + 1;
+                                      final verbKey =
+                                          '${categoryName}_${verb.label}';
+                                      final isExpanded =
+                                          _expandedVerb == verbKey;
+                                      final isLastUsed =
+                                          _lastUsedVerbLabel == verb.label;
+                                      final isSticky =
+                                          _stickyVerb?.label == verb.label;
+
+                                      return Column(
+                                        children: [
+                                          GestureDetector(
+                                            onSecondaryTapDown: (details) {
+                                              _showVerbContextMenu(context,
+                                                  details.globalPosition, verb);
+                                            },
+                                            child: InkWell(
+                                              onTap: () =>
+                                                  _handleVerbTap(verb, verbKey),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 6,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: isSticky
+                                                      ? Colors.orange.shade50
+                                                      : Colors.white,
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color:
+                                                          Colors.grey.shade200,
+                                                      width: 0.5,
+                                                    ),
+                                                    left: isSticky
+                                                        ? BorderSide(
+                                                            color: Colors.orange
+                                                                .shade400,
+                                                            width: 3,
+                                                          )
+                                                        : BorderSide.none,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const SizedBox(width: 12),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              right: 6),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 4,
+                                                                vertical: 1),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(3),
+                                                        ),
+                                                        child: Text(
+                                                          '$verbNumber',
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isSticky)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 4),
+                                                        child: Icon(
+                                                          Icons.push_pin,
+                                                          size: 12,
+                                                          color: Colors
+                                                              .orange.shade700,
+                                                        ),
+                                                      ),
+                                                    Expanded(
+                                                      child: Text(
+                                                        verb.label,
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          fontSize: 11,
+                                                          color: isSticky
+                                                              ? Colors.orange
+                                                                  .shade700
+                                                              : Colors.grey
+                                                                  .shade700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    if (isLastUsed)
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(right: 4),
+                                                        child: Text(
+                                                          '<- Last Used',
+                                                          style: TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors.red,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    Icon(
+                                                      isExpanded
+                                                          ? Icons.expand_less
+                                                          : Icons.expand_more,
+                                                      size: 14,
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          // Show action buttons when expanded OR when sticky verb is active
+                                          // Check both regular selected players and sticky players
+                                          if ((isExpanded || isSticky) &&
+                                              (_selectedHomePlayers
+                                                      .isNotEmpty ||
+                                                  _selectedAwayPlayers
+                                                      .isNotEmpty ||
+                                                  _stickyHomePlayers
+                                                      .isNotEmpty ||
+                                                  _stickyAwayPlayers
+                                                      .isNotEmpty))
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade50,
+                                                border: Border(
+                                                  bottom: BorderSide(
+                                                    color: Colors.grey.shade200,
+                                                    width: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  const SizedBox(
+                                                      width:
+                                                          24), // Indent to match verb text
+                                                  Expanded(
+                                                    child:
+                                                        _buildActionButtonsRow(
+                                                            collapseOnAction:
+                                                                true),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    }),
+                                    // Add Verb button
+                                    InkWell(
+                                      onTap: () =>
+                                          _showAddVerbDialog(categoryName),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade50,
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Colors.grey.shade200,
+                                              width: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.add,
+                                              size: 14,
+                                              color: Colors.blue.shade600,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Add New Verb',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.blue.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              ),
+                            );
+                          }).toList(),
+                          Padding(
+                            key: const ValueKey('bottom_padding'),
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 8),
+                                Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: Colors.grey.shade300,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Custom Verb',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                _buildGlobalCustomVerbInput(),
+                                const SizedBox(height: 8),
+                                const SizedBox(height: 8),
+                                Divider(
+                                  height: 1,
+                                  thickness: 1,
+                                  color: Colors.grey.shade300,
+                                ),
+                                const SizedBox(height: 8),
+                                // Upload progress monitor
+                                _buildUploadMonitor(),
+                                // Show action buttons when custom verb has text
+                                // Check both regular selected players and sticky players
+                                if (_showCustomVerbButtons &&
+                                    (_selectedHomePlayers.isNotEmpty ||
+                                        _selectedAwayPlayers.isNotEmpty ||
+                                        _stickyHomePlayers.isNotEmpty ||
+                                        _stickyAwayPlayers.isNotEmpty)) ...[
+                                  const SizedBox(height: 8),
+                                  _buildActionButtonsRow(),
+                                ],
                               ],
                             ),
                           ),
-                        );
-                      }).toList(),
-                      Padding(
-                        key: const ValueKey('bottom_padding'),
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 8),
-                            Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: Colors.grey.shade300,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Custom Verb',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            _buildGlobalCustomVerbInput(),
-                            const SizedBox(height: 8),
-                            const SizedBox(height: 8),
-                            Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: Colors.grey.shade300,
-                            ),
-                            const SizedBox(height: 8),
-                            // Upload progress monitor
-                            _buildUploadMonitor(),
-                            // Show action buttons when custom verb has text
-                            // Check both regular selected players and sticky players
-                            if (_showCustomVerbButtons &&
-                                (_selectedHomePlayers.isNotEmpty ||
-                                    _selectedAwayPlayers.isNotEmpty ||
-                                    _stickyHomePlayers.isNotEmpty ||
-                                    _stickyAwayPlayers.isNotEmpty)) ...[
-                              const SizedBox(height: 8),
-                              _buildActionButtonsRow(),
-                            ],
-                          ],
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
               ),
+            ),
           ),
         ],
       ),

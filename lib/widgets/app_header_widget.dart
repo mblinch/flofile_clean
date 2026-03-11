@@ -19,6 +19,8 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final CameraSerialService cameraService;
   final String? currentLayout;
   final Function(String)? onLayoutChanged;
+  /// Called when the preferences dialog is closed (so the screen can reload caption entry mode etc.).
+  final VoidCallback? onPreferencesClosed;
 
   const AppHeaderWidget({
     super.key,
@@ -30,6 +32,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
     this.onStartFolderWatcher,
     this.currentLayout,
     this.onLayoutChanged,
+    this.onPreferencesClosed,
   });
 
   @override
@@ -323,11 +326,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ),
         ),
         IconButton(
-          onPressed: () {
-            showDialog(
+          onPressed: () async {
+            await showDialog(
               context: context,
               builder: (context) => const PreferencesDialog(),
             );
+            widget.onPreferencesClosed?.call();
           },
           icon: const Icon(Icons.settings),
           tooltip: 'Preferences',

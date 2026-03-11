@@ -24,6 +24,8 @@ class PreferencesService {
       'resolution_warning_threshold';
   static const String _keyPhotoshopPath = 'photoshop_path';
   static const String _keyCurrentLayout = 'current_layout';
+  /// Caption entry mode: 'keyboard_fire' (default) or 'classic'.
+  static const String _keyCaptionEntryMode = 'caption_entry_mode';
   static const String _keyCustomVerbs = 'custom_verbs';
   static const String _keyVerbOverrides = 'verb_overrides'; // For editing built-in verbs
   static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
@@ -369,6 +371,17 @@ class PreferencesService {
     await prefs.setString(_keyCurrentLayout, layout);
   }
 
+  /// Caption entry: 'keyboard_fire' (default) or 'classic'.
+  Future<String> getCaptionEntryMode() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyCaptionEntryMode) ?? 'keyboard_fire';
+  }
+
+  Future<void> saveCaptionEntryMode(String mode) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyCaptionEntryMode, mode);
+  }
+
   // Custom Verbs (user-created verbs)
   String _getCustomVerbsKey(String sport) {
     return '${_keyCustomVerbs}_${sport.toLowerCase()}';
@@ -496,6 +509,8 @@ class PreferencesService {
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
       'lastSavedMetadata': await getLastSavedMetadata(),
+      'currentLayout': await getCurrentLayout(),
+      'captionEntryMode': await getCaptionEntryMode(),
     };
   }
 
@@ -526,6 +541,12 @@ class PreferencesService {
       await saveLastSavedMetadata(
           Map<String, dynamic>.from(preferences['lastSavedMetadata']));
     }
+    if (preferences.containsKey('currentLayout')) {
+      await saveCurrentLayout(preferences['currentLayout'] as String);
+    }
+    if (preferences.containsKey('captionEntryMode')) {
+      await saveCaptionEntryMode(preferences['captionEntryMode'] as String);
+    }
   }
 
   // Clear all preferences
@@ -547,6 +568,7 @@ class PreferencesService {
       'Favorites',
     ]);
     await savePlaceFirebarOnRight(true);
+    await saveCaptionEntryMode('keyboard_fire');
   }
 
   Future<SharedPreferences> _getPrefs() async {
