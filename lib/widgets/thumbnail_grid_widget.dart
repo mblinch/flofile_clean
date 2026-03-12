@@ -525,17 +525,24 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         }
 
         return Container(
-      margin: const EdgeInsets.all(3.0),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 16),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         children: [
           // Top bar with controls (moved from bottom)
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
             decoration: BoxDecoration(
               color: Colors.grey.shade200,
               borderRadius: const BorderRadius.only(
@@ -637,7 +644,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // See All Thumbnails button
+                        // See Larger Thumbnails button
                         GestureDetector(
                           onTap: () {
                             _showThumbnailPopup();
@@ -652,7 +659,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             ),
                             child: Center(
                               child: Text(
-                                'See All Thumbnails',
+                                'See Larger Thumbnails',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.grey.shade700,

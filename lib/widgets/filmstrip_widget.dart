@@ -72,7 +72,7 @@ class FilmstripWidget extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 14),
               itemCount: imagePaths.length,
               itemBuilder: (context, index) {
                 final imagePath = imagePaths[index];

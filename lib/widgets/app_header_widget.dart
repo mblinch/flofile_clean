@@ -196,7 +196,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       elevation: 0,
       automaticallyImplyLeading: false,
       title: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 12, 2),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
         child: Row(
           children: [
             Text(

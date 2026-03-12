@@ -241,6 +241,7 @@ class CaptionFieldsWidget extends StatefulWidget {
       onClearUploadStatus; // Clear upload status for re-upload
   final Map<String, String> Function()? getCurrentMetadataValues;
   final VoidCallback? onCopyMetadata; // Callback to copy metadata to clipboard
+  final VoidCallback? onVerbOverridesChanged; // Called when verb display name overrides are saved (so keyboard fire panel can refresh)
   final String? sport; // Current sport mode (baseball, hockey, basketball)
   final CameraSerialService?
       cameraService; // Camera serial service for automatic bylines
@@ -271,6 +272,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.onClearUploadStatus,
     this.getCurrentMetadataValues,
     this.onCopyMetadata,
+    this.onVerbOverridesChanged,
     this.sport,
     this.cameraService,
     this.hidePlayerPicker = false,
@@ -1381,7 +1383,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         const SizedBox(width: 2),
                         Text(
-                          'Reset',
+                          'Reset Caption',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade700,
@@ -5146,7 +5148,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Reset',
+                          'Reset Caption',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade700,
@@ -7973,9 +7975,302 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Call from the KeyboardFireDialog to embed the real verb menu.
   Widget buildVerbCategoriesWidget() => _buildDraggableCategories();
 
-  /// Called from keyboard fire panel: show edit-wording dialog for a verb.
+  /// Called from keyboard fire panel: show full verb editor (same as classic).
   void showEditVerbDialogForKeyboardFire(String verb) {
-    _showEditVerbDialog(verb);
+    _showFullVerbEditorDialog(verb);
+  }
+
+  /// Resolve verb label to initial data for the full editor (from overrides or verb list).
+  Map<String, dynamic> _getVerbEditorInitialData(String verb) {
+    final override = _verbOverrides[verb];
+    if (override != null) {
+      return {
+        'label': override['label'] as String? ?? verb,
+        'verbPhrase': override['verbPhrase'] as String? ?? verb,
+        'pluralPhrase': override['pluralPhrase'] as String?,
+        'omitAgainst': override['omitAgainst'] as bool? ?? false,
+        'wantsOpponent': override['wantsOpponent'] as bool? ?? false,
+        'category': override['category'] as String? ?? _findVerbCategory(verb),
+      };
+    }
+    for (final entry in _verbOverrides.entries) {
+      if (entry.value['label'] == verb) {
+        final o = entry.value;
+        return {
+          'label': o['label'] as String? ?? verb,
+          'verbPhrase': o['verbPhrase'] as String? ?? verb,
+          'pluralPhrase': o['pluralPhrase'] as String?,
+          'omitAgainst': o['omitAgainst'] as bool? ?? false,
+          'wantsOpponent': o['wantsOpponent'] as bool? ?? false,
+          'category': o['category'] as String? ?? _findVerbCategory(verb),
+        };
+      }
+    }
+    final category = _findVerbCategory(verb);
+    return {
+      'label': verb,
+      'verbPhrase': verb,
+      'pluralPhrase': null,
+      'omitAgainst': false,
+      'wantsOpponent': false,
+      'category': category ?? (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
+    };
+  }
+
+  String? _findVerbCategory(String verb) {
+    final list = keyboardFireVerbList;
+    for (final cat in list) {
+      final verbs = (cat['verbs'] as List<dynamic>?)?.cast<String>() ?? [];
+      if (verbs.contains(verb)) return cat['name'] as String?;
+    }
+    return null;
+  }
+
+  /// Full verb editor dialog (Display Name, Singular/Plural phrase, Category, Omit against) — same as classic.
+  Future<void> _showFullVerbEditorDialog(String verb) async {
+    final initial = _getVerbEditorInitialData(verb);
+    final labelController = TextEditingController(text: initial['label'] as String? ?? verb);
+    final singularController = TextEditingController(text: initial['verbPhrase'] as String? ?? verb);
+    final pluralController = TextEditingController(text: initial['pluralPhrase'] as String? ?? initial['verbPhrase'] as String? ?? verb);
+    bool omitAgainst = initial['omitAgainst'] as bool? ?? false;
+    bool wantsOpponent = initial['wantsOpponent'] as bool? ?? false;
+    String selectedCategory = initial['category'] as String? ?? ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
+
+    final categories = _categoryOrder.where((c) => c == 'Favorites' || verbCategories.containsKey(c)).toList();
+    if (categories.isEmpty) return;
+    if (!categories.contains(selectedCategory)) selectedCategory = categories.first;
+
+    final homeTeamName = selectedHomeTeam ?? 'Home Team';
+    final awayTeamName = selectedAwayTeam ?? 'Away Team';
+    final homePlayer1 = _homeRoster.isNotEmpty ? _homeRoster.first : null;
+    final homePlayer2 = _homeRoster.length > 1 ? _homeRoster[1] : null;
+    final awayPlayer = _awayRoster.isNotEmpty ? _awayRoster.first : null;
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            String buildExampleCaption(String verbPhrase, int playerCount) {
+              final p1Name = homePlayer1?.fullName ?? 'Player One';
+              final p2Name = homePlayer2?.fullName ?? 'Player Two';
+              final oppName = awayPlayer?.fullName ?? 'Opponent';
+              final againstText = omitAgainst ? '' : ' against';
+              if (playerCount == 1) {
+                return '${p1Name} #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $oppName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
+              } else {
+                return '${p1Name} #${homePlayer1?.jerseyNumber ?? '00'} and ${p2Name} #${homePlayer2?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $oppName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
+              }
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: const BorderSide(color: Colors.black, width: 1)),
+              child: Container(
+                width: 500,
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Edit Verb', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      Text('Display Name', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: labelController,
+                        style: const TextStyle(fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Skates',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Singular Phrase (1 player)', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: singularController,
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., skates, battles, shoots',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Example (1 player):', style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text(
+                              buildExampleCaption(singularController.text.trim().isEmpty ? verb : singularController.text, 1),
+                              style: TextStyle(fontSize: 10, color: Colors.blue.shade900),
+                              softWrap: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Plural Phrase (2+ players)', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: pluralController,
+                        style: const TextStyle(fontSize: 12),
+                        onChanged: (_) => setDialogState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., skate, battle, shoot',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Example (2+ players):', style: TextStyle(fontSize: 9, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text(
+                              buildExampleCaption(pluralController.text.trim().isEmpty ? singularController.text.trim().isEmpty ? verb : singularController.text : pluralController.text, 2),
+                              style: TextStyle(fontSize: 10, color: Colors.green.shade900),
+                              softWrap: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Category', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedCategory,
+                            isExpanded: true,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                            items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                            onChanged: (value) {
+                              if (value != null) setDialogState(() => selectedCategory = value);
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: omitAgainst,
+                              onChanged: (v) => setDialogState(() => omitAgainst = v ?? false),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Omit "against" in caption',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              softWrap: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: wantsOpponent,
+                              onChanged: (v) => setDialogState(() => wantsOpponent = v ?? false),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Include opposing player in caption',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              softWrap: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: Text('Cancel', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final newLabel = labelController.text.trim();
+                              final newSingular = singularController.text.trim();
+                              if (newLabel.isEmpty || newSingular.isEmpty) return;
+                              final overrideKey = verb;
+                              final override = {
+                                'label': newLabel,
+                                'verbPhrase': newSingular,
+                                'pluralPhrase': pluralController.text.trim().isEmpty ? null : pluralController.text.trim(),
+                                'wantsOpponent': wantsOpponent,
+                                'omitAgainst': omitAgainst,
+                                'isCustom': false,
+                                'category': selectedCategory,
+                              };
+                              await _preferencesService.saveVerbOverride(overrideKey, override, sport: _currentSport);
+                              _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+                              if (mounted) setState(() {});
+                              widget.onVerbOverridesChanged?.call();
+                              if (context.mounted) Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0052CC),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                            child: const Text('Save', style: TextStyle(fontSize: 11, color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   /// Called from keyboard fire panel: toggle favorite and persist.
@@ -7994,9 +8289,57 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool isFavoriteVerbFromKeyboardFire(String verb) =>
       _favoriteVerbs.contains(verb);
 
+  /// Called from keyboard fire panel: whether this verb has an override (so "Delete verb" can revert it).
+  bool hasVerbOverrideFromKeyboardFire(String displayLabelOrKey) {
+    final s = displayLabelOrKey.trim();
+    if (s.isEmpty) return false;
+    if (_verbOverrides.containsKey(s)) return true;
+    for (final entry in _verbOverrides.entries) {
+      final label = entry.value['label'] as String?;
+      if (label != null && label.trim() == s) return true;
+    }
+    return false;
+  }
+
+  /// Called from keyboard fire panel: remove verb override so the verb reverts to its default display name.
+  /// [displayLabelOrKey] is the verb string shown in the list (display label) or the original key.
+  /// Returns true if an override was removed.
+  Future<bool> deleteVerbOverrideFromKeyboardFire(String displayLabelOrKey) async {
+    final s = displayLabelOrKey.trim();
+    if (s.isEmpty) return false;
+    String? keyToRemove;
+    if (_verbOverrides.containsKey(s)) {
+      keyToRemove = s;
+    } else {
+      for (final entry in _verbOverrides.entries) {
+        final label = entry.value['label'] as String?;
+        if (label != null && label.trim() == s) {
+          keyToRemove = entry.key;
+          break;
+        }
+      }
+    }
+    if (keyToRemove == null) return false;
+    await _preferencesService.removeVerbOverride(keyToRemove, sport: _currentSport);
+    _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+    if (mounted) setState(() {});
+    widget.onVerbOverridesChanged?.call();
+    return true;
+  }
+
+  /// Resolve verb to its display label (from verb overrides if edited), for use in lists.
+  String _verbDisplayLabel(String verb) {
+    if (_verbOverrides.containsKey(verb)) {
+      final label = _verbOverrides[verb]!['label'] as String?;
+      if (label != null && label.isNotEmpty) return label;
+    }
+    return verb;
+  }
+
   /// Verb list for keyboard fire dialog: category number, name, and ordered verb strings.
   /// Uses sport-aware category order (filters _categoryOrder to valid categories, else default).
   /// Favorites is always included so it appears in the Keyboard Fire panel.
+  /// Applies verb overrides so edited display names (e.g. "Goes to the Net Against") show correctly.
   List<Map<String, dynamic>> get keyboardFireVerbList {
     final order = _categoryOrder
         .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
@@ -8010,9 +8353,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     for (var i = 0; i < effectiveOrder.length; i++) {
       final cat = effectiveOrder[i];
       final catNum = i + 1;
-      final verbs = cat == 'Favorites'
+      final rawVerbs = cat == 'Favorites'
           ? _favoriteVerbs.toList()
           : (verbCategories[cat] ?? <String>[]);
+      final verbs = rawVerbs.map(_verbDisplayLabel).toList();
       list.add(<String, dynamic>{'number': catNum, 'name': cat, 'verbs': verbs});
     }
     return list;
@@ -22049,7 +22393,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                'Reset',
+                                'Reset Caption',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.grey.shade700,
@@ -22093,7 +22437,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
                   const SizedBox(width: 2),
                   Text(
-                    'Reset',
+                    'Reset Caption',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey.shade700,

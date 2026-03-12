@@ -338,10 +338,10 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   Widget build(BuildContext context) {
     if (widget.imagePaths.isEmpty) {
       return Container(
-        margin: const EdgeInsets.all(3.0),
+        margin: const EdgeInsets.all(10.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           color: Colors.grey.shade50,
         ),
         child: const Center(
@@ -375,30 +375,35 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     final imageCount = widget.imagePaths.length;
 
     return Container(
-      margin: const EdgeInsets.all(3.0),
+      margin: const EdgeInsets.all(10.0),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
+          const double _imageVerticalPadding = 6;
           final double _mainImageHeight = constraints.maxHeight -
-              56; // Reserve space for top and bottom bars (28px each)
+              44 - (_imageVerticalPadding * 2); // Bars (22px each) + top/bottom padding
           return Column(
             children: [
               // Top bar: Filename, pixel size, date and time
               if (_exifData != null || _isLoadingExif)
                 Container(
-                  height: 28, // Minimized height for top info bar
+                  height: 22, // Top info bar (filename + resolution)
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(8),
-                      topRight: Radius.circular(8),
-                    ),
+                    borderRadius: BorderRadius.zero,
                     border: Border(
                       bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                     ),
@@ -492,11 +497,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                     icon: Icon(
                                       Icons.chevron_left,
                                       color: Colors.black87,
-                                      size: 16,
+                                      size: 14,
                                     ),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
-                                        minWidth: 24, minHeight: 24),
+                                        minWidth: 20, minHeight: 20),
                                   ),
 
                                   // Image counter between arrows
@@ -544,11 +549,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                     icon: Icon(
                                       Icons.chevron_right,
                                       color: Colors.black87,
-                                      size: 16,
+                                      size: 14,
                                     ),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
-                                        minWidth: 24, minHeight: 24),
+                                        minWidth: 20, minHeight: 20),
                                   ),
                                 ],
                               ),
@@ -557,10 +562,12 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         ),
                 ),
 
-              // Main image area - 50% of available height
-              SizedBox(
-                height: _mainImageHeight,
-                child: Stack(
+              // Main image area with padding so image doesn't touch outline
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: SizedBox(
+                  height: _mainImageHeight,
+                  child: Stack(
                   children: [
                     // Main image with right-click and double-click support
                     GestureDetector(
@@ -687,20 +694,18 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       ),
                   ],
                 ),
+                ),
               ),
 
               // Bottom bar: Camera model, shutter speed, focal length, and navigation
               if (_exifData != null || _isLoadingExif)
                 Container(
-                  height: 28, // Minimized height for bottom info bar
+                  height: 22, // Bottom info bar (camera + date)
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
+                    borderRadius: BorderRadius.zero,
                     border: Border(
                       top: BorderSide(color: Colors.grey.shade300, width: 1),
                     ),

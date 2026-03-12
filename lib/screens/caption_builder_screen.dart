@@ -3336,7 +3336,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             },
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(0.0, 1.0, 0.0, 0.0),
+              padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
               child: _buildLayout(),
             ),
           ),
@@ -3478,7 +3478,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Current layout: Players List Left (default)
   Widget _buildPlayersListLeftLayout() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // LEFT COLUMN - Picture Preview and Thumbnails
         Expanded(
@@ -3489,8 +3489,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 // Resolution warning (if applicable)
                 _buildResolutionWarning(),
 
-                // Picture preview - 50% of screen height
-                SizedBox(
+                  // Picture preview - 50% of screen height
+                  SizedBox(
                   height: MediaQuery.of(context).size.height * 0.5,
                   child: PicturePreviewWidget(
                     key: _picturePreviewKey2,
@@ -3551,13 +3551,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   ),
                 ),
 
-                // Divider line between picture preview and thumbnails
-                Container(
-                  height: 1,
-                  color: Colors.grey.shade300,
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                ),
-
                 // Thumbnail grid - takes remaining space
                 Expanded(
                   child: ThumbnailGridWidget(
@@ -3598,75 +3591,71 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // RIGHT COLUMN - Player picker, firebar, verbs
         Expanded(
           flex: 6,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: _buildCaptionEntryWidget(
-              CaptionFieldsWidget(
-                key: _captionFieldsKey2,
-                metadata: currentMetadata,
-                cameraService: _cameraService,
-                onMetadataUpdated: (metadata) {
+          child: _buildCaptionEntryWidget(
+            CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
+                setState(() {
+                  currentMetadata = metadata;
+                });
+              },
+              onVerbOverridesChanged: () => setState(() {}),
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
                   setState(() {
-                    currentMetadata = metadata;
+                    _thumbCenterRequestId++;
                   });
-                },
-                getCurrentMetadataValues: () {
-                  return {};
-                },
-                homeTeam: selectedHomeTeam,
-                awayTeam: selectedAwayTeam,
-                sport: _selectedSport,
-                onNextImage: () {
-                  if (currentIndex < imagePaths.length - 1) {
-                    setState(() {
-                      _thumbCenterRequestId++;
-                    });
-                    _onImageSelected(currentIndex + 1);
-                  }
-                },
-                onPreviousImage: () {
-                  if (currentIndex > 0) {
-                    setState(() {
-                      _thumbCenterRequestId++;
-                    });
-                    _onImageSelected(currentIndex - 1);
-                  }
-                },
-                onReset: _handleReset,
-                personalityOverride: _personalityOverride,
-                onImagesLoaded: (files) {
-                  print(
-                      'DEBUG: onImagesLoaded called with ${files.length} files');
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
                   setState(() {
-                    imagePaths = files;
-                    currentIndex = 0;
+                    _thumbCenterRequestId++;
                   });
-                },
-                onStartFolderWatcher: _startFolderWatcher,
-                preloadedHomeRoster:
-                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-                preloadedAwayRoster:
-                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-                currentImagePath:
-                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                totalImages: imagePaths.length,
-                onSaveIptc: _saveIptcMetadata,
-                onImageUploaded: (imagePath) {
-                  if (!_currentlyUploading.contains(imagePath)) {
-                    setState(() {
-                      _uploadedImages.add(imagePath);
-                      _uploadProgress[imagePath] =
-                          1.0; // Set to 1.0 to show "Upload complete"
-                    });
-                  }
-                },
-                onUploadProgress: (imagePath, progress) {
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                setState(() {
+                  imagePaths = files;
+                  currentIndex = 0;
+                });
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
-                    _uploadProgress[imagePath] = progress;
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress[imagePath] = 1.0;
                   });
-                },
-              ),
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
+                setState(() {
+                  _uploadProgress[imagePath] = progress;
+                });
+              },
             ),
           ),
         ),
@@ -3677,80 +3666,76 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Players List Right Layout
   Widget _buildPlayersListRightLayout() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // LEFT COLUMN - Player picker, firebar, verbs
         Expanded(
           flex: 6,
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: _buildCaptionEntryWidget(
-              CaptionFieldsWidget(
-                key: _captionFieldsKey2,
-                metadata: currentMetadata,
-                cameraService: _cameraService,
-                onMetadataUpdated: (metadata) {
+          child: _buildCaptionEntryWidget(
+            CaptionFieldsWidget(
+              key: _captionFieldsKey2,
+              metadata: currentMetadata,
+              cameraService: _cameraService,
+              onMetadataUpdated: (metadata) {
+                setState(() {
+                  currentMetadata = metadata;
+                });
+              },
+              onVerbOverridesChanged: () => setState(() {}),
+              getCurrentMetadataValues: () {
+                return {};
+              },
+              homeTeam: selectedHomeTeam,
+              awayTeam: selectedAwayTeam,
+              sport: _selectedSport,
+              onNextImage: () {
+                if (currentIndex < imagePaths.length - 1) {
                   setState(() {
-                    currentMetadata = metadata;
+                    _thumbCenterRequestId++;
                   });
-                },
-                getCurrentMetadataValues: () {
-                  return {};
-                },
-                homeTeam: selectedHomeTeam,
-                awayTeam: selectedAwayTeam,
-                sport: _selectedSport,
-                onNextImage: () {
-                  if (currentIndex < imagePaths.length - 1) {
-                    setState(() {
-                      _thumbCenterRequestId++;
-                    });
-                    _onImageSelected(currentIndex + 1);
-                  }
-                },
-                onPreviousImage: () {
-                  if (currentIndex > 0) {
-                    setState(() {
-                      _thumbCenterRequestId++;
-                    });
-                    _onImageSelected(currentIndex - 1);
-                  }
-                },
-                onReset: _handleReset,
-                personalityOverride: _personalityOverride,
-                onImagesLoaded: (files) {
-                  print(
-                      'DEBUG: onImagesLoaded called with ${files.length} files');
+                  _onImageSelected(currentIndex + 1);
+                }
+              },
+              onPreviousImage: () {
+                if (currentIndex > 0) {
                   setState(() {
-                    imagePaths = files;
-                    currentIndex = 0;
+                    _thumbCenterRequestId++;
                   });
-                },
-                onStartFolderWatcher: _startFolderWatcher,
-                preloadedHomeRoster:
-                    _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-                preloadedAwayRoster:
-                    _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-                currentImagePath:
-                    imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-                currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                totalImages: imagePaths.length,
-                onSaveIptc: _saveIptcMetadata,
-                onImageUploaded: (imagePath) {
-                  if (!_currentlyUploading.contains(imagePath)) {
-                    setState(() {
-                      _uploadedImages.add(imagePath);
-                      _uploadProgress[imagePath] =
-                          1.0; // Set to 1.0 to show "Upload complete"
-                    });
-                  }
-                },
-                onUploadProgress: (imagePath, progress) {
+                  _onImageSelected(currentIndex - 1);
+                }
+              },
+              onReset: _handleReset,
+              personalityOverride: _personalityOverride,
+              onImagesLoaded: (files) {
+                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                setState(() {
+                  imagePaths = files;
+                  currentIndex = 0;
+                });
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              preloadedHomeRoster:
+                  _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+              preloadedAwayRoster:
+                  _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+              totalImages: imagePaths.length,
+              onSaveIptc: _saveIptcMetadata,
+              onImageUploaded: (imagePath) {
+                if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
-                    _uploadProgress[imagePath] = progress;
+                    _uploadedImages.add(imagePath);
+                    _uploadProgress[imagePath] = 1.0;
                   });
-                },
-              ),
+                }
+              },
+              onUploadProgress: (imagePath, progress) {
+                setState(() {
+                  _uploadProgress[imagePath] = progress;
+                });
+              },
             ),
           ),
         ),
@@ -3825,13 +3810,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
               ),
 
-              // Divider line between picture preview and thumbnails
-              Container(
-                height: 1,
-                color: Colors.grey.shade300,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-              ),
-
               // Thumbnail grid - takes remaining space
               Expanded(
                 child: ThumbnailGridWidget(
@@ -3888,6 +3866,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentMetadata = metadata;
                 });
               },
+              onVerbOverridesChanged: () => setState(() {}),
               getCurrentMetadataValues: () {
                 return {};
               },
@@ -3944,13 +3923,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               },
             ),
           ),
-        ),
-
-        // Divider line
-        Container(
-          height: 1,
-          color: Colors.grey.shade300,
-          margin: const EdgeInsets.symmetric(vertical: 12),
         ),
 
         // BOTTOM ROW - Picture Preview and Thumbnails
@@ -4198,13 +4170,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           ),
         ),
 
-        // Divider line
-        Container(
-          height: 1,
-          color: Colors.grey.shade300,
-          margin: const EdgeInsets.symmetric(vertical: 12),
-        ),
-
         // BOTTOM ROW - Player picker, firebar, verbs
         Expanded(
           flex: 6,
@@ -4218,6 +4183,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentMetadata = metadata;
                 });
               },
+              onVerbOverridesChanged: () => setState(() {}),
               getCurrentMetadataValues: () {
                 return {};
               },
@@ -4354,13 +4320,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
               ),
 
-              // Divider line between picture preview and thumbnails
-              Container(
-                height: 1,
-                color: Colors.grey.shade300,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-              ),
-
               // Thumbnail grid - takes remaining space
               Expanded(
                 child: ThumbnailGridWidget(
@@ -4424,6 +4383,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         currentMetadata = metadata;
                       });
                     },
+                    onVerbOverridesChanged: () => setState(() {}),
                     getCurrentMetadataValues: () {
                       return {};
                     },
@@ -4807,12 +4767,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
               ),
 
-              // Horizontal divider line
-              Container(
-                height: 1,
-                color: Colors.grey.shade300,
-              ),
-
               // Thumbnail grid - remaining space
               Expanded(
                 child: ThumbnailGridWidget(
@@ -4840,12 +4794,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ),
             ],
           ),
-        ),
-
-        // Vertical divider
-        Container(
-          width: 1,
-          color: Colors.grey.shade300,
         ),
 
         // RIGHT COLUMN - Caption Fields and Player Picker
