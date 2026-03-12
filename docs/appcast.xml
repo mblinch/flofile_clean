@@ -10,13 +10,13 @@
     <language>en</language>
     <item>
       <title>Version 1.0.4</title>
-      <pubDate>Thu, 12 Mar 2026 03:29:50 +0000</pubDate>
+      <pubDate>Thu, 12 Mar 2026 03:38:45 +0000</pubDate>
       <sparkle:version>104</sparkle:version>
       <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
       <enclosure
         url="https://mblinch.github.io/flofile_clean/releases/v1.0.4/FloFileBeta.zip"
         type="application/octet-stream"
-        length="38935918" sparkle:edSignature="UUWx6EGZp6NSXphavjqg2+U/mrGopyxfi9SmTsDMBzOZj4Zk6niZIUg6EFIGibhPCpxIKFvrQCLScwYAhCjfDA==" />
+        length="38976084" sparkle:edSignature="wja0/DbdsF3DcXdo0t1hWdROUf8b7bxlObaAXDRjqiLwSumtUSZKfuMFWnBA9IdxlXwP0Ss7yzfygSAR5bzzDg==" />
     </item>
     <item>
       <title>Version 1.0.3</title>
