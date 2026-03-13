@@ -8,8 +8,8 @@
    curl -L -o /tmp/Sparkle-2.9.0.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.0/Sparkle-2.9.0.tar.xz
    tar -xf /tmp/Sparkle-2.9.0.tar.xz -C tools --strip-components=1
    ```
-2. Signing uses your **Keychain** (no key file). The script runs `sign_update -p` on the zip; it reads the private key from the Keychain. If Keychain prompts for "Private key for signing Sparkle updates", allow it.
-3. When you ask for a release, the script signs the zip via Keychain and puts `sparkle:edSignature` in the appcast so the app accepts the update.
+2. **Signing**: The script uses **Keychain only** (`sign_update -p`). The private key that matches `SUPublicEDKey` in `macos/Runner/Info.plist` must be in your Keychain (e.g. run Sparkle’s `generate_keys`, add to Keychain, put the public key in Info.plist). If you have multiple keys, set `SPARKLE_KEYCHAIN_ACCOUNT` to the Keychain account name.
+3. When you run a release, the script signs the zip and puts `sparkle:edSignature` in the appcast so the app accepts the update.
 
 ---
 
@@ -58,7 +58,7 @@ What it does:
 1. Build macOS app: `flutter build macos --release --build-name=VERSION --build-number=SPARKLE_VERSION`
 2. Bundle ExifTool libs into the app.
 3. Zip the `.app`: `ditto -c -k --sequesterRsrc --keepParent "FloFile Beta.app" build/release/FloFileBeta.zip`
-4. Run `sign_update -p` on the zip; it reads the private key from the Keychain and prints the EdDSA signature. The script puts that in the appcast as `sparkle:edSignature` (required when the app has `SUPublicEDKey` set).
+4. Run `sign_update -p` on the zip (reads private key from Keychain); it prints the EdDSA signature. The script puts that in the appcast as `sparkle:edSignature` (required when the app has `SUPublicEDKey` set).
 5. Insert a new item into `docs/appcast.xml` (after `</language>`) with the versioned Pages URL, `length`, and optional `edSignature`.
 6. Copy the zip to `docs/releases/vVERSION/FloFileBeta.zip` for GitHub Pages.
 7. If `gh` is available and release doesn’t exist: `gh release create vVERSION ...` (tag + notes; zip is still served from Pages).
@@ -108,7 +108,7 @@ ditto -c -k --sequesterRsrc --keepParent "build/macos/Build/Products/Release/Flo
 **5) Sign for Sparkle (optional but recommended):**
 
 ```bash
-# Keychain: no key file. sign_update reads the private key from the Keychain.
+# Keychain only. Optional: SPARKLE_KEYCHAIN_ACCOUNT if you have multiple keys.
 tools/bin/sign_update -p build/release/FloFileBeta.zip
 # Use the printed signature in appcast as sparkle:edSignature
 ```

@@ -107,6 +107,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   final TextEditingController _awayBarController = TextEditingController();
   final TextEditingController _categoryBarController = TextEditingController();
   final TextEditingController _verbBarController = TextEditingController();
+  final TextEditingController _customVerbController = TextEditingController();
   final FocusNode _homeBarFocus = FocusNode();
   final FocusNode _awayBarFocus = FocusNode();
   final FocusNode _categoryBarFocus = FocusNode();
@@ -120,6 +121,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   int? _pickedVerbCategory; // 1-based category of last picked verb
   int? _pickedVerbIndex; // 1-based index of last picked verb
   String? _lastUsedVerbLabel; // verb label to show "(last used)" in red when image changes
+
+  // Pinned verb: Cmd+click to pin; auto-applies to every subsequent image
+  int? _pinnedVerbCategory;
+  int? _pinnedVerbIndex;
+
   bool _showPlayoffOvertimes = false;
 
   /// Index of the one expanded category (verbs visible). Null = none expanded.
@@ -142,7 +148,31 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   final GlobalKey _verbColumnKey = GlobalKey();
 
-  void _onVerbTapped(int selectedCatNum, int verbNum) {
+  void _onVerbTapped(int selectedCatNum, int verbNum, {bool cmdHeld = false}) {
+    if (cmdHeld) {
+      // Cmd+click: toggle pin on this verb
+      final alreadyPinned =
+          _pinnedVerbCategory == selectedCatNum && _pinnedVerbIndex == verbNum;
+      setState(() {
+        if (alreadyPinned) {
+          _pinnedVerbCategory = null;
+          _pinnedVerbIndex = null;
+        } else {
+          _pinnedVerbCategory = selectedCatNum;
+          _pinnedVerbIndex = verbNum;
+          // Also select it immediately
+          _pickedVerbCategory = selectedCatNum;
+          _pickedVerbIndex = verbNum;
+        }
+      });
+      if (!alreadyPinned) {
+        widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
+            selectedCatNum, verbNum);
+        widget.captionState?.updateCaptionFromKeyboardFire();
+        _refreshCaptionPreviewLater();
+      }
+      return;
+    }
     widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
         selectedCatNum, verbNum);
     widget.captionState?.updateCaptionFromKeyboardFire();
@@ -153,6 +183,28 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _pickedVerbIndex = verbNum;
     });
     _refreshCaptionPreviewLater();
+  }
+
+  /// Pin a verb by category+index (from context menu).
+  void _setPinnedVerb(int catNum, int verbNum) {
+    setState(() {
+      _pinnedVerbCategory = catNum;
+      _pinnedVerbIndex = verbNum;
+      _pickedVerbCategory = catNum;
+      _pickedVerbIndex = verbNum;
+    });
+    widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
+        catNum, verbNum);
+    widget.captionState?.updateCaptionFromKeyboardFire();
+    _refreshCaptionPreviewLater();
+  }
+
+  /// Unpin the currently pinned verb (from context menu).
+  void _clearPinnedVerb() {
+    setState(() {
+      _pinnedVerbCategory = null;
+      _pinnedVerbIndex = null;
+    });
   }
 
   @override
@@ -179,8 +231,22 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           _lastUsedVerbLabel = verbList[idx - 1];
         }
       }
-      _pickedVerbCategory = null;
-      _pickedVerbIndex = null;
+
+      // If a verb is pinned, keep it selected and auto-apply it to the new image.
+      // We tell CaptionFieldsWidget about the pending verb BEFORE _loadMetadata()
+      // runs, so it applies the verb at the end of _loadMetadata() — after the
+      // metadata caption is written, with no post-frame timing race.
+      if (_pinnedVerbCategory != null && _pinnedVerbIndex != null) {
+        _pickedVerbCategory = _pinnedVerbCategory;
+        _pickedVerbIndex = _pinnedVerbIndex;
+        widget.captionState?.setPendingPinnedVerb(
+            _pinnedVerbCategory!, _pinnedVerbIndex!);
+        if (mounted) setState(() {});
+      } else {
+        _pickedVerbCategory = null;
+        _pickedVerbIndex = null;
+      }
+
       // Reset firebar so next caption starts at H/V
       _firebarStep = 0;
       _firebarHv = null;
@@ -189,6 +255,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _firebarCategoryValue = '';
       _firebarVerbValue = '';
       _firebarController.clear();
+      _customVerbController.clear();
+      widget.captionState?.updateCustomVerbFromPopup('');
       if (mounted) setState(() {});
     }
   }
@@ -203,6 +271,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     _awayBarController.dispose();
     _categoryBarController.dispose();
     _verbBarController.dispose();
+    _customVerbController.dispose();
     _homeBarFocus.dispose();
     _awayBarFocus.dispose();
     _categoryBarFocus.dispose();
@@ -425,7 +494,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final c = letter.trim().toUpperCase();
     if (c.isEmpty) return;
     if (c == 'S') {
-      widget.captionState?.updateCaptionFromKeyboardFire();
       if (widget.onSaveIptc != null) widget.onSaveIptc!();
       widget.onNextImage?.call();
       setState(() {
@@ -586,7 +654,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           final rosterKey = jersey.isNotEmpty ? '${isHomeTeam}_$jersey' : null;
           final isHovered = rosterKey != null && _hoveredRosterKey == rosterKey;
           final bgColor = isPicked
-              ? Colors.blue.shade50
+              ? const Color(0xFFDBEAFF)
               : (isCurrent ? Colors.grey.shade200 : (isHovered ? Colors.grey.shade200 : null));
           return MouseRegion(
             onEnter: rosterKey != null ? (_) => setState(() => _hoveredRosterKey = rosterKey) : null,
@@ -607,8 +675,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     }
                   : null,
               child: Container(
-                color: bgColor,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  border: isPicked
+                      ? const Border(
+                          left: BorderSide(color: Color(0xFF4A90E2), width: 3),
+                        )
+                      : null,
+                ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
@@ -620,14 +695,24 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
+                        color: isPicked
+                            ? const Color(0xFF0052CC)
+                            : Colors.grey.shade800,
                       ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       displayName,
-                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isPicked
+                            ? const Color(0xFF0052CC)
+                            : Colors.black87,
+                        fontWeight: isPicked
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -936,22 +1021,48 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 final isFavorite = state != null && (state.isFavoriteVerbFromKeyboardFire(verb) == true);
                 final verbKey = '${catNum}_$verbNum';
                 final isHovered = _hoveredVerbKey == verbKey;
+                final isPicked = _pickedVerbCategory == catNum && _pickedVerbIndex == verbNum;
+                final isPinned = _pinnedVerbCategory == catNum && _pinnedVerbIndex == verbNum;
                 return MouseRegion(
                   onEnter: (_) => setState(() => _hoveredVerbKey = verbKey),
                   onExit: (_) => setState(() => _hoveredVerbKey = null),
                   child: GestureDetector(
                     onSecondaryTapDown: (TapDownDetails d) {
-                      _showVerbContextMenu(context, d.globalPosition, verb, isFavorite);
+                      _showVerbContextMenu(context, d.globalPosition, verb, isFavorite,
+                          catNum: catNum, verbNum: verbNum, isPinned: isPinned);
                     },
                     child: InkWell(
-                        onTap: () => _onVerbTapped(catNum, verbNum),
+                        onTapDown: (TapDownDetails d) {
+                          if (HardwareKeyboard.instance.isMetaPressed) {
+                            _onVerbTapped(catNum, verbNum, cmdHeld: true);
+                          }
+                        },
+                        onTap: () {
+                          if (!HardwareKeyboard.instance.isMetaPressed) {
+                            _onVerbTapped(catNum, verbNum);
+                          }
+                        },
                         child: Container(
                           padding: const EdgeInsets.only(left: 24, right: 8, top: 2, bottom: 2),
                           decoration: BoxDecoration(
-                            color: isHovered ? Colors.grey.shade200 : null,
-                            border: Border(
-                              bottom: BorderSide(color: Colors.grey.shade100, width: 0.5),
-                            ),
+                            color: isPinned
+                                ? const Color(0xFFFFF8E1)
+                                : (isPicked
+                                    ? const Color(0xFFDBEAFF)
+                                    : (isHovered ? Colors.grey.shade200 : null)),
+                            border: isPinned
+                                ? Border(
+                                    left: const BorderSide(color: Color(0xFFF59E0B), width: 3),
+                                    bottom: BorderSide(color: Colors.grey.shade100, width: 0.5),
+                                  )
+                                : (isPicked
+                                    ? Border(
+                                        left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+                                        bottom: BorderSide(color: Colors.grey.shade100, width: 0.5),
+                                      )
+                                    : Border(
+                                        bottom: BorderSide(color: Colors.grey.shade100, width: 0.5),
+                                      )),
                           ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -964,7 +1075,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800,
+                                  color: isPinned
+                                      ? const Color(0xFFB45309)
+                                      : (isPicked
+                                          ? const Color(0xFF0052CC)
+                                          : Colors.grey.shade800),
                                 ),
                               ),
                             ),
@@ -974,11 +1089,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   Flexible(
                                     child: Text(
                                       verb,
-                                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isPinned
+                                            ? const Color(0xFFB45309)
+                                            : (isPicked
+                                                ? const Color(0xFF0052CC)
+                                                : Colors.black87),
+                                        fontWeight: (isPinned || isPicked)
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                      ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (isLastUsed)
+                                  if (isPinned)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.push_pin, size: 11, color: Color(0xFFF59E0B)),
+                                    ),
+                                  if (isLastUsed && !isPinned)
                                     Padding(
                                       padding: const EdgeInsets.only(left: 4),
                                       child: Text(
@@ -1007,13 +1137,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   void _showVerbContextMenu(
-      BuildContext context, Offset position, String verb, bool isFavorite) {
+      BuildContext context, Offset position, String verb, bool isFavorite,
+      {int? catNum, int? verbNum, bool isPinned = false}) {
     final state = widget.captionState;
     if (state == null) return;
 
     final hasOverride = state.hasVerbOverrideFromKeyboardFire(verb);
 
     final menuItems = <PopupMenuItem<String>>[
+      // Pin / Unpin
+      if (catNum != null && verbNum != null)
+        PopupMenuItem<String>(
+          value: isPinned ? 'unpin' : 'pin',
+          height: 32,
+          child: Row(
+            children: [
+              Icon(
+                isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                size: 16,
+                color: isPinned ? const Color(0xFFF59E0B) : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isPinned ? 'Unpin verb' : 'Pin verb (holds for every image)',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+              ),
+            ],
+          ),
+        ),
       PopupMenuItem<String>(
         value: 'favorite',
         height: 32,
@@ -1027,10 +1178,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             const SizedBox(width: 8),
             Text(
               isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade800,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
             ),
           ],
         ),
@@ -1044,10 +1192,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             const SizedBox(width: 8),
             Text(
               'Edit Verb',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade800,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
             ),
           ],
         ),
@@ -1062,10 +1207,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               const SizedBox(width: 8),
               Text(
                 'Delete verb',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade800,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
               ),
             ],
           ),
@@ -1075,14 +1217,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + 1,
-        position.dy + 1,
+        position.dx, position.dy, position.dx + 1, position.dy + 1,
       ),
       items: menuItems,
     ).then((value) async {
-      if (value == 'favorite') {
+      if (value == 'pin' && catNum != null && verbNum != null) {
+        _setPinnedVerb(catNum, verbNum);
+      } else if (value == 'unpin') {
+        _clearPinnedVerb();
+      } else if (value == 'favorite') {
         await state.toggleFavoriteVerbFromKeyboardFire(verb);
         if (mounted) setState(() {});
       } else if (value == 'edit') {
@@ -1148,7 +1291,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 final isPicked = _pickedVerbCategory == selectedCatNum &&
                     _pickedVerbIndex == verbNum;
                 final isCurrent = barVerbNum != null && barVerbNum == verbNum;
-                final bgColor = isPicked ? Colors.blue.shade50 : (isCurrent ? Colors.grey.shade200 : null);
+                final bgColor = isPicked
+                    ? const Color(0xFFDBEAFF)
+                    : (isCurrent ? Colors.grey.shade200 : null);
                 final isLastUsed = _lastUsedVerbLabel == verb;
                 final dynamic state = widget.captionState;
                 final isFavorite = state != null &&
@@ -1164,10 +1309,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
                       color: bgColor,
-                      border: Border(
-                        bottom: BorderSide(
-                            color: Colors.grey.shade100, width: 0.5),
-                      ),
+                      border: isPicked
+                          ? Border(
+                              left: const BorderSide(
+                                  color: Color(0xFF4A90E2), width: 3),
+                              bottom: BorderSide(
+                                  color: Colors.grey.shade100, width: 0.5),
+                            )
+                          : Border(
+                              bottom: BorderSide(
+                                  color: Colors.grey.shade100, width: 0.5),
+                            ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -1180,7 +1332,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade800,
+                              color: isPicked
+                                  ? const Color(0xFF0052CC)
+                                  : Colors.grey.shade800,
                             ),
                           ),
                         ),
@@ -1190,8 +1344,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               Flexible(
                                 child: Text(
                                   verb,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.black87),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isPicked
+                                        ? const Color(0xFF0052CC)
+                                        : Colors.black87,
+                                    fontWeight: isPicked
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -1363,7 +1524,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             width: 72,
             onTap: hasPrev
                 ? () async {
-                    widget.captionState?.updateCaptionFromKeyboardFire();
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
                     widget.onPreviousImage?.call();
                   }
@@ -1382,7 +1542,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             width: 72,
             onTap: hasNext
                 ? () async {
-                    widget.captionState?.updateCaptionFromKeyboardFire();
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
                     widget.onNextImage?.call();
                   }
@@ -1464,6 +1623,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   void _onResetPressed() {
+    // Reset all caption/verb/player state via the caption state object
+    try {
+      (widget.captionState as dynamic)?.resetCaption();
+    } catch (_) {}
+
     setState(() {
       _firebarStep = 0;
       _firebarHv = null;
@@ -1471,8 +1635,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _firebarTeam2Value = '';
       _firebarCategoryValue = '';
       _firebarVerbValue = '';
+      // Clear verb highlight and pin
+      _pickedVerbCategory = null;
+      _pickedVerbIndex = null;
+      _lastUsedVerbLabel = null;
+      _pinnedVerbCategory = null;
+      _pinnedVerbIndex = null;
     });
     _firebarController.clear();
+    _customVerbController.clear();
+    widget.captionState?.updateCustomVerbFromPopup('');
     widget.onReset?.call();
   }
 
@@ -2119,6 +2291,62 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                           _buildCategoriesWithVerbsContent(barText: value.text),
                                     ),
                                   ),
+                                  // Custom verb input below the verb list
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 2),
+                                          child: Text(
+                                            'Custom Verb',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ),
+                                        TextField(
+                                          controller: _customVerbController,
+                                          style: const TextStyle(fontSize: 11),
+                                          decoration: InputDecoration(
+                                            hintText: '',
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 6),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(3),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(3),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade300),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(3),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey.shade500),
+                                            ),
+                                          ),
+                                          onChanged: (value) {
+                                            widget.captionState
+                                                ?.updateCustomVerbFromPopup(value.trim());
+                                            // Clear verb pick if typing a custom verb
+                                            if (value.trim().isNotEmpty) {
+                                              setState(() {
+                                                _pickedVerbCategory = null;
+                                                _pickedVerbIndex = null;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -2268,13 +2496,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 Expanded(
                                   child: _btn(
                                     width: double.infinity,
-                                    onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
-                                        ? () async {
-                                            widget.captionState?.updateCaptionFromKeyboardFire();
-                                            if (widget.onSaveIptc != null) widget.onSaveIptc!();
-                                            widget.onPreviousImage?.call();
-                                          }
-                                        : null,
+                    onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                        ? () async {
+                            if (widget.onSaveIptc != null) widget.onSaveIptc!();
+                            widget.onPreviousImage?.call();
+                          }
+                        : null,
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
@@ -2289,12 +2516,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 Expanded(
                                   child: _btn(
                                     width: double.infinity,
-                                    onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
-                                        ? () async {
-                                            widget.captionState?.updateCaptionFromKeyboardFire();
-                                            if (widget.onSaveIptc != null) widget.onSaveIptc!();
-                                            widget.onNextImage?.call();
-                                          }
+                    onTap: (widget.currentIndex != null && widget.totalImages != null && widget.currentIndex! < widget.totalImages! - 1)
+                        ? () async {
+                            if (widget.onSaveIptc != null) widget.onSaveIptc!();
+                            widget.onNextImage?.call();
+                          }
                                         : null,
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,

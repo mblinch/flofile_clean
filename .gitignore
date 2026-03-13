@@ -70,6 +70,7 @@ macos/build/
 *.zip
 # Allow Sparkle release zips for GitHub Pages
 !docs/releases/**/*.zip
+!docs/FloFileBeta.zip
 *.dmg
 
 # Build artifacts - NEVER commit these

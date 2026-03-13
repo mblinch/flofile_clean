@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
 import '../services/mlb_api_service.dart';
 import '../services/api_manager.dart';
@@ -349,6 +350,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Verb selection
   String? _selectedVerb;
   String? _selectedActionVerb; // Stores the verb for caption generation
+  String? _stickyVerb; // Cmd+click sticks this verb until Cmd+click again (classic behavior)
+
+  // Pending pinned verb: set by KeyboardFireDialog before image navigation so
+  // the verb is applied synchronously at the end of _loadMetadata(), guaranteeing
+  // it runs after (not before) the metadata setState rebuild.
+  int? _pendingPinnedVerbCategory;
+  int? _pendingPinnedVerbIndex;
   String? _selectedHittingAction;
   bool _showExtraInnings = false;
   int _extraInningsPage = 0;
@@ -2610,6 +2618,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Creator field is now handled by metadata widget only
     });
+
+    // Apply any pending pinned verb synchronously after metadata loads.
+    // This runs after the setState above, so we are the last write to the
+    // caption for this navigation event — no post-frame timing races.
+    if (_pendingPinnedVerbCategory != null && _pendingPinnedVerbIndex != null) {
+      final cat = _pendingPinnedVerbCategory!;
+      final idx = _pendingPinnedVerbIndex!;
+      _pendingPinnedVerbCategory = null;
+      _pendingPinnedVerbIndex = null;
+      // Force _selectedVerb to null first so selectVerb doesn't toggle it off.
+      _selectedVerb = null;
+      _selectedActionVerb = null;
+      selectVerbByCategoryAndIndexFromKeyboardFire(cat, idx);
+      updateCaptionFromKeyboardFire();
+    }
   }
 
   // Reset all caption building selections when navigating to a new image
@@ -2624,6 +2647,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Clear verb selections
       _selectedVerb = null;
       _selectedActionVerb = null;
+      _stickyVerb = null;
       _selectedHittingAction = null;
 
       // Clear celebration settings
@@ -5225,11 +5249,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.rocket_launch,
-                          size: 24,
-                          color:
-                              _disableFtp ? Colors.grey.shade600 : Colors.white,
+                        SvgPicture.asset(
+                          'assets/images/rocket_icon_white_only.svg',
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                          colorFilter: ColorFilter.mode(
+                            _disableFtp ? Colors.grey.shade600 : Colors.white,
+                            BlendMode.srcIn,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Flexible(
@@ -7926,6 +7954,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  /// Store a pinned verb so that _loadMetadata() applies it after loading image
+  /// metadata, preventing the metadata caption from overwriting the verb caption.
+  void setPendingPinnedVerb(int category1Based, int verb1Based) {
+    _pendingPinnedVerbCategory = category1Based;
+    _pendingPinnedVerbIndex = verb1Based;
+  }
+
   /// Keyboard fire mode: clear player selection for a fresh start.
   void clearPlayersForKeyboardFire() {
     setState(() {
@@ -8532,6 +8567,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     final isSelected = _selectedVerb == verb;
+    final isSticky = _stickyVerb == verb;
 
     // Get all verbs for prefix calculation
     List<String> allVerbs = [];
@@ -8608,29 +8644,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         });
       },
       onTapDown: (TapDownDetails details) {
-        // Store tap position for positioning the popup
-        final RenderBox renderBox = context.findRenderObject() as RenderBox;
-        final localPosition = renderBox.globalToLocal(details.globalPosition);
-        final globalPosition = renderBox.localToGlobal(localPosition);
+        // Cmd+click: sticky verb (classic behavior) — stick until Cmd+click same verb again
+        final isMetaPressed = HardwareKeyboard.instance.isMetaPressed;
 
-        // Check if this verb needs a popup BEFORE setting state
-        final needsInningSelector =
-            !isSelected && _shouldShowInningSelector(verb);
-        final needsFullPopup =
-            !isSelected && _shouldShowFullPopupInterface(verb);
-
-        if (needsInningSelector) {
-          // For verbs that need only inning selection, show popup WITHOUT changing UI
-          _showCompactInningSelector(globalPosition, verb);
-        } else if (needsFullPopup) {
-          // For verbs that need full popup interface (Home Run, Single, Double, Triple)
-          _showHittingPopup(globalPosition, verb);
-        } else {
-          // For ALL other verbs, show popup without innings
-          // This prevents switching to the second screen with Back button
-          if (isSelected) {
-            // If already selected, deselect it
-            setState(() {
+        if (isMetaPressed) {
+          setState(() {
+            if (_stickyVerb == verb) {
+              _stickyVerb = null;
               _selectedVerb = null;
               _selectedActionVerb = null;
               _selectedHomeRunType = null;
@@ -8638,12 +8658,63 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               _selectedBase = null;
               _rbiCount = null;
               _selectedRbiInning = null;
-            });
-            _updateCaption();
-          } else {
-            // Show popup without innings for all other verbs (like Post Game Win)
-            _showSimpleVerbPopup(globalPosition, verb);
-          }
+            } else {
+              _stickyVerb = verb;
+              _selectedVerb = verb;
+              _selectedActionVerb = verb;
+              _selectedHomeRunType = null;
+              _selectedTagsAction = null;
+              _selectedBase = null;
+              _rbiCount = null;
+              _selectedRbiInning = null;
+            }
+          });
+          _updateCaption();
+          return;
+        }
+
+        // Normal click: clear sticky
+        setState(() => _stickyVerb = null);
+
+        // Store tap position for positioning the popup
+        final RenderBox renderBox = context.findRenderObject() as RenderBox;
+        final localPosition = renderBox.globalToLocal(details.globalPosition);
+        final globalPosition = renderBox.localToGlobal(localPosition);
+
+        if (isSelected) {
+          // Tap again on already-selected verb → deselect + clear caption
+          setState(() {
+            _selectedVerb = null;
+            _selectedActionVerb = null;
+            _selectedHomeRunType = null;
+            _selectedTagsAction = null;
+            _selectedBase = null;
+            _rbiCount = null;
+            _selectedRbiInning = null;
+          });
+          _updateCaption();
+          return;
+        }
+
+        // Immediately highlight the verb (like player selection)
+        setState(() {
+          _selectedVerb = verb;
+          _selectedActionVerb = verb;
+          _selectedHomeRunType = null;
+          _selectedTagsAction = null;
+          _selectedBase = null;
+          _rbiCount = null;
+          _selectedRbiInning = null;
+        });
+        _updateCaption();
+
+        // Open any relevant popup for extra options (inning, hitting details, etc.)
+        if (_shouldShowInningSelector(verb)) {
+          _showCompactInningSelector(globalPosition, verb);
+        } else if (_shouldShowFullPopupInterface(verb)) {
+          _showHittingPopup(globalPosition, verb);
+        } else {
+          _showSimpleVerbPopup(globalPosition, verb);
         }
       },
       child: Container(
@@ -8652,11 +8723,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.grey.shade300 : Colors.grey.shade50,
+          color: isSticky
+              ? const Color(0xFFE3EDFF)
+              : (isSelected ? const Color(0xFFDBEAFF) : Colors.grey.shade50),
           borderRadius: BorderRadius.circular(3),
           border: Border.all(
-            color: isSelected ? Colors.grey.shade400 : Colors.grey.shade300,
-            width: 0.5,
+            color: isSticky
+                ? const Color(0xFF0052CC)
+                : (isSelected
+                    ? const Color(0xFF4A90E2)
+                    : Colors.grey.shade300),
+            width: (isSelected || isSticky) ? 1.5 : 0.5,
           ),
         ),
         child: Center(
@@ -8669,7 +8746,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade500,
+                      color: isSelected
+                          ? const Color(0xFF4A90E2)
+                          : Colors.grey.shade500,
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text(
@@ -8793,8 +8872,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
                           ),
                         ),
                         TextSpan(
@@ -8802,7 +8881,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.black87,
                           ),
                         ),
                         if (_favoriteVerbs.contains(verb))
@@ -8824,8 +8903,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
                           ),
                         ),
                         if (_favoriteVerbs.contains(verb))
@@ -8854,8 +8933,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
                           ),
                         ),
                         TextSpan(
@@ -8863,7 +8942,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.black87,
                           ),
                         ),
                         if (_favoriteVerbs.contains(verb))
@@ -8886,8 +8965,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           text: _getVerbDisplayText(verb),
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade700,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
                           ),
                         ),
                         if (_favoriteVerbs.contains(verb))
@@ -9607,8 +9686,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
-                                                const Icon(Icons.cloud_upload,
-                                                    size: 16),
+                                                SvgPicture.asset(
+                                                  'assets/images/rocket_icon_white_only.svg',
+                                                  width: 16,
+                                                  height: 16,
+                                                  fit: BoxFit.contain,
+                                                  colorFilter: ColorFilter.mode(
+                                                    _disableFtp
+                                                        ? Colors.grey.shade600
+                                                        : Colors.white,
+                                                    BlendMode.srcIn,
+                                                  ),
+                                                ),
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   _currentFtpProfile != null
@@ -9738,8 +9827,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedHittingAction = _selectedHittingAction == option['value']
                 ? null
                 : option['value'] as String;
-            // Set the action verb for caption generation but DON'T set _selectedVerb
-            // This prevents the UI from switching to the interface with Back button
+            _selectedVerb = verbName;
             _selectedActionVerb = verbName;
           });
           setDialogState(() {});
@@ -9792,8 +9880,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 if (_isPriorToGame) {
                   _selectedRbiInning = null;
                 }
-                // Set the action verb for caption generation but DON'T set _selectedVerb
-                // This prevents the UI from switching to the interface with Back button
+                _selectedVerb = verbName;
                 _selectedActionVerb = verbName;
               });
               setDialogState(() {});
@@ -9843,8 +9930,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             _selectedRbiInning == inning ? null : inning;
                         if (_selectedRbiInning != null) {
                           _isPriorToGame = false;
-                          // Set the action verb for caption generation but DON'T set _selectedVerb
-                          // This prevents the UI from switching to the interface with Back button
+                          _selectedVerb = verbName;
                           _selectedActionVerb = verbName;
                         }
                       });
@@ -10070,8 +10156,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 height: 40,
                                 child: ElevatedButton(
                                   onPressed: () async {
-                                    // Set the action verb for caption generation
+                                    // Set verb so chip stays highlighted and caption updates
                                     setState(() {
+                                      _selectedVerb = verbName;
                                       _selectedActionVerb = verbName;
                                     });
                                     _updateCaption();
@@ -10128,7 +10215,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.cloud_upload, size: 16),
+                                      SvgPicture.asset(
+                                        'assets/images/rocket_icon_white_only.svg',
+                                        width: 16,
+                                        height: 16,
+                                        fit: BoxFit.contain,
+                                        colorFilter: ColorFilter.mode(
+                                          _disableFtp
+                                              ? Colors.grey.shade600
+                                              : Colors.white,
+                                          BlendMode.srcIn,
+                                        ),
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         _currentFtpProfile != null
@@ -10194,8 +10292,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
-    // Set the action verb immediately so caption updates right away
+    // Set verb so chip stays highlighted and caption updates
     setState(() {
+      _selectedVerb = verbName;
       _selectedActionVerb = verbName;
     });
     _updateCaption();
@@ -10672,8 +10771,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
                                             children: [
-                                              const Icon(Icons.cloud_upload,
-                                                  size: 16),
+                                              SvgPicture.asset(
+                                                'assets/images/rocket_icon_white_only.svg',
+                                                width: 16,
+                                                height: 16,
+                                                fit: BoxFit.contain,
+                                                colorFilter: ColorFilter.mode(
+                                                  _disableFtp
+                                                      ? Colors.grey.shade600
+                                                      : Colors.white,
+                                                  BlendMode.srcIn,
+                                                ),
+                                              ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 _currentFtpProfile != null
@@ -10866,7 +10975,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildVerbChip(String verb, String label) {
-    final isSelected = _selectedVerb == verb;
+    // Highlight when this category is selected, or when any verb in this category is selected
+    final isSelected = _selectedVerb == verb ||
+        (verbCategories[verb]?.contains(_selectedVerb ?? '') ?? false);
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -11086,8 +11197,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     bool showingHomeTeam =
         selectedHomePlayers.isEmpty; // Start with opposing team
 
-    // Set the action verb immediately so caption updates right away
+    // Set verb so chip stays highlighted and caption updates
     setState(() {
+      _selectedVerb = verbName;
       _selectedActionVerb = verbName;
     });
     _updateCaption();
@@ -11474,12 +11586,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   onPressed: _isFtpDisabled
                                                       ? null
                                                       : () => _uploadToFtp(),
-                                                  icon: Icon(
-                                                    Icons.cloud_upload,
-                                                    size: 16,
-                                                    color: _isFtpDisabled
-                                                        ? Colors.grey.shade400
-                                                        : Colors.white,
+                                                  icon: SvgPicture.asset(
+                                                    'assets/images/rocket_icon_white_only.svg',
+                                                    width: 16,
+                                                    height: 16,
+                                                    fit: BoxFit.contain,
+                                                    colorFilter: ColorFilter.mode(
+                                                      _isFtpDisabled
+                                                          ? Colors.grey.shade400
+                                                          : Colors.white,
+                                                      BlendMode.srcIn,
+                                                    ),
                                                   ),
                                                   label: Text(
                                                     'FTP',
@@ -14344,7 +14461,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Handle opponent players if selected
     String opponentPart = '';
+    // Hockey verbs that always embed the opponent (with or without "against") in
+    // their own action phrase via _buildActionPhrase(). We suppress opponentPart
+    // for all of them so the opponent name is never appended twice — even when the
+    // user has set omitAgainst=true (which removes "against" from the phrase but
+    // still includes the player name, causing the old contains('against') check to
+    // miss and double-append).
+    const Set<String> hockeyOpponentVerbs = {
+      'Shoots', 'Scores', 'Skates', 'Goes to the Net', 'Battles', 'Faceoff',
+      'Checks', 'Defends', 'Blocks', 'Clears', 'Guards the Net', 'Saves',
+      'Passes', 'Power Play', 'Breakaway',
+    };
     if (actionPhrase.contains('against') ||
+        hockeyOpponentVerbs.contains(verbToUse) ||
         _selectedHittingAction == 'celebrates' ||
         _selectedHittingAction == 'celebrates_in_dugout' ||
         _selectedHittingAction == 'trots_the_bases' ||
@@ -22291,12 +22420,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.rocket_launch,
-                                size: 14,
-                                color: _disableFtp
-                                    ? Colors.grey.shade600
-                                    : Colors.white,
+                              SvgPicture.asset(
+                                'assets/images/rocket_icon_white_only.svg',
+                                width: 14,
+                                height: 14,
+                                fit: BoxFit.contain,
+                                colorFilter: ColorFilter.mode(
+                                  _disableFtp
+                                      ? Colors.grey.shade600
+                                      : Colors.white,
+                                  BlendMode.srcIn,
+                                ),
                               ),
                               const SizedBox(width: 4),
                               Flexible(

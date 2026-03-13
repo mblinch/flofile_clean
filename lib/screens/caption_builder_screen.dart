@@ -1009,6 +1009,56 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return true; // consume event to prevent system beep
   }
 
+  /// Cmd+S: save current image and advance to the next one.
+  bool _handleSaveAndNextShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyS) return false;
+    final k = HardwareKeyboard.instance;
+    if (!(k.isMetaPressed || k.isControlPressed) || k.isShiftPressed) {
+      return false;
+    }
+    _saveIptcMetadata().then((_) {
+      if (!mounted) return;
+      if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
+        setState(() => _thumbCenterRequestId++);
+        _onImageSelected(currentIndex + 1);
+      }
+    });
+    return true;
+  }
+
+  /// Cmd+Enter: save, FTP upload, then advance to the next image.
+  bool _handleSaveFtpNextShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) return false;
+    final k = HardwareKeyboard.instance;
+    if (!(k.isMetaPressed || k.isControlPressed)) return false;
+    _saveFtpAndNext();
+    return true;
+  }
+
+  Future<void> _saveFtpAndNext() async {
+    // 1. Save IPTC metadata
+    await _saveIptcMetadata();
+    if (!mounted) return;
+
+    // 2. Trigger FTP upload via caption state
+    try {
+      final dynamic cs = _captionFieldsKey2.currentState;
+      if (cs != null) await cs.triggerFtp();
+    } catch (e) {
+      print('FTP error in Cmd+Enter: $e');
+    }
+    if (!mounted) return;
+
+    // 3. Advance to next image
+    if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
+      setState(() => _thumbCenterRequestId++);
+      _onImageSelected(currentIndex + 1);
+    }
+  }
+
   /// Cmd+Shift+K: open Keyboard Fire dialog (global, no focus needed).
   bool _handleKeyboardFireShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
@@ -1085,6 +1135,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     super.initState();
     _thumbnailAreaFocusNode = FocusNode();
     _initializeServices();
+    HardwareKeyboard.instance.addHandler(_handleSaveAndNextShortcut);
+    HardwareKeyboard.instance.addHandler(_handleSaveFtpNextShortcut);
     HardwareKeyboard.instance.addHandler(_handlePastePreviousKeyEvent);
     HardwareKeyboard.instance.addHandler(_handleKeyboardFireShortcut);
     HardwareKeyboard.instance.addHandler(_handleOptionVerbShortcut);
@@ -1322,20 +1374,34 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Build exiftool command arguments
       List<String> args = [];
 
+      // Fields that should be explicitly cleared in the file when the user empties them.
+      const clearableFields = {
+        'XMP-getty:Personality',
+        'IPTC:Description',
+        'Description',
+        'Caption-Abstract',
+        'IPTC:Caption-Abstract',
+        'XMP:Description',
+        'ImageDescription',
+      };
+
       // Add each field that has a value, handle keywords specially
       allValues.forEach((key, value) {
+        // Skip keyword fields — handled separately below
+        if (key == 'IPTC:Keywords' ||
+            key == 'Keywords' ||
+            key == 'Subject' ||
+            key == 'XMP:Subject' ||
+            key == 'XMP-dc:Subject') return;
+
         if (value.trim().isNotEmpty) {
-          // Skip all keyword-related fields; they'll be handled separately
-          if (key != 'IPTC:Keywords' &&
-              key != 'Keywords' &&
-              key != 'Subject' &&
-              key != 'XMP:Subject' &&
-              key != 'XMP-dc:Subject') {
-            args.add('-$key=$value');
-            if (key == 'Creator') {
-              print('DEBUG: Adding Creator to exiftool args: -$key=$value');
-            }
+          args.add('-$key=$value');
+          if (key == 'Creator') {
+            print('DEBUG: Adding Creator to exiftool args: -$key=$value');
           }
+        } else if (clearableFields.contains(key)) {
+          // Explicitly clear the field so the old value is removed from the file
+          args.add('-$key=');
         }
       });
 
@@ -1536,10 +1602,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Build exiftool command arguments
       List<String> args = [];
 
-      // Add each field that has a value
+      const clearableFieldsBg = {
+        'XMP-getty:Personality',
+        'IPTC:Description',
+        'Description',
+        'Caption-Abstract',
+        'IPTC:Caption-Abstract',
+        'XMP:Description',
+        'ImageDescription',
+      };
+
+      // Add each field that has a value; explicitly clear clearable fields when empty
       allValues.forEach((key, value) {
         if (value.trim().isNotEmpty) {
           args.add('-$key=$value');
+        } else if (clearableFieldsBg.contains(key)) {
+          args.add('-$key=');
         }
       });
 
@@ -2042,6 +2120,78 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Load metadata for the current image if there are any images left
       if (imagePaths.isNotEmpty) {
         _loadMetadata();
+      }
+    });
+  }
+
+  // Keyboard-fire-specific copy: copies current UI caption + personality (not stale file metadata)
+  void _onKeyboardFireCopy() {
+    final cs = _captionFieldsKey2.currentState;
+    if (cs == null) return;
+    try {
+      final dynamic state = cs;
+      final caption = (state.captionTextController as TextEditingController).text;
+      final personality = (state.personalityTextController as TextEditingController).text;
+      final payload = jsonEncode({'caption': caption, 'personality': personality});
+      Clipboard.setData(ClipboardData(text: payload));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Caption copied'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      print('KeyboardFire copy error: $e');
+    }
+  }
+
+  // Keyboard-fire-specific paste: reads caption + personality from clipboard and
+  // updates the UI immediately, then saves to file.
+  void _onKeyboardFirePaste() {
+    Clipboard.getData(Clipboard.kTextPlain).then((data) async {
+      if (data?.text == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nothing in clipboard'), backgroundColor: Colors.red, duration: Duration(seconds: 2)),
+        );
+        return;
+      }
+      try {
+        final map = jsonDecode(data!.text!) as Map<String, dynamic>;
+        final caption = map['caption']?.toString() ?? '';
+        final personality = map['personality']?.toString() ?? '';
+
+        // Update UI controllers directly
+        final cs = _captionFieldsKey2.currentState;
+        if (cs != null) {
+          try {
+            final dynamic state = cs;
+            (state.captionTextController as TextEditingController).text = caption;
+            (state.personalityTextController as TextEditingController).text = personality;
+          } catch (_) {}
+        }
+
+        // Write to file
+        if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
+          await _saveIptcMetadata();
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Caption pasted'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+        );
+      } catch (_) {
+        // Fallback: try as plain text — just paste into caption field
+        final text = data!.text!;
+        final cs = _captionFieldsKey2.currentState;
+        if (cs != null) {
+          try {
+            final dynamic state = cs;
+            (state.captionTextController as TextEditingController).text = text;
+          } catch (_) {}
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Caption pasted'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+        );
       }
     });
   }
@@ -3000,6 +3150,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleSaveAndNextShortcut);
+    HardwareKeyboard.instance.removeHandler(_handleSaveFtpNextShortcut);
     HardwareKeyboard.instance.removeHandler(_handlePastePreviousKeyEvent);
     HardwareKeyboard.instance.removeHandler(_handleKeyboardFireShortcut);
     HardwareKeyboard.instance.removeHandler(_handleOptionVerbShortcut);
@@ -3435,6 +3587,15 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Widget _buildCaptionEntryWidget(Widget captionWidget) {
     if (!_useKeyboardFireAsDefault) return captionWidget;
     final cs = _captionFieldsKey2.currentState;
+    // If the CaptionFieldsWidget hasn't mounted yet (first frame), schedule a
+    // rebuild so KeyboardFirePanel receives a non-null captionState immediately
+    // after mount — without this, the caption text field in the panel renders
+    // as a disconnected fallback and manual typing is never saved.
+    if (cs == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
     final dynamic state = cs;
     return Stack(
       fit: StackFit.expand,
@@ -3465,8 +3626,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
           onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
           onReset: _handleReset,
-          onCopy: () => _onCopyMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
-          onPaste: () => _onPasteMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+          onCopy: _onKeyboardFireCopy,
+          onPaste: _onKeyboardFirePaste,
           onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
           ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
           currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
@@ -4856,8 +5017,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
                         onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
                         onReset: _handleReset,
-                        onCopy: () => _onCopyMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
-                        onPaste: () => _onPasteMetadata(imagePaths.isNotEmpty ? imagePaths[currentIndex] : ''),
+                        onCopy: _onKeyboardFireCopy,
+                        onPaste: _onKeyboardFirePaste,
                         onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
                         ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
                         currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
