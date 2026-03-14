@@ -1,30 +1,39 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
-import '../services/preferences_sync_service.dart';
 import '../utils/native_file_picker.dart';
+import 'camera_serial_dialog.dart';
+import 'ftp_settings_panel.dart';
 
 class PreferencesDialog extends StatefulWidget {
-  const PreferencesDialog({super.key});
+  /// When set, called to open the FTP Settings dialog (e.g. from right-click on FTP button). Shown as an option in the FTP section.
+  final VoidCallback? onOpenFtpSettings;
+
+  const PreferencesDialog({super.key, this.onOpenFtpSettings});
 
   @override
   State<PreferencesDialog> createState() => _PreferencesDialogState();
 }
 
+enum _PrefsCategory {
+  application,
+  ftp,
+  teamVerb,
+}
+
+/// Same blue as the FTP button in the app.
+const Color _prefsBlue = Color(0xFF0052CC);
+
 class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
-  final PreferencesSyncService _syncService = PreferencesSyncService();
-  final TextEditingController _syncUrlController = TextEditingController();
-  final TextEditingController _syncAccountController = TextEditingController();
+  final TextEditingController _photoshopPathController = TextEditingController();
+  final TextEditingController _resolutionController = TextEditingController();
   String _sportForDefault = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
-  bool _useBallDontLieApi = false;
+  _PrefsCategory _selectedCategory = _PrefsCategory.application;
 
   @override
   void initState() {
@@ -34,8 +43,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
   @override
   void dispose() {
-    _syncUrlController.dispose();
-    _syncAccountController.dispose();
+    _photoshopPathController.dispose();
+    _resolutionController.dispose();
     super.dispose();
   }
 
@@ -53,639 +62,568 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
     setState(() {
       _isLoading = false;
-      _syncUrlController.text = _currentPreferences?['syncServerUrl']?.toString() ?? '';
-      _syncAccountController.text = _currentPreferences?['syncAccountId']?.toString() ?? '';
-      _sportForDefault = _currentPreferences?['currentSport']?.toString() ?? 'baseball';
-      _useBallDontLieApi = _currentPreferences?['useBallDontLieApi'] == true;
+      _photoshopPathController.text = _currentPreferences?['photoshopPath']?.toString() ?? '';
+      final res = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
+      _resolutionController.text = '$res';
+      final sport = _currentPreferences?['currentSport']?.toString();
+      _sportForDefault = (sport == null || sport.isEmpty) ? '' : sport;
     });
-  }
-
-  Future<void> _saveAsDefault() async {
-    try {
-      await _preferencesService.saveAsDefaultPreferences();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Current preferences saved as default. Reset will restore this setup.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving as default: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _exportToFile() async {
-    try {
-      final path = await FilePicker.platform.saveFile(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        fileName: 'caption-writer-preferences.json',
-      );
-      if (path == null || !mounted) return;
-      final prefs = await _preferencesService.exportAllPreferences();
-      final jsonString = const JsonEncoder.withIndent('  ').convert(prefs);
-      await File(path).writeAsString(jsonString);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preferences saved to file')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error exporting to file: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _importFromFile() async {
-    try {
-      final path = await NativeFilePicker.pickFile(
-        allowedExtensions: ['json'],
-      );
-      if (path == null || path.isEmpty || !mounted) return;
-      final content = await File(path).readAsString();
-      final preferences = json.decode(content) as Map<String, dynamic>;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Import Preferences'),
-          content: const Text(
-            'Replace all preferences with the contents of this file?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Import'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed == true) {
-        await _preferencesService.importPreferences(preferences);
-        await _loadCurrentPreferences();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Preferences imported from file')),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error importing from file: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _setSportAsDefault() async {
-    try {
-      await _preferencesService.setCurrentSportAsDefault(_sportForDefault);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'Current ${_sportForDefault.isNotEmpty ? "${_sportForDefault[0].toUpperCase()}${_sportForDefault.substring(1)}" : _sportForDefault} verbs and order set as default for this sport.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _uploadSync() async {
-    try {
-      await _preferencesService.setSyncServerUrl(_syncUrlController.text);
-      await _preferencesService.setSyncAccountId(_syncAccountController.text);
-      await _syncService.upload(_preferencesService);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings uploaded to sync server')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _downloadSync() async {
-    try {
-      await _preferencesService.setSyncServerUrl(_syncUrlController.text);
-      await _preferencesService.setSyncAccountId(_syncAccountController.text);
-      await _syncService.download(_preferencesService);
-      await _loadCurrentPreferences();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings downloaded from sync server')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download failed: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _resetToDefaults() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset Preferences'),
-        content: const Text(
-          'Reset all preferences. If you have used "Save as default", that setup will be restored; otherwise factory defaults are used. This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _preferencesService.resetToDefaults();
-      await _loadCurrentPreferences();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preferences reset to defaults')),
-        );
-      }
-    }
-  }
-
-  Future<void> _exportPreferences() async {
-    try {
-      final preferences = await _preferencesService.exportAllPreferences();
-      final jsonString =
-          const JsonEncoder.withIndent('  ').convert(preferences);
-
-      await Clipboard.setData(ClipboardData(text: jsonString));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preferences copied to clipboard')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error exporting preferences: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _importPreferences() async {
-    try {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      if (clipboardData?.text == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No data found in clipboard')),
-          );
-        }
-        return;
-      }
-
-      final preferences =
-          json.decode(clipboardData!.text!) as Map<String, dynamic>;
-
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Import Preferences'),
-          content: const Text(
-            'Are you sure you want to import preferences from clipboard? This will overwrite your current preferences.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Import'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true) {
-        await _preferencesService.importPreferences(preferences);
-        await _loadCurrentPreferences();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Preferences imported successfully')),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error importing preferences: $e')),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    const sidebarWidth = 180.0;
+    const contentPadding = 28.0;
     return Dialog(
+      backgroundColor: Colors.transparent,
       child: Container(
-        width: 500,
-        height: 600,
+        width: 860,
+        height: 640,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(4),
-                  topRight: Radius.circular(4),
-                ),
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey.shade300),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Preferences',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Icon(Icons.close,
-                        size: 16, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-
-            // Content
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Application Settings Section
-                          _buildSectionHeader('Application Settings'),
-                          const SizedBox(height: 8),
-
-                          _buildModernPreferenceItem(
-                            'Serial Number Bylines',
-                            (_currentPreferences?['serialNumberBylines'] ==
-                                    true)
-                                ? 'Enabled'
-                                : 'Disabled',
-                            onTap: () => _toggleSerialNumberBylines(),
-                            icon: Icons.auto_awesome,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Resolution Warning Threshold',
-                            '${_currentPreferences?['resolutionWarningThreshold'] ?? 3000}px',
-                            onTap: () => _editResolutionWarningThreshold(),
-                            icon: Icons.warning,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Photoshop Application',
-                            _currentPreferences?['photoshopPath'] != null
-                                ? _getPhotoshopDisplayName(
-                                    _currentPreferences!['photoshopPath'])
-                                : 'Not configured',
-                            onTap: () => _editPhotoshopPath(),
-                            icon: Icons.brush,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Current Layout',
-                            _getLayoutDisplayName(
-                                _currentPreferences?['currentLayout'] ??
-                                    'players_list_left'),
-                            onTap: () => _editCurrentLayout(),
-                            icon: Icons.view_quilt,
-                          ),
-                          _buildModernPreferenceItem(
-                            'Caption Entry',
-                            _currentPreferences?['captionEntryMode'] == 'classic'
-                                ? 'Classic'
-                                : 'Keyboard Fire (default)',
-                            onTap: () => _editCaptionEntryMode(),
-                            icon: Icons.keyboard,
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Team & Verb Settings Section
-                          _buildSectionHeader('Team & Verb Settings'),
-                          const SizedBox(height: 8),
-
-                          _buildModernPreferenceItem(
-                            'Category Order',
-                            (_currentPreferences?['categoryOrder'] as List?)
-                                    ?.join(', ') ??
-                                'Default',
-                            icon: Icons.list,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Favorite Verbs',
-                            '${(_currentPreferences?['favoriteVerbs'] as List?)?.length ?? 0} verbs',
-                            icon: Icons.star,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Favorite Teams',
-                            '${(_currentPreferences?['favoriteTeams'] as List?)?.length ?? 0} teams',
-                            icon: Icons.sports_baseball,
-                          ),
-
-                          const SizedBox(height: 12),
-                          _buildSectionHeader('Sport default'),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Text('Set as default for:', style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 8),
-                              DropdownButton<String>(
-                                value: _sportForDefault,
-                                items: ['baseball', 'hockey', 'basketball']
-                                    .map((s) => DropdownMenuItem(
-                                          value: s,
-                                          child: Text(s[0].toUpperCase() + s.substring(1)),
-                                        ))
-                                    .toList(),
-                                onChanged: (v) => setState(() => _sportForDefault = v ?? _sportForDefault),
-                              ),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: _setSportAsDefault,
-                                icon: const Icon(Icons.check_circle_outline, size: 18),
-                                label: const Text('Set as default'),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-                          _buildSectionHeader('Cloud sync'),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Store settings on your server so they work across computers.',
-                            style: TextStyle(fontSize: 11, color: Colors.black54),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _syncUrlController,
-                            decoration: const InputDecoration(
-                              labelText: 'Sync server URL',
-                              hintText: 'https://your-server.com/caption-writer-sync',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            ),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _syncAccountController,
-                            decoration: const InputDecoration(
-                              labelText: 'Account ID',
-                              hintText: 'e.g. your email or username',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            ),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              TextButton.icon(
-                                onPressed: _uploadSync,
-                                icon: const Icon(Icons.cloud_upload, size: 18),
-                                label: const Text('Upload'),
-                              ),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: _downloadSync,
-                                icon: const Icon(Icons.cloud_download, size: 18),
-                                label: const Text('Download'),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-                          _buildSectionHeader('Testing'),
-                          const SizedBox(height: 8),
-                          SwitchListTile(
-                            title: const Text('Use BallDontLie API (testing)'),
-                            subtitle: const Text(
-                              'Use balldontlie.io for MLB and NBA teams/rosters instead of official/ESPN APIs.',
-                              style: TextStyle(fontSize: 11, color: Colors.black54),
-                            ),
-                            value: _useBallDontLieApi,
-                            onChanged: (bool value) async {
-                              await _preferencesService.setUseBallDontLieApi(value);
-                              setState(() => _useBallDontLieApi = value);
-                            },
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // FTP Settings Section
-                          _buildSectionHeader('FTP Settings'),
-                          const SizedBox(height: 8),
-
-                          _buildModernPreferenceItem(
-                            'FTP Profiles',
-                            '${(_currentPreferences?['ftpProfiles'] as Map?)?.length ?? 0} profiles',
-                            icon: Icons.cloud_upload,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Current FTP Profile',
-                            (_currentPreferences?['currentFtpProfile']
-                                    as String?) ??
-                                'None',
-                            icon: Icons.account_circle,
-                          ),
-
-                          _buildModernPreferenceItem(
-                            'Firebar Position',
-                            (_currentPreferences?['placeFirebarOnRight'] ==
-                                    true)
-                                ? 'Right'
-                                : 'Left',
-                            icon: Icons.swap_horiz,
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-
-            // Footer with action buttons
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(4),
-                  bottomRight: Radius.circular(4),
-                ),
-                border: Border(
-                  top: BorderSide(color: Colors.grey.shade300),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildActionButton(
-                        'Export',
-                        Icons.copy,
-                        _exportPreferences,
-                        Colors.blue.shade600,
-                      ),
-                      _buildActionButton(
-                        'Import',
-                        Icons.content_paste,
-                        _importPreferences,
-                        Colors.green.shade600,
-                      ),
-                      _buildActionButton(
-                        'Export to file',
-                        Icons.download,
-                        _exportToFile,
-                        Colors.indigo.shade600,
-                      ),
-                      _buildActionButton(
-                        'Import from file',
-                        Icons.folder_open,
-                        _importFromFile,
-                        Colors.teal.shade600,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildActionButton(
-                        'Save as default',
-                        Icons.save,
-                        _saveAsDefault,
-                        Colors.orange.shade700,
-                      ),
-                      _buildActionButton(
-                        'Reset',
-                        Icons.refresh,
-                        _resetToDefaults,
-                        Colors.red.shade600,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-      ),
-    );
-  }
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'Preferences',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade900,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const Spacer(),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => Navigator.pop(context),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(Icons.close, size: 20, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-  // Build section header
-  Widget _buildSectionHeader(String title) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
+            // Sidebar + content
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Left: category list
+                        Container(
+                          width: sidebarWidth,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            border: Border(
+                              right: BorderSide(color: Colors.grey.shade200),
+                            ),
+                          ),
+                          child: ListView(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            children: [
+                              _buildSidebarTile(
+                                _PrefsCategory.application,
+                                'Application',
+                              ),
+                              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+                              _buildSidebarTile(
+                                _PrefsCategory.ftp,
+                                'FTP',
+                              ),
+                              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+                              _buildSidebarTile(
+                                _PrefsCategory.teamVerb,
+                                'Team & Verb',
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Right: selected category content
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(contentPadding),
+                            child: _buildCategoryContent(),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
         ),
       ),
     );
   }
 
-  // Build modern preference item
+  Widget _buildSidebarTile(
+    _PrefsCategory category,
+    String label,
+  ) {
+    final selected = _selectedCategory == category;
+    return Material(
+      color: selected ? _prefsBlue.withOpacity(0.06) : Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedCategory = category),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            border: selected
+                ? Border(
+                    left: BorderSide(color: _prefsBlue, width: 2),
+                  )
+                : null,
+          ),
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? _prefsBlue : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryContent() {
+    switch (_selectedCategory) {
+      case _PrefsCategory.application:
+        return _buildApplicationContent();
+      case _PrefsCategory.ftp:
+        return _buildFtpContent();
+      case _PrefsCategory.teamVerb:
+        return _buildTeamVerbContent();
+    }
+  }
+
+  Widget _buildApplicationContent() {
+    final serialBylines = _currentPreferences?['serialNumberBylines'] == true;
+    final resolutionThreshold = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
+    final resolutionEnabled = resolutionThreshold > 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildInlineRow(
+          'Serial Number Bylines',
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildOnOffSegment('Off', !serialBylines, () async {
+                            if (serialBylines) {
+                              await _preferencesService.saveSerialNumberBylines(false);
+                              await _loadCurrentPreferences();
+                            }
+                          }, isFirst: true),
+                          _buildOnOffSegment('On', serialBylines, () async {
+                            if (!serialBylines) {
+                              await _preferencesService.saveSerialNumberBylines(true);
+                              await _loadCurrentPreferences();
+                            }
+                          }, isLast: true),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final cameraService = CameraSerialService();
+                        await cameraService.initialize();
+                        if (!context.mounted) return;
+                        await showDialog<void>(
+                          context: context,
+                          builder: (context) => CameraSerialDialog(cameraService: cameraService),
+                        );
+                      },
+                      child: Text('Update Serial Number List', style: TextStyle(fontSize: 11, color: _prefsBlue)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Write photographer name and bylines according to camera serial numbers.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow('Resolution (pixels)', child: Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade400, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildOnOffSegment('Off', !resolutionEnabled, () async {
+                          if (resolutionEnabled) {
+                            await _preferencesService.saveResolutionWarningThreshold(0);
+                            _resolutionController.text = '0';
+                            await _loadCurrentPreferences();
+                          }
+                        }, isFirst: true),
+                        _buildOnOffSegment('On', resolutionEnabled, () async {
+                          if (!resolutionEnabled) {
+                            await _preferencesService.saveResolutionWarningThreshold(3000);
+                            _resolutionController.text = '3000';
+                            await _loadCurrentPreferences();
+                          }
+                        }, isLast: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 100,
+                    child: TextField(
+                      controller: _resolutionController,
+                      enabled: resolutionEnabled,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        disabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        hintText: 'e.g. 3000',
+                        hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      ),
+                      onSubmitted: (text) async {
+                        if (!resolutionEnabled) return;
+                        final v = int.tryParse(text);
+                        if (v != null && v > 0) {
+                          await _preferencesService.saveResolutionWarningThreshold(v);
+                          await _loadCurrentPreferences();
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Threshold at which a warning is displayed if your picture is below a certain number of pixels on the longest side. Off or set 0 to disable.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        )),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow('Photoshop Path', child: Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 320,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _photoshopPathController,
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          hintText: 'Path to Photoshop.app',
+                          hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                        ),
+                        onSubmitted: (text) async {
+                          await _preferencesService.savePhotoshopPath(text.isEmpty ? null : text);
+                          await _loadCurrentPreferences();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () async {
+                        final path = await NativeFilePicker.pickFile(allowedExtensions: ['app']);
+                        if (path == null || path.isEmpty || !mounted) return;
+                        _photoshopPathController.text = path;
+                        await _preferencesService.savePhotoshopPath(path);
+                        await _loadCurrentPreferences();
+                      },
+                      child: Text('Browse', style: TextStyle(fontSize: 11, color: _prefsBlue)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Path to your Photoshop application.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        )),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow('Sport Default', child: Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              PopupMenuButton<String>(
+                onSelected: (v) async {
+                  setState(() => _sportForDefault = v);
+                  try {
+                    if (v.isEmpty) {
+                      await _preferencesService.saveCurrentSport('');
+                    } else {
+                      await _preferencesService.setCurrentSportAsDefault(v);
+                    }
+                    await _loadCurrentPreferences();
+                  } catch (_) {}
+                },
+                itemBuilder: (context) {
+                  const options = ['', 'baseball', 'hockey', 'basketball'];
+                  const labels = ['None', 'Baseball', 'Hockey', 'Basketball'];
+                  final entries = <PopupMenuEntry<String>>[];
+                  for (var i = 0; i < options.length; i++) {
+                    entries.add(PopupMenuItem(value: options[i], child: Text(labels[i], style: TextStyle(fontSize: 11, color: Colors.grey.shade800))));
+                    if (i < options.length - 1) entries.add(const PopupMenuDivider());
+                  }
+                  return entries;
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _sportForDefault.isEmpty ? 'None' : _sportForDefault[0].toUpperCase() + _sportForDefault.substring(1),
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                    ),
+                    Icon(Icons.arrow_drop_down, size: 20, color: Colors.grey.shade600),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Select which sport is defaulted when you open the app.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        )),
+      ],
+    );
+  }
+
+  Widget _buildOnOffSegment(String label, bool selected, VoidCallback onTap, {bool isFirst = false, bool isLast = false}) {
+    const radius = 3.0;
+    final borderRadius = BorderRadius.only(
+      topLeft: Radius.circular(isFirst ? radius : 0),
+      bottomLeft: Radius.circular(isFirst ? radius : 0),
+      topRight: Radius.circular(isLast ? radius : 0),
+      bottomRight: Radius.circular(isLast ? radius : 0),
+    );
+    return Material(
+      color: selected ? _prefsBlue : Colors.transparent,
+      borderRadius: borderRadius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: borderRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineRow(String label, {required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 160,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamVerbContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildModernPreferenceItem(
+          'Category Order',
+          (_currentPreferences?['categoryOrder'] as List?)?.join(', ') ?? 'Default',
+          icon: Icons.list,
+        ),
+        const SizedBox(height: 8),
+        _buildModernPreferenceItem(
+          'Favorite Verbs',
+          '${(_currentPreferences?['favoriteVerbs'] as List?)?.length ?? 0} verbs',
+          icon: Icons.star,
+        ),
+        const SizedBox(height: 8),
+        _buildModernPreferenceItem(
+          'Favorite Teams',
+          '${(_currentPreferences?['favoriteTeams'] as List?)?.length ?? 0} teams',
+          icon: Icons.sports_baseball,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFtpContent() {
+    final firebarRight = _currentPreferences?['placeFirebarOnRight'] == true;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Full FTP Server Settings panel (same as the FTP settings dialog)
+        FtpSettingsPanel(
+          embedded: true,
+          onProfilesChanged: () => _loadCurrentPreferences(),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow('Firebar Position', child: SizedBox(
+          width: 100,
+          child: PopupMenuButton<bool>(
+            onSelected: (v) async {
+              await _preferencesService.savePlaceFirebarOnRight(v);
+              await _loadCurrentPreferences();
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(value: false, child: Text('Left', style: TextStyle(fontSize: 11, color: Colors.grey.shade800))),
+              const PopupMenuDivider(),
+              PopupMenuItem(value: true, child: Text('Right', style: TextStyle(fontSize: 11, color: Colors.grey.shade800))),
+            ],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(firebarRight ? 'Right' : 'Left', style: TextStyle(fontSize: 11, color: Colors.grey.shade800)),
+                Icon(Icons.arrow_drop_down, size: 20, color: Colors.grey.shade600),
+              ],
+            ),
+          ),
+        )),
+      ],
+    );
+  }
+
+  // Build a traditional list row (no box, no icon): label and value with optional tap
   Widget _buildModernPreferenceItem(
     String label,
     String value, {
     VoidCallback? onTap,
     IconData? icon,
   }) {
-    Widget content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: Colors.grey.shade600),
-            const SizedBox(width: 8),
-          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   label,
@@ -699,7 +637,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 11,
                     color: Colors.grey.shade600,
                   ),
                 ),
@@ -709,634 +647,31 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           if (onTap != null)
             Icon(
               Icons.chevron_right,
-              size: 16,
+              size: 14,
               color: Colors.grey.shade400,
             ),
         ],
       ),
     );
 
+    final withDivider = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row,
+        Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+      ],
+    );
+
     if (onTap != null) {
       return GestureDetector(
         onTap: onTap,
-        child: content,
+        behavior: HitTestBehavior.opaque,
+        child: withDivider,
       );
     }
 
-    return content;
+    return withDivider;
   }
 
-  // Build action button
-  Widget _buildActionButton(
-    String label,
-    IconData icon,
-    VoidCallback onPressed,
-    Color color,
-  ) {
-    return SizedBox(
-      height: 32,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 14),
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 11),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        ),
-      ),
-    );
-  }
-
-  // Get display name for Photoshop path
-  String _getPhotoshopDisplayName(String path) {
-    final fileName = path.split('/').last;
-    if (fileName.endsWith('.app')) {
-      return fileName.substring(0, fileName.length - 4);
-    }
-    return fileName;
-  }
-
-  // Get display name for layout
-  String _getLayoutDisplayName(String layout) {
-    switch (layout) {
-      case 'players_list_left':
-        return 'Players List Left';
-      case 'players_list_right':
-        return 'Players List Right';
-      case 'players_list_top':
-        return 'Players List Top';
-      case 'players_list_bottom':
-        return 'Players List Bottom';
-      case 'compact_players_above':
-        return 'Compact Players Above';
-      case 'matrix_board':
-        return 'Matrix Board (Fast Caption Builder)';
-      case 'player_popup_board':
-        return 'Player Popup (Click Player → Select Verb)';
-      default:
-        return 'Players List Left';
-    }
-  }
-
-  Future<void> _toggleSerialNumberBylines() async {
-    final currentValue = _currentPreferences?['serialNumberBylines'] ?? true;
-    final newValue = !currentValue;
-
-    await _preferencesService.saveSerialNumberBylines(newValue);
-    await _loadCurrentPreferences();
-  }
-
-  Future<void> _editResolutionWarningThreshold() async {
-    final currentValue =
-        _currentPreferences?['resolutionWarningThreshold'] ?? 3000;
-    final controller = TextEditingController(text: currentValue.toString());
-
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resolution Warning Threshold'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                'Set the minimum resolution threshold (in pixels) for showing warnings.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                labelText: 'Threshold (pixels)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final value = int.tryParse(controller.text);
-              if (value != null && value > 0) {
-                Navigator.pop(context, value);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null) {
-      await _preferencesService.saveResolutionWarningThreshold(result);
-      await _loadCurrentPreferences();
-    }
-  }
-
-  Future<void> _editPhotoshopPath() async {
-    final currentValue = _currentPreferences?['photoshopPath'] ?? '';
-    final controller = TextEditingController(text: currentValue);
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          width: 500,
-          height: 400,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
-                  ),
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.brush, size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Photoshop Application Path',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Icon(Icons.close,
-                          size: 16, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Content
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Select your Photoshop application:',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // File picker button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 36,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            try {
-                              final result = await NativeFilePicker.pickFile();
-
-                              if (result != null && result.isNotEmpty) {
-                                controller.text = result;
-                              }
-                            } catch (e) {
-                              print('Error picking file: $e');
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error selecting file: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.folder_open, size: 16),
-                          label: const Text('Browse for Photoshop App',
-                              style: TextStyle(fontSize: 11)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      const Text(
-                        'Or enter the path manually:',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-
-                      TextField(
-                        controller: controller,
-                        decoration: InputDecoration(
-                          hintText:
-                              '/Applications/Adobe Photoshop 2024/Adobe Photoshop 2024.app',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(3),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                        ),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: const Text(
-                          'Common locations:\n• /Applications/Adobe Photoshop 2024/Adobe Photoshop 2024.app\n• /Applications/Adobe Photoshop 2023/Adobe Photoshop 2023.app',
-                          style: TextStyle(fontSize: 10, color: Colors.blue),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Footer
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(4),
-                    bottomRight: Radius.circular(4),
-                  ),
-                  border: Border(
-                    top: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child:
-                          const Text('Cancel', style: TextStyle(fontSize: 11)),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context, ''); // Clear the path
-                      },
-                      child:
-                          const Text('Clear', style: TextStyle(fontSize: 11)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context, controller.text.trim());
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade600,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                      ),
-                      child: const Text('Save', style: TextStyle(fontSize: 11)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (result != null) {
-      await _preferencesService
-          .savePhotoshopPath(result.isEmpty ? null : result);
-      await _loadCurrentPreferences();
-    }
-  }
-
-  Future<void> _editCurrentLayout() async {
-    final currentValue =
-        _currentPreferences?['currentLayout'] ?? 'players_list_left';
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          width: 400,
-          height: 300,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
-                  ),
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.view_quilt,
-                        size: 16, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Select Layout',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Icon(Icons.close,
-                          size: 16, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Content
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Choose your preferred layout:',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildLayoutOption('players_list_left',
-                          'Players List Left', currentValue),
-                      _buildLayoutOption('players_list_right',
-                          'Players List Right', currentValue),
-                      _buildLayoutOption(
-                          'players_list_top', 'Players List Top', currentValue),
-                      _buildLayoutOption('players_list_bottom',
-                          'Players List Bottom', currentValue),
-                      _buildLayoutOption('compact_players_above',
-                          'Compact Players Above', currentValue),
-                      _buildLayoutOption('matrix_board',
-                          'Matrix Board (Fast Caption Builder)', currentValue),
-                      _buildLayoutOption(
-                          'player_popup_board',
-                          'Player Popup (Click Player → Select Verb)',
-                          currentValue),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Footer
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(4),
-                    bottomRight: Radius.circular(4),
-                  ),
-                  border: Border(
-                    top: BorderSide(color: Colors.grey.shade300),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child:
-                          const Text('Cancel', style: TextStyle(fontSize: 11)),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context, _selectedLayout);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade600,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                      ),
-                      child: const Text('Save', style: TextStyle(fontSize: 11)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (result != null) {
-      await _preferencesService.saveCurrentLayout(result);
-      await _loadCurrentPreferences();
-    }
-  }
-
-  Future<void> _editCaptionEntryMode() async {
-    final currentValue =
-        _currentPreferences?['captionEntryMode'] ?? 'keyboard_fire';
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => _CaptionEntryModeDialog(initialValue: currentValue),
-    );
-
-    if (result != null) {
-      await _preferencesService.saveCaptionEntryMode(result);
-      await _loadCurrentPreferences();
-    }
-  }
-
-  String _selectedLayout = 'players_list_left';
-
-  Widget _buildLayoutOption(
-      String value, String displayName, String currentValue) {
-    final isSelected = value == currentValue;
-    _selectedLayout = isSelected ? value : _selectedLayout;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedLayout = value;
-        });
-      },
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: _selectedLayout == value ? Colors.blue.shade50 : Colors.white,
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: _selectedLayout == value
-                ? Colors.blue.shade300
-                : Colors.grey.shade300,
-            width: _selectedLayout == value ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _selectedLayout == value
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              size: 16,
-              color: _selectedLayout == value
-                  ? Colors.blue.shade600
-                  : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              displayName,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: _selectedLayout == value
-                    ? FontWeight.w600
-                    : FontWeight.w500,
-                color: _selectedLayout == value
-                    ? Colors.blue.shade700
-                    : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CaptionEntryModeDialog extends StatefulWidget {
-  final String initialValue;
-
-  const _CaptionEntryModeDialog({required this.initialValue});
-
-  @override
-  State<_CaptionEntryModeDialog> createState() => _CaptionEntryModeDialogState();
-}
-
-class _CaptionEntryModeDialogState extends State<_CaptionEntryModeDialog> {
-  late String _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = widget.initialValue;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Caption Entry'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Choose how you write captions. You can switch back anytime.',
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          RadioListTile<String>(
-            title: const Text('Keyboard Fire (default)'),
-            subtitle: const Text(
-              'Number-first flow: home → away → category → verb',
-              style: TextStyle(fontSize: 11),
-            ),
-            value: 'keyboard_fire',
-            groupValue: _selected,
-            onChanged: (v) {
-              if (v != null) setState(() => _selected = v);
-            },
-          ),
-          RadioListTile<String>(
-            title: const Text('Classic'),
-            subtitle: const Text(
-              'Original player picker and verb list layout',
-              style: TextStyle(fontSize: 11),
-            ),
-            value: 'classic',
-            groupValue: _selected,
-            onChanged: (v) {
-              if (v != null) setState(() => _selected = v);
-            },
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _selected),
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
 }

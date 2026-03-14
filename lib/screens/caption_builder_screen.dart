@@ -3458,6 +3458,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             });
           }
         },
+        onOpenFtpSettings: () {
+          try {
+            (_captionFieldsKey2.currentState as dynamic)?.showFtpSettings();
+          } catch (_) {}
+        },
       ),
       body: Focus(
         canRequestFocus: false,

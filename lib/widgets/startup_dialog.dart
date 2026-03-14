@@ -90,6 +90,7 @@ class _StartupDialogState extends State<StartupDialog> {
   Set<String> _favoriteTeams = {};
   String? _favoriteHomeTeam;
   String? _favoriteAwayTeam;
+  bool _useBallDontLieApi = false;
 
   final List<String> questions = [
     'Where is your images folder?',
@@ -150,6 +151,8 @@ class _StartupDialogState extends State<StartupDialog> {
       print(
           'DEBUG _initializePreferences: Set selectedAwayTeam=$selectedAwayTeam');
     }
+
+    _useBallDontLieApi = await _preferencesService.getUseBallDontLieApi();
 
     if (mounted) {
       setState(() {});
@@ -281,6 +284,13 @@ class _StartupDialogState extends State<StartupDialog> {
         // Remove duplicates by converting to Set, then back to List and sort
         availableTeams = teams.map((team) => team.name).toSet().toList()..sort();
         print('DEBUG _loadTeams: Loaded ${availableTeams.length} teams');
+        // Clear selection if no longer in list (e.g. after switching API)
+        if (selectedHomeTeam != null && !availableTeams.contains(selectedHomeTeam)) {
+          selectedHomeTeam = null;
+        }
+        if (selectedAwayTeam != null && !availableTeams.contains(selectedAwayTeam)) {
+          selectedAwayTeam = null;
+        }
         // Restore favorite teams if they exist and are in the team list
         print('DEBUG _loadTeams: Checking home favorite: $_favoriteHomeTeam');
         if (_favoriteHomeTeam != null &&
@@ -415,6 +425,12 @@ class _StartupDialogState extends State<StartupDialog> {
         }
         print(
             'DEBUG _loadTeams (fallback): Loaded ${availableTeams.length} fallback teams for $sport');
+        if (selectedHomeTeam != null && !availableTeams.contains(selectedHomeTeam)) {
+          selectedHomeTeam = null;
+        }
+        if (selectedAwayTeam != null && !availableTeams.contains(selectedAwayTeam)) {
+          selectedAwayTeam = null;
+        }
         // Restore favorite teams if they exist and are in the team list
         print(
             'DEBUG _loadTeams (fallback): Checking home favorite: $_favoriteHomeTeam');
@@ -722,9 +738,15 @@ class _StartupDialogState extends State<StartupDialog> {
                   height: 1,
                   color: Colors.grey.shade300,
                 ),
-                const SizedBox(
-                    height: 32), // Reduced from 40 to account for line
+                const SizedBox(height: 32),
 
+                // Scrollable body so content never overflows
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                 // Question with typewriter effect
                 Text(
                   displayedText + (isTyping ? '|' : ''),
@@ -1014,6 +1036,38 @@ class _StartupDialogState extends State<StartupDialog> {
 
                     // Show team dropdowns only after typewriter is done
                     if (!_isTypingTeamSelection) ...[
+                      // BallDontLie API option (baseball and basketball only)
+                      if (widget.sport?.toLowerCase() == 'baseball' ||
+                          widget.sport?.toLowerCase() == 'basketball') ...[
+                        FractionallySizedBox(
+                          widthFactor: 0.75,
+                          alignment: Alignment.centerLeft,
+                          child: SwitchListTile(
+                            title: Text(
+                              'Use BallDontLie API (testing)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            value: _useBallDontLieApi,
+                            onChanged: (bool value) async {
+                              await _preferencesService.setUseBallDontLieApi(value);
+                              setState(() => _useBallDontLieApi = value);
+                              await _loadTeams();
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       // Home Team
                       Text('Home Team:',
                           style: TextStyle(
@@ -1459,6 +1513,10 @@ class _StartupDialogState extends State<StartupDialog> {
                     ),
                   ],
                 ],
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -128,6 +128,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   bool _showPlayoffOvertimes = false;
 
+  /// When true, show players as number-only squares (classic style) in Home/Away columns.
+  bool _useSquarePlayerView = false;
+
   /// Index of the one expanded category (verbs visible). Null = none expanded.
   int? _expandedCategoryIndex;
 
@@ -722,6 +725,91 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ),
           );
         }).toList();
+  }
+
+  /// Square-style (number-only) grid for Keyboard Fire roster column.
+  Widget _buildRosterSquareGrid(List<Player> roster, bool isHomeTeam) {
+    if (roster.isEmpty) {
+      return Center(
+        child: Text('No players', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+      );
+    }
+    final selectedNames = _getSelectedPlayerNames(isHomeTeam);
+    final sorted = List<Player>.from(roster)
+      ..sort((a, b) {
+        final an = int.tryParse(a.jerseyNumber ?? '') ?? 999;
+        final bn = int.tryParse(b.jerseyNumber ?? '') ?? 999;
+        return an.compareTo(bn);
+      });
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+      ),
+      itemCount: sorted.length,
+      itemBuilder: (context, index) {
+        final player = sorted[index];
+        final jersey = player.jerseyNumber ?? '?';
+        final isPicked = selectedNames.contains(player.displayName);
+        final lastName = player.fullName.contains(' ')
+            ? player.fullName.split(' ').sublist(1).join(' ').trim()
+            : player.fullName;
+        return GestureDetector(
+          onTap: () {
+            final state = widget.captionState;
+            if (state == null) return;
+            if (isPicked) {
+              (state as dynamic).removePlayerByJersey(isHomeTeam, jersey);
+            } else {
+              state.addPlayerByJersey(isHomeTeam, jersey);
+            }
+            state.updateCaptionFromKeyboardFire();
+            setState(() {});
+            _refreshCaptionPreviewLater();
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
+              border: Border.all(
+                color: isPicked ? const Color(0xFF4A90E2) : Colors.grey.shade300,
+                width: isPicked ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    jersey,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isPicked ? FontWeight.w600 : FontWeight.w500,
+                      color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    lastName,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w500,
+                      color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildRosterSection(String teamLabel, List<Player> roster, {required bool isHomeTeam}) {
@@ -2231,13 +2319,42 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 ),
                               ],
                             ),
-                            child: Text(
-                              homeName,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
-                              ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  homeName,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () => setState(() => _useSquarePlayerView = false),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: !_useSquarePlayerView ? Colors.blue.shade100 : Colors.grey.shade200,
+                                      borderRadius: const BorderRadius.only(topLeft: Radius.circular(3), bottomLeft: Radius.circular(3)),
+                                      border: Border.all(color: Colors.grey.shade400),
+                                    ),
+                                    child: Text('List', style: TextStyle(fontSize: 9, color: !_useSquarePlayerView ? Colors.blue.shade800 : Colors.grey.shade600)),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() => _useSquarePlayerView = true),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _useSquarePlayerView ? Colors.blue.shade100 : Colors.grey.shade200,
+                                      borderRadius: const BorderRadius.only(topRight: Radius.circular(3), bottomRight: Radius.circular(3)),
+                                      border: Border.all(color: Colors.grey.shade400),
+                                    ),
+                                    child: Text('Squares', style: TextStyle(fontSize: 9, color: _useSquarePlayerView ? Colors.blue.shade800 : Colors.grey.shade600)),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           Expanded(
@@ -2269,11 +2386,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     rosterForGhostNames: widget.homeRoster,
                                   ),
                                   Expanded(
-                                    child: ValueListenableBuilder<TextEditingValue>(
-                                      valueListenable: _homeBarController,
-                                      builder: (_, value, __) =>
-                                          _buildRosterColumnContent(widget.homeRoster, true, barText: value.text),
-                                    ),
+                                    child: _useSquarePlayerView
+                                        ? Padding(
+                                            padding: const EdgeInsets.only(bottom: 12),
+                                            child: _buildRosterSquareGrid(widget.homeRoster, true),
+                                          )
+                                        : ValueListenableBuilder<TextEditingValue>(
+                                            valueListenable: _homeBarController,
+                                            builder: (_, value, __) =>
+                                                _buildRosterColumnContent(widget.homeRoster, true, barText: value.text),
+                                          ),
                                   ),
                                 ],
                               ),
@@ -2429,11 +2551,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     rosterForGhostNames: widget.awayRoster,
                                   ),
                                   Expanded(
-                                    child: ValueListenableBuilder<TextEditingValue>(
-                                      valueListenable: _awayBarController,
-                                      builder: (_, value, __) =>
-                                          _buildRosterColumnContent(widget.awayRoster, false, barText: value.text),
-                                    ),
+                                    child: _useSquarePlayerView
+                                        ? Padding(
+                                            padding: const EdgeInsets.only(bottom: 12),
+                                            child: _buildRosterSquareGrid(widget.awayRoster, false),
+                                          )
+                                        : ValueListenableBuilder<TextEditingValue>(
+                                            valueListenable: _awayBarController,
+                                            builder: (_, value, __) =>
+                                                _buildRosterColumnContent(widget.awayRoster, false, barText: value.text),
+                                          ),
                                   ),
                                 ],
                               ),

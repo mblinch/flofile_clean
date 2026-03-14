@@ -15,6 +15,7 @@ import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/exiftool_helper.dart';
 import '../services/preferences_service.dart';
+import 'ftp_settings_panel.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -512,9 +513,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _homeSortAscending = true; // true = ascending, false = descending
   bool _awaySortAscending = true;
 
-  // Player display mode - list or grid
-  bool _homePlayerGridMode = true; // false = list, true = grid
-  bool _awayPlayerGridMode = true;
+  // Player display mode - list, grid, or square (number-only like classic/compact)
+  String _homePlayerView = 'grid'; // 'grid', 'list', 'square'
+  String _awayPlayerView = 'grid';
   String _homePlayerSortBy = 'number'; // 'lastname', 'firstname', or 'number'
   String _awayPlayerSortBy = 'number'; // 'lastname', 'firstname', or 'number'
   bool _homePlayerSortAscending = true; // true = ascending, false = descending
@@ -2310,8 +2311,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         // Switch to list mode when magic bar is focused for easier player selection
         if (_magicBarFocusNode.hasFocus) {
-          _homePlayerGridMode = false;
-          _awayPlayerGridMode = false;
+          _homePlayerView = 'list';
+          _awayPlayerView = 'list';
         }
       });
     });
@@ -3874,10 +3875,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             'DEBUG: Magic bar tapped, switching to list mode',
                                                           );
                                                           setState(() {
-                                                            _homePlayerGridMode =
-                                                                false;
-                                                            _awayPlayerGridMode =
-                                                                false;
+                                                            _homePlayerView = 'list';
+                                                            _awayPlayerView = 'list';
                                                           });
                                                         },
                                                         onChanged: (value) {
@@ -4859,8 +4858,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         focusNode: _magicBarFocusNode,
                         onTap: () {
                           setState(() {
-                            _homePlayerGridMode = false;
-                            _awayPlayerGridMode = false;
+                            _homePlayerView = 'list';
+                            _awayPlayerView = 'list';
                           });
                         },
                         onChanged: (value) {
@@ -5498,9 +5497,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               onTap: () {
                                                 setState(() {
                                                   if (_homeOnLeft) {
-                                                    _homePlayerGridMode = true;
+                                                    _homePlayerView = 'grid';
                                                   } else {
-                                                    _awayPlayerGridMode = true;
+                                                    _awayPlayerView = 'grid';
                                                   }
                                                 });
                                               },
@@ -5512,8 +5511,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
-                                                          ? _homePlayerGridMode
-                                                          : _awayPlayerGridMode)
+                                                          ? _homePlayerView == 'grid'
+                                                          : _awayPlayerView == 'grid')
                                                       ? Colors.blue.shade600
                                                       : Colors.grey.shade100,
                                                   borderRadius:
@@ -5524,8 +5523,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   ),
                                                   border: Border.all(
                                                     color: (_homeOnLeft
-                                                            ? _homePlayerGridMode
-                                                            : _awayPlayerGridMode)
+                                                            ? _homePlayerView == 'grid'
+                                                            : _awayPlayerView == 'grid')
                                                         ? Colors.blue.shade600
                                                         : Colors.grey.shade300,
                                                   ),
@@ -5539,8 +5538,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         Icons.grid_view,
                                                         size: 9,
                                                         color: (_homeOnLeft
-                                                                ? _homePlayerGridMode
-                                                                : _awayPlayerGridMode)
+                                                                ? _homePlayerView == 'grid'
+                                                                : _awayPlayerView == 'grid')
                                                             ? Colors.white
                                                             : Colors
                                                                 .grey.shade500,
@@ -5551,8 +5550,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           color: (_homeOnLeft
-                                                                  ? _homePlayerGridMode
-                                                                  : _awayPlayerGridMode)
+                                                                  ? _homePlayerView == 'grid'
+                                                                  : _awayPlayerView == 'grid')
                                                               ? Colors.white
                                                               : Colors.grey
                                                                   .shade500,
@@ -5565,14 +5564,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                               ),
                                             ),
-                                            // List view button (right)
+                                            // List view button (middle)
                                             GestureDetector(
                                               onTap: () {
                                                 setState(() {
                                                   if (_homeOnLeft) {
-                                                    _homePlayerGridMode = false;
+                                                    _homePlayerView = 'list';
                                                   } else {
-                                                    _awayPlayerGridMode = false;
+                                                    _awayPlayerView = 'list';
                                                   }
                                                 });
                                               },
@@ -5584,21 +5583,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
-                                                          ? !_homePlayerGridMode
-                                                          : !_awayPlayerGridMode)
+                                                          ? _homePlayerView == 'list'
+                                                          : _awayPlayerView == 'list')
                                                       ? Colors.blue.shade600
                                                       : Colors.grey.shade100,
-                                                  borderRadius:
-                                                      const BorderRadius.only(
-                                                    topRight:
-                                                        Radius.circular(4),
-                                                    bottomRight:
-                                                        Radius.circular(4),
-                                                  ),
+                                                  borderRadius: BorderRadius.zero,
                                                   border: Border.all(
                                                     color: (_homeOnLeft
-                                                            ? !_homePlayerGridMode
-                                                            : !_awayPlayerGridMode)
+                                                            ? _homePlayerView == 'list'
+                                                            : _awayPlayerView == 'list')
                                                         ? Colors.blue.shade600
                                                         : Colors.grey.shade300,
                                                   ),
@@ -5612,8 +5605,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         Icons.list,
                                                         size: 9,
                                                         color: (_homeOnLeft
-                                                                ? !_homePlayerGridMode
-                                                                : !_awayPlayerGridMode)
+                                                                ? _homePlayerView == 'list'
+                                                                : _awayPlayerView == 'list')
                                                             ? Colors.white
                                                             : Colors
                                                                 .grey.shade500,
@@ -5624,8 +5617,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           color: (_homeOnLeft
-                                                                  ? !_homePlayerGridMode
-                                                                  : !_awayPlayerGridMode)
+                                                                  ? _homePlayerView == 'list'
+                                                                  : _awayPlayerView == 'list')
                                                               ? Colors.white
                                                               : Colors.grey
                                                                   .shade500,
@@ -5638,13 +5631,80 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                               ),
                                             ),
+                                            // Square style (number-only) button (right)
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  if (_homeOnLeft) {
+                                                    _homePlayerView = 'square';
+                                                  } else {
+                                                    _awayPlayerView = 'square';
+                                                  }
+                                                });
+                                              },
+                                              child: Container(
+                                                height: 18,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: (_homeOnLeft
+                                                          ? _homePlayerView == 'square'
+                                                          : _awayPlayerView == 'square')
+                                                      ? Colors.blue.shade600
+                                                      : Colors.grey.shade100,
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                    topRight: Radius.circular(4),
+                                                    bottomRight: Radius.circular(4),
+                                                  ),
+                                                  border: Border.all(
+                                                    color: (_homeOnLeft
+                                                            ? _homePlayerView == 'square'
+                                                            : _awayPlayerView == 'square')
+                                                        ? Colors.blue.shade600
+                                                        : Colors.grey.shade300,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.apps,
+                                                        size: 9,
+                                                        color: (_homeOnLeft
+                                                                ? _homePlayerView == 'square'
+                                                                : _awayPlayerView == 'square')
+                                                            ? Colors.white
+                                                            : Colors.grey.shade500,
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        'Squares',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: (_homeOnLeft
+                                                                  ? _homePlayerView == 'square'
+                                                                  : _awayPlayerView == 'square')
+                                                              ? Colors.white
+                                                              : Colors.grey.shade500,
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                         // Right side: Sorting options (always take space, invisible in grid mode)
                                         Opacity(
                                           opacity: (_homeOnLeft
-                                                  ? _homePlayerGridMode
-                                                  : _awayPlayerGridMode)
+                                                  ? _homePlayerView != 'list'
+                                                  : _awayPlayerView != 'list')
                                               ? 0.0
                                               : 1.0,
                                           child: Row(
@@ -5915,12 +5975,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
                       )
-                    : (_homeOnLeft ? _homePlayerGridMode : _awayPlayerGridMode)
-                        ? _buildBothTeamsGrid()
-                        : _magicBarFocusNode.hasFocus
-                            ? _buildBothTeamsList()
-                            : _buildBothTeamsListView(),
+                    : (_homeOnLeft ? _homePlayerView == 'square' : _awayPlayerView == 'square')
+                        ? _buildBothTeamsSquareView()
+                        : (_homeOnLeft ? _homePlayerView == 'grid' : _awayPlayerView == 'grid')
+                            ? _buildBothTeamsGrid()
+                            : _magicBarFocusNode.hasFocus
+                                ? _buildBothTeamsList()
+                                : _buildBothTeamsListView(),
           ),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -6277,6 +6340,166 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Away team grid
         _buildSingleTeamGrid(awayRoster, selectedAwayPlayers, false),
       ],
+    );
+  }
+
+  /// Square-style (number-only) player grid like classic/compact dialog.
+  Widget _buildBothTeamsSquareView() {
+    final homeRoster = _getFilteredRoster(true);
+    final awayRoster = _getFilteredRoster(false);
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _buildSingleTeamSquareGrid(homeRoster, selectedHomePlayers, true)),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _buildSingleTeamSquareGrid(awayRoster, selectedAwayPlayers, false)),
+      ],
+    );
+  }
+
+  Widget _buildSingleTeamSquareGrid(List<Player> players, Set<String> selectedPlayers, bool isHome) {
+    if (players.isEmpty) {
+      return Center(
+        child: Text('No players', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+      );
+    }
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 6,
+        childAspectRatio: 1.0,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+      ),
+      itemCount: players.length,
+      itemBuilder: (context, index) {
+        final player = players[index];
+        final isSelected = selectedPlayers.contains(player.displayName);
+        final isMainPlayer = _isFirstSelectedPlayer(player.displayName);
+        final lastName = player.fullName.contains(' ')
+            ? player.fullName.split(' ').sublist(1).join(' ').trim()
+            : player.fullName;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              if (isSelected) {
+                if (isHome) {
+                  selectedHomePlayers.remove(player.displayName);
+                } else {
+                  selectedAwayPlayers.remove(player.displayName);
+                }
+              } else {
+                if (_firstTeamSelected == null) {
+                  _firstTeamSelected = isHome;
+                  _firstPlayerSelected = _removeJerseyNumberFromName(player.displayName);
+                }
+                if (isHome) {
+                  selectedHomePlayers.add(player.displayName);
+                } else {
+                  selectedAwayPlayers.add(player.displayName);
+                }
+                _isPlayerSearchMode = false;
+              }
+            });
+            _updateCaption();
+            _originalCaptionBeforeCustomVerb = captionController.text;
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isMainPlayer
+                  ? Colors.red.shade100
+                  : isSelected
+                      ? Colors.blue.shade100
+                      : Colors.white,
+              border: Border.all(
+                color: isMainPlayer
+                    ? Colors.red.shade400
+                    : isSelected
+                        ? Colors.blue.shade400
+                        : Colors.grey.shade300,
+                width: isMainPlayer || isSelected ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    player.jerseyNumber ?? '?',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isMainPlayer || isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isMainPlayer
+                          ? Colors.red.shade700
+                          : isSelected
+                              ? Colors.blue.shade700
+                              : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    lastName,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w500,
+                      color: isMainPlayer
+                          ? Colors.red.shade700
+                          : isSelected
+                              ? Colors.blue.shade700
+                              : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -18131,620 +18354,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _showFtpSettings() {
-    final hostController = TextEditingController(text: _ftpHost);
-    final usernameController = TextEditingController(text: _ftpUsername);
-    final passwordController = TextEditingController(text: _ftpPassword);
-    final portController = TextEditingController(text: _ftpPort.toString());
-    final remotePathController = TextEditingController(text: _ftpRemotePath);
-    final profileNameController = TextEditingController();
-    bool showProfileManager = false; // Track which view to show
-    String? successMessage; // Track success message
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          child: Container(
-            width: 450,
-            height: 500,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Icon(
-                      showProfileManager ? Icons.folder : Icons.settings,
-                      size: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      showProfileManager
-                          ? 'FTP Profile Manager'
-                          : 'FTP Server Settings',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: _showCreateNewProfileDialog,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(color: Colors.grey.shade400),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  size: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Create New Profile',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            setDialogState(() {
-                              showProfileManager = !showProfileManager;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(color: Colors.grey.shade400),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  showProfileManager
-                                      ? Icons.settings
-                                      : Icons.folder,
-                                  size: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  showProfileManager
-                                      ? 'Back to Settings'
-                                      : 'Manage Profiles',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Success Message
-                if (successMessage != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(2),
-                      border: Border.all(color: Colors.green.shade300),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: Colors.green.shade600,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            successMessage!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.green.shade700,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            setDialogState(() {
-                              successMessage = null;
-                            });
-                          },
-                          child: Icon(
-                            Icons.close,
-                            size: 14,
-                            color: Colors.green.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Content - either settings or profile manager
-                if (!showProfileManager) ...[
-                  // Profile Selection
-                  Text(
-                    'Select Profile',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 350),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: DropdownButtonFormField<String>(
-                      value: _currentFtpProfile,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        isDense: false,
-                      ),
-                      items: [
-                        DropdownMenuItem<String>(
-                          value: null,
-                          child: Text(
-                            'No Profile Selected',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ),
-                        ..._ftpProfiles.keys
-                            .map(
-                              (profileName) => DropdownMenuItem<String>(
-                                value: profileName,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        profileName,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _showEditProfileDialog(profileName);
-                                      },
-                                      child: Icon(
-                                        Icons.settings,
-                                        size: 14,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ],
-                      onChanged: (String? newValue) {
-                        setDialogState(() {
-                          if (newValue != null) {
-                            _loadFtpProfile(newValue);
-                            // Update the text controllers with loaded profile data
-                            hostController.text = _ftpHost;
-                            usernameController.text = _ftpUsername;
-                            passwordController.text = _ftpPassword;
-                            portController.text = _ftpPort.toString();
-                            remotePathController.text = _ftpRemotePath;
-                          } else {
-                            _currentFtpProfile = null;
-                          }
-                        });
-                      },
-                      icon: Icon(
-                        Icons.arrow_drop_down,
-                        size: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                      dropdownColor: Colors.white,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Upload Options
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(2),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Upload Options',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-
-                        // Rename uploaded file option
-                        TextField(
-                          style: const TextStyle(fontSize: 12, height: 2.3),
-                          decoration: InputDecoration(
-                            hintText: 'Enter custom filename (optional)',
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 11,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade400,
-                                width: 1.5,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            isDense: true,
-                            labelText: 'Rename uploaded file as',
-                            labelStyle: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
-                            floatingLabelBehavior: FloatingLabelBehavior.auto,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Save duplicate option
-                        TextField(
-                          style: const TextStyle(fontSize: 12, height: 2.3),
-                          decoration: InputDecoration(
-                            hintText:
-                                'Enter folder path for duplicate (optional)',
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 11,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(2),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade400,
-                                width: 1.5,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            isDense: true,
-                            labelText:
-                                'Save a duplicate version in another folder',
-                            labelStyle: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
-                            floatingLabelBehavior: FloatingLabelBehavior.auto,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Enable duplicate checkbox
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: Transform.scale(
-                                scale: 0.8,
-                                child: Checkbox(
-                                  value: false, // Placeholder value
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      // Placeholder functionality
-                                    });
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  activeColor: Colors.grey.shade600,
-                                  checkColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Enable duplicate file saving',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  const SizedBox(height: 12),
-                ] else ...[
-                  // Profile Manager View
-                  Text(
-                    'Profile Manager',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Profile List
-                  Container(
-                    height: 300,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(2),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: _ftpProfiles.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No saved profiles yet.\nCreate your first profile using the settings above.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: _ftpProfiles.length,
-                            itemBuilder: (context, index) {
-                              final profileName = _ftpProfiles.keys.elementAt(
-                                index,
-                              );
-                              final profile = _ftpProfiles[profileName]!;
-                              final isCurrent =
-                                  _currentFtpProfile == profileName;
-
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                color: isCurrent
-                                    ? Colors.blue.withOpacity(0.1)
-                                    : null,
-                                child: ListTile(
-                                  leading: Icon(
-                                    isCurrent
-                                        ? Icons.check_circle
-                                        : Icons.storage,
-                                    color:
-                                        isCurrent ? Colors.blue : Colors.grey,
-                                    size: 16,
-                                  ),
-                                  title: Text(
-                                    profileName,
-                                    style: TextStyle(
-                                      fontWeight: isCurrent
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    '${profile['host']}:${profile['port']}',
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (!isCurrent)
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.play_arrow,
-                                            size: 16,
-                                          ),
-                                          onPressed: () {
-                                            setDialogState(() {
-                                              _loadFtpProfile(profileName);
-                                              // Update the text controllers with loaded profile data
-                                              hostController.text = _ftpHost;
-                                              usernameController.text =
-                                                  _ftpUsername;
-                                              passwordController.text =
-                                                  _ftpPassword;
-                                              portController.text =
-                                                  _ftpPort.toString();
-                                              remotePathController.text =
-                                                  _ftpRemotePath;
-                                            });
-                                          },
-                                          tooltip: 'Load Profile',
-                                        ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          size: 16,
-                                        ),
-                                        onPressed: () {
-                                          setDialogState(() {
-                                            _deleteFtpProfile(profileName);
-                                          });
-                                        },
-                                        tooltip: 'Delete Profile',
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(2),
-                          border: Border.all(color: Colors.grey.shade400),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _ftpHost = hostController.text;
-                          _ftpUsername = usernameController.text;
-                          _ftpPassword = passwordController.text;
-                          _ftpPort = int.tryParse(portController.text) ?? 21;
-                          _ftpRemotePath = remotePathController.text;
-                        });
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('FTP settings saved!'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(2),
-                          border: Border.all(color: Colors.grey.shade400),
-                        ),
-                        child: Text(
-                          'Save Settings',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      builder: (context) => Dialog(
+        child: Container(
+          width: 450,
+          constraints: const BoxConstraints(maxHeight: 500),
+          padding: const EdgeInsets.all(12),
+          child: FtpSettingsPanel(
+            embedded: false,
+            onClose: () {
+              _loadFtpProfiles(); // sync current profile from storage
+              Navigator.pop(context);
+            },
+            onProfilesChanged: () => _loadFtpProfiles(),
           ),
         ),
       ),
@@ -22330,8 +21954,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         onTap: () {
                           setState(() {
-                            _homePlayerGridMode = false;
-                            _awayPlayerGridMode = false;
+                            _homePlayerView = 'list';
+                            _awayPlayerView = 'list';
                           });
                         },
                         onChanged: (value) {

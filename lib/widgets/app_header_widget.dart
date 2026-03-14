@@ -21,6 +21,8 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(String)? onLayoutChanged;
   /// Called when the preferences dialog is closed (so the screen can reload caption entry mode etc.).
   final VoidCallback? onPreferencesClosed;
+  /// Called to open FTP Settings (e.g. from Preferences > FTP). When set, Preferences dialog shows "Open FTP Settings" in the FTP section.
+  final VoidCallback? onOpenFtpSettings;
 
   const AppHeaderWidget({
     super.key,
@@ -33,6 +35,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
     this.currentLayout,
     this.onLayoutChanged,
     this.onPreferencesClosed,
+    this.onOpenFtpSettings,
   });
 
   @override
@@ -329,7 +332,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           onPressed: () async {
             await showDialog(
               context: context,
-              builder: (context) => const PreferencesDialog(),
+              builder: (context) => PreferencesDialog(onOpenFtpSettings: widget.onOpenFtpSettings),
             );
             widget.onPreferencesClosed?.call();
           },

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'intents.dart';
 import 'screens/caption_builder_screen.dart';
+import 'widgets/preferences_dialog.dart';
 
 // Global navigator key so the pre-focus keyboard handler can dispatch to the app.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -36,6 +37,21 @@ void main() {
   // Register the Cmd+Shift+K interceptor before any widget is built.
   WidgetsFlutterBinding.ensureInitialized();
   HardwareKeyboard.instance.addHandler(_globalKeyboardFireInterceptor);
+
+  // Handle native app menu "Preferences…" (Cmd+,) — open Preferences dialog
+  const prefsChannel = MethodChannel('caption_writer/preferences');
+  prefsChannel.setMethodCallHandler((MethodCall call) async {
+    if (call.method == 'openPreferences') {
+      final ctx = appNavigatorKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await showDialog<void>(
+          context: ctx,
+          builder: (context) => const PreferencesDialog(),
+        );
+      }
+    }
+    return null;
+  });
 
   // Check if running from a mounted volume (DMG) and warn user
   final executablePath = Platform.resolvedExecutable;
@@ -117,19 +133,41 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Caption Writer',
-      navigatorKey: appNavigatorKey,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E3A59),
-          brightness: Brightness.light,
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.comma, meta: true):
+            OpenPreferencesIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          OpenPreferencesIntent: CallbackAction<OpenPreferencesIntent>(
+            onInvoke: (_) {
+              final ctx = appNavigatorKey.currentContext;
+              if (ctx != null && ctx.mounted) {
+                showDialog<void>(
+                  context: ctx,
+                  builder: (context) => const PreferencesDialog(),
+                );
+              }
+              return null;
+            },
+          ),
+        },
+        child: MaterialApp(
+          title: 'Caption Writer',
+          navigatorKey: appNavigatorKey,
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF2E3A59),
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: Colors.white,
+            useMaterial3: true,
+          ),
+          home: const CaptionBuilderScreen(),
         ),
-        scaffoldBackgroundColor: Colors.white,
-        useMaterial3: true,
       ),
-      home: const CaptionBuilderScreen(),
     );
   }
 }

@@ -49,6 +49,9 @@ dependencies:
   # File picker for importing camera serial numbers
   file_picker: ^8.0.0+1
 
+  # Native-style settings/preferences UI (sectioned lists)
+  flutter_settings_ui: ^3.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

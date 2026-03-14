@@ -14,6 +14,16 @@ class AppDelegate: FlutterAppDelegate {
     updaterController.checkForUpdates(sender)
   }
 
+  @IBAction func openPreferences(_ sender: Any?) {
+    guard let window = mainFlutterWindow as? MainFlutterWindow,
+          let flutterVC = window.contentViewController as? FlutterViewController else { return }
+    let channel = FlutterMethodChannel(
+      name: "caption_writer/preferences",
+      binaryMessenger: flutterVC.engine.binaryMessenger
+    )
+    channel.invokeMethod("openPreferences", arguments: nil)
+  }
+
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
     // Check for updates shortly after launch so the window is up first
