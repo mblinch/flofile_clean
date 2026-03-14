@@ -1,15 +1,18 @@
 import 'mlb_api_service.dart';
 import 'nhl_api_service.dart';
 import 'balldontlie_api_service.dart';
+import 'nba_api_service.dart';
 
 class ApiManager {
   static const String _mlbStatsApi = 'MLB Stats API';
   static const String _nhlStatsApi = 'NHL Stats API';
   static const String _balldontlieApi = 'Balldontlie.io API';
+  static const String _nbaStatsApi = 'NBA Stats API';
 
   final MlbApiService _mlbService = MlbApiService();
   final NhlApiService _nhlService = NhlApiService();
   final BalldontlieApiService _balldontlieService = BalldontlieApiService();
+  final NbaApiService _nbaService = NbaApiService();
 
   String _currentApi = _mlbStatsApi; // Default to MLB
   String _currentSport = 'baseball'; // Track current sport
@@ -32,7 +35,7 @@ class ApiManager {
         _currentApi = _nhlStatsApi;
         break;
       case 'basketball':
-        _currentApi = _balldontlieApi;
+        _currentApi = _nbaStatsApi;
         break;
       case 'baseball':
       default:
@@ -50,15 +53,19 @@ class ApiManager {
     try {
       if (_currentApi == _nhlStatsApi) {
         return await _nhlService.fetchAllTeams();
+      } else if (_currentApi == _nbaStatsApi) {
+        return await _nbaService.fetchAllTeams();
       } else if (_currentApi == _balldontlieApi) {
-        final balldontlieTeams = await _balldontlieService.fetchAllTeams();
-        // Convert BalldontlieTeam to TeamInfo for compatibility
+        final fetchFn = _currentSport == 'basketball'
+            ? _balldontlieService.fetchAllNbaTeams()
+            : _balldontlieService.fetchAllTeams();
+        final balldontlieTeams = await fetchFn;
         return balldontlieTeams
             .map((team) => TeamInfo(
                   id: team.id,
                   name: team.displayName,
                   locationName: team.location,
-                  venueName: null, // Will be fetched separately from games API
+                  venueName: null,
                 ))
             .toList();
       } else {
@@ -77,17 +84,22 @@ class ApiManager {
     try {
       if (_currentApi == _nhlStatsApi) {
         return await _nhlService.fetchRosterByTeamName(teamName);
+      } else if (_currentApi == _nbaStatsApi) {
+        return await _nbaService.fetchTeamRoster(teamName);
       } else if (_currentApi == _balldontlieApi) {
-        // For balldontlie, we need to find the team ID first
-        final teams = await _balldontlieService.fetchAllTeams();
-        final team = teams.firstWhere(
-          (t) => t.displayName == teamName,
-          orElse: () => throw Exception('Team "$teamName" not found'),
-        );
-
-        final balldontliePlayers =
-            await _balldontlieService.fetchTeamActivePlayers(team.id);
-        // Convert BalldontliePlayer to Player for compatibility
+        List<BalldontliePlayer> balldontliePlayers;
+        if (_currentSport == 'basketball') {
+          balldontliePlayers =
+              await _balldontlieService.fetchNbaRosterByTeamName(teamName);
+        } else {
+          final teams = await _balldontlieService.fetchAllTeams();
+          final team = teams.firstWhere(
+            (t) => t.displayName == teamName,
+            orElse: () => throw Exception('Team "$teamName" not found'),
+          );
+          balldontliePlayers =
+              await _balldontlieService.fetchTeamActivePlayers(team.id);
+        }
         return balldontliePlayers
             .map((player) => Player(
                   fullName: player.fullName,
@@ -129,6 +141,8 @@ class ApiManager {
           orElse: () => throw Exception('Team "$teamName" not found'),
         );
         return team.venueName;
+      } else if (_currentApi == _nbaStatsApi) {
+        return null; // NBA API service doesn't provide venue in team list
       } else if (_currentApi == _balldontlieApi) {
         return await _balldontlieService.fetchVenueForTeam(teamName);
       } else {
@@ -153,7 +167,9 @@ class ApiManager {
         'API Manager: Fetching venue for game $awayTeam @ $homeTeam on ${gameDate.toIso8601String().split('T')[0]} from $_currentApi');
 
     try {
-      if (_currentApi == _balldontlieApi) {
+      if (_currentApi == _nbaStatsApi) {
+        return null; // Venue for game not implemented for NBA API
+      } else if (_currentApi == _balldontlieApi) {
         return await _balldontlieService.fetchVenueForGame(
             homeTeam, awayTeam, gameDate);
       } else {
@@ -171,6 +187,8 @@ class ApiManager {
   String getConnectionStatusMessage() {
     if (_currentApi == _nhlStatsApi) {
       return 'Connected to NHL Stats API';
+    } else if (_currentApi == _nbaStatsApi) {
+      return 'Connected to NBA Stats API';
     } else if (_currentApi == _balldontlieApi) {
       return 'Connected to Balldontlie.io API';
     } else {

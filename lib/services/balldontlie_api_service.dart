@@ -82,14 +82,60 @@ class BalldontlieApiService {
   static const String _baseUrl = 'api.balldontlie.io';
   static const String _apiKey = 'f081f205-1993-4171-8c06-06694c6ae8a4';
 
+  // ── MLB ──────────────────────────────────────────────────────────────────
+
   /// Fetches all MLB teams
   Future<List<BalldontlieTeam>> fetchAllTeams() async {
+    return _fetchTeams('/mlb/v1/teams');
+  }
+
+  /// Fetches all active players
+  Future<List<BalldontliePlayer>> fetchAllActivePlayers() async {
+    return _fetchActivePlayers('/mlb/v1/players/active');
+  }
+
+  /// Fetches active players for a specific MLB team
+  Future<List<BalldontliePlayer>> fetchTeamActivePlayers(String teamId) async {
+    return _fetchTeamPlayers('/mlb/v1/players/active', teamId);
+  }
+
+  /// Finds an MLB team by name (case-insensitive)
+  Future<BalldontlieTeam?> findTeamByName(String teamName) async {
+    final teams = await fetchAllTeams();
+    return _findInList(teams, teamName);
+  }
+
+  // ── NBA ──────────────────────────────────────────────────────────────────
+
+  /// Fetches all NBA teams
+  Future<List<BalldontlieTeam>> fetchAllNbaTeams() async {
+    return _fetchTeams('/nba/v1/teams');
+  }
+
+  /// Fetches active players for a specific NBA team ID
+  Future<List<BalldontliePlayer>> fetchNbaTeamActivePlayers(
+      String teamId) async {
+    return _fetchTeamPlayers('/nba/v1/players/active', teamId);
+  }
+
+  /// Finds an NBA team by name and returns its active roster.
+  Future<List<BalldontliePlayer>> fetchNbaRosterByTeamName(
+      String teamName) async {
+    final teams = await fetchAllNbaTeams();
+    final team = _findInList(teams, teamName);
+    if (team == null) throw Exception('NBA team "$teamName" not found');
+    return fetchNbaTeamActivePlayers(team.id);
+  }
+
+  // ── Shared helpers ────────────────────────────────────────────────────────
+
+  Future<List<BalldontlieTeam>> _fetchTeams(String path) async {
     try {
-      final url = Uri.https(_baseUrl, '/mlb/v1/teams');
+      final url = Uri.https(_baseUrl, path);
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         throw Exception('Team lookup failed: ${response.statusCode}');
@@ -97,24 +143,22 @@ class BalldontlieApiService {
 
       final data = jsonDecode(response.body);
       final teamsData = data['data'] as List<dynamic>;
-
       return teamsData
           .map((teamJson) => BalldontlieTeam.fromJson(teamJson))
           .toList();
     } catch (e) {
-      print('Error fetching teams: $e');
+      print('Error fetching teams from $path: $e');
       rethrow;
     }
   }
 
-  /// Fetches all active players
-  Future<List<BalldontliePlayer>> fetchAllActivePlayers() async {
+  Future<List<BalldontliePlayer>> _fetchActivePlayers(String path) async {
     try {
-      final url = Uri.https(_baseUrl, '/mlb/v1/players/active');
+      final url = Uri.https(_baseUrl, path);
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         throw Exception('Active player lookup failed: ${response.statusCode}');
@@ -122,25 +166,23 @@ class BalldontlieApiService {
 
       final data = jsonDecode(response.body);
       final playersData = data['data'] as List<dynamic>;
-
       return playersData
           .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
           .toList();
     } catch (e) {
-      print('Error fetching active players: $e');
+      print('Error fetching active players from $path: $e');
       rethrow;
     }
   }
 
-  /// Fetches active players for a specific team
-  Future<List<BalldontliePlayer>> fetchTeamActivePlayers(String teamId) async {
+  Future<List<BalldontliePlayer>> _fetchTeamPlayers(
+      String path, String teamId) async {
     try {
-      final url =
-          Uri.https(_baseUrl, '/mlb/v1/players/active', {'team_ids[]': teamId});
+      final url = Uri.https(_baseUrl, path, {'team_ids[]': teamId});
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         throw Exception(
@@ -149,27 +191,33 @@ class BalldontlieApiService {
 
       final data = jsonDecode(response.body);
       final playersData = data['data'] as List<dynamic>;
-
       return playersData
           .map((playerJson) => BalldontliePlayer.fromJson(playerJson))
           .toList();
     } catch (e) {
-      print('Error fetching team active players: $e');
+      print('Error fetching team players from $path: $e');
       rethrow;
     }
   }
 
-  /// Finds a team by name (case-insensitive)
-  Future<BalldontlieTeam?> findTeamByName(String teamName) async {
+  BalldontlieTeam? _findInList(List<BalldontlieTeam> teams, String teamName) {
+    final lower = teamName.trim().toLowerCase();
     try {
-      final teams = await fetchAllTeams();
       return teams.firstWhere(
-        (team) => team.displayName.toLowerCase() == teamName.toLowerCase(),
-        orElse: () => throw Exception('Team "$teamName" not found'),
+        (t) =>
+            t.displayName.toLowerCase() == lower ||
+            t.name.toLowerCase() == lower ||
+            t.location.toLowerCase() == lower ||
+            '${t.location} ${t.name}'.toLowerCase() == lower,
       );
-    } catch (e) {
-      print('Error finding team $teamName: $e');
-      return null;
+    } catch (_) {
+      // Fuzzy fallback – check if any word in the team's full name matches
+      return teams.cast<BalldontlieTeam?>().firstWhere(
+            (t) =>
+                t!.displayName.toLowerCase().contains(lower) ||
+                lower.contains(t.name.toLowerCase()),
+            orElse: () => null,
+          );
     }
   }
 
@@ -191,11 +239,10 @@ class BalldontlieApiService {
           '${gameDate.year}-${gameDate.month.toString().padLeft(2, '0')}-${gameDate.day.toString().padLeft(2, '0')}';
 
       // Fetch games for the specific date and teams
-      final url = Uri.https(_baseUrl, '/mlb/v1/games', {
-        'dates[]': dateString,
-        'team_ids[]': homeTeamInfo.id,
-        'team_ids[]': awayTeamInfo.id,
-      });
+      // Uri.https doesn't support repeated keys via map; build manually
+      final base = Uri.https(_baseUrl, '/mlb/v1/games');
+      final url = Uri.parse(
+          '${base.toString()}?dates[]=$dateString&team_ids[]=${homeTeamInfo.id}&team_ids[]=${awayTeamInfo.id}');
 
       final response = await http.get(
         url,

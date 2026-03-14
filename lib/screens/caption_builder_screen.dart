@@ -708,9 +708,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         _playerLoadingProgress = 0.1;
       });
 
+      const rosterTimeout = Duration(seconds: 12);
+
       if (selectedHomeTeam != null) {
         print('Loading home team roster for: $selectedHomeTeam');
-        final homeRoster = await _apiManager.fetchTeamRoster(selectedHomeTeam!);
+        final homeRoster = await _apiManager
+            .fetchTeamRoster(selectedHomeTeam!)
+            .timeout(rosterTimeout, onTimeout: () {
+          throw TimeoutException(
+              'Home roster request timed out after ${rosterTimeout.inSeconds}s');
+        });
         print('Loaded ${homeRoster.length} home team players');
         setState(() {
           _cachedHomeRoster = homeRoster;
@@ -721,7 +728,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Load away team players
       if (selectedAwayTeam != null) {
         print('Loading away team roster for: $selectedAwayTeam');
-        final awayRoster = await _apiManager.fetchTeamRoster(selectedAwayTeam!);
+        final awayRoster = await _apiManager
+            .fetchTeamRoster(selectedAwayTeam!)
+            .timeout(rosterTimeout, onTimeout: () {
+          throw TimeoutException(
+              'Away roster request timed out after ${rosterTimeout.inSeconds}s');
+        });
         print('Loaded ${awayRoster.length} away team players');
         setState(() {
           _cachedAwayRoster = awayRoster;
@@ -733,7 +745,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       await Future.delayed(const Duration(milliseconds: 200));
     } catch (e) {
       print('Error loading players: $e');
-      // Continue even if player loading fails
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Roster load failed: ${e is Exception ? e.toString().replaceFirst('Exception: ', '') : e}',
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
 
     setState(() {

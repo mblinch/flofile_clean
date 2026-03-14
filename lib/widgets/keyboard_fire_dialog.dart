@@ -1660,9 +1660,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   Widget _buildPeriodPicker() {
-    final periodLabels = _showPlayoffOvertimes
-        ? ['Pre-Game', '1OT', '2OT', '3OT', '4OT', '5OT']
-        : ['Pre-Game', '1', '2', '3', 'OT', 'SO'];
+    final sport = (() {
+      try {
+        return (widget.captionState as dynamic).currentSportName as String? ?? 'hockey';
+      } catch (_) {
+        return 'hockey';
+      }
+    })();
+    final isBasketball = sport == 'basketball';
+    final periodLabels = isBasketball
+        ? (  _showPlayoffOvertimes
+              ? ['Pre-Game', '2OT', '3OT', '4OT', '5OT', 'Post Game']
+              : ['Pre-Game', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '1H', '2H'])
+        : (_showPlayoffOvertimes
+              ? ['Pre-Game', '1OT', '2OT', '3OT', '4OT', '5OT']
+              : ['Pre-Game', '1', '2', '3', 'OT', 'SO']);
     final selected = _getSelectedPeriod();
 
     const Set<String> wideLabels = {'Pre-Game', 'Post Game'};
@@ -1735,7 +1747,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ],
           ),
           child: Text(
-            'Period',
+            isBasketball ? 'Quarter' : 'Period',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -2132,15 +2144,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ),
             if (!widget.showDialogActions) _buildPeriodPicker(),
             if (!widget.showDialogActions && _showFirebar) _buildNewFirebar(),
-            if (widget.homeRoster.isNotEmpty ||
-                widget.awayRoster.isNotEmpty ||
-                _step == 2) ...[
-              const SizedBox(height: 8),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ── 1: Home roster (title, then box: number bar + list) ───────
+            // Always show roster + verb columns so layout isn't blank when roster load fails
+            const SizedBox(height: 8),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── 1: Home roster (title, then box: number bar + list) ───────
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2612,7 +2622,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   ],
                 ),
               ),
-            ],
         if (widget.showDialogActions) ...[
           const SizedBox(height: 16),
           Row(

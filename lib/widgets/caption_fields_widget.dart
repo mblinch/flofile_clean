@@ -608,6 +608,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Reactions',
           'Favorites',
         ];
+      case 'basketball':
+        return [
+          'Offense',
+          'Defense',
+          'Reactions',
+          'Non Game-Action',
+          'Favorites',
+        ];
       case 'baseball':
       default:
         return [
@@ -670,6 +678,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
+  // Basketball verb categories
+  final Map<String, List<String>> basketballVerbCategories = {
+    'Offense': [
+      'Drives',
+      'Dribbles',
+      'Shoots',
+      'Scores',
+      'Dunks',
+      'Lays Up',
+      'Three-Pointer',
+      'Free Throw',
+    ],
+    'Defense': [
+      'Blocks',
+      'Steals the Ball',
+      'Defends',
+      'Contests',
+      'Rebounds',
+      '',
+      '',
+      '',
+      '',
+    ],
+    'Reactions': [
+      'Celebrates',
+      'Dejection',
+      'Post Game Win',
+      'Post Game Loss',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
+    'Non Game-Action': [
+      'Looks On',
+      'Warm Ups',
+      'Takes the Court',
+      'Comes Off the Court',
+      'National Anthem',
+      'Stretching',
+      'Bench',
+      '',
+      '',
+    ],
+  };
+
   // Hockey verb categories (aligned with classic verb list / player popup)
   final Map<String, List<String>> hockeyVerbCategories = {
     'Offense': [
@@ -722,11 +777,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     switch (sport) {
       case 'hockey':
         return hockeyVerbCategories;
+      case 'basketball':
+        return basketballVerbCategories;
       case 'baseball':
       default:
         return baseballVerbCategories;
     }
   }
+
+  /// Expose current sport for child widgets (e.g. KeyboardFirePanel period picker).
+  String get currentSportName => widget.sport?.toLowerCase() ?? 'baseball';
 
   // Match a magic-bar verb token to a canonical verb using the following rules:
   // - Single-word verbs: the first 2–3 letters are accepted (require at least 2)
@@ -12200,6 +12260,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  String _getBasketballQuarterText(String quarter) {
+    switch (quarter) {
+      case 'Q1':
+        return ' during the first quarter';
+      case 'Q2':
+        return ' during the second quarter';
+      case 'Q3':
+        return ' during the third quarter';
+      case 'Q4':
+        return ' during the fourth quarter';
+      case 'OT':
+        return ' during overtime';
+      case '2OT':
+        return ' during double overtime';
+      case '3OT':
+        return ' during triple overtime';
+      case '1H':
+        return ' during the first half';
+      case '2H':
+        return ' during the second half';
+      case 'Pre-Game':
+      case 'Post Game':
+        return '';
+      default:
+        if (quarter.endsWith('OT')) return ' during overtime';
+        return '';
+    }
+  }
+
+
   // Handle multiple player numbers input (e.g., "27 23")
   void _handleMultiplePlayerInput(String value) {
     final trimmed = value.trim();
@@ -14468,9 +14558,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // still includes the player name, causing the old contains('against') check to
     // miss and double-append).
     const Set<String> hockeyOpponentVerbs = {
+      // Hockey
       'Shoots', 'Scores', 'Skates', 'Goes to the Net', 'Battles', 'Faceoff',
       'Checks', 'Defends', 'Blocks', 'Clears', 'Guards the Net', 'Saves',
       'Passes', 'Power Play', 'Breakaway',
+      // Basketball (all embed opponent in their action phrase)
+      'Drives', 'Dribbles', 'Dunks', 'Lays Up',
+      'Three-Pointer', 'Free Throw', 'Steals the Ball', 'Contests', 'Rebounds',
+      'Takes the Court',
     };
     if (actionPhrase.contains('against') ||
         hockeyOpponentVerbs.contains(verbToUse) ||
@@ -14539,6 +14634,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Hockey mode: use periods
         if (_selectedPeriod != null) {
           inningPart = _getHockeyPeriodText(_selectedPeriod!);
+        } else if (_isPriorToGame) {
+          inningPart = ' prior to the game';
+        }
+      } else if (widget.sport?.toLowerCase() == 'basketball') {
+        // Basketball mode: use quarters
+        if (_selectedPeriod != null) {
+          inningPart = _getBasketballQuarterText(_selectedPeriod!);
         } else if (_isPriorToGame) {
           inningPart = ' prior to the game';
         }
@@ -14657,7 +14759,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Set game part based on sport
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
-    gamePart = sport == 'hockey' ? 'in their NHL game' : 'in their MLB game';
+    if (sport == 'hockey') {
+      gamePart = 'in their NHL game';
+    } else if (sport == 'basketball') {
+      gamePart = 'in their NBA game';
+    } else {
+      gamePart = 'in their MLB game';
+    }
 
     if (_isPriorToGame || _isPostGame) {
       // For pre-game or post-game, we need to extract just the team name from opponentPart
@@ -18916,7 +19024,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         originalVerb == 'Faceoff' ||
         originalVerb == 'Checks' ||
         originalVerb == 'Defends' ||
-        originalVerb == 'Blocks';
+        originalVerb == 'Blocks' ||
+        // Basketball opponent verbs
+        originalVerb == 'Drives' ||
+        originalVerb == 'Dribbles' ||
+        originalVerb == 'Dunks' ||
+        originalVerb == 'Lays Up' ||
+        originalVerb == 'Three-Pointer' ||
+        originalVerb == 'Free Throw' ||
+        originalVerb == 'Steals the Ball' ||
+        originalVerb == 'Contests' ||
+        originalVerb == 'Rebounds';
 
     final activePlayerCount = requiresOpponent && _firstTeamSelected != null
         ? (_firstTeamSelected!
@@ -19854,6 +19972,125 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ? '$customWording against the ${_getOpposingTeamName()}'
               : 'sits on the bench against the ${_getOpposingTeamName()}';
         }
+
+      // ── Basketball verbs ──────────────────────────────────────────────
+      case 'Drives':
+        final drivesOpp = _getOpposingPlayers();
+        final drivesPhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'drives to the basket');
+        final drivesOmit = _shouldOmitAgainst(originalVerb);
+        final drivesAgainst = drivesOmit ? '' : ' against';
+        if (drivesOpp.isNotEmpty) {
+          return '$drivesPhrase$drivesAgainst ${_formatPlayersWithTeam(drivesOpp)}';
+        }
+        return '$drivesPhrase$drivesAgainst the ${_getOpposingTeamName()}';
+
+      case 'Dunks':
+        final dunksOpp = _getOpposingPlayers();
+        final dunksPhrase =
+            overriddenPhrase ?? (hasCustomWording ? customWording : 'dunks');
+        final dunksOmit = _shouldOmitAgainst(originalVerb);
+        final dunksAgainst = dunksOmit ? '' : ' against';
+        if (dunksOpp.isNotEmpty) {
+          return '$dunksPhrase$dunksAgainst ${_formatPlayersWithTeam(dunksOpp)}';
+        }
+        return '$dunksPhrase$dunksAgainst the ${_getOpposingTeamName()}';
+
+      case 'Lays Up':
+        final layupOpp = _getOpposingPlayers();
+        final layupPhrase =
+            overriddenPhrase ?? (hasCustomWording ? customWording : 'lays up');
+        final layupOmit = _shouldOmitAgainst(originalVerb);
+        final layupAgainst = layupOmit ? '' : ' against';
+        if (layupOpp.isNotEmpty) {
+          return '$layupPhrase$layupAgainst ${_formatPlayersWithTeam(layupOpp)}';
+        }
+        return '$layupPhrase$layupAgainst the ${_getOpposingTeamName()}';
+
+      case 'Dribbles':
+        final dribblesOpp = _getOpposingPlayers();
+        final dribblesPhrase =
+            overriddenPhrase ?? (hasCustomWording ? customWording : 'dribbles');
+        final dribblesOmit = _shouldOmitAgainst(originalVerb);
+        final dribblesAgainst = dribblesOmit ? '' : ' against';
+        if (dribblesOpp.isNotEmpty) {
+          return '$dribblesPhrase$dribblesAgainst ${_formatPlayersWithTeam(dribblesOpp)}';
+        }
+        return '$dribblesPhrase$dribblesAgainst the ${_getOpposingTeamName()}';
+
+      case 'Three-Pointer':
+        final threeOpp = _getOpposingPlayers();
+        final threePhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'makes a three-pointer');
+        final threeOmit = _shouldOmitAgainst(originalVerb);
+        final threeAgainst = threeOmit ? '' : ' against';
+        if (threeOpp.isNotEmpty) {
+          return '$threePhrase$threeAgainst ${_formatPlayersWithTeam(threeOpp)}';
+        }
+        return '$threePhrase$threeAgainst the ${_getOpposingTeamName()}';
+
+      case 'Free Throw':
+        final ftOpp = _getOpposingPlayers();
+        final ftPhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'shoots a free throw');
+        final ftOmit = _shouldOmitAgainst(originalVerb);
+        final ftAgainst = ftOmit ? '' : ' against';
+        if (ftOpp.isNotEmpty) {
+          return '$ftPhrase$ftAgainst ${_formatPlayersWithTeam(ftOpp)}';
+        }
+        return '$ftPhrase$ftAgainst the ${_getOpposingTeamName()}';
+
+      case 'Steals the Ball':
+        final stealOpp = _getOpposingPlayers();
+        final stealPhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'steals the ball from');
+        if (stealOpp.isNotEmpty) {
+          return '$stealPhrase ${_formatPlayersWithTeam(stealOpp)}';
+        }
+        return '$stealPhrase the ${_getOpposingTeamName()}';
+
+      case 'Contests':
+        final contestsOpp = _getOpposingPlayers();
+        final contestsPhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'contests a shot by');
+        if (contestsOpp.isNotEmpty) {
+          return '$contestsPhrase ${_formatPlayersWithTeam(contestsOpp)}';
+        }
+        return '$contestsPhrase the ${_getOpposingTeamName()}';
+
+      case 'Rebounds':
+        final reboundOpp = _getOpposingPlayers();
+        final reboundPhrase = overriddenPhrase ??
+            (hasCustomWording ? customWording : 'rebounds');
+        final reboundOmit = _shouldOmitAgainst(originalVerb);
+        final reboundAgainst = reboundOmit ? '' : ' against';
+        if (reboundOpp.isNotEmpty) {
+          return '$reboundPhrase$reboundAgainst ${_formatPlayersWithTeam(reboundOpp)}';
+        }
+        return '$reboundPhrase$reboundAgainst the ${_getOpposingTeamName()}';
+
+      case 'Takes the Court':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'take the court against the ${_getOpposingTeamName()}';
+        } else {
+          return hasCustomWording
+              ? '$customWording against the ${_getOpposingTeamName()}'
+              : 'takes the court against the ${_getOpposingTeamName()}';
+        }
+
+      case 'Comes Off the Court':
+        if (activePlayerCount >= 2) {
+          return hasCustomWording
+              ? customWording ?? 'come off the court'
+              : 'come off the court';
+        } else {
+          return hasCustomWording
+              ? customWording ?? 'comes off the court'
+              : 'comes off the court';
+        }
+
       default:
         baseAction = originalVerb.toLowerCase();
     }
