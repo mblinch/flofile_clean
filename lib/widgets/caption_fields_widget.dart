@@ -320,6 +320,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Map<String, String> _customVerbWordings = {}; // Custom wordings for verbs
   Map<String, Map<String, dynamic>> _verbOverrides =
       {}; // Verb phrase overrides from editor
+  Set<String> _deletedVerbs = {}; // Verbs hidden from the list
 
   // Prevent recursive onChanged updates for caption shortcuts
   bool _isProcessingCaptionShortcut = false;
@@ -391,6 +392,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Store the last saved metadata for the "Last" button functionality
   Map<String, dynamic>? _lastSavedMetadata;
 
+  // When true, didUpdateWidget will skip its auto-store to avoid overwriting
+  // a caption that was explicitly saved by storeCurrentCaption().
+  bool _skipNextAutoStore = false;
+
   // Store current metadata for the "Last" button
   void _storeCurrentMetadata() {
     if (captionController.text.isNotEmpty ||
@@ -406,6 +411,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'City': cityController.text,
         'Province-State': provinceController.text,
       };
+      print('DEBUG storeCurrentMetadata: stored caption="${captionController.text}"');
+    } else {
+      print('DEBUG storeCurrentMetadata: all controllers empty — NOT storing');
     }
   }
 
@@ -771,18 +779,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
-  // Get verb categories based on current sport
+  // Get verb categories based on current sport, filtering out deleted verbs
   Map<String, List<String>> get verbCategories {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    Map<String, List<String>> base;
     switch (sport) {
       case 'hockey':
-        return hockeyVerbCategories;
+        base = hockeyVerbCategories;
+        break;
       case 'basketball':
-        return basketballVerbCategories;
+        base = basketballVerbCategories;
+        break;
       case 'baseball':
       default:
-        return baseballVerbCategories;
+        base = baseballVerbCategories;
     }
+    if (_deletedVerbs.isEmpty) return base;
+    return base.map(
+      (cat, verbs) => MapEntry(
+        cat,
+        verbs.where((v) => v.isEmpty || !_deletedVerbs.contains(v)).toList(),
+      ),
+    );
   }
 
   /// Expose current sport for child widgets (e.g. KeyboardFirePanel period picker).
@@ -2372,6 +2390,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
 
+    // Load deleted verbs (hidden from list)
+    _deletedVerbs =
+        await _preferencesService.getDeletedVerbs(sport: _currentSport);
+
     // Load firebar position
     _placeFirebarOnRight = await _preferencesService.getPlaceFirebarOnRight();
 
@@ -2587,8 +2609,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       personalityController.text = widget.personalityOverride!;
     }
     if (widget.metadata != oldWidget.metadata) {
-      // Store current metadata before loading new image
-      _storeCurrentMetadata();
+      // Only auto-store if the save handler hasn't already done it explicitly.
+      // After an explicit save, _skipNextAutoStore is true to prevent
+      // didUpdateWidget from overwriting the correct (verb-inclusive) caption
+      // with a stale captionController.text.
+      if (!_skipNextAutoStore) {
+        _storeCurrentMetadata();
+      }
+      _skipNextAutoStore = false;
 
       // Reset selections when metadata changes (new image loaded)
       resetCaptionSelections();
@@ -2690,8 +2718,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Force _selectedVerb to null first so selectVerb doesn't toggle it off.
       _selectedVerb = null;
       _selectedActionVerb = null;
-      selectVerbByCategoryAndIndexFromKeyboardFire(cat, idx);
-      updateCaptionFromKeyboardFire();
+      final hasExistingCaption = extractedCaption.trim().isNotEmpty;
+      // If the photo already has a caption, highlight the pinned verb in the
+      // UI but do NOT regenerate the caption — preserve what's in the file.
+      // If there's no caption yet, generate one from the pinned verb as normal.
+      selectVerbByCategoryAndIndexFromKeyboardFire(cat, idx,
+          suppressCaptionUpdate: hasExistingCaption);
+      if (!hasExistingCaption) {
+        updateCaptionFromKeyboardFire();
+      }
     }
   }
 
@@ -7983,9 +8018,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Keyboard Fire: set verb and update caption without showing any dialog.
   /// Use this when the verb is picked from the Keyboard Fire panel so only the panel’s Save/Copy/FTP popup appears.
-  void selectVerbByCategoryAndIndexFromKeyboardFire(int category1Based, int verb1Based) {
-    if (category1Based < 1 || category1Based > _categoryOrder.length) return;
-    final categoryName = _categoryOrder[category1Based - 1];
+  void selectVerbByCategoryAndIndexFromKeyboardFire(int category1Based, int verb1Based, {bool suppressCaptionUpdate = false}) {
+    final order = effectiveCategoryOrder;
+    if (category1Based < 1 || category1Based > order.length) return;
+    final categoryName = order[category1Based - 1];
     final List<String> verbList = categoryName == 'Favorites'
         ? _favoriteVerbs.toList()
         : (verbCategories[categoryName] ?? []);
@@ -8004,13 +8040,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _rbiCount = null;
         _selectedRbiInning = null;
       });
-      _updateCaption();
+      if (!suppressCaptionUpdate) _updateCaption();
     } else {
       setState(() {
         _selectedVerb = verb;
         _selectedActionVerb = verb;
       });
-      _updateCaption();
+      if (!suppressCaptionUpdate) _updateCaption();
     }
   }
 
@@ -8402,21 +8438,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Future<bool> deleteVerbOverrideFromKeyboardFire(String displayLabelOrKey) async {
     final s = displayLabelOrKey.trim();
     if (s.isEmpty) return false;
-    String? keyToRemove;
-    if (_verbOverrides.containsKey(s)) {
-      keyToRemove = s;
-    } else {
-      for (final entry in _verbOverrides.entries) {
-        final label = entry.value['label'] as String?;
-        if (label != null && label.trim() == s) {
-          keyToRemove = entry.key;
-          break;
-        }
+
+    // Resolve the canonical verb key (the built-in name, before any override label)
+    String canonicalVerb = s;
+    for (final entry in _verbOverrides.entries) {
+      final label = entry.value['label'] as String?;
+      if (label != null && label.trim() == s) {
+        canonicalVerb = entry.key;
+        break;
       }
     }
-    if (keyToRemove == null) return false;
-    await _preferencesService.removeVerbOverride(keyToRemove, sport: _currentSport);
-    _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+
+    // Add to deleted verbs so it is hidden from the list
+    await _preferencesService.addDeletedVerb(canonicalVerb, sport: _currentSport);
+    _deletedVerbs = await _preferencesService.getDeletedVerbs(sport: _currentSport);
+
+    // Also clear any verb override so it doesn't ghost around
+    if (_verbOverrides.containsKey(canonicalVerb)) {
+      await _preferencesService.removeVerbOverride(canonicalVerb, sport: _currentSport);
+      _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+    }
+
     if (mounted) setState(() {});
     widget.onVerbOverridesChanged?.call();
     return true;
@@ -8431,19 +8473,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return verb;
   }
 
+  /// The effective category order for the current sport: filters out categories that don't
+  /// exist in [verbCategories] (e.g. 'Running' doesn't exist for basketball/hockey), ensures
+  /// 'Favorites' is always included, and falls back to the sport default if empty.
+  /// This is the single source of truth used by [keyboardFireVerbList] and all category-index lookups.
+  List<String> get effectiveCategoryOrder {
+    final order = _categoryOrder
+        .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
+        .toList();
+    List<String> effective =
+        order.isNotEmpty ? List<String>.from(order) : List<String>.from(categoryOrder);
+    if (!effective.contains('Favorites')) {
+      effective = [...effective, 'Favorites'];
+    }
+    return effective;
+  }
+
   /// Verb list for keyboard fire dialog: category number, name, and ordered verb strings.
   /// Uses sport-aware category order (filters _categoryOrder to valid categories, else default).
   /// Favorites is always included so it appears in the Keyboard Fire panel.
   /// Applies verb overrides so edited display names (e.g. "Goes to the Net Against") show correctly.
   List<Map<String, dynamic>> get keyboardFireVerbList {
-    final order = _categoryOrder
-        .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
-        .toList();
-    List<String> effectiveOrder =
-        order.isNotEmpty ? List<String>.from(order) : List<String>.from(categoryOrder);
-    if (!effectiveOrder.contains('Favorites')) {
-      effectiveOrder = [...effectiveOrder, 'Favorites'];
-    }
+    final effectiveOrder = effectiveCategoryOrder;
     final list = <Map<String, dynamic>>[];
     for (var i = 0; i < effectiveOrder.length; i++) {
       final cat = effectiveOrder[i];
@@ -8465,6 +8516,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void resetCaption() => _fullReset();
   Future<void> triggerFtp() async => _onFtpPressed();
   void showFtpSettings() => _showFtpSettings();
+
+  /// Called by the screen whenever the user explicitly saves an image, so that
+  /// the current caption (including the verb phrase) is captured as the
+  /// "previous" caption available via paste-prev.
+  void storeCurrentCaption() {
+    _storeCurrentMetadata();
+    // Prevent the upcoming didUpdateWidget (triggered by navigation) from
+    // overwriting the caption we just stored with a stale version.
+    _skipNextAutoStore = true;
+    // Persist immediately so the value survives widget recreation.
+    _preferencesService.saveLastSavedMetadata(_lastSavedMetadata);
+  }
 
   bool get isFtpDisabled => _disableFtp;
   String? get currentFtpProfile => _currentFtpProfile;
@@ -8684,8 +8747,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ],
               ),
             ),
+            const PopupMenuItem<String>(
+              value: 'delete_verb',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Text('Delete verb'),
+                ],
+              ),
+            ),
           ],
-        ).then((value) {
+        ).then((value) async {
           if (value == 'favorite') {
             setState(() {
               if (_favoriteVerbs.contains(verb)) {
@@ -8693,13 +8766,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               } else {
                 _favoriteVerbs.add(verb);
               }
-
-              // Save favorite verbs preference for current sport
-              _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
-                  sport: _currentSport);
             });
+            await _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
+                sport: _currentSport);
           } else if (value == 'edit') {
             _showEditVerbDialog(verb);
+          } else if (value == 'delete_verb') {
+            await deleteVerbOverrideFromKeyboardFire(verb);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Verb removed from list.')),
+              );
+            }
           }
         });
       },
@@ -14799,9 +14877,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Determine if we should skip inning/period part
     final skipInningPart = _isPriorToGame || _isPostGame;
 
+    // Getty Images disclaimer: inserted when the credit field contains "Getty Images"
+    const _gettyDisclaimer =
+        'NOTE TO USER: User expressly acknowledges and agrees that, by downloading '
+        'and/or using this Photograph, user is consenting to the terms and conditions '
+        'of the Getty Images License Agreement.';
+    final isGetty = byline.toLowerCase().contains('getty images') &&
+        sport == 'basketball';
+    final disclaimerPart = isGetty ? ' $_gettyDisclaimer' : '';
+
     var caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${skipInningPart ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix.${byline.isNotEmpty ? ' (Photo by $byline)' : ''}';
+        '$gamePart at $stadium on $formattedDate $locationSuffix.$disclaimerPart${byline.isNotEmpty ? ' (Photo by $byline)' : ''}';
 
     // Apply diacritic removal if checkbox is checked
     if (_removeAccent) {
@@ -16448,95 +16535,44 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
-  // Paste last saved IPTC metadata to current picture
+  // Paste last saved caption and personality exactly as they were — no regeneration.
   Future<void> _pasteLastCaption() async {
-    try {
-      print(
-        'DEBUG: _pasteLastCaption called, _lastSavedMetadata: $_lastSavedMetadata',
-      );
-
-      if (_lastSavedMetadata != null) {
-        // Update the metadata in the parent widget - EXACTLY like the regular paste function
-        if (widget.onMetadataUpdated != null) {
-          final updatedMetadata = Map<String, dynamic>.from(
-            widget.metadata ?? {},
-          );
-
-          // Update each field exactly like the regular paste function
-          // Use Photo Mechanic's preferred field first
-          if (_lastSavedMetadata!['IPTC:Description'] != null) {
-            final captionValue =
-                _lastSavedMetadata!['IPTC:Description'].toString();
-            updatedMetadata['IPTC:Description'] = captionValue;
-            updatedMetadata['Caption-Abstract'] = captionValue;
-            // Update the caption controller directly
-            captionController.text = captionValue;
-          } else if (_lastSavedMetadata!['Caption-Abstract'] != null) {
-            final captionValue =
-                _lastSavedMetadata!['Caption-Abstract'].toString();
-            updatedMetadata['IPTC:Description'] = captionValue;
-            updatedMetadata['Caption-Abstract'] = captionValue;
-            // Update the caption controller directly
-            captionController.text = captionValue;
-          }
-
-          if (_lastSavedMetadata!['XMP-getty:Personality'] != null) {
-            final personalityValue =
-                _lastSavedMetadata!['XMP-getty:Personality'].toString();
-            updatedMetadata['XMP-getty:Personality'] = personalityValue;
-            // Update the personality controller directly
-            personalityController.text = personalityValue;
-          }
-
-          if (_lastSavedMetadata!['Sub-location'] != null) {
-            final stadiumValue = _lastSavedMetadata!['Sub-location'].toString();
-            updatedMetadata['Sub-location'] = stadiumValue;
-            // Update the stadium controller directly
-            stadiumController.text = stadiumValue;
-          }
-
-          if (_lastSavedMetadata!['City'] != null) {
-            final cityValue = _lastSavedMetadata!['City'].toString();
-            updatedMetadata['City'] = cityValue;
-            // Update the city controller directly
-            cityController.text = cityValue;
-          }
-
-          if (_lastSavedMetadata!['Province-State'] != null) {
-            final provinceValue =
-                _lastSavedMetadata!['Province-State'].toString();
-            updatedMetadata['Province-State'] = provinceValue;
-            // Update the province controller directly
-            provinceController.text = provinceValue;
-          }
-
-          // Call the metadata updated callback - EXACTLY like regular paste
-          widget.onMetadataUpdated!(updatedMetadata);
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Last saved IPTC metadata applied!'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No previous metadata available'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      print('DEBUG: Error pasting last IPTC metadata: $e');
+    if (_lastSavedMetadata == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error applying last metadata: $e'),
-          duration: const Duration(seconds: 2),
+        const SnackBar(
+          content: Text('No previous caption available'),
+          duration: Duration(seconds: 2),
         ),
       );
+      return;
     }
+
+    // Read the saved caption text
+    final captionValue = (_lastSavedMetadata!['IPTC:Description']
+            ?? _lastSavedMetadata!['Caption-Abstract'])
+        ?.toString() ?? '';
+
+    // Read the saved personality text
+    final personalityValue =
+        _lastSavedMetadata!['XMP-getty:Personality']?.toString() ?? '';
+
+    print('DEBUG pasteLastCaption: captionValue="$captionValue"');
+    print('DEBUG pasteLastCaption: personalityValue="$personalityValue"');
+
+    // Write directly — no callbacks, no _updateCaption(), nothing that can overwrite.
+    setState(() {
+      captionController.text = captionValue;
+      personalityController.text = personalityValue;
+    });
+    print('DEBUG pasteLastCaption: after setState, captionController.text="${captionController.text}"');
+    _keyboardFireCaptionNotifier.value = captionValue;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Previous caption pasted'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   /// Public entry for Cmd+Shift+V (paste previous caption).
@@ -19160,45 +19196,59 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return 'comes off the field against the ${_getOpposingTeamName()}';
         }
       case 'National Anthem':
-        // Check for verb override from verb editor first
         if (overriddenPhrase != null && overriddenPhrase.isNotEmpty) {
           return overriddenPhrase;
         }
-        // Check if multiple players are selected
-        final activePlayers = selectedHomePlayers.union(selectedAwayPlayers);
-        final isMultiplePlayers = activePlayers.length > 1;
-
-        final action = isMultiplePlayers ? 'look on' : 'looks on';
-        return '$action during the national anthem prior to play against the ${_getOpposingTeamName()}';
+        if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
+          final activePlayersAnthem = selectedHomePlayers.union(selectedAwayPlayers);
+          final isMultipleAnthem = activePlayersAnthem.length > 1;
+          final actionAnthem = isMultipleAnthem ? 'look on' : 'looks on';
+          return hasCustomWording
+              ? '$customWording during the national anthem prior to play against the ${_getOpposingTeamName()}'
+              : '$actionAnthem during the national anthem prior to play against the ${_getOpposingTeamName()}';
+        } else {
+          if (activePlayerCount >= 2) {
+            return hasCustomWording ? customWording : 'stand for the national anthem';
+          } else {
+            return hasCustomWording ? customWording : 'stands for the national anthem';
+          }
+        }
       case 'Stretching':
-        // Check for verb override from verb editor first
         if (overriddenPhrase != null && overriddenPhrase.isNotEmpty) {
           return overriddenPhrase;
         }
-        // Check if multiple players are selected
-        final activePlayersStretching = selectedHomePlayers.union(
-          selectedAwayPlayers,
-        );
-        final isMultiplePlayersStretching = activePlayersStretching.length > 1;
-
-        final actionStretching =
-            isMultiplePlayersStretching ? 'stretch' : 'stretches';
-        return '$actionStretching prior to play against the ${_getOpposingTeamName()}';
+        if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
+          final activePlayersStretching = selectedHomePlayers.union(selectedAwayPlayers);
+          final isMultiplePlayersStretching = activePlayersStretching.length > 1;
+          final actionStretching = isMultiplePlayersStretching ? 'stretch' : 'stretches';
+          return hasCustomWording
+              ? '$customWording prior to play against the ${_getOpposingTeamName()}'
+              : '$actionStretching prior to play against the ${_getOpposingTeamName()}';
+        } else {
+          if (activePlayerCount >= 2) {
+            return hasCustomWording ? customWording : 'stretch';
+          } else {
+            return hasCustomWording ? customWording : 'stretches';
+          }
+        }
       case 'Warm Ups':
-        // Check for verb override from verb editor first
         if (overriddenPhrase != null && overriddenPhrase.isNotEmpty) {
           return overriddenPhrase;
         }
-        // Check if multiple players are selected
-        final activePlayersWarmUps = selectedHomePlayers.union(
-          selectedAwayPlayers,
-        );
-        final isMultiplePlayersWarmUps = activePlayersWarmUps.length > 1;
-
-        final actionWarmUps = isMultiplePlayersWarmUps
-            ? 'take part in warm ups'
-            : 'takes part in warm ups';
-        return '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
+        if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
+          final activePlayersWarmUps = selectedHomePlayers.union(selectedAwayPlayers);
+          final isMultiplePlayersWarmUps = activePlayersWarmUps.length > 1;
+          final actionWarmUps = isMultiplePlayersWarmUps ? 'take part in warm ups' : 'takes part in warm ups';
+          return hasCustomWording
+              ? '$customWording prior to play against the ${_getOpposingTeamName()}'
+              : '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
+        } else {
+          if (activePlayerCount >= 2) {
+            return hasCustomWording ? customWording : 'warm up';
+          } else {
+            return hasCustomWording ? customWording : 'warms up';
+          }
+        }
       case 'Pitching Change':
         String inningText = '';
         if (_selectedRbiInning != null) {
@@ -19914,12 +19964,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$defendsPhrase$againstText $playerNames';
         }
         return '$defendsPhrase$againstText the ${_getOpposingTeamName()}';
-      case 'Warm Ups':
-        if (activePlayerCount >= 2) {
-          return hasCustomWording ? customWording : 'warm up';
-        } else {
-          return hasCustomWording ? customWording : 'warms up';
-        }
       case 'Takes the Ice':
         if (activePlayerCount >= 2) {
           return hasCustomWording ? customWording : 'take the ice';
@@ -19945,22 +19989,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return hasCustomWording
               ? '$customWording against the ${_getOpposingTeamName()}'
               : 'comes off the ice against the ${_getOpposingTeamName()}';
-        }
-      case 'National Anthem':
-        if (activePlayerCount >= 2) {
-          return hasCustomWording
-              ? customWording
-              : 'stand for the national anthem';
-        } else {
-          return hasCustomWording
-              ? customWording
-              : 'stands for the national anthem';
-        }
-      case 'Stretching':
-        if (activePlayerCount >= 2) {
-          return hasCustomWording ? customWording : 'stretch';
-        } else {
-          return hasCustomWording ? customWording : 'stretches';
         }
       case 'Bench':
         if (activePlayerCount >= 2) {

@@ -29,6 +29,10 @@ class PreferencesService {
   static const String _keyCustomVerbs = 'custom_verbs';
   static const String _keyVerbOverrides = 'verb_overrides'; // For editing built-in verbs
   static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
+  static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
+  static const String _keySyncServerUrl = 'sync_server_url';
+  static const String _keySyncAccountId = 'sync_account_id';
+  static const String _keyUseBallDontLieApi = 'use_balldontlie_api';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -62,6 +66,13 @@ class PreferencesService {
         print(
             'Error parsing category order for ' + sport + ': ' + e.toString());
       }
+    }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['categoryOrder'] != null) {
+      try {
+        final order = List<String>.from(sportDefault['categoryOrder'] as List<dynamic>);
+        if (order.isNotEmpty) return order;
+      } catch (_) {}
     }
     // Return sport-specific default order if not found or error
     final List<String> defaultOrder;
@@ -143,6 +154,36 @@ class PreferencesService {
     }
   }
 
+  // Per-sport default (e.g. "Set as default for Baseball") — used when user has no saved prefs for that sport
+  String _getSportDefaultKey(String sport) =>
+      '$_keySportDefaultPrefix${sport.toLowerCase()}';
+
+  Future<Map<String, dynamic>?> getSportDefault(String sport) async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_getSportDefaultKey(sport));
+    if (raw == null) return null;
+    try {
+      return json.decode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> hasSportDefault(String sport) async {
+    final prefs = await _getPrefs();
+    return prefs.containsKey(_getSportDefaultKey(sport));
+  }
+
+  Future<void> setSportDefault(String sport, Map<String, dynamic> data) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_getSportDefaultKey(sport), json.encode(data));
+  }
+
+  Future<void> clearSportDefault(String sport) async {
+    final prefs = await _getPrefs();
+    await prefs.remove(_getSportDefaultKey(sport));
+  }
+
   // Helper for custom verb wordings key per sport
   String _getCustomVerbWordingsKey(String sport) {
     switch (sport.toLowerCase()) {
@@ -167,6 +208,12 @@ class PreferencesService {
         print('Error parsing favorite verbs for $sport: $e');
       }
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['favoriteVerbs'] != null) {
+      try {
+        return Set<String>.from(sportDefault['favoriteVerbs'] as List<dynamic>);
+      } catch (_) {}
+    }
     return <String>{};
   }
 
@@ -189,6 +236,12 @@ class PreferencesService {
       } catch (e) {
         print('Error parsing favorite teams for $sport: $e');
       }
+    }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['favoriteTeams'] != null) {
+      try {
+        return Set<String>.from(sportDefault['favoriteTeams'] as List<dynamic>);
+      } catch (_) {}
     }
     return <String>{};
   }
@@ -288,17 +341,25 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getCustomVerbWordingsKey(sport);
     final jsonString = prefs.getString(key);
-    if (jsonString == null) return <String, String>{};
-    try {
-      final Map<String, dynamic> decoded = json.decode(jsonString);
-      return decoded.map((k, v) => MapEntry(k, v.toString()));
-    } catch (e) {
-      print('Error parsing custom verb wordings for ' +
-          sport +
-          ': ' +
-          e.toString());
-      return <String, String>{};
+    if (jsonString != null) {
+      try {
+        final Map<String, dynamic> decoded = json.decode(jsonString);
+        return decoded.map((k, v) => MapEntry(k, v.toString()));
+      } catch (e) {
+        print('Error parsing custom verb wordings for ' +
+            sport +
+            ': ' +
+            e.toString());
+      }
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['customVerbWordings'] != null) {
+      try {
+        final m = sportDefault['customVerbWordings'] as Map<String, dynamic>;
+        return m.map((k, v) => MapEntry(k, v.toString()));
+      } catch (_) {}
+    }
+    return <String, String>{};
   }
 
   Future<void> saveCustomVerbWording(String verb, String wording,
@@ -391,14 +452,23 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getCustomVerbsKey(sport);
     final jsonString = prefs.getString(key);
-    if (jsonString == null) return [];
-    try {
-      final List<dynamic> decoded = json.decode(jsonString);
-      return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-    } catch (e) {
-      print('Error parsing custom verbs for $sport: $e');
-      return [];
+    if (jsonString != null) {
+      try {
+        final List<dynamic> decoded = json.decode(jsonString);
+        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (e) {
+        print('Error parsing custom verbs for $sport: $e');
+      }
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['customVerbs'] != null) {
+      try {
+        return (sportDefault['customVerbs'] as List<dynamic>)
+            .map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {}
+    }
+    return [];
   }
 
   Future<void> saveCustomVerbs(List<Map<String, dynamic>> verbs, {String sport = 'hockey'}) async {
@@ -428,14 +498,22 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getVerbOverridesKey(sport);
     final jsonString = prefs.getString(key);
-    if (jsonString == null) return {};
-    try {
-      final Map<String, dynamic> decoded = json.decode(jsonString);
-      return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
-    } catch (e) {
-      print('Error parsing verb overrides for $sport: $e');
-      return {};
+    if (jsonString != null) {
+      try {
+        final Map<String, dynamic> decoded = json.decode(jsonString);
+        return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+      } catch (e) {
+        print('Error parsing verb overrides for $sport: $e');
+      }
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['verbOverrides'] != null) {
+      try {
+        final m = sportDefault['verbOverrides'] as Map<String, dynamic>;
+        return m.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+      } catch (_) {}
+    }
+    return {};
   }
 
   Future<void> saveVerbOverride(String originalVerbPhrase, Map<String, dynamic> override, {String sport = 'hockey'}) async {
@@ -467,14 +545,21 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getDeletedVerbsKey(sport);
     final jsonString = prefs.getString(key);
-    if (jsonString == null) return <String>{};
-    try {
-      final List<dynamic> decoded = json.decode(jsonString);
-      return decoded.cast<String>().toSet();
-    } catch (e) {
-      print('Error parsing deleted verbs for $sport: $e');
-      return <String>{};
+    if (jsonString != null) {
+      try {
+        final List<dynamic> decoded = json.decode(jsonString);
+        return decoded.cast<String>().toSet();
+      } catch (e) {
+        print('Error parsing deleted verbs for $sport: $e');
+      }
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['deletedVerbs'] != null) {
+      try {
+        return Set<String>.from(sportDefault['deletedVerbs'] as List<dynamic>);
+      } catch (_) {}
+    }
+    return <String>{};
   }
 
   Future<void> saveDeletedVerbs(Set<String> deletedVerbs, {String sport = 'hockey'}) async {
@@ -499,12 +584,86 @@ class PreferencesService {
     await saveDeletedVerbs(deletedVerbs, sport: sport);
   }
 
-  // Export all preferences as JSON
+  /// Saves the current effective state for [sport] as that sport's default (used when user has no prefs yet).
+  Future<void> setCurrentSportAsDefault(String sport) async {
+    final data = {
+      'categoryOrder': await getCategoryOrder(sport: sport),
+      'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+      'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
+      'customVerbWordings': await getCustomVerbWordings(sport: sport),
+      'verbOverrides': await getVerbOverrides(sport: sport),
+      'customVerbs': await getCustomVerbs(sport: sport),
+      'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
+    };
+    await setSportDefault(sport, data);
+  }
+
+  // Sync server (your hosted endpoint for cloud sync)
+  Future<String> getSyncServerUrl() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keySyncServerUrl) ?? '';
+  }
+
+  Future<void> setSyncServerUrl(String url) async {
+    final prefs = await _getPrefs();
+    if (url.isEmpty) {
+      await prefs.remove(_keySyncServerUrl);
+    } else {
+      await prefs.setString(_keySyncServerUrl, url.trim());
+    }
+  }
+
+  Future<String> getSyncAccountId() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keySyncAccountId) ?? '';
+  }
+
+  Future<bool> getUseBallDontLieApi() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyUseBallDontLieApi) ?? false;
+  }
+
+  Future<void> setUseBallDontLieApi(bool use) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyUseBallDontLieApi, use);
+  }
+
+  Future<void> setSyncAccountId(String id) async {
+    final prefs = await _getPrefs();
+    if (id.isEmpty) {
+      await prefs.remove(_keySyncAccountId);
+    } else {
+      await prefs.setString(_keySyncAccountId, id.trim());
+    }
+  }
+
+  static const String _keySavedDefaultPreferences = 'saved_default_preferences';
+
+  /// Exports all preferences as JSON, including per-sport verb settings so they can be saved and passed on.
   Future<Map<String, dynamic>> exportAllPreferences() async {
+    const sports = ['baseball', 'hockey', 'basketball'];
+    final verbSettingsBySport = <String, Map<String, dynamic>>{};
+    for (final sport in sports) {
+      verbSettingsBySport[sport] = {
+        'categoryOrder': await getCategoryOrder(sport: sport),
+        'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+        'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
+        'customVerbWordings': await getCustomVerbWordings(sport: sport),
+        'verbOverrides': await getVerbOverrides(sport: sport),
+        'customVerbs': await getCustomVerbs(sport: sport),
+        'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
+      };
+    }
     return {
+      'version': 2,
+      'currentSport': await getCurrentSport(),
+      'verbSettingsBySport': verbSettingsBySport,
       'categoryOrder': await getCategoryOrder(),
       'favoriteVerbs': (await getFavoriteVerbs()).toList(),
       'favoriteTeams': (await getFavoriteTeams()).toList(),
+      'syncServerUrl': await getSyncServerUrl(),
+      'syncAccountId': await getSyncAccountId(),
+      'useBallDontLieApi': await getUseBallDontLieApi(),
       'ftpProfiles': await getFtpProfiles(),
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
@@ -514,8 +673,81 @@ class PreferencesService {
     };
   }
 
-  // Import preferences from JSON
+  /// Saves the current preferences as the "default" bundle. Reset to defaults will restore this if present.
+  Future<void> saveAsDefaultPreferences() async {
+    final prefs = await _getPrefs();
+    final bundle = await exportAllPreferences();
+    await prefs.setString(_keySavedDefaultPreferences, json.encode(bundle));
+  }
+
+  /// Returns the saved default bundle, or null if none.
+  Future<Map<String, dynamic>?> getSavedDefaultPreferences() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keySavedDefaultPreferences);
+    if (raw == null) return null;
+    try {
+      return json.decode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Imports preferences from JSON (export format). Supports full verbSettingsBySport and legacy flat keys.
   Future<void> importPreferences(Map<String, dynamic> preferences) async {
+    if (preferences.containsKey('verbSettingsBySport')) {
+      final bySport = preferences['verbSettingsBySport'] as Map<String, dynamic>;
+      for (final entry in bySport.entries) {
+        final sport = entry.key;
+        final data = Map<String, dynamic>.from(entry.value as Map<String, dynamic>);
+        if (data.containsKey('categoryOrder')) {
+          await saveCategoryOrder(List<String>.from(data['categoryOrder']), sport: sport);
+        }
+        if (data.containsKey('favoriteVerbs')) {
+          await saveFavoriteVerbs(Set<String>.from(data['favoriteVerbs']), sport: sport);
+        }
+        if (data.containsKey('favoriteTeams')) {
+          await saveFavoriteTeams(Set<String>.from(data['favoriteTeams']), sport: sport);
+        }
+        if (data.containsKey('customVerbWordings')) {
+          final existing = await getCustomVerbWordings(sport: sport);
+          for (final k in existing.keys) {
+            await removeCustomVerbWording(k, sport: sport);
+          }
+          final wordings = Map<String, dynamic>.from(data['customVerbWordings']);
+          for (final w in wordings.entries) {
+            await saveCustomVerbWording(w.key, w.value.toString(), sport: sport);
+          }
+        }
+        if (data.containsKey('verbOverrides')) {
+          final existing = await getVerbOverrides(sport: sport);
+          for (final k in existing.keys) {
+            await removeVerbOverride(k, sport: sport);
+          }
+          final overrides = data['verbOverrides'] as Map<String, dynamic>;
+          for (final o in overrides.entries) {
+            await saveVerbOverride(o.key, Map<String, dynamic>.from(o.value as Map<String, dynamic>), sport: sport);
+          }
+        }
+        if (data.containsKey('customVerbs')) {
+          await saveCustomVerbs((data['customVerbs'] as List<dynamic>).map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>)).toList(), sport: sport);
+        }
+        if (data.containsKey('deletedVerbs')) {
+          await saveDeletedVerbs(Set<String>.from(data['deletedVerbs']), sport: sport);
+        }
+      }
+    }
+    if (preferences.containsKey('currentSport')) {
+      await saveCurrentSport(preferences['currentSport'] as String);
+    }
+    if (preferences.containsKey('syncServerUrl')) {
+      await setSyncServerUrl(preferences['syncServerUrl'] as String? ?? '');
+    }
+    if (preferences.containsKey('syncAccountId')) {
+      await setSyncAccountId(preferences['syncAccountId'] as String? ?? '');
+    }
+    if (preferences.containsKey('useBallDontLieApi')) {
+      await setUseBallDontLieApi(preferences['useBallDontLieApi'] as bool? ?? false);
+    }
     if (preferences.containsKey('categoryOrder')) {
       await saveCategoryOrder(List<String>.from(preferences['categoryOrder']));
     }
@@ -527,7 +759,7 @@ class PreferencesService {
     }
     if (preferences.containsKey('ftpProfiles')) {
       final profiles = Map<String, Map<String, dynamic>>.from(
-          preferences['ftpProfiles'].map(
+          (preferences['ftpProfiles'] as Map<String, dynamic>).map(
               (key, value) => MapEntry(key, Map<String, dynamic>.from(value))));
       await saveFtpProfiles(profiles);
     }
@@ -535,7 +767,7 @@ class PreferencesService {
       await saveCurrentFtpProfile(preferences['currentFtpProfile']);
     }
     if (preferences.containsKey('placeFirebarOnRight')) {
-      await savePlaceFirebarOnRight(preferences['placeFirebarOnRight']);
+      await savePlaceFirebarOnRight(preferences['placeFirebarOnRight'] as bool);
     }
     if (preferences.containsKey('lastSavedMetadata')) {
       await saveLastSavedMetadata(
@@ -555,10 +787,16 @@ class PreferencesService {
     await prefs.clear();
   }
 
-  // Reset to defaults
+  /// Reset to defaults. If a "Save as default" bundle exists, restores that; otherwise clears and applies hardcoded defaults.
   Future<void> resetToDefaults() async {
+    final savedDefault = await getSavedDefaultPreferences();
+    if (savedDefault != null && savedDefault.isNotEmpty) {
+      await clearAllPreferences();
+      await importPreferences(savedDefault);
+      await saveAsDefaultPreferences();
+      return;
+    }
     await clearAllPreferences();
-    // Set default category order
     await saveCategoryOrder([
       'Offense',
       'Defense',

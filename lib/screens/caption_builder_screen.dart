@@ -51,6 +51,21 @@ class _NextRowIntent extends Intent {
   const _NextRowIntent();
 }
 
+/// Arrow-key action that only consumes the key when [consumesKeyWhen] is true
+/// (e.g. thumbnail area has focus). Otherwise the key is passed through to the
+/// focused widget (e.g. text field for cursor movement).
+class _ConditionalArrowAction extends CallbackAction<Intent> {
+  _ConditionalArrowAction({
+    required super.onInvoke,
+    required this.consumesKeyWhen,
+  });
+
+  final bool Function() consumesKeyWhen;
+
+  @override
+  bool consumesKey(Intent intent) => consumesKeyWhen();
+}
+
 class CaptionBuilderScreen extends StatefulWidget {
   const CaptionBuilderScreen({super.key});
 
@@ -1040,6 +1055,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
     _saveIptcMetadata().then((_) {
       if (!mounted) return;
+      // Snapshot the current caption (with verb) as "last saved" before moving on.
+      (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
       if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
         setState(() => _thumbCenterRequestId++);
         _onImageSelected(currentIndex + 1);
@@ -1063,6 +1080,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // 1. Save IPTC metadata
     await _saveIptcMetadata();
     if (!mounted) return;
+
+    // Snapshot the current caption (with verb) as "last saved" before moving on.
+    (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
 
     // 2. Trigger FTP upload via caption state
     try {
@@ -1369,6 +1389,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Future<void> _saveIptcMetadata() async {
     if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
 
+    // Snapshot the current caption (with verb) BEFORE any async yields.
+    // Navigation can trigger didUpdateWidget which resets captionController.text,
+    // so we must capture it here, synchronously, before the first await.
+    (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
+
     final imagePath = imagePaths[currentIndex];
     print('Saving IPTC metadata to: $imagePath');
 
@@ -1595,6 +1620,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       print('DEBUG: No images or invalid index');
       return;
     }
+
+    // Snapshot caption before async yields (same race-condition fix as _saveIptcMetadata).
+    (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
 
     final imagePath = imagePaths[currentIndex];
     print('DEBUG: Saving IPTC metadata in background to: $imagePath');
@@ -1853,6 +1881,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     // Switch to the selected image
     _switchToImage(index);
+
+    // Return focus to the thumbnail area so arrow keys work immediately
+    // after clicking a thumbnail without needing a second click.
+    _thumbnailAreaFocusNode.requestFocus();
   }
 
   // Check if there are unsaved changes (only for the current image, not when switching)
@@ -3475,8 +3507,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   return null;
                 },
               ),
-              _PreviousImageIntent: CallbackAction<_PreviousImageIntent>(
+              _PreviousImageIntent: _ConditionalArrowAction(
+                consumesKeyWhen: () => !_isTextInputFocused(),
                 onInvoke: (_) {
+                  if (_isTextInputFocused()) return null;
                   if (imagePaths.isEmpty) return null;
                   if (currentIndex > 0) {
                     setState(() => _thumbCenterRequestId++);
@@ -3485,8 +3519,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   return null;
                 },
               ),
-              _NextImageIntent: CallbackAction<_NextImageIntent>(
+              _NextImageIntent: _ConditionalArrowAction(
+                consumesKeyWhen: () => !_isTextInputFocused(),
                 onInvoke: (_) {
+                  if (_isTextInputFocused()) return null;
                   if (imagePaths.isEmpty) return null;
                   if (currentIndex < imagePaths.length - 1) {
                     setState(() => _thumbCenterRequestId++);
@@ -3495,11 +3531,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   return null;
                 },
               ),
-              _PreviousRowIntent: CallbackAction<_PreviousRowIntent>(
-                onInvoke: (_) => _handleArrowUpDownByRow(up: true),
+              _PreviousRowIntent: _ConditionalArrowAction(
+                consumesKeyWhen: () => !_isTextInputFocused(),
+                onInvoke: (_) {
+                  if (_isTextInputFocused()) return null;
+                  return _handleArrowUpDownByRow(up: true);
+                },
               ),
-              _NextRowIntent: CallbackAction<_NextRowIntent>(
-                onInvoke: (_) => _handleArrowUpDownByRow(up: false),
+              _NextRowIntent: _ConditionalArrowAction(
+                consumesKeyWhen: () => !_isTextInputFocused(),
+                onInvoke: (_) {
+                  if (_isTextInputFocused()) return null;
+                  return _handleArrowUpDownByRow(up: false);
+                },
               ),
               KeyboardFireIntent: CallbackAction<KeyboardFireIntent>(
                 onInvoke: (_) {
@@ -3516,6 +3560,21 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         ),
       ), // Focus
     );
+  }
+
+  bool _isTextInputFocused() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null) return false;
+    final context = primary.context;
+    if (context == null) return false;
+    if (context.widget is EditableText) return true;
+    if (context.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return true;
+    }
+    if (context.findAncestorStateOfType<EditableTextState>() != null) {
+      return true;
+    }
+    return false;
   }
 
   Object? _handleArrowUpDownByRow({required bool up}) {

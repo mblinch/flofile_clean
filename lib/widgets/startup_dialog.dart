@@ -267,10 +267,17 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
+  Future<void> _retryLoadTeams() async {
+    setState(() => isLoadingTeams = true);
+    await _loadTeams();
+  }
+
   Future<void> _loadTeams() async {
     try {
       final teams = await _apiManager.fetchTeams();
+      if (!mounted) return;
       setState(() {
+        _isOffline = false;
         // Remove duplicates by converting to Set, then back to List and sort
         availableTeams = teams.map((team) => team.name).toSet().toList()..sort();
         print('DEBUG _loadTeams: Loaded ${availableTeams.length} teams');
@@ -297,6 +304,7 @@ class _StartupDialogState extends State<StartupDialog> {
       });
     } catch (e) {
       print('Error loading teams: $e');
+      if (!mounted) return;
       // Fallback teams based on sport
       setState(() {
         _isOffline = true;
@@ -978,6 +986,23 @@ class _StartupDialogState extends State<StartupDialog> {
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: isLoadingTeams ? null : _retryLoadTeams,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              isLoadingTeams ? 'Loading…' : 'Retry',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),

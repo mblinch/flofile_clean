@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert';
+
 import '../services/preferences_service.dart';
+import '../services/preferences_sync_service.dart';
 import '../utils/native_file_picker.dart';
 
 class PreferencesDialog extends StatefulWidget {
@@ -13,13 +18,25 @@ class PreferencesDialog extends StatefulWidget {
 
 class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
+  final PreferencesSyncService _syncService = PreferencesSyncService();
+  final TextEditingController _syncUrlController = TextEditingController();
+  final TextEditingController _syncAccountController = TextEditingController();
+  String _sportForDefault = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
+  bool _useBallDontLieApi = false;
 
   @override
   void initState() {
     super.initState();
     _initializePreferences();
+  }
+
+  @override
+  void dispose() {
+    _syncUrlController.dispose();
+    _syncAccountController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializePreferences() async {
@@ -36,7 +53,158 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
     setState(() {
       _isLoading = false;
+      _syncUrlController.text = _currentPreferences?['syncServerUrl']?.toString() ?? '';
+      _syncAccountController.text = _currentPreferences?['syncAccountId']?.toString() ?? '';
+      _sportForDefault = _currentPreferences?['currentSport']?.toString() ?? 'baseball';
+      _useBallDontLieApi = _currentPreferences?['useBallDontLieApi'] == true;
     });
+  }
+
+  Future<void> _saveAsDefault() async {
+    try {
+      await _preferencesService.saveAsDefaultPreferences();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Current preferences saved as default. Reset will restore this setup.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving as default: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportToFile() async {
+    try {
+      final path = await FilePicker.platform.saveFile(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        fileName: 'caption-writer-preferences.json',
+      );
+      if (path == null || !mounted) return;
+      final prefs = await _preferencesService.exportAllPreferences();
+      final jsonString = const JsonEncoder.withIndent('  ').convert(prefs);
+      await File(path).writeAsString(jsonString);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Preferences saved to file')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error exporting to file: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importFromFile() async {
+    try {
+      final path = await NativeFilePicker.pickFile(
+        allowedExtensions: ['json'],
+      );
+      if (path == null || path.isEmpty || !mounted) return;
+      final content = await File(path).readAsString();
+      final preferences = json.decode(content) as Map<String, dynamic>;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Import Preferences'),
+          content: const Text(
+            'Replace all preferences with the contents of this file?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await _preferencesService.importPreferences(preferences);
+        await _loadCurrentPreferences();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Preferences imported from file')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error importing from file: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _setSportAsDefault() async {
+    try {
+      await _preferencesService.setCurrentSportAsDefault(_sportForDefault);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Current ${_sportForDefault.isNotEmpty ? "${_sportForDefault[0].toUpperCase()}${_sportForDefault.substring(1)}" : _sportForDefault} verbs and order set as default for this sport.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadSync() async {
+    try {
+      await _preferencesService.setSyncServerUrl(_syncUrlController.text);
+      await _preferencesService.setSyncAccountId(_syncAccountController.text);
+      await _syncService.upload(_preferencesService);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings uploaded to sync server')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadSync() async {
+    try {
+      await _preferencesService.setSyncServerUrl(_syncUrlController.text);
+      await _preferencesService.setSyncAccountId(_syncAccountController.text);
+      await _syncService.download(_preferencesService);
+      await _loadCurrentPreferences();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings downloaded from sync server')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _resetToDefaults() async {
@@ -45,7 +213,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       builder: (context) => AlertDialog(
         title: const Text('Reset Preferences'),
         content: const Text(
-          'Are you sure you want to reset all preferences to their default values? This action cannot be undone.',
+          'Reset all preferences. If you have used "Save as default", that setup will be restored; otherwise factory defaults are used. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -281,6 +449,94 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                             icon: Icons.sports_baseball,
                           ),
 
+                          const SizedBox(height: 12),
+                          _buildSectionHeader('Sport default'),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Text('Set as default for:', style: TextStyle(fontSize: 12)),
+                              const SizedBox(width: 8),
+                              DropdownButton<String>(
+                                value: _sportForDefault,
+                                items: ['baseball', 'hockey', 'basketball']
+                                    .map((s) => DropdownMenuItem(
+                                          value: s,
+                                          child: Text(s[0].toUpperCase() + s.substring(1)),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) => setState(() => _sportForDefault = v ?? _sportForDefault),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: _setSportAsDefault,
+                                icon: const Icon(Icons.check_circle_outline, size: 18),
+                                label: const Text('Set as default'),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+                          _buildSectionHeader('Cloud sync'),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Store settings on your server so they work across computers.',
+                            style: TextStyle(fontSize: 11, color: Colors.black54),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _syncUrlController,
+                            decoration: const InputDecoration(
+                              labelText: 'Sync server URL',
+                              hintText: 'https://your-server.com/caption-writer-sync',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _syncAccountController,
+                            decoration: const InputDecoration(
+                              labelText: 'Account ID',
+                              hintText: 'e.g. your email or username',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                onPressed: _uploadSync,
+                                icon: const Icon(Icons.cloud_upload, size: 18),
+                                label: const Text('Upload'),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: _downloadSync,
+                                icon: const Icon(Icons.cloud_download, size: 18),
+                                label: const Text('Download'),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+                          _buildSectionHeader('Testing'),
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            title: const Text('Use BallDontLie API (testing)'),
+                            subtitle: const Text(
+                              'Use balldontlie.io for MLB and NBA teams/rosters instead of official/ESPN APIs.',
+                              style: TextStyle(fontSize: 11, color: Colors.black54),
+                            ),
+                            value: _useBallDontLieApi,
+                            onChanged: (bool value) async {
+                              await _preferencesService.setUseBallDontLieApi(value);
+                              setState(() => _useBallDontLieApi = value);
+                            },
+                          ),
+
                           const SizedBox(height: 16),
 
                           // FTP Settings Section
@@ -328,26 +584,55 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   top: BorderSide(color: Colors.grey.shade300),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildActionButton(
-                    'Export',
-                    Icons.download,
-                    _exportPreferences,
-                    Colors.blue.shade600,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildActionButton(
+                        'Export',
+                        Icons.copy,
+                        _exportPreferences,
+                        Colors.blue.shade600,
+                      ),
+                      _buildActionButton(
+                        'Import',
+                        Icons.content_paste,
+                        _importPreferences,
+                        Colors.green.shade600,
+                      ),
+                      _buildActionButton(
+                        'Export to file',
+                        Icons.download,
+                        _exportToFile,
+                        Colors.indigo.shade600,
+                      ),
+                      _buildActionButton(
+                        'Import from file',
+                        Icons.folder_open,
+                        _importFromFile,
+                        Colors.teal.shade600,
+                      ),
+                    ],
                   ),
-                  _buildActionButton(
-                    'Import',
-                    Icons.upload,
-                    _importPreferences,
-                    Colors.green.shade600,
-                  ),
-                  _buildActionButton(
-                    'Reset',
-                    Icons.refresh,
-                    _resetToDefaults,
-                    Colors.red.shade600,
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildActionButton(
+                        'Save as default',
+                        Icons.save,
+                        _saveAsDefault,
+                        Colors.orange.shade700,
+                      ),
+                      _buildActionButton(
+                        'Reset',
+                        Icons.refresh,
+                        _resetToDefaults,
+                        Colors.red.shade600,
+                      ),
+                    ],
                   ),
                 ],
               ),

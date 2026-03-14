@@ -939,12 +939,72 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final isExpanded = _expandedCategoryIndex == ci;
       totalCount += 1 + (isExpanded ? verbs.length : 0);
     }
+    // +1 for the custom verb input at the end of the list
+    final customVerbIndex = totalCount;
+    totalCount += 1;
     return Scrollbar(
       thumbVisibility: true,
       child: ListView.builder(
         padding: EdgeInsets.zero,
         itemCount: totalCount,
         itemBuilder: (context, flatIndex) {
+          // Custom verb input — last item in the list
+          if (flatIndex == customVerbIndex) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      'Custom Verb',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                  TextField(
+                    controller: _customVerbController,
+                    style: const TextStyle(fontSize: 11),
+                    decoration: InputDecoration(
+                      hintText: '',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(3),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(3),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(3),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade500),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      widget.captionState
+                          ?.updateCustomVerbFromPopup(value.trim());
+                      if (value.trim().isNotEmpty) {
+                        setState(() {
+                          _pickedVerbCategory = null;
+                          _pickedVerbIndex = null;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          }
           int offset = 0;
           for (int ci = 0; ci < cats.length; ci++) {
             final cat = cats[ci];
@@ -1142,8 +1202,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final state = widget.captionState;
     if (state == null) return;
 
-    final hasOverride = state.hasVerbOverrideFromKeyboardFire(verb);
-
     final menuItems = <PopupMenuItem<String>>[
       // Pin / Unpin
       if (catNum != null && verbNum != null)
@@ -1197,21 +1255,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ],
         ),
       ),
-      if (hasOverride)
-        PopupMenuItem<String>(
-          value: 'delete',
-          height: 32,
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline, size: 16, color: Colors.grey.shade600),
-              const SizedBox(width: 8),
-              Text(
-                'Delete verb',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-              ),
-            ],
-          ),
+      PopupMenuItem<String>(
+        value: 'delete',
+        height: 32,
+        child: Row(
+          children: [
+            Icon(Icons.delete_outline, size: 16, color: Colors.grey.shade600),
+            const SizedBox(width: 8),
+            Text(
+              'Delete verb',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+            ),
+          ],
         ),
+      ),
     ];
 
     showMenu<String>(
@@ -1231,11 +1288,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       } else if (value == 'edit') {
         state.showEditVerbDialogForKeyboardFire(verb);
       } else if (value == 'delete') {
-        final removed = await state.deleteVerbOverrideFromKeyboardFire(verb);
+        await state.deleteVerbOverrideFromKeyboardFire(verb);
         if (mounted) setState(() {});
-        if (removed && context.mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Verb reverted to default')),
+            const SnackBar(content: Text('Verb removed from list.')),
           );
         }
       }
@@ -2299,62 +2356,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       valueListenable: _categoryBarController,
                                       builder: (_, value, __) =>
                                           _buildCategoriesWithVerbsContent(barText: value.text),
-                                    ),
-                                  ),
-                                  // Custom verb input below the verb list
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.only(bottom: 2),
-                                          child: Text(
-                                            'Custom Verb',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                          ),
-                                        ),
-                                        TextField(
-                                          controller: _customVerbController,
-                                          style: const TextStyle(fontSize: 11),
-                                          decoration: InputDecoration(
-                                            hintText: '',
-                                            isDense: true,
-                                            contentPadding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 6),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(3),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(3),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade300),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(3),
-                                              borderSide: BorderSide(
-                                                  color: Colors.grey.shade500),
-                                            ),
-                                          ),
-                                          onChanged: (value) {
-                                            widget.captionState
-                                                ?.updateCustomVerbFromPopup(value.trim());
-                                            // Clear verb pick if typing a custom verb
-                                            if (value.trim().isNotEmpty) {
-                                              setState(() {
-                                                _pickedVerbCategory = null;
-                                                _pickedVerbIndex = null;
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ],
